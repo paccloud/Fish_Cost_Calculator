@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fish Cost Calculator</title>
+</head>
+<body>
+    <h1>Fish Cost Calculator</h1>
+    <label for="cost"> Cost per Pound to boat</label>
+    <input type="number" id="cost" placeholder="$1">
+    <br>
+    <label for="yield">Yield Percentage:</label>
+    <input type="number" id="yield" placeholder="70">
+    <br>
+    <button onclick="calculate()">Calculate</button>
+    <p id="result"></p>
+
+    <script>
+        function calculate() {
+            var cost = document.getElementById("cost").value;
+            var yieldPercent = document.getElementById("yield").value / 100;
+            var result = cost / yieldPercent;
+            document.getElementById("result").innerHTML = "Cost per Sellable Pound: $" + result.toFixed(2);
+        }
+    </script>
+</body>
+</html>
