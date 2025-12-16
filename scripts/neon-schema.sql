@@ -5,8 +5,13 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role VARCHAR(50) DEFAULT 'user'
+    password TEXT,  -- NULL for OAuth-only users
+    role VARCHAR(50) DEFAULT 'user',
+    -- Neon Auth integration fields
+    neon_auth_id TEXT UNIQUE,
+    email TEXT,
+    avatar_url TEXT,
+    auth_provider VARCHAR(50) DEFAULT 'password'  -- 'password', 'google', 'github'
 );
 
 -- Calculations table (saved calculation history)
@@ -48,3 +53,10 @@ CREATE TABLE IF NOT EXISTS contributors (
 CREATE INDEX IF NOT EXISTS idx_calculations_user_id ON calculations(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
+
+-- Migration for existing databases (run if upgrading)
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS neon_auth_id TEXT UNIQUE;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'password';
+-- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;

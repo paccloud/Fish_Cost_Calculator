@@ -90,13 +90,27 @@ const Calculator = () => {
   
   const [customData, setCustomData] = useState({});
   const [history, setHistory] = useState([]);
+  const [publicHistory, setPublicHistory] = useState([]);
 
-  // Load custom data on login
+  // Load public calculations for all users (including guests)
+  useEffect(() => {
+    fetch(apiUrl('/api/public-calcs'))
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setPublicHistory(data);
+        }
+      })
+      .catch(err => console.error("Failed to load public calculations", err));
+  }, []);
+
+  // Load user-specific data on login
   useEffect(() => {
     if (user) {
       const token = localStorage.getItem('token');
       fetch(apiUrl('/api/user-data'), {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include'
       })
       .then(res => res.json())
       .then(data => {
@@ -104,7 +118,7 @@ const Calculator = () => {
           const mapped = {};
           data.forEach(item => {
             if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-            mapped[item.species].conversions[`Custom: ${item.product}`] = { 
+            mapped[item.species].conversions[`Custom: ${item.product}`] = {
               yield: parseFloat(item.yield),
               from: 'Custom',
               to: item.product
@@ -116,7 +130,8 @@ const Calculator = () => {
       .catch(err => console.error("Failed to load custom data", err));
 
       fetch(apiUrl('/api/saved-calcs'), {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}` },
+        credentials: 'include'
       })
       .then(res => res.json())
       .then(data => setHistory(data))
@@ -604,6 +619,47 @@ const Calculator = () => {
           ))}
         </div>
       </div>
+
+      {/* Public Calculation History - visible to all users including guests */}
+      {publicHistory.length > 0 && (
+        <div className="bg-white dark:bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-slate-200 dark:border-white/10 shadow-md dark:shadow-none">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+            <CalcIcon size={18} className="text-cyan-600 dark:text-cyan-400" />
+            Recent Calculations
+            <span className="text-xs font-normal text-slate-500 dark:text-gray-500 ml-2">
+              (Community)
+            </span>
+          </h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {publicHistory.slice(0, 10).map((calc) => (
+              <div
+                key={calc.id}
+                className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-sm"
+              >
+                <div>
+                  <p className="font-medium text-slate-800 dark:text-white">{calc.name || calc.species}</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                    {calc.product} • {calc.yield}% yield
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-green-600 dark:text-green-400">
+                    ${parseFloat(calc.result).toFixed(2)}/lb
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                    {new Date(calc.date).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {!user && (
+            <p className="mt-4 text-xs text-center text-slate-500 dark:text-gray-500">
+              Sign in to save your own calculations
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 };
