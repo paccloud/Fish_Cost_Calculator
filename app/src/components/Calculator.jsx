@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FISH_DATA as FISH_DATA_V2, ACRONYMS, PROFILES_DATA, FISH_DATA_V3 } from '../data/fish_data_v3';
+import { ACRONYMS } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
@@ -91,6 +91,30 @@ const Calculator = () => {
   const [customData, setCustomData] = useState({});
   const [history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
+  
+  // Fish data from API
+  const [fishData, setFishData] = useState({});
+  const [profilesData, setProfilesData] = useState({});
+  const [dataLoading, setDataLoading] = useState(true);
+
+  // Load fish data from API on mount
+  useEffect(() => {
+    fetch(apiUrl('/api/fish-data'))
+      .then(res => res.json())
+      .then(data => {
+        if (data.fishData) {
+          setFishData(data.fishData);
+        }
+        if (data.profiles) {
+          setProfilesData(data.profiles);
+        }
+        setDataLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to load fish data:", err);
+        setDataLoading(false);
+      });
+  }, []);
 
   // Load public calculations for all users (including guests)
   useEffect(() => {
@@ -142,9 +166,9 @@ const Calculator = () => {
     }
   }, [user]);
 
-  // Merge Data
+  // Merge Data - combine API fish data with user custom data
   const combinedData = useMemo(() => {
-    const merged = { ...FISH_DATA_V2 };
+    const merged = { ...fishData };
     Object.keys(customData).forEach(sp => {
       if (!merged[sp]) {
         merged[sp] = customData[sp];
@@ -156,7 +180,7 @@ const Calculator = () => {
       }
     });
     return merged;
-  }, [customData]);
+  }, [fishData, customData]);
 
   const speciesList = Object.keys(combinedData).sort();
   
@@ -189,8 +213,8 @@ const Calculator = () => {
     );
   }, [species, fromState, toState, combinedData]);
 
-  const profile = species ? PROFILES_DATA[species] : null;
-  const scientificName = species && FISH_DATA_V3[species] ? FISH_DATA_V3[species].scientific_name : null;
+  const profile = species ? profilesData[species] : null;
+  const scientificName = species && combinedData[species] ? combinedData[species].scientific_name : null;
 
   // Handle species change
   const handleSpeciesChange = (e) => {
