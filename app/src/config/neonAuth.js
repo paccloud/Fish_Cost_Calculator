@@ -1,13 +1,11 @@
-import { createClient } from '@neondatabase/neon-js';
-import { BetterAuthReactAdapter } from '@neondatabase/neon-js/auth/react/adapters';
+import { StackClientApp } from "@stackframe/react";
 
-// Create Neon Auth client with React adapter for hooks support
-export const neonClient = createClient({
-  auth: {
-    adapter: BetterAuthReactAdapter(),
-    url: import.meta.env.VITE_NEON_AUTH_URL,
-  },
+// Create Stack Auth client (Neon Auth is powered by Stack Auth)
+export const stackClientApp = new StackClientApp({
+  projectId: import.meta.env.VITE_STACK_PROJECT_ID,
+  publishableClientKey: import.meta.env.VITE_STACK_PUBLISHABLE_CLIENT_KEY,
+  tokenStore: "cookie",
 });
 
-// Export auth client for direct access
-export const neonAuth = neonClient.auth;
+// Export for backward compatibility
+export const neonAuth = stackClientApp;

@@ -1,5 +1,6 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import React, { Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { StackProvider, StackTheme, StackHandler } from "@stackframe/react";
 import Calculator from './components/Calculator';
 import Login from './components/Login';
 import UploadData from './components/UploadData';
@@ -10,6 +11,7 @@ import ContributorProfile from './components/ContributorProfile';
 import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
+import { stackClientApp } from './config/neonAuth';
 
 const NavBar = () => {
     const { user, logout } = useAuth();
@@ -69,27 +71,45 @@ const NavBar = () => {
     );
 };
 
+function StackHandlerRoutes() {
+  const location = useLocation();
+  return <StackHandler app={stackClientApp} location={location.pathname} fullPage />;
+}
+
+function AppContent() {
+  return (
+    <div className="min-h-screen bg-stone-50 dark:bg-slate-900 text-slate-800 dark:text-gray-100 font-sans selection:bg-cyan-500 selection:text-white transition-colors">
+      <NavBar />
+      <main className="py-10 px-4">
+        <Routes>
+          <Route path="/handler/*" element={<StackHandlerRoutes />} />
+          <Route path="/" element={<Calculator />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/upload" element={<UploadData />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/data-sources" element={<DataTransparency />} />
+          <Route path="/manage-data" element={<DataManagement />} />
+          <Route path="/profile" element={<ContributorProfile />} />
+          <Route path="/inventory" element={<div className="text-center mt-20 text-gray-400">Inventory Management Coming Soon</div>} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
 function App() {
   return (
-    <AuthProvider>
-        <Router>
-        <div className="min-h-screen bg-stone-50 dark:bg-slate-900 text-slate-800 dark:text-gray-100 font-sans selection:bg-cyan-500 selection:text-white transition-colors">
-            <NavBar />
-            <main className="py-10 px-4">
-            <Routes>
-                <Route path="/" element={<Calculator />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/upload" element={<UploadData />} />
-                <Route path="/about" element={<About />} />
-                <Route path="/data-sources" element={<DataTransparency />} />
-                <Route path="/manage-data" element={<DataManagement />} />
-                <Route path="/profile" element={<ContributorProfile />} />
-                <Route path="/inventory" element={<div className="text-center mt-20 text-gray-400">Inventory Management Coming Soon</div>} />
-            </Routes>
-            </main>
-        </div>
-        </Router>
-    </AuthProvider>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <StackProvider app={stackClientApp}>
+        <StackTheme>
+          <Router>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </Router>
+        </StackTheme>
+      </StackProvider>
+    </Suspense>
   );
 }
 

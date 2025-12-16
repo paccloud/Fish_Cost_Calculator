@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { apiUrl } from '../config/api';
-import { neonAuth } from '../config/neonAuth';
+import { stackClientApp } from '../config/neonAuth';
 
 const AuthContext = createContext(null);
 
@@ -9,25 +9,25 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
-  // Check for Neon Auth session on mount
+  // Check for Stack Auth (Neon Auth) session on mount
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // First check Neon Auth session
-        const session = await neonAuth.getSession();
-        if (session?.user) {
+        // First check Stack Auth session
+        const stackUser = await stackClientApp.getUser();
+        if (stackUser) {
           setUser({
-            username: session.user.name || session.user.email,
-            email: session.user.email,
-            avatar: session.user.image,
+            username: stackUser.displayName || stackUser.primaryEmail,
+            email: stackUser.primaryEmail,
+            avatar: stackUser.profileImageUrl,
             authProvider: 'oauth',
-            neonAuthId: session.user.id
+            stackAuthId: stackUser.id
           });
           setLoading(false);
           return;
         }
       } catch (e) {
-        console.log('No Neon Auth session');
+        console.log('No Stack Auth session:', e.message);
       }
 
       // Fall back to JWT token
@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
           setUser({ username: payload.username, authProvider: 'password' });
-        } catch (e) {
+        } catch {
           localStorage.removeItem('token');
           setToken(null);
         }
@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }) => {
       });
       if (res.ok) return true;
       return false;
-    } catch(e) {
+    } catch {
       return false;
     }
   };
@@ -86,13 +86,10 @@ export const AuthProvider = ({ children }) => {
   // OAuth sign in (Google, GitHub)
   const signInWithOAuth = async (provider) => {
     try {
-      await neonAuth.signIn.social({
-        provider: provider, // 'google' or 'github'
-        callbackURL: window.location.origin,
-      });
+      await stackClientApp.signInWithOAuth(provider);
       return true;
-    } catch (e) {
-      console.error(`${provider} sign-in error:`, e);
+    } catch (err) {
+      console.error(`${provider} sign-in error:`, err);
       return false;
     }
   };
@@ -100,12 +97,12 @@ export const AuthProvider = ({ children }) => {
   // Logout - handles both auth methods
   const logout = async () => {
     try {
-      // Sign out from Neon Auth if using OAuth
+      // Sign out from Stack Auth if using OAuth
       if (user?.authProvider === 'oauth') {
-        await neonAuth.signOut();
+        await stackClientApp.signOut();
       }
-    } catch (e) {
-      console.log('Neon signout error:', e);
+    } catch (err) {
+      console.log('Stack Auth signout error:', err);
     }
 
     // Clear local state
