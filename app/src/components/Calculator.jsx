@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FISH_DATA as FISH_DATA_V2, ACRONYMS, PROFILES_DATA, FISH_DATA_V3 } from '../data/fish_data_v3';
-import { Info, Calculator as CalcIcon, Save, HelpCircle } from 'lucide-react';
+import { Info, Calculator as CalcIcon, Save, HelpCircle, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../config/api';
 
 // Tooltip component for acronyms
 const Tooltip = ({ text, children }) => {
@@ -14,9 +15,9 @@ const Tooltip = ({ text, children }) => {
     >
       {children}
       {show && (
-        <span className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-slate-800 text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30">
+        <span className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30">
           {text}
-          <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-800"></span>
+          <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-slate-800"></span>
         </span>
       )}
     </span>
@@ -58,7 +59,7 @@ const TextWithTooltips = ({ text }) => {
       {parts.map((part, i) => 
         part.isAcronym ? (
           <Tooltip key={i} text={part.tooltip}>
-            <span className="border-b border-dashed border-cyan-400/50 text-cyan-300">{part.text}</span>
+            <span className="border-b border-dashed border-cyan-500/50 dark:border-cyan-400/50 text-cyan-600 dark:text-cyan-300">{part.text}</span>
           </Tooltip>
         ) : (
           <span key={i}>{part.text}</span>
@@ -94,7 +95,7 @@ const Calculator = () => {
   useEffect(() => {
     if (user) {
       const token = localStorage.getItem('token');
-      fetch('http://localhost:3000/api/user-data', {
+      fetch(apiUrl('/api/user-data'), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => res.json())
@@ -114,7 +115,7 @@ const Calculator = () => {
       })
       .catch(err => console.error("Failed to load custom data", err));
 
-      fetch('http://localhost:3000/api/saved-calcs', {
+      fetch(apiUrl('/api/saved-calcs'), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       .then(res => res.json())
@@ -260,12 +261,12 @@ const Calculator = () => {
 
   const handleSave = async () => {
     if (!user || !result) return;
-    
+
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:3000/api/save-calc', {
+      const res = await fetch(apiUrl('/api/save-calc'), {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -292,24 +293,24 @@ const Calculator = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-8 text-white">
-      <div className="bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-xl border border-white/20">
+    <div className="max-w-2xl mx-auto p-6 space-y-8 text-slate-800 dark:text-white">
+      <div className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-lg dark:shadow-xl border border-slate-200 dark:border-white/20">
         <h2 className="text-3xl font-bold mb-6 flex items-center gap-3">
           <CalcIcon className="w-8 h-8 text-cyan-400" />
           Fish Yield Calculator
         </h2>
         
         {/* Mode Toggle */}
-        <div className="flex bg-slate-800 p-1 rounded-lg mb-6">
-          <button 
+        <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg mb-6">
+          <button
             onClick={() => { setMode('cost'); setResult(null); }}
-            className={`flex-1 py-2 rounded-md transition ${mode === 'cost' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 py-2 rounded-md transition ${mode === 'cost' ? 'bg-cyan-600 text-white' : 'text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white'}`}
           >
             Calculate Cost
           </button>
-          <button 
+          <button
             onClick={() => { setMode('weight'); setResult(null); }}
-            className={`flex-1 py-2 rounded-md transition ${mode === 'weight' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 py-2 rounded-md transition ${mode === 'weight' ? 'bg-cyan-600 text-white' : 'text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white'}`}
           >
             Calculate Input Weight
           </button>
@@ -318,33 +319,33 @@ const Calculator = () => {
         <div className="space-y-6">
           {/* Species Selection */}
           <div>
-            <label className="block text-sm font-medium mb-2 text-gray-300">Species</label>
-            <select 
-              value={species} 
+            <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Species</label>
+            <select
+              value={species}
               onChange={handleSpeciesChange}
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none"
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
             >
               <option value="">Select Species</option>
               {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {scientificName && (
-              <p className="mt-1 text-sm text-gray-400 italic">{scientificName}</p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-gray-400 italic">{scientificName}</p>
             )}
           </div>
 
           {/* From/To Conversion Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-300 flex items-center gap-2">
+              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                 From State
                 <Tooltip text="The starting form of the fish (e.g., Round = whole fish as caught)">
-                  <HelpCircle size={14} className="text-gray-500" />
+                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
                 </Tooltip>
               </label>
-              <select 
-                value={fromState} 
+              <select
+                value={fromState}
                 onChange={handleFromChange}
-                className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
                 disabled={!species}
               >
                 <option value="">Select From State</option>
@@ -355,16 +356,16 @@ const Calculator = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-300 flex items-center gap-2">
+              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                 To Product
                 <Tooltip text="The final form after processing">
-                  <HelpCircle size={14} className="text-gray-500" />
+                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
                 </Tooltip>
               </label>
-              <select 
-                value={toState} 
+              <select
+                value={toState}
                 onChange={handleToChange}
-                className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
                 disabled={!fromState}
               >
                 <option value="">Select To Product</option>
@@ -379,23 +380,23 @@ const Calculator = () => {
 
           {/* Conversion Info Box */}
           {currentConversion && (
-            <div className="bg-cyan-900/30 p-4 rounded-lg border border-cyan-800 space-y-3">
-              <h3 className="font-semibold text-cyan-400 flex items-center gap-2">
+            <div className="bg-cyan-50 dark:bg-cyan-900/30 p-4 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
+              <h3 className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-2">
                 <Info size={16} /> Conversion Details
               </h3>
               <div className="text-sm space-y-1">
                 <p>
-                  <span className="text-gray-400">Converting:</span>{' '}
+                  <span className="text-slate-600 dark:text-gray-400">Converting:</span>{' '}
                   <TextWithTooltips text={currentConversion.from} /> → <TextWithTooltips text={currentConversion.to} />
                 </p>
                 <p>
-                  <span className="text-gray-400">Average Yield:</span>{' '}
-                  <span className="text-white font-medium">{currentConversion.yield}%</span>
+                  <span className="text-slate-600 dark:text-gray-400">Average Yield:</span>{' '}
+                  <span className="text-slate-800 dark:text-white font-medium">{currentConversion.yield}%</span>
                 </p>
                 {currentConversion.range && (
                   <p>
-                    <span className="text-gray-400">Expected Range:</span>{' '}
-                    <span className="text-white">{currentConversion.range[0]}% - {currentConversion.range[1]}%</span>
+                    <span className="text-slate-600 dark:text-gray-400">Expected Range:</span>{' '}
+                    <span className="text-slate-800 dark:text-white">{currentConversion.range[0]}% - {currentConversion.range[1]}%</span>
                   </p>
                 )}
               </div>
@@ -405,19 +406,19 @@ const Calculator = () => {
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={() => { setUseRangeMin(true); setUseRangeMax(false); }}
-                    className={`px-3 py-1 text-xs rounded ${useRangeMin ? 'bg-yellow-600' : 'bg-slate-700'} hover:bg-yellow-500 transition`}
+                    className={`px-3 py-1 text-xs rounded text-white ${useRangeMin ? 'bg-yellow-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-yellow-500 transition`}
                   >
                     Use Min ({currentConversion.range[0]}%)
                   </button>
                   <button
                     onClick={() => { setUseRangeMin(false); setUseRangeMax(false); }}
-                    className={`px-3 py-1 text-xs rounded ${!useRangeMin && !useRangeMax ? 'bg-cyan-600' : 'bg-slate-700'} hover:bg-cyan-500 transition`}
+                    className={`px-3 py-1 text-xs rounded text-white ${!useRangeMin && !useRangeMax ? 'bg-cyan-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-cyan-500 transition`}
                   >
                     Use Average ({currentConversion.yield}%)
                   </button>
                   <button
                     onClick={() => { setUseRangeMax(true); setUseRangeMin(false); }}
-                    className={`px-3 py-1 text-xs rounded ${useRangeMax ? 'bg-green-600' : 'bg-slate-700'} hover:bg-green-500 transition`}
+                    className={`px-3 py-1 text-xs rounded text-white ${useRangeMax ? 'bg-green-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-green-500 transition`}
                   >
                     Use Max ({currentConversion.range[1]}%)
                   </button>
@@ -428,13 +429,13 @@ const Calculator = () => {
 
           {/* Profile Info */}
           {profile && (
-            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 text-sm space-y-2">
-              <h3 className="font-semibold text-cyan-400 flex items-center gap-2">
+            <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-300 dark:border-slate-700 text-sm space-y-2">
+              <h3 className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-2">
                 <Info size={16} /> Species Info
               </h3>
-              {profile.description && <p><span className="text-gray-400">Description:</span> {profile.description}</p>}
-              {profile.edible_portions && <p><span className="text-gray-400">Edible:</span> {profile.edible_portions}</p>}
-              {profile.url && <a href={profile.url} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Read more</a>}
+              {profile.description && <p><span className="text-slate-600 dark:text-gray-400">Description:</span> {profile.description}</p>}
+              {profile.edible_portions && <p><span className="text-slate-600 dark:text-gray-400">Edible:</span> {profile.edible_portions}</p>}
+              {profile.url && <a href={profile.url} target="_blank" rel="noreferrer" className="text-cyan-600 dark:text-cyan-400 hover:underline">Read more</a>}
             </div>
           )}
 
@@ -442,48 +443,48 @@ const Calculator = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {mode === 'cost' ? (
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Cost per Pound ({fromState || 'Whole'})</label>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Cost per Pound ({fromState || 'Whole'})</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-500">$</span>
-                  <input 
-                    type="number" 
-                    value={cost} 
+                  <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={cost}
                     onChange={(e) => setCost(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none" 
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
                     placeholder="0.00"
                   />
                 </div>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Target Output (lbs of {toState || 'Product'})</label>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Target Output (lbs of {toState || 'Product'})</label>
                 <div className="relative">
-                  <input 
-                    type="number" 
-                    value={targetWeight} 
+                  <input
+                    type="number"
+                    value={targetWeight}
                     onChange={(e) => setTargetWeight(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none" 
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
                     placeholder="e.g. 100"
                   />
-                  <span className="absolute right-3 top-3 text-gray-500">lbs</span>
+                  <span className="absolute right-3 top-3 text-slate-500 dark:text-gray-500">lbs</span>
                 </div>
               </div>
             )}
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-300">Yield Percentage</label>
+              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Yield Percentage</label>
               <div className="relative">
-                <input 
-                  type="number" 
-                  value={yieldPercent} 
+                <input
+                  type="number"
+                  value={yieldPercent}
                   onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
-                  className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none" 
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
                   placeholder="0"
                 />
-                <span className="absolute right-3 top-3 text-gray-500">%</span>
+                <span className="absolute right-3 top-3 text-slate-500 dark:text-gray-500">%</span>
               </div>
               {yieldRange && (
-                <p className="mt-1 text-xs text-gray-500">Range: {yieldRange[0]}% - {yieldRange[1]}%</p>
+                <p className="mt-1 text-xs text-slate-600 dark:text-gray-500">Range: {yieldRange[0]}% - {yieldRange[1]}%</p>
               )}
             </div>
           </div>
@@ -492,25 +493,25 @@ const Calculator = () => {
           {mode === 'cost' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Processing Cost</label>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Processing Cost</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-500">$</span>
-                  <input 
-                    type="number" 
-                    value={processingCost} 
+                  <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={processingCost}
                     onChange={(e) => setProcessingCost(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none" 
+                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
                     placeholder="0.00"
                   />
                 </div>
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Applied To</label>
-                <select 
-                  value={weightType} 
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Applied To</label>
+                <select
+                  value={weightType}
                   onChange={(e) => setWeightType(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
                 >
                   <option value="incoming">Incoming Weight ({fromState || 'Whole'})</option>
                   <option value="outgoing">Outgoing Weight ({toState || 'Product'})</option>
@@ -530,32 +531,58 @@ const Calculator = () => {
 
           {/* Result */}
           {result !== null && (
-            <div className="mt-8 p-6 bg-green-900/40 border border-green-500/30 rounded-xl text-center animate-fade-in relative">
-              <p className="text-gray-400 text-sm uppercase tracking-wide">
+            <div className="mt-8 p-6 bg-green-50 dark:bg-green-900/40 border border-green-200 dark:border-green-500/30 rounded-xl text-center animate-fade-in relative">
+              <p className="text-slate-600 dark:text-gray-400 text-sm uppercase tracking-wide">
                 {mode === 'cost' ? `Cost per Pound of ${toState}` : `Required ${fromState} Input`}
               </p>
-              <p className="text-5xl font-bold text-green-400 mt-2">
+              <p className="text-5xl font-bold text-green-600 dark:text-green-400 mt-2">
                 {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(2)} lbs`}
               </p>
-              <p className="text-sm text-gray-400 mt-2">
-                {mode === 'cost' 
+              <p className="text-sm text-slate-600 dark:text-gray-400 mt-2">
+                {mode === 'cost'
                   ? `Based on ${yieldPercent}% yield from ${fromState} to ${toState}`
                   : `You need ${result.toFixed(2)} lbs of ${fromState} to get ${targetWeight} lbs of ${toState}`
                 }
               </p>
 
               {user ? (
-                <div className="mt-4 flex flex-col items-center">
-                  <button 
-                    onClick={handleSave}
-                    className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition"
-                  >
-                    <Save size={20} /> Save Calculation
-                  </button>
-                  {saveStatus && <p className="text-sm mt-2 text-gray-300">{saveStatus}</p>}
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={handleSave}
+                      className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 transition"
+                    >
+                      <Save size={20} /> Save Calculation
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const token = localStorage.getItem('token');
+                        try {
+                          const response = await fetch(apiUrl('/api/export-calcs'), {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                          });
+                          const blob = await response.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'calculations.csv';
+                          document.body.appendChild(a);
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                          document.body.removeChild(a);
+                        } catch (error) {
+                          console.error('Export failed:', error);
+                        }
+                      }}
+                      className="flex items-center gap-2 text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-gray-200 transition text-sm"
+                    >
+                      <Download size={16} /> Export History
+                    </button>
+                  </div>
+                  {saveStatus && <p className="text-sm mt-2 text-slate-700 dark:text-gray-300">{saveStatus}</p>}
                 </div>
               ) : (
-                <p className="mt-4 text-xs text-gray-500">Log in to save this calculation</p>
+                <p className="mt-4 text-xs text-slate-500 dark:text-gray-500">Log in to save this calculation</p>
               )}
             </div>
           )}
@@ -563,16 +590,16 @@ const Calculator = () => {
       </div>
 
       {/* Acronym Reference */}
-      <div className="bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-white/10">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <HelpCircle size={18} className="text-cyan-400" />
+      <div className="bg-white dark:bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-slate-200 dark:border-white/10 shadow-md dark:shadow-none">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+          <HelpCircle size={18} className="text-cyan-600 dark:text-cyan-400" />
           Acronym Reference
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
           {Object.entries(ACRONYMS).slice(0, 9).map(([abbr, full]) => (
-            <div key={abbr} className="bg-slate-800/50 p-2 rounded">
-              <span className="text-cyan-400 font-medium">{abbr}</span>
-              <span className="text-gray-400 ml-2">{full.split(' - ')[0]}</span>
+            <div key={abbr} className="bg-slate-100 dark:bg-slate-800/50 p-2 rounded">
+              <span className="text-cyan-600 dark:text-cyan-400 font-medium">{abbr}</span>
+              <span className="text-slate-600 dark:text-gray-400 ml-2">{full.split(' - ')[0]}</span>
             </div>
           ))}
         </div>

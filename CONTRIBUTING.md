@@ -1,4 +1,4 @@
-# Contributing to Scale & Cost
+# Contributing to Local Catch
 
 Thank you for your interest in contributing! This document provides guidelines for contributing to the Fish Cost Calculator project.
 

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document provides a technical overview of the Scale & Cost Fish Calculator architecture.
+This document provides a technical overview of the Local Catch Fish Yield Calculator architecture.
 
 ## System Architecture
 

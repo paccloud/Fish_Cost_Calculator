@@ -33,35 +33,35 @@ const Login = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md bg-white/10 backdrop-blur-lg p-8 rounded-xl border border-white/20 shadow-2xl">
-        <h2 className="text-3xl font-bold mb-6 text-center text-white">
+      <div className="w-full max-w-md bg-white dark:bg-white/10 backdrop-blur-lg p-8 rounded-xl border border-slate-200 dark:border-white/20 shadow-xl">
+        <h2 className="text-3xl font-bold mb-6 text-center text-slate-800 dark:text-white">
             {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
         
         <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-                <label className="block text-gray-400 text-sm mb-2">Username</label>
+                <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Username</label>
                 <div className="relative">
                     <User className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
-                    <input 
-                        type="text" 
+                    <input
+                        type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="w-full bg-slate-800 border-slate-600 text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
                         required
                     />
                 </div>
             </div>
             
             <div>
-                <label className="block text-gray-400 text-sm mb-2">Password</label>
+                <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Password</label>
                 <div className="relative">
                     <Lock className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
-                    <input 
-                        type="password" 
+                    <input
+                        type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-slate-800 border-slate-600 text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
                         required
                     />
                 </div>
@@ -75,16 +75,16 @@ const Login = () => {
         </form>
 
         <div className="mt-6 text-center">
-            <button 
+            <button
                 onClick={() => setIsRegister(!isRegister)}
-                className="text-gray-400 hover:text-white text-sm"
+                className="text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white text-sm transition"
             >
                 {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}
             </button>
         </div>
-        
+
         <div className="mt-4 text-center">
-            <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-300 text-sm">
+            <button onClick={() => navigate('/')} className="text-slate-500 dark:text-gray-500 hover:text-slate-700 dark:hover:text-gray-300 text-sm transition">
                 Continue as Guest
             </button>
         </div>

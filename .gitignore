@@ -26,7 +26,16 @@ yarn-error.log*
 # Database
 *.db
 *.sqlite
+*_export.csv
+server/*_export.csv
+
+# Uploads
+uploads/
+server/uploads/
 
 # IDEs
 .vscode
 .idea
+
+# Vercel
+.vercel

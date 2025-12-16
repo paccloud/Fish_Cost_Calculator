@@ -54,6 +54,18 @@ db.serialize(() => {
         source TEXT,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS contributors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER UNIQUE,
+        display_name TEXT,
+        organization TEXT,
+        bio TEXT,
+        show_on_page INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )`);
 });
 
 // Auth Middleware
@@ -212,16 +224,117 @@ app.put('/api/user-data/:id', authenticate, (req, res) => {
 // Delete User Data Entry
 app.delete('/api/user-data/:id', authenticate, (req, res) => {
     const { id } = req.params;
-    
+
     // Verify ownership before delete
     db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        
+
         db.run('DELETE FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ message: 'Deleted successfully' });
         });
+    });
+});
+
+// Export Calculations as CSV
+app.get('/api/export-calcs', authenticate, (req, res) => {
+    db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // Create CSV content
+        const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
+        const csvRows = rows.map(row => {
+            const date = new Date(row.date).toLocaleDateString();
+            return `"${date}","${row.species}","${row.product}","${row.cost}","${row.yield}","${row.result}"`;
+        }).join('\n');
+
+        const csv = headers + csvRows;
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="calculations.csv"');
+        res.send(csv);
+    });
+});
+
+// Export User Data as CSV
+app.get('/api/export-user-data', authenticate, (req, res) => {
+    db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // Create CSV content
+        const headers = 'Species,Product,Yield (%),Source\n';
+        const csvRows = rows.map(row => {
+            return `"${row.species}","${row.product}","${row.yield}","${row.source || ''}"`;
+        }).join('\n');
+
+        const csv = headers + csvRows;
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="custom-yield-data.csv"');
+        res.send(csv);
+    });
+});
+
+// Get all visible contributors (public)
+app.get('/api/contributors', (req, res) => {
+    const query = `
+        SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+        FROM contributors c
+        JOIN users u ON c.user_id = u.id
+        LEFT JOIN user_data ud ON c.user_id = ud.user_id
+        WHERE c.show_on_page = 1
+        GROUP BY c.id
+        ORDER BY contribution_count DESC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Get current user's contributor profile
+app.get('/api/contributor/me', authenticate, (req, res) => {
+    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Profile not found' });
+        res.json(row);
+    });
+});
+
+// Create or update contributor profile
+app.post('/api/contributor', authenticate, (req, res) => {
+    const { display_name, organization, bio, show_on_page } = req.body;
+    const now = new Date().toISOString();
+
+    // Check if profile exists
+    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (row) {
+            // Update existing profile
+            db.run(
+                `UPDATE contributors
+                 SET display_name = ?, organization = ?, bio = ?, show_on_page = ?, updated_at = ?
+                 WHERE user_id = ?`,
+                [display_name, organization, bio, show_on_page ? 1 : 0, now, req.user.id],
+                function(err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ message: 'Profile updated successfully' });
+                }
+            );
+        } else {
+            // Create new profile
+            db.run(
+                `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [req.user.id, display_name, organization, bio, show_on_page ? 1 : 0, now, now],
+                function(err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    res.json({ id: this.lastID, message: 'Profile created successfully' });
+                }
+            );
+        }
     });
 });
 

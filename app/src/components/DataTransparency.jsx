@@ -1,8 +1,18 @@
-import React from 'react';
-import { BookOpen, ExternalLink, FileText, AlertCircle, Database, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, ExternalLink, FileText, AlertCircle, Database, Users, Award } from 'lucide-react';
 import { DATA_SOURCE, ACRONYMS, UNCERTAIN_DATA } from '../data/fish_data_v3';
+import { apiUrl } from '../config/api';
 
 const DataTransparency = () => {
+    const [contributors, setContributors] = useState([]);
+
+    useEffect(() => {
+        fetch(apiUrl('/api/contributors'))
+            .then(res => res.json())
+            .then(data => setContributors(data))
+            .catch(err => console.error('Failed to load contributors:', err));
+    }, []);
+
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
             {/* Header */}
@@ -12,40 +22,40 @@ const DataTransparency = () => {
                         <BookOpen className="h-10 w-10 text-white" />
                     </div>
                 </div>
-                <h1 className="text-4xl font-bold text-white mb-4">Data Sources & Methodology</h1>
-                <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+                <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-4">Data Sources & Methodology</h1>
+                <p className="text-xl text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
                     Transparency in data sourcing for accurate yield calculations
                 </p>
             </div>
 
             {/* Primary Source */}
-            <div className="bg-slate-800/80 border border-white/10 rounded-2xl p-8 mb-8">
+            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 mb-8 shadow-md dark:shadow-none">
                 <div className="flex items-center gap-3 mb-6">
                     <FileText className="h-6 w-6 text-emerald-400" />
-                    <h2 className="text-2xl font-semibold text-white">Primary Data Source</h2>
+                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">Primary Data Source</h2>
                 </div>
-                
+
                 <div className="bg-emerald-900/30 border border-emerald-700/50 rounded-xl p-6 mb-6">
-                    <h3 className="text-xl font-bold text-white mb-2">{DATA_SOURCE.title}</h3>
-                    <p className="text-gray-300 mb-4">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{DATA_SOURCE.title}</h3>
+                    <p className="text-slate-600 dark:text-gray-300 mb-4">
                         <span className="text-emerald-400">Publication:</span> {DATA_SOURCE.publication}
                     </p>
                     <div className="grid md:grid-cols-2 gap-4 text-sm">
                         <div>
-                            <p className="text-gray-400">Authors:</p>
-                            <p className="text-white">{DATA_SOURCE.authors.join(', ')}</p>
+                            <p className="text-slate-600 dark:text-gray-400">Authors:</p>
+                            <p className="text-slate-800 dark:text-white">{DATA_SOURCE.authors.join(', ')}</p>
                         </div>
                         <div>
-                            <p className="text-gray-400">Publisher:</p>
-                            <p className="text-white">{DATA_SOURCE.publisher}</p>
+                            <p className="text-slate-600 dark:text-gray-400">Publisher:</p>
+                            <p className="text-slate-800 dark:text-white">{DATA_SOURCE.publisher}</p>
                         </div>
                         <div>
-                            <p className="text-gray-400">Year:</p>
-                            <p className="text-white">{DATA_SOURCE.year}</p>
+                            <p className="text-slate-600 dark:text-gray-400">Year:</p>
+                            <p className="text-slate-800 dark:text-white">{DATA_SOURCE.year}</p>
                         </div>
                         <div>
-                            <p className="text-gray-400">ISBN:</p>
-                            <p className="text-white font-mono">{DATA_SOURCE.isbn}</p>
+                            <p className="text-slate-600 dark:text-gray-400">ISBN:</p>
+                            <p className="text-slate-800 dark:text-white font-mono">{DATA_SOURCE.isbn}</p>
                         </div>
                     </div>
                 </div>
@@ -62,13 +72,13 @@ const DataTransparency = () => {
             </div>
 
             {/* Methodology */}
-            <div className="bg-slate-800/80 border border-white/10 rounded-2xl p-8 mb-8">
+            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 mb-8 shadow-md dark:shadow-none">
                 <div className="flex items-center gap-3 mb-6">
                     <Database className="h-6 w-6 text-blue-400" />
-                    <h2 className="text-2xl font-semibold text-white">Methodology Notes</h2>
+                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">Methodology Notes</h2>
                 </div>
-                
-                <div className="space-y-4 text-gray-300">
+
+                <div className="space-y-4 text-slate-600 dark:text-gray-300">
                     <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4">
                         <h4 className="font-semibold text-blue-400 mb-2">Average Yields</h4>
                         <p>Yields represent high quality, properly handled fresh fish and shellfish in good physiological condition. If fish condition is abnormal (post-spawning or starving state), actual yields may differ.</p>
@@ -87,16 +97,16 @@ const DataTransparency = () => {
             </div>
 
             {/* Acronym Glossary */}
-            <div className="bg-slate-800/80 border border-white/10 rounded-2xl p-8 mb-8">
-                <h2 className="text-2xl font-semibold text-white mb-6 flex items-center gap-3">
+            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 mb-8 shadow-md dark:shadow-none">
+                <h2 className="text-2xl font-semibold text-slate-800 dark:text-white mb-6 flex items-center gap-3">
                     <span className="text-cyan-400">A-Z</span> Acronym Glossary
                 </h2>
-                
+
                 <div className="grid md:grid-cols-2 gap-4">
                     {Object.entries(ACRONYMS).map(([abbr, definition]) => (
-                        <div key={abbr} className="bg-slate-700/50 rounded-lg p-4">
+                        <div key={abbr} className="bg-slate-100 dark:bg-slate-700/50 rounded-lg p-4">
                             <span className="text-cyan-400 font-bold text-lg">{abbr}</span>
-                            <p className="text-gray-300 text-sm mt-1">{definition}</p>
+                            <p className="text-slate-600 dark:text-gray-300 text-sm mt-1">{definition}</p>
                         </div>
                     ))}
                 </div>
@@ -104,21 +114,21 @@ const DataTransparency = () => {
 
             {/* Uncertain Data */}
             {UNCERTAIN_DATA && UNCERTAIN_DATA.length > 0 && (
-                <div className="bg-slate-800/80 border border-white/10 rounded-2xl p-8 mb-8">
+                <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 mb-8 shadow-md dark:shadow-none">
                     <div className="flex items-center gap-3 mb-6">
                         <AlertCircle className="h-6 w-6 text-amber-400" />
-                        <h2 className="text-2xl font-semibold text-white">Data Quality Notes</h2>
+                        <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">Data Quality Notes</h2>
                     </div>
-                    
-                    <p className="text-gray-400 mb-4">
+
+                    <p className="text-slate-600 dark:text-gray-400 mb-4">
                         The following data entries were extracted from PDF scans and may have quality issues:
                     </p>
-                    
+
                     <div className="space-y-3">
                         {UNCERTAIN_DATA.map((item, i) => (
                             <div key={i} className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-4">
-                                <p className="text-white font-medium">{item.species}</p>
-                                <p className="text-sm text-gray-400">
+                                <p className="text-slate-800 dark:text-white font-medium">{item.species}</p>
+                                <p className="text-sm text-slate-600 dark:text-gray-400">
                                     <span className="text-amber-400">{item.field}:</span> {item.note}
                                 </p>
                             </div>
@@ -128,17 +138,17 @@ const DataTransparency = () => {
             )}
 
             {/* User Data */}
-            <div className="bg-slate-800/80 border border-white/10 rounded-2xl p-8">
+            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 shadow-md dark:shadow-none">
                 <div className="flex items-center gap-3 mb-6">
                     <Users className="h-6 w-6 text-purple-400" />
-                    <h2 className="text-2xl font-semibold text-white">User-Contributed Data</h2>
+                    <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">User-Contributed Data</h2>
                 </div>
-                
-                <p className="text-gray-300 mb-4">
+
+                <p className="text-slate-600 dark:text-gray-300 mb-4">
                     Logged-in users can upload their own yield data from personal experience. User-contributed data is:
                 </p>
-                
-                <ul className="space-y-2 text-gray-300">
+
+                <ul className="space-y-2 text-slate-600 dark:text-gray-300">
                     <li className="flex items-start gap-2">
                         <span className="text-purple-400 mt-1">•</span>
                         <span>Displayed separately from source data in the calculator</span>
@@ -154,8 +164,57 @@ const DataTransparency = () => {
                 </ul>
             </div>
 
+            {/* Community Contributors */}
+            {contributors.length > 0 && (
+                <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-2xl p-8 shadow-md dark:shadow-none">
+                    <div className="flex items-center gap-3 mb-6">
+                        <Award className="h-6 w-6 text-amber-500" />
+                        <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">Community Contributors</h2>
+                    </div>
+
+                    <p className="text-slate-600 dark:text-gray-300 mb-6">
+                        These community members have contributed custom yield data to help expand our database.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {contributors.map((contributor) => (
+                            <div
+                                key={contributor.id}
+                                className="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg p-4"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                        <h3 className="font-semibold text-slate-800 dark:text-white">
+                                            {contributor.display_name}
+                                        </h3>
+                                        {contributor.organization && (
+                                            <p className="text-sm text-cyan-600 dark:text-cyan-400 mt-1">
+                                                {contributor.organization}
+                                            </p>
+                                        )}
+                                        {contributor.bio && (
+                                            <p className="text-sm text-slate-600 dark:text-gray-400 mt-2">
+                                                {contributor.bio}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="text-right ml-4">
+                                        <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                                            {contributor.contribution_count}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-gray-500">
+                                            {contributor.contribution_count === 1 ? 'entry' : 'entries'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* References */}
-            <div className="mt-12 text-center text-gray-500 text-sm">
+            <div className="mt-12 text-center text-slate-500 dark:text-gray-500 text-sm">
                 <p>
                     For corrections or additions to the data, please contact the project maintainers via GitHub.
                 </p>

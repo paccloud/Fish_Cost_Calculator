@@ -1,4 +1,4 @@
-# 🐟 Scale & Cost - Fish Yield Calculator
+# 🐟 Local Catch Fish Yield Calculator
 
 A community-driven fish cost calculator for sustainable seafood. Calculate the true cost of fish products after accounting for processing yields, fees, and other factors.
 
@@ -6,7 +6,28 @@ A community-driven fish cost calculator for sustainable seafood. Calculate the t
 
 ## 🌊 Overview
 
-Scale & Cost helps fishers, processors, and seafood businesses accurately calculate the cost per pound of finished fish products. Whether you're a small-scale fisher selling direct to consumers or a processor managing multiple species, this tool provides the yield data and calculations you need.
+Local Catch helps fishers, processors, and seafood businesses accurately calculate the cost per pound of finished fish products. Whether you're a small-scale fisher selling direct to consumers or a processor managing multiple species, this tool provides the yield data and calculations you need.
+
+## 🎣 Born from the Local Catch Community
+
+This project emerged from conversations within the [Local Catch Network](https://localcatch.org/)—a community of fishing families, organizers, researchers, and technical assistance providers working to support healthy fisheries and communities across North America.
+
+### What is Local Catch Network?
+
+Local Catch Network connects Community Supported Fisheries (CSFs) and values-based seafood businesses with the resources they need to thrive. With over 200 member organizations, Local Catch is at the forefront of the direct-to-consumer seafood movement, helping fishers build sustainable livelihoods while providing consumers access to fresh, locally-caught seafood.
+
+CSFs work like a seafood subscription—consumers pay upfront for a "share" of the catch, creating stable income for fishers while cutting out middlemen. This model supports:
+
+- **Fair prices for fishers** - Direct sales mean better returns
+- **Fresher seafood for consumers** - Local catch, not global supply chains
+- **Reduced carbon footprint** - Less transportation, more sustainability
+- **Stronger fishing communities** - Economic stability and local connections
+
+### Why This Tool?
+
+When Local Catch members discussed the challenges of pricing their products, a common pain point emerged: calculating the true cost of processed fish. If you buy whole fish at $3/lb but sell fillets, what should you charge? This tool answers that question with real yield data, helping small-scale fishers price their products accurately and sustainably.
+
+Find a CSF near you: [finder.localcatch.org](https://finder.localcatch.org/)
 
 ### Key Features
 
@@ -245,7 +266,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **Local Catch Network** - For reinvigorating this project through community discussions
+- **[Local Catch Network](https://localcatch.org/)** - This project was born from community discussions about the real challenges fishers face when pricing their products. Thank you to all the Local Catch members who shared their experiences and needs.
 - **Alaska Sea Grant College Program** - For the comprehensive yield data in MAB-37
 - The fishing community members who have contributed feedback and data
 
