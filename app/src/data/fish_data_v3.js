@@ -1036,21 +1036,25 @@ export const UNCERTAIN_DATA = [
 ];
 
 // ============ EXPORT LEGACY FORMAT ============
+// Calculator expects: FISH_DATA[species].conversions[label] = { from, to, yield, range }
 export const FISH_DATA = {};
 Object.entries(FISH_DATA_V3).forEach(([species, data]) => {
-  FISH_DATA[species] = {};
+  FISH_DATA[species] = {
+    scientific_name: data.scientific_name,
+    category: data.category,
+    conversions: {}
+  };
   Object.entries(data.conversions).forEach(([convKey, conv]) => {
     const parts = convKey.split(" → ");
     const from = parts[0];
     const to = parts[1];
     const fromLabel = from !== "Round" && from !== "Whole" && from !== "Raw Whole" ? `From ${from}: ` : "";
     const label = `${fromLabel}${to}`;
-    FISH_DATA[species][label] = {
+    FISH_DATA[species].conversions[label] = {
       yield: String(conv.yield),
       range: conv.range ? `${conv.range[0]}-${conv.range[1]}` : null,
       from: from,
-      to: to,
-      scientificName: data.scientific_name
+      to: to
     };
   });
 });
