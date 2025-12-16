@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Fish Cost Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        .calculator-container {
+            width: 300px;
+            margin: 0 auto;
+        }
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #result {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Fish Cost Calculator</h1>
+    <div class="calculator-container">
+        <!-- Species and Product Selection -->
+        <label for="species">Species:</label>
+        <select id="species" onchange="updateProductOptions()">
+            <option value="">Select Species</option>
+        </select>
+        <label for="product">Final Product:</label>
+        <select id="product" onchange="updateFields()">
+            <option value="">Select Product</option>
+        </select>
+        <!-- Cost per Pound and Yield Percentage -->
+        <label for="cost">Cost per Pound to boat:</label>
+        <input type="number" id="cost" placeholder="$1">
+        <label for="yield">Yield Percentage:</label>
+        <input type="number" id="yield" placeholder="70">
+        <!-- Processing Cost and Weight Selection -->
+        <label for="processing_cost">Processing Cost:</label>
+        <input type="number" id="processing_cost" placeholder="$1">
+        <label for="weight_type">Apply Processing Cost to:</label>
+        <select id="weight_type">
+            <option value="incoming">Incoming Weight</option>
+            <option value="outgoing">Outgoing Weight</option>
+        </select>
+        <!-- Calculate Button and Result -->
+        <button onclick="calculate()">Calculate</button>
+        <p id="result"></p>
+        <div id="species-info" style="margin-top: 20px; font-size: 14px; color: #555;"></div>
+    </div>
+
+    <script src="data/fish_data.js"></script>
+    <script src="javascript.js"></script>
+</body>
+</html>

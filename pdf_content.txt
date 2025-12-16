@@ -1,0 +1,942 @@
+--- Page 1 ---
+• overles 
+from Pacific 
+~~-"""""""~ ..... Fish and 
+Shellfish 
+Chuck Crapo • Brian Paust • Jeny Babbitt 
+Alaska Sea Grant College Program 
+Marine AdvisolY Bulletin No. 37 
+2004 
+
+--- Page 2 ---
+Soo~ 
+Alaska • coverles 
+Chuck Crapo 
+University of Alaska 
+Marine Advisory Program from Pacific 
+Fish and 
+Shellfish 
+Fishery Industrial Technology Center 
+Kodiak, Alaska 
+Brian Paust 
+University of Alaska 
+Marine Advisory Program 
+Petersburg, Alaska 
+Jer!}: Babbitt 
+National Marine Fisheries Service 
+Kodiak, Alaska 
+Alaska Sea Grant College Program 
+University of Alaska Fairbanks 
+Fairbanks, Alaska 99775-5040 
+Toll free (888) 789-0090 
+907474-6707· Fax 907474-6285 
+http://www .uaf.edu/seagrant/ MAB-37 
+Revised 2004 
+Price $5.00 
+
+--- Page 3 ---
+Elmer E. Rasmuson Library Cataloging-in-Publication Data 
+Crapo, Chuck. 
+Recoveries and yields from Pacific fish and shellfish / Chuck Crapo, Brian 
+Paust, and Jerry Babbitt. 
+Rev. 2004 
+(Marine advisory bulletin; no. 37 Rev.) 
+1. Fisheries-Pacific Ocean-Statistics. 2. Shellfish fisheries-Pacific 
+Ocean-Statistics. I. Paust, Brian. II. Babbitt, Jerry. III. Alaska Sea Grant 
+College Program. IV. Title. V. Series. 
+SH219.5.C72 2004 
+ISBN 1-56612-012 -8 
+Revised 2004 
+Acknowledgments 
+This book was produced by the Alaska Sea Grant College Program which is 
+cooperatively supported by the U.S. Department of Commerce, NOAA Office of 
+Sea Grant and Extramural Programs, under grant numbers NA86AA-D-SG041 
+and NA90AA-D-SG066, project numbers Al75-01 and Al71-01; and by the 
+University of Alaska with funds appropriated by the state. The University of 
+Alaska Fairbanks is an affirmative action/equal opportunity employer and educa­
+tional institution. 
+Sea Grant is a unique partnership with public and private sectors combining 
+research, education, and technology transfer for public service. This national 
+network of universities meets changing environmental and economic needs of 
+people in our coastal, ocean, and Great Lakes regions. 
+Cover design is by Susan B. Gibson. Layout and formatting is by Susan B. 
+Gibson and Lisa Valore. Table of Contents 
+Introduction 
+Abalone, Piilfo . 
+Capelin---
+Clams 
+Softshell 
+Macoma 
+Cockles 
+Littlenecks 
+Geoducks 
+Razors 
+Butter 
+Cod, Pacific 
+Crab 
+Dungeness 
+King (Red, Brown or Golden) 
+King (Blue) 
+Tanner 
+Dogfish 
+Eels 
+Fish Meal 
+Flounders 
+Arrowtooth 
+Starry 
+Hake, Pacific 
+Halibut, Pacific 
+Herring, Pacific 
+Lamprey, Pacific 
+Lingcod 
+Mackerel, Atka 
+Mussels 
+Octopus 
+Oysters 
+Pacific Ocean Perch 
+Plaice, Alaska 1 Pollock, Walleye 9 
+2 Rat-TanS-- --.. -. 9 
+:1 Rockfish 10 
+2 Black 10 
+2 Greenstriped 10 
+2 Thomyhead 10 
+2 Canary 10 
+2 China 10 
+2 Dusky 10 
+2 Quillback 10 
+2 Redbanded 10 
+Redstriped 10 
+3 Rosethom 10 
+4 Rougheye 10 
+4 Shortraker 10 
+Silvergray 10 4 TIger 10 4 Widow 10 5 Yelloweye 10 
+5 Yellowtai l 10 
+5 Sablefish 11 5 Salmon 11 6 Pink 11-12 6 
+6 Chum 12-13 
+Sockeye 13-14 
+6 Coho 14-15 
+7 Other Salmon 15-16 
+7 All Wild Salmon (trim) 16 7 Salmon, Farmed 17 8 Norwegian 17 8 -8 Chilean 17 
+8 
+8 
+9 
+9 
+
+--- Page 4 ---
+Table of Contents (continued) 
+SallTlon, Frozen and Thawed 17 
+Chum (Thawed) 17 
+Pink (Thawed) 17 
+Sockeye (Thawed) 17 
+Silver (Thawed) 18 
+Saury, Pacific 18 
+Scall~p .s _ 18 
+Sculpin 18 
+Sea Cucumber 18 Sea Urchin 19 
+Shad, Ameri'can 19 Shark-' _. . .... 19 
+Sharks, General 19 
+Salmon 20 
+Sevengill (Cow Shark) 20 
+Soupfin 20 
+Blue 20 
+Thresher 21 
+Blacktip 21 
+Shrimp 21 
+Pink 21 
+Spot 21 
+Skates 22 
+Smelt 22 
+Snails 22 
+Soles 22 
+Dabs 22 
+Dover 22 
+English 22 
+Flathead 23 
+Petrale 23 
+Rex 23 
+Rock 23 
+Yellowfin 23 Squid 
+Sturgeon 
+Trout 
+Trout, Farmeir-_._---
+Norwegian 
+Tuna, Albacore 
+Turbot, Greenland 
+Sources and References 23 
+24 
+24 _ .. _-24 
+24 
+25 
+25 
+26 Recoveries and YieldsJrolll Pacific Fish alld Shellfish 8 
+Introduction 
+Yield and recovery data are important decision-making tools for many people in 
+Ihe seafood industry. The fisherman uses yield data to determine whether roe 
+herring are ready to be fished. The line foreman tracks the efficiency of his 
+filteting operation by documenting daily recovery. And the plant manager uses 
+yield figures to estimale the profitability of a new fishery or processing line. 
+Finding this information can be difficult since much of it is generated in scientific 
+papers or under actual processing conditions , but without it making good deci­
+sions becomes more uncertain. 
+This publication is a compilation of recovery and yield data from scientific 
+sources and industry experience. 
+Note !! 
+Recoveries are reported as averages and expected ranges. The average yield 
+represent s high quality, properly handled fresh fish and shellfish in good physi­
+ological condition. If fish condition is abnormal, in a post-spawn ing or starving 
+state, then the numbers will not be good estimates . The ranges, when available, 
+represent the typical variations found within fish populations during the year. 
+Many other factors such as handling and processing conditions wilt also 
+affect yields. Filleting skills , cooking times, and refrigeration systems can aWhave 
+an effect on recoveries. The data presented here are based on typical processing 
+and handling methods. 
+Smoked fish yields were calculated using an average 15% weight loss during 
+salting/brining and 10% in the smoking process. 
+
+--- Page 5 ---
+8 Ra:n",ries alUi Yields from Pacific Fish alUi SIU'llfish Recoveries and Yields frmll Pacific Fish alld Shellfish e 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Abalone, Pinto Haliotus kamtschatkana Cod, Pacific Gadus macrocephalus 
+Whole Edible Muscle 42 40-45 Round O/H-On 81 72-90 
+Meat 25 O/H-Ofi 63 56-75 
+Trimming 16 Skin-On Fillets (V-cut) 45 38-48 
+Dried Muscle 10 Skinless Fillets (V-cut) 39 22-45 
+SIB Fillets (V-cut) 33 18-39 
+Blackcod (see Sablefish) Skin-On Fillets 38 
+Skinless Fillets (J-cut) 32 
+Capelin Mallotus VillOSll5 SIB Fillets (J-cut) 26 
+Steaks 62 
+Round DJH-Gn 89 84-93 Salted OIH-Off 45 
+DJH-QfI 78 73-81 Smoked O/H-Ofi 58 50-65 
+Bell~ Flaes 10 
+Clams Liver 5 3-7 
+Roe 4 1-7 
+O/H-On O/H-Ofi 78 
+Soflshell M~a SO. Skin·On Fillets 55 42-60 
+Whole Edible Meats 57 53-62 Skinless Fillets 48 34-56 
+SIB Fillets 41 20-48 
+Macoma Macoma SQ. OIH-Off Skin·On Fillets 71 54-80 
+Whole Edible Meats 53 45-59 Skinless Fillets 62 31-81 
+Cockles GJinocaniium SQ. SIB Fillets 52 25-70 
+Skin-On Fillets Skinless Fillets 87 
+Whole Edible Meats 42 38-48 Trim 12 
+UtUenecks Protothaca SQ. SIB Fillets 73 
+Skinless Fillets SIB Fillets 84 
+Whole Edible Meats 37 31-46 Trim 13 
+Geoducks Panope SO. Trim Mince 90 80·95 
+Whole Edible Meats 33 32-35 
+Steaks 22 20-25 
+Necks 12 9-14 
+Razors Siligua sQ. 
+Whole Edible Meats 44 42-50 
+Raw Meal Cooked Meal 60 
+Butter Saxidomus SI!.. 
+Whole Edible Meats 45 38-46 
+DIH-On=Dressed/Head-On D/H·Off=DressedlHead -Ofl S/B=SkinlessiBoneless sp.::species DIH-On=DressedIHead·On D/H·Off=OressedIHead·Off SIB:: Skinless/Boneless sp.=species 
+
+--- Page 6 ---
+e Recoveries and Yields froll! Pacific Fish alld Shellfish Recoveries alld Yields fro", Pacific Fish and SlleliJish e 
+From To Average (%) Range (%) From ,: To Average (%) Range (%) 
+Crab Crab (continued) 
+Dungeness Cancer magister Tanner Chionoecetes bairdi, C. opi/io 
+Raw Whole Raw Sections 60 Raw Whole Raw Sections 68 65-72 
+Cooked Whole 90 Cooked Whole 92 90-95 
+Cooked Sections 52 Cooked Sections 60 58-66 
+Cooked Meat 24 22-25 Cooked Meat 17 15-21 
+(during molt) 13-14 (during molt) 10-14 
+Raw Sections Cooked Sections 87 Raw Sections Cooked Sections 88 
+Cooked Whole Cooked Meat 27 Cooked Whole Cooked Meat 19 
+Cooked Sections Cooked Meat 46 Cooked Sections Cooked Meat 28 
+King (Red, Brown or Golden) Paralithodes camtschatica , Dogfish Squalus acanthias Lithodes aegpispina 
+Raw Whole Raw Sections 69 67-74 Round D/H-On 75 69-80 
+Cooked Whole 92 90-95 D/H-Off 55 41-68 
+Cooked Sections 60 52-67 Edible Portion 36 32-40 
+Cooked Meat 25 23-28 Backs 30 
+(during molt) 16-19 Belly Flaps 5 
+Raw Sections Cooked Sections 87 Tails and Fins 4 4-6 
+Cooked Whole Cooked Meat 27 Liver 13 10-21 
+Cooked Sections Cooked Meat 42 Viscera 51 
+D/H-On DIH-Off 69 
+King (Blue) Paralithodes platvpus Backs 38 
+Belly Flaps 7 Raw Whole Raw Sections 65 
+Cooked Whole 90 Eels Anguilliformes Cooked Sections 55 50-61 
+Cooked Meat 20 16-23 Round D/H-On 90 
+(during molt) 13-14 D/H-Off 72 70-75 
+Raw Sections Cooked Sections 84 Skin-On Flesh 62 56-65 
+Cooked Whole Cooked Meat 22 Smoked D/H-Off 65 
+Cooked Sections Cooked Meat 37 
+Fish Meal 
+Lean Fish Meal 18 16-20 
+Fatty Fish Meal 22 20-25 
+D/H·On;OressediHead-On DIH·OH=Oressed/Head·OIl S/B=Skinless/Boneless sp_=species D/H-On=DressedfHead-On D/H-Off=DressedfHead -Off SIB = Skinless/Boneless sp.=species 
+
+--- Page 7 ---
+o Recoveries and Yields from Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish and Shellfish G 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Flounders Halibut, Pacific Hippoglossus stenolepis 
+Round D/H-On 88 85-92 
+Arrowtooth Atheresthes stomias D/H-Off 72 68-80 
+Round D/H-On 90 84-94 Steaks 62 60-75 
+D/H-Off 74 70-80 Skin-On Fillet 49 45-56 
+Skinless Fillet 34 25-39 Skinless Fillet (Fletch) 41 34-44 
+Surimi 11 D/H-On D/H-Off 83 73-94 
+Kurimi 48 Steaks 76 71-88 
+SIB fillets 25 18-30 Skin-On Fillet 56 47-64 
+Skinless Fillet (Fletch) 46 38-50 
+Starry Platichth'i.S stellatus D/H-Off Skin-On Fillet 68 64-73 
+Round D/H-On 84 79-86 Skinless Fillet (Fletch) 56 45-60 
+D/H-Off 67 63-69 Steaks 79 70-94 
+Skinless Fillet 33 25-40 Roasts 84 
+Hake, Pacific Merluccius Eroductus Herring, Pacific Clupea harengus pallasi 
+Round DlH-On 80 70-85 Round D/H-On 82 78-87 
+D/H-Off 60 56-71 D/H-Off 70 60-76 
+Skin-On Fillets 43 Skin-On Fillets 53 45-60 
+Skinless Fillets 32 Skinless Fillets 49 41-58 
+SIB Fillets 27 Salted Round 82 79-88 
+Surimi (Decanter Process) 27 26-30 Salted Gibbed 65 
+Roe 2-8 Salted Fillets 42 35-47 
+D/H-On D/H-Off 71 Smoked D/H-Off 60 
+Skin-On Fillets 51 Roe 10 3-18 
+Skinless Fillets 38 Pickled D/H-On 74 
+SIB Fillets 32 Skin-On Fillets Salted Fillets 85 
+Skin-On Fillets Skinless Fillets 75 Pickled 90 
+Trim 12 
+SIB Fillets 63 Lamprey, Pacific Lampetra tridentata 
+Trim Mince 90 
+Round D/H-Off 77 74-85 
+DIH-On:DressedlHead-O n D/H-Off=DressedlH ead-Ofl S/B=Skinless!Boneless sp.=species DIH-On=DressedIHead-On D/H-Oft=DressediHead-Off S/B= Skinless/Boneless sp.=species 
+
+--- Page 8 ---
+o Recoveries and Yields from Pacific Fish and Shellfish Recoveries alld Yields from Pacific Fis', alld Shellfish G 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Lingcod Ophiodon elongatus Pacific Ocean Perch Sebastes alutus 
+Round D/H-On 90 83-93 Round D/H-On 88 82-94 
+D/H-Off 70 62-74 D/H-Off 62 46-72 
+Skinless Fillet 35 29-38 Skinless Fillet 30 27-32 
+Steaks 62 D/H-On D/H-Off 71 
+D/H-On D/H-Off 80 67-89 Skinless Fillet 35 
+Skinless Fillet 39 31-45 
+Steaks 69 Plaice, Alaska Pleuronectes quadrituberculatus 
+D/H-Off Skinless Fillets 49 
+Steaks 86 Round D/H-On 84 79-86 
+D/H-Off 68 60-72 
+Mackerel, Atka Pleurogrammus monopterygius Skinless Fillet 35 30-40 
+Round D/H-On 87 83-93 Pollock, Walleye Theragra chalcogramma 
+DIH-Off 68 62-74 
+Skinless Fillet 31 29-33 Round DIH-On 79 72-86 
+Steaks 57 D/H-Off 62 52-72 
+Salted D/H-Off 41 Skin-On Fillets 40 35-55 
+Skinless Fillets 34 29-43 
+Mussels Mytilus sp. SIB Fillets 28 24-36 
+Mince 50 30-60 
+Whole Edible Meat (wild) 26 19-32 Surimi (Traditional Process) 20 15-22 
+Edible Meat (cultured) 20 11-27 Surimi (Decanter Process) 27 26-32 
+Steamed 14 10-18 Roe 6.5 3-20 
+Skin-On Fillets Skinless Fillets 85 
+Octopus Octopus dofieini Trim 15 
+SIB Fillets 70 
+Whole Gutted/Skin-On 80 80-85 Trim Mince 90 
+Gutted/Skinned 65 
+Viscera 20 Rat-Tails Coryphaenoides sp. 
+Oysters Crassostrea Sp. Round Edible Meat 53 
+Raw Whole Raw Meats 5-14 Red Snappers (see Rockfish) Raw Meats Cooked Meats 61 
+D/H·On=DressedlHead·On O/H-OIf=DressediHead -OH S/B=SkinlesslBon eless sp.=species D/H·On=Dressed/Head-On OIH-Off: Dressed/Head-Off SIB = Skinless/Boneless sp_=species 
+
+--- Page 9 ---
+CD) Recoveries and Yields from Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish and Shellfish G 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Rockfish Sablefish Anoplopoma fimbria 
+Round D/H-On 89 86-94 
+Black Sebastes melanops D/H-Off 68 67-71 
+Greenstriped Sebastes elongatus D/H-Off (Eastern) 62 60-67 
+Thornyhead Sebastes altivelis Skin-On Fillet 40 38-46 
+Round D/H-On 88 85-91 Skinless Fillet 35 
+D/H-Off 57 48-62 Steaks 62 60-65 
+D/H-Off (Eastem) 50 Salted D/H-Off 45 
+Skin-On Fillet 32 30-36 Smoked Sides 31 27-35 
+Skinless Fillet 27 25-33 D/H-Off Skin-On Fillet 59 
+Skin-On Fillet Skinless Fillet 85 Skinless Fillet 28 
+D/H-On D/H-Off 65 Smoked Sides 45 40-49 
+Skin-On Fillet 56 D/H-Off (Eastern) Skin-On Fillets 64 
+Skinless Fillet 48 Skinless Fillet 56 
+Smoked Sides 50 45-52 
+Canary Sebastes pinniger Rougheye Sebastes aleutianus Skin-On Fillets Smoked Fillets 80 
+China Sebastes nebulosus Shortraker Sebastes borealis 
+Dusky Sebastes ci/iatus Silvergray Sebastes brevispinis Salmon 
+Quillback Sebastes maliger Tiger Sebastes nigrocinctus 
+Redbanded Sebastes babcocki Widow Sebastes entomelas Pink Oncorhynchus gorbuscha 
+Redstriped Sebastes prorigor Yelloweye Sebastes ruberrimus 
+Rosethorn Sebastes helvomaculatus Yellowtail Sebastes f1avidus Round D/H-On 91 84-94 
+D/H-Off 73 68-80 
+Round O/H-On 88 85-91 Canned 65 58-67 
+O/H-Off 57 48-62 Skin-On Fillet (Hand) 52 47-58 
+D/H-Off (Eastern) 50 Skin-On Fillet (Machine) 50 45-55 
+Skin-On Fillet 28 25-35 Skinless Fillet 42 41-46 
+Skinless Fillet 23 21-30 SIB Fillet (Hand-V-Cut) 33 30-36 
+Skin-On Fillet Skinless Fillet 82 SIB Fillet (Pinboning) 41 40-44 
+D/H-On D/H-Off 65 SIB Trim 14 12-16 
+Skin-On Fillet 49 Steaks 58 53-65 
+Skinless Fillet 40 Dry-Salt Sides 36 
+Mild Cure Sides 30 
+Smoked Sides 30 
+Roe 6 3-10 
+D/H-On D/H-Off 81 72-90 
+Skin-On Fillet (Hand) 57 50-64 
+Skin-On Fillet (Machine) 55 48-61 
+DIH·On=Dressed/Head·On D/H-Off:Dressed/Head-OIi S/B=Skinless/Boneless sp.=species D/H-On=DressediH ead-On D/H-Off:Dresse d/Head-Off SIB = Skinless/Boneless sp.=species 
+
+--- Page 10 ---
+G Recoveries nlld Yields froJ/l Pacific Fish alld Shellfish Recoveries nlld Yields frolll Pncific Fish nlld Shellfish G 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Salmon (continued) Salmon (continued) 
+Pink Oncorh't.nchus gorbuscha (continued) Salmon, Chum Oncorh't.nchus keta (continued) 
+D/H-On Skinless Fillet 46 43-55 D/H-On D/H-Ofl 83 79-91 
+SIB Fillet (Hand-V-Cut) 36 32-43 Skin-On Fillet (Hand) 67 61-74 
+SIB Fillet (Pinboning) 44 41-53 Skin-On Fillet (Machine) 64 58-66 
+SIB Trim 16 13-19 Skinless Fillet 56 49-62 
+Steaks 63 56-77 SIB Fillet (Hand-V-Cut) 43 38-47 
+Dry-Salt Sides 40 SIB Fillet (Pinboning) 53 47-59 
+Mild Cure Sides 33 SIB Trim 17 13-19 
+Smoked Sides 33 Steaks 65 61-75 
+D/H-Off Skin-On Fillet (Hand) 74 Dry-Salt Sides 48 
+Skin-On Fillet (Machine) 71 Mild Cure Sides 39 
+Skinless Fillet 58 Smoked Sides 39 
+SIB Fillet (Hand-V-Cut) 45 D/H-Off Skin-On Fillet (Hand) 81 
+SIB Fillet (Pinboning) 55 Skin-On Fillet (Machine) 77 
+SIB Trim 19 Skinless Fillet 67 
+Steaks 80 SIB Fillet (Hand-V-Cut) 51 
+D~-Salt Sides 49 SIB Fillet (Pinboning) 64 
+Mild Cure Sides 41 SIB Trim 20 
+Smoked Sides 41 35-50 Steaks 78 
+D~-Salt Sides 58 
+Chum Oncorh't.nchus keta Salted D/H-Off 47 
+Smoked Sides 55 45-60 
+Round D/H-On 89 79-91 
+D/H-Off 74 71-77 
+Canned 67 60-70 Socke~e Oncorh't.nchus nerka 
+Skin-On Fillet (Hand) 60 55-63 Round D/H-On 92 85-94 
+Skin-On Fillet (Machine) 57 52-59 D/H-Off 74 66-82 
+Skinless Fillet 50 45-53 Canned 67 60-70 
+SIB Fillet (Hand-V-Cut) 36 30-36 Skin-On Fillet (Hand) 53 50-59 
+SIB Fillet (Pinboning) 48 43-51 Skin-On Fillet (Machine) 51 48-56 
+SIB Trim 15 12-16 Skinless Fillet 46 41-49 
+Steaks 58 55-65 SIB Fillet (Hand-V-Cut) 35 30-38 
+D~-Salt Sides 43 SIB Fillet (Pinboning) 45 40-48 
+Mild Cure Sides 35 SIB Trim 15 12-16 
+Smoked Sides 35 Steaks 57 55-65 
+Roe 8 4-10 Dry-Salt Sides 40 
+D/H-On=Dressed/Head-On D/H-Off::Dressed/Head-Ofl S/B=Sklnless/Bo neless sp.=species D/H-On=Dr essedfHead-On D/H-Off=Dressed/Head·Off SIB:: Skinless/Boneless sp.=species 
+
+--- Page 11 ---
+CD Recoveries and Yields from Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish and Shellfish G 
+From To Average ("!o) Range ("!o) From To Average ("!o) Range ("!o) 
+Salmon (continued) Salmon (continued) 
+Salmon, Socke¥e Oncorh,{nchus nerka (continued) Salmon, Coho Oncorh't.nchus kisutch (continued) 
+Round Mild Cure Sides 33 Round Steaks 62 58-65 
+Smoked Sides 33 Dry-Salt Sides 43 
+Roe 4 3-6 Mild Cure Sides 36 
+D/H-On DIH-Off 80 70-94 Smoked Sides 36 
+Skin-On Fillet (Hand) 57 53-68 Roe 7 5-10 
+Skin-On Fillet (Machine) 54 49-62 DIH-On D/H-Off 82 76-92 
+Skinless Fillet 50 43-56 Skin-On Fillet (Hand) 62 58-67 
+SIB Fillet (Hand-V-Cut) 38 32-41 Skin-On Fillet (Machine) 59 56-63 
+SIB Fillet (Pinboning) 48 42-54 Skinless Fillet 55 49-63 
+SIB Trim 16 13-28 SIB Fillet (Hand-V-Cut) 41 32-45 
+Steaks 62 59-75 SIB Fillet (Pinboning) 52 46-60 
+Dry-Salt Sides 44 SIB Trim 15 13-18 
+Mild Cure Sides 36 Steaks 66 63-73 
+Smoked Sides 36 Dry-Salt Sides 47 
+D/H-Off Skin-On Fillet (Hand) 72 Mild Cure Sides 39 
+Skin-On Fillet (Machine) 69 Smoked Sides 39 
+Skinless Fillet 62 D/H-Off Skin-On Fillet (Hand) 76 
+SIB Fillet (Hand-V-Cut) 47 Skin-On Fillet (Machine) 73 
+SIB Fillet (Pinboning) 59 Skinless Fillet 68 
+SIB Trim 20 SIB Fillet (Hand-V-Cut) 51 
+Steaks 77 SIB Fillet (pinboning) 64 
+Dry-Salt Sides 54 SIB Trim 19 
+Mild Cure Sides 45 Steaks 81 
+Smoked Sides 45 35-60 Dry-Salt Sides 57 
+Mild Cure Sides 48 
+Coho Oncorh't.nchus kisutch Smoked Sides 48 40-60 
+Round D/H-On 92 87-94 
+D/H-Off 75 70-83 Other Salmon, including Chinook and Cherr¥ 
+Canned 67 60-70 Round D/H-On 88 82-94 
+Skin-On Fillet (Hand) 57 52-60 DIH-Off 72 68-74 
+Skin-On Fillet (Machine) 55 50-57 Skin-On Fillet (Hand) 55 52-60 
+Skinless Fillet 51 46-56 Skinless Fillet 46 41-49 
+SIB Fillet (Hand-V-Cut) 38 30-40 SIB Fillet (Hand-V-Cut) 36 30-40 
+SIB Fillet (Pinboning) 49 44-54 SIB Fillet (pin boning) 45 40-48 
+SIB Trim 14 12-17 SIB Trim 14 12-16 
+D/H-On:Dressed/Head-O n D/H-Off=Oressed/Head-Dl f S/B=Skinless/Boneless sp.=species D/H-On=DressediHead -On D/H-Off=D ressed/Head-Olf SIB = Skinless/Boneless sp.=species 
+
+--- Page 12 ---
+~ Recoveries and Yields from Pacific Fish and Shellfish 
+From To Average (%) Range (%) 
+Salmon {continued) 
+Other Salmon, including Chinook and Cherry (continued) 
+Round Steaks 58 54-65 
+Dry-Salt Sides 40 
+Mild Cure Sides 34 
+Smoked Sides 34 
+Roe 6 3-10 
+O/H-On O/H-Off 82 73-90 
+Skin-On Fillet (Hand) 63 55-73 
+Skinless Fillet 52 44-59 
+SIB Fillet (Hand-V-Cut) 41 32-49 
+SIB Fillet (Pinboning) 50 42-57 
+SIB Trim 16 13-20 
+Steaks 66 57-79 
+Dry-Salt Sides 46 
+Mild Cure Sides 39 
+Smoked Sides 39 
+O/H-Off Skin-On Fillet (Hand) 76 
+Skinless Fillet 64 
+SIB Fillet (Hand-V-Cut) 50 
+SIB Fillet (Pinboning) 61 
+SIB Trim 19 
+Steaks 81 
+Dry-Salt Sides 56 
+Mild Cure Sides 47 
+Smoked Sides 47 35-60 
+Raw Steak Baked Steak 89 
+Broiled Steak 83 
+All Wild Salmon 
+Salmon, Trim 
+O/H-Off Trim A 76 75-80 
+Trim B 74 73-75 
+Trim C 74 73-75 
+Trim 0 67 64-70 
+Trim E 61 58-64 
+DIH-On=Dressed/Head-On D/H-Off=Dressed/Head -DII S/B=Skinless/Boneless sp.=species Recoveries and Yields from Pacific Fish and Shellfish G 
+From To Average (%) Range (%) 
+Salmon, Fanned 
+Norwegian 
+O/H-On O/H-Off 88 
+Skin-On fillet 76 
+Skinless Fillet 68 
+Roasts 85 
+Chilean 
+O/H-On O/H-Off 86 
+Skin-On Fillet 72 
+Skinless Fillet 66 
+Roasts 83 
+Salmon, Frozen and Thawed 
+Note: Freezing conditions and length of storage will affect recoveries. Poor 
+conditions and storage more than six months will reduce yields significantly. 
+Chum (Thawed) 
+O/H-On Skin-On Fillet 62 
+Skinless Fillet 52 
+O/H Off Skin-On Fillet 75 
+Skinless Fillet 63 
+Pink (Thawed) 
+O/H-On Skin-On Fillet 54 
+Skinless Fillet 45 
+O/H-Off Skin-On Fillet 67 
+Skinless Fillet 56 
+Sockeye (Thawed) 
+O/H-On Skin-On Fillet 52 
+Skinless Fillet 47 
+O/H-Off Skin-On Fillet 65 
+Skinless Fillet 59 
+D/H-On=D ressed/Head-On D/H-Oft=DressediHead-OH SIB = Skinless/Boneless sp.=species 
+
+--- Page 13 ---
+e Recoveries and Yields from Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish and Shellfish G> 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Salmon, Frozen and Thawed (continued) Sea Urchin Strongylocentrotus sp. 
+Silver (Thawed) Green 
+D/H·On Skin-On Fillet 58 Round Roe 5-30 Skinless Fillet 49 
+O/H-Off Skin-On Fillet 71 Red Skinless Fillet 60 Round Roe 8-30 
+Saury, Pacific Cololabis saira Shad, American Alosa sapidissima 
+Round D/H-On 88 83-92 Round D/H-On 88 85-92 D/H-Off 76 71-86 O/H-Off 74 69-77 Skinless Fillet 57 54-61 Skin-On Fillet 65 62-67 
+Skinless Fillet 54 Scallops Chlamy's sE> Hinnites sE> Pecten SE. Roe 3-17 
+Raw Whole Adductor Muscle 10 8-12 
+Viscera 22 20-26 Shark 
+Raw Meats Cooked Meats 50 
+Sharks, General 
+Sculpin Enophrys sp., Hemilepidotus Sp., Round D/H-On 80 62-90 
+D/H-Off 58 22-75 My'0xocephalus SE. Trunk 51 33-67 
+Round OIH-On 80 75-87 Skin-On Fillet 42 21-60 
+O/H-Off 39 25-51 Skinless Fillet 32 17-56 
+Skinless Fillet 24 20-41 Fins 5 1-12 
+D/H-On OIH-Off 73 
+Sea Cucumber Cucumaria SE. Trunk 64 
+Skin-On Fillet 53 Whole Eviscerated Meat 36 Skinless Fillet 40 Edible Meat 25 Fins 6 Cooked Meat 13 O/H-Off Trunk 88 Dried Meat 5 Skin-On Fillet 73 
+Skinless Fillet 55 
+Fins 9 
+D/H·On=DressedlHead· On DIH·Off=DressedlHead -Off S/B=SkinJessiBoneless sp.=species D/H-On=DressedfHead -On D/H-Off=Dressed/Head·Off S/B= Skinless/Boneless sp.=species 
+
+--- Page 14 ---
+fJ!) Recoveries and Yields from Pacific Fish alld Shellfish Recoveries and Yields from Pacific Fish alld Shellfish ED 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Shark (continued) Shark (continued) 
+Salmon Lamna ditroeJs Thresher A/opias vu/pinus 
+Round D/H-On 80 Round D/H-On 85 
+DIH-Off 63 50-66 D/H-Off 71 
+Trunk 58 44-59 Trunk 57 
+Skin-On Fillet 53 39-57 Skin-On Fillet 49 
+Skinless Fillet 44 32-48 Skinless Fillet 44 
+Fins 5 Fins 14 
+Sevengill (Cow Shark) Notorvnchus macu/ata Blacktip Carcharhinus limbatus 
+Round D/H-On 86 Round D/H-On 82 
+D/H-Off 55 D/H-Off 62 
+Trunk 52 Trunk 52 
+Skin-On Fillet 45 Skin-On Fillet 46 
+Skinless Fillet 35 Skinless Fillet 36 
+Fins 5 Fins 10 
+Soupfin Ga/eorhinus z'i0pterus Shrimp Pandalus Sp. 
+Round DIH-On 65 
+DIH-Off 51 Pink 
+Trunk 45 Raw Whole Raw Headless 53 Fins 4 Cooked Whole 90 
+Blue Prionace g/auca Raw Peeled 36 
+Cooked Peeled 25 Round D/H-On 88 Raw Headless Cooked Peeled 69 
+D/H-Off 67 Cooked Whole Cooked Peeled 28 
+Trunk 54 
+Skin-On Fillet 51 Spot 
+Skinless Fillet 40 Raw Whole Raw Headless 47 45-49 Fins 6 Cooked Whole 90 
+Raw Peeled 34 30-38 
+Cooked Peeled 26 
+Raw Headless Raw Peeled 72 
+Cooked Whole Cooked Peeled 29 
+D/H-On=DressedlHead-On D/H-Off=DressedlHead-OH S/B=SkinlesslBoneless sp.=species O/H-On=Dressed/Hea d-On OIH·Off: Dressed/Head-Off SIB = Skinless/Boneless sp.=species 
+
+--- Page 15 ---
+e Recoveries and Yields from Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish and Shellfish Q) 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Skates Raja sp. Soles 
+Round O/H-On 90 75-95 
+O/H-Off 39 Flathead Hippoglossoides elassodon 
+Wings 23 20-23 Round O/H-On 86 80-94 
+O/H-Off 67 60-79 
+Smelt Hypomesus sp., Spirinchus Sp. Skinless Fillet 27 25-32 
+Round O/H-On 85 82-90 Petrale Eopsetta jordani 
+O/H-Off 71 67-78 Round O/H-On 86 75-90 
+Skinless Fillet 38 O/H-Off 66 55-75 
+Salted O/H-Off 45 Skinless Fillet 29 28-32 
+Smoked O/H-Off 57 
+Cooked Fillet 35 Rex Glyptocephalus zachirus 
+Round O/H-On 85 75-90 
+Snails Neptunea sp. O/H-Off 65 55-75 
+Whole Edible Meats 28 27-31 Skinless Fillet 33 27-37 
+Soles Rock Lepidopsetta bilineata 
+Round O/H-On 87 82-92 
+O/H-Off 67 62-78 
+Dabs Limanda proboscidea Skinless Fillet 28 22-30 
+Round O/H-On 85 75-90 
+O/H-Off 64 55-75 Yellowfin Limanda aspera 
+Skinless Fillet 23 17-26 Round O/H-On 86 76-94 
+Dover Microstomus pacificus O/H-Off 69 60-83 
+Skinless Fillet 25 16-30 
+Round O/H-On 86 75-90 Surimi 11 
+O/H-Off 65 55-65 Kurimi 48 
+Skinless Fillet 29 26-32 
+English Parophrvs vetulus Squid Loligo Sp. 
+Round O/H-On 85 79-94 Whole Edible Meats 71 64-73 
+O/H-Off 65 55-75 Mantle w/Fins 52 45-55 
+Skinless Fillet 27 25-28 Mantle w/o Fins 39 36-42 
+Tentacles 17 13-20 
+Fins 12 10-13 
+D/H-On=Dressed/Head-On D/H-Off=Dressed/Head-Off SfB=SkinlessfBoneless sp.=species O/H-On=Dressed/Head-On D/H·Off=Dressed/Head ·Off SIB = Skinless/Boneless sp.=species 
+
+--- Page 16 ---
+e Recoveries alld Yields frolll Pacific Fish and Shellfish Recoveries and Yields from Pacific Fish mid Shellfish e 
+From To Average (%) Range (%) From To Average (%) Range (%) 
+Stur~eon AciEenser 8£. Tuna, Albacore Thunnus alalunga 
+Round O/H-On 85 82-87 Round DlH-On 90 
+O/H-Off 75 72-78 O/H-Off 75 
+Skin-On Fillet 56 50-59 Skinless Fillet 35 
+Skinless Fillet 45 Steaks 65 
+Steaks 62 O/H-On O/H-Off 83 
+Salted O/H-Off 46 Skinless Fillet 39 
+Smoked O/H-Off 56 Steaks 72 
+Roe 8-12 
+OIH-On OIH-Off 88 Turbot, Greenland Reinhardtius hiEEoglossoides 
+Skin-On Fillet 66 
+Skinless Fillet 53 Round O/H-On 90 
+Steaks 73 OIH-Off 74 70-80 
+Skinless Fillet 30 25-35 
+Trout Salrno 8£./ Salvelinus 8£. 
+Round OIH-On 88 
+OIH-Off 69 
+Skin-On Fillet 61 60-65 
+Skinless Fillet 55 
+Steaks 60 
+Smoked O/H-Off 54 
+O/H-On O/H-Olf 78 
+Skin-On Fillet 69 
+Skinless Fillet 63 
+Steaks 68 
+O/H-Off Skin-On Fillet 88 
+Skinless Fillet 79 
+Steaks 86 
+Trout, Fanned 
+Norwegian 
+O/H-On O/H-Off 78 
+Skin-On Fillet 69 
+Skinless Fillet 63 
+DIH-On:DressedIHead-On D/H·Off=Dressed/Head-Off S/B=Skinless/Boneless sp,=species D/H-On:Dressed/Head -On D/H-OH=DressedIHead -Off S/8 = Skinless/Boneless sp.=species 
+
+--- Page 17 ---
+e Recoveries alld Yields from Pacific Fish and Shellftsh 
+A Final Note 
+Every effort has been made to assure that the data presented in this publication 
+are as accurate as possible. Since recovery information is highly dependent on 
+processing technique s and handling systems, frequenlly conflicting data are 
+generated. If you have contradictory information on any speCies, please let us 
+know. Send additions and corrections to: 
+Chuck Crapo 
+Marine AdviSOry Program 
+Fishery Industrial Technology Center 
+900 Trident Way 
+Kodiak, Alaska 99615 
+Sources and References 
+Alaska Department of Fish and Game. 1969. Minutes of the Second Alaskan 
+Shellfish Conferen ce. Information Leaflet No. 135. Alaska Department of 
+Fish and Game, Juneau, AK. 
+Alaska Department of Fish and Game. 1985. Alaska 1984 catch and production . 
+Commercial Fisheries Statistics. Statistical Leaflet No. 37. Alaska Department 
+of Fish and Game, Juneau, AK. 
+Alaska Department of Fish and Game. 1986. Alaska 1985 catch and production. 
+Commercial Fisheries Statistics. Statistical Leaflet No. 38. Alaska Department 
+of Fish and Game, Juneau, AK. 
+Alaska Sea Grant College Program. 1977. The Bering Sea tanner crab resource: 
+U.S. production capacity and marketing. Sea Grant Report No. 77-5. Univ. 
+Alaska, Fairbanks , AK. 
+Allread, K. 1987. Western Alaska Fisheries, Inc., Kodiak, AK. Pers. communication. 
+Anon. 1977. The specification on squid processing plant. Available from the 
+author, FITC, Kodiak, AK. 99615. 
+Anon. 1981. Portland fish·drying company exporting to Asia. Australian Fisheries 
+43(5):18. 
+Anon. 1986. Cod. Seafood Leader 6(1):18. 
+Anon. 1986. Rockfish. Seafood Leader 6(1 ):127. 
+Anon. 1987. Sablefish (Anop/opoma fimbria). Seafood Leader 7(1 ):111. 
+Babbitt, J. 2003. Evaluation of Decanter Process for Surimi. NMFS, Kodiak, AK. 
+Bailey, W. 2003. Copper River Seafoods, Inc., Cordova, AK. Personal 
+Communication . Recoveries and Yields from Pacific Fish and Shellfish Qj 
+Baker, W.l. 1979. Report on Exploratory Diving by the Northern Diver. City of 
+Ketchikan , Ketchikan, AK. 
+Barr, L. 1970. Alaska's fisheries resources-The shrimps. Fishery Leaflet No. 
+631. Bureau of Commercial Fisheries, Auke Bay, AK. 
+Berger, J.D. and S.R. Hare. 1988. Product Recovery Rates Obtained Aboard 
+Foreign Fishing Vessels Operating in the Northeast Pacific Ocean and 
+Eastern Bering Sea, 1983-85. U.S. Department of Commerce , NOAA 
+Technical Memorandum NMFS F/NWC-129 ., Washington , D.C. 
+Berk, Z. 1974. Processing squid for food. Sea Grant Report No. 13. Massachusetts 
+Institute of Technology , Cambridge, MA. 
+Berntsen, S. 1988. Oregon State University , Newport, OR. Pers. communication . 
+Bethers, M. 1985. Learn to identify S.E. salmon, trout and char. Alaska Department 
+of Fish and Game, Juneau, AK. 
+Blankenbeckler, D. and R. Larson. 1983. Pacific herring (C/upea harengus 
+pallas,) harvest statistics, hydroacoustical surveys, age, weight, and length 
+analysis, and spawning ground surveys for S.E. Alaska, 1980-1983 . Data 
+Report No. 202. Alaska Department of Fish and Game, Juneau, AK. 
+Brooks, L.A. and R.P. Singh. 1979. Properties of squid useful in designing of 
+cleaning and handling systems. Transaction s of the American Society of 
+Agricultural Engineers 22(3):658. 
+Brown, D.E. 1979. A machine to eviscerate and skin squid. ASAE Paper No. 
+79-6525. American Society of Agricultural Engineers , St. Joseph, MI. 
+Bykov, V.P. 1985. Marine fishes: Chemical composition and processing 
+properties . AA Balkema Publishing, Rotterdam , Netherlands. 
+Camitech , Inc., Seattle, WA. Personal Communication . 
+Cheney, D.P. and I.E. Mumford. 1986. Shellfish and seaweed harvests of 
+Puget Sound. Univ. Washington Press, Seattle, WA. 
+Collins, J. and R. Jones. 1966. Spot shrimp: Yield and quality studies. Technical 
+Report No. 77. Bureau of Commercial Fisheries, Ketchikan , AK. 
+Dart, D. 1987. Commercial Fisherman, Petersburg , AK. Pers. communication . 
+Dassow, J.A. 1967. Characteristics of frozen shellfish: Factors affecting quality 
+changes during freezing and storage. Part I-Crabs and lobsters. In: 
+Freezing preservation of foods, Volume 2 (Fourth edn.). AVI Publishing 
+Company , Westport, CI. 
+Dassow, J.A. 1979. Product yields from various Alaska fish species. National 
+Marine Fisheries Service, Seattle, WA. 
+
+--- Page 18 ---
+e Recoveries and Yields from Pacific Fish and Shellfish 
+Edwards, E. and J. Early. 1972. Catching, handling and processing crabs. 
+Advisory Note No. 26. Torry Research Station, Aberdeen , Scotland, U.K. 
+Elwell, T. 1977. Dogfish-An underutilized Oregon resource. Oregon State 
+Univ., Corvallis, OR. 
+Enge, J. 1986. Petersburg Fisheries, Inc., Petersburg , AK. Pers. communica­
+tion. 
+Evans, W.E. 1987. Conversion factors for fishery products. National Marine 
+Fisheries Service, Washington , D.C. 
+Feder, H.M. and A.J. Paul. 1973. Abundance estimations and growth rate 
+comparisons for the clam Protothaca staminea from three beaches in Prince 
+William Sound, Alaska, with additional comments on size-weight relation­
+ships, harvesting and marketing. Sea Grant Report No. 73-2. Univ. Alaska, 
+Fairbanks , AK. 
+Fitzgerald, R. 1981. Mussels. Ocean Leader 1 (3):2. 
+Freeman, K. 1984. Geoduck. Pacific Fishing 5(13):21. 
+Freeman, K. 1984. Thresher Shark. Pacific Fishing 5(11 ):51. 
+Freeman, K. 1987. Bering Sea snails: A fishery that still goes begging. Na­
+tional Fisherman 67(11):8. 
+Freeman, K. 1987. Diving for urchins: A prickly business. National Fisherman 
+68(4):12. 
+Gisslen, W. 1983. Professional cooking. Wiley & Sons, New York. 
+Goodwin, C.L. 1973. Subtidal geoducks of Puget Sound, Washington. Techni­
+cal Report No. 13. Washington Department of Fisheries, Olympia, WA. 
+Gordievskaya , V.S. 1971. Shark flesh in the food industry. Pacific Scientific 
+Research Institute of Marine Fisheries and Oceanography (TINRO). Trans­
+lated from Russian by the Israel Program for Scientific Translations . Na­
+tional Marine Fisheries Service and National Science Foundation , Washing­
+ton, D.C. 
+Graham, J. 1984. Planning and engineering data: 3. Fish freezing. Fisheries 
+Circular No. 771. Food and Agriculture Organization of the United Nations, 
+Rome, Italy. 
+Hammerstrom, L. and M. Merritt. 1985. A survey of Pacific weathervane 
+scallops (Pecten caurinus) in Kamishak Bay, Alaska. Information Leaflet No. 
+252. Alaska Department of Fish and Game, Juneau, AK. 
+Haynes, E.B. and B.C. Powell. 1968. A preliminary report on the sea scallop 
+fishery exploration , biology, and commercial processing. Information Leaflet 
+No. 125. Alaska Department of Fish and Game, Juneau, AK. Recoveries and Yields from Pacific Fish and Shellfish 
+Heggelund, P. 1979. Teaching manual for extension courses in white fish 
+processing technology. Marine Advisory Bulletin No.8. Univ. Alaska, 
+Fairbanks, AK. 
+Hoag, S.H., C.C. Schmitt, and W.H. Hardman. 1979. Size, age and frequency of 
+male and female halibut: Setline research catches, 1925-1977 . Technical 
+Report No. 17. International Pacific Halibut Commission , Seattle, WA. 
+Hoopes, D.T. 1973. Alaska's fisheries resources -The dungeness crab. 
+Fisheries Facts No.6. National Marine Fisheries Service, Seattle, WA. 
+Hughes, S. 1977. Northwest and Alaska Fisheries Center processed report, 
+Results of an industry-government jOint venture on Bering Sea clams, 
+September 1976. National Marine Fisheries Service, Seattle, WA. 
+International Pacific Halibut Commission. 1986. Annual Report 1985. Interna­
+tional Pacific Halibut Commission, Seattle, WA. 
+Iverson, J.L. 1957. Pacific Ocean perch: Proximate composition and commer­
+cial utilization . Technical Report No.12. Bureau of Commercial Fisheries, 
+Ketchikan, AK. 
+Jensen, C. 1988. Eastpoint Seafoods, Inc., Kodiak, AK. Pers. Communication . 
+Kaersgaard, K. 1979. Unit operations in white fish processing. In: P. 
+Heggelund (ed.). Teaching manual for extension courses in white fish 
+processing technology. Marine Advisory Bulletin No.8. Univ. Alaska, 
+Fairbanks, AK. 
+Ke, P.J., E. Lervantes, B. Smith-Lall and R.w. Hirtle. 1983. Freshness preser­
+vation of Canadian Atlantic crab, scallop, squid and sea cucumber 
+(Cucumaria frondosa) . Industry Report No. 138. Fisheries and Oceans 
+Canada, Halifax, Nova Scotia. 
+Kizevetter, LV. 1973. Chemistry and technology of Pacific fish. Pacific Scientific 
+Research Institute of Marine Fisheries and Oceanography (TINRO). Trans­
+lated from Russian by the Israel Program for Scientific Translations. Na­
+tional Marine Fisheries Service and National Science Foundation , Washing­
+ton, D.C. 
+Klein, S.J. 1985. Selectivity of trawl, trap, long line and set-net gears to sable­
+fish, Anoplopoma fimbria. Master's Thesis. Univ. Washington , Seattle, WA. 
+Koeneman , T. 1986. Alaska Department of Fish and Game, Petersburg, AK. 
+Pers. Communication. 
+Kramer, D.E. and D.MA Nordin. 1978. Physical data from a study of size, 
+weight and gonad quality for the green sea urchin (Strongylocentrotus 
+droebachiensis) over a one-year period. Manuscript Report No. 1476. 
+Fisheries and Oceans Canada, Vancouver , British Columbia . 
+Kyte, M. 1986. Andrea Enterprises, Lynnwood , WA. Pers. Communication. 
+
+--- Page 19 ---
+ED) Recoveries and Yields from Pacific Fish and Shellfish 
+Low, L.L., J.E. Smoker, L.J. Watson, J.D. Berger and M.W. Ecklund. 1989. A 
+Review of Product Recovery Rates for Alaska Groundfish . U.S. Department 
+of Commerce , NOAA Technical Memorandum NMFS F/NWC-175 ., Wash­
+ington, D.C. 
+Macintosh , R. and A.J. Paul. 1977. The relation of shell length to total weight, 
+tissue weight, edible-meat weight and reproduct ive organ weight of the 
+gastropods Neptunea heros, N. Iyrata, N. pribilo/fensis, and N. ventricosa of 
+the eastern Bering Sea. Proceedings of the National Shellfisheries Associa­
+tion, Volume 67. 
+Marshall, R.P. and T.J. Quinn. 1988. Estimation of average weight and biomass 
+of pink, chum, sockeye and coho salmon in southeast Alaska commercial 
+harvests. Fishery Research Bulletin 88-07. Alaska Department of Fish and 
+Game, Juneau, AK. 
+Matthews , R.H. and Y.J. Garrison. 1975. Food yields summarized by different 
+stages of preparation. Agriculture Handbook No. 102. United States 
+Department of Agriculture, Washington , D.C. 
+Monical, J.B. 1980. Comparative studies on growth of the purple hinge rock 
+scallop (Hinnites multirugosus [Gale]) in the marine waters of southern 
+California. Proceedings of the National Shellfisheries Association, Volume 
+70. 
+Mottet, M.G. 1976. The fishery biology and market preparation of sea cucum­
+bers. Technical Report No. 22. Washington Department of Fisheries, 
+Olympia, WA. 
+Mottet, M.G. 1978. A review of the fishery biology of abalones. Technical 
+Report No. 37. Washington Department of Fisheries, Olympia, WA. 
+Natural Resource Consultants. 1981. Pacific pollock (Theragra chafcogramma): 
+Resources , fisheries, products, and markets. National Marine Fisheries 
+Service, Seattle, WA. 
+Nettleton, J. 1985. Seafood nutrition: Facts, issues, and marketing of nutrition 
+in fish and shellfish. Osprey Books, Huntington , NY. 
+Norris, J.G., J. Rowley, and S.B. Mathews. 1987. Analysis of four factors 
+affecting the sablefish soft fish problem. National Marine Fisheries Service, 
+Seattle, WA. 
+Northwest and Alaska Fisheries Center. 1986. Monthly Report. National Marine 
+Fisheries Service, Seattle, WA. 
+Orth, F., C. Smelcer, H. Feder, and J. Williams. 1975. The Alaska clam fishery: 
+A survey and analysis of economic potential. Sea Grant Report No. 75-5. 
+Univ. Alaska, Fairbanks, AK. Recoveries alld Yields from Pacific Fish alld Shellfish 
+Otwell, W.S. and T.C. Lanier. 1978. Utilization of North Carolina skates and 
+rays. Special Scientific Report No. 31. North Carolina Department of 
+Natural Resources and Community Development Division of Marine Fisher­
+ies, Morehead City, NC. 
+Park, J. 2003. Oregon State University Seafoods Laboratory , Astoria, Personal 
+communica tion. 
+Parker, J.W. 1973. The abalone in Alaska. Wildlife Notebook Series. Alaska 
+Department of Fish and Game, Juneau, AK. 
+Paul, J.M., and A.J. Paul. 1984. Reproductive cycle and gonad yield of green 
+sea urchins in lower Cook Inlet, Alaska. Sea Grant Report No. 84-2. Univ. 
+Alaska, Fairbanks, AK. 
+Paust, B.C. 1988. Fishing for octopus: A guide for commercial fishermen. Sea 
+Grant Report No. 88-3. Univ. Alaska, Fairbanks , AK. 
+Paust, B. and R. Smith. 1986. Salmon shark manual: The development of a 
+commercial salmon shark, Lamna ditropis, fishery in the north Pacific. Sea 
+Grant Report No. 86-1. Univ. Alaska, Fairbanks , AK. 
+Peters, J.A. 1978. Scallops and their utilization. Marine Fisheries Review 
+40(11):1. 
+Powell, G.C. and R.B. Nickerson. 1965. Meat content of king crabs 
+(Parafithodes camtschatica, Tilesius) from Kodiak Island, Alaska. Informa­
+tional Leaflet No. 46. Alaska Department of Fish and Game, Juneau, AK. 
+Price, R. 1988. University of California , Davis, CA. Pers. communication. 
+Quayle, D.B. 1962. Abalones in British Columbia . Progress Report No. 114. 
+Fisheries Research Board of Canada, Ottawa, Ontario. 
+Randall, R.C. 1982. Herring spawn on kelp in pounds fishery, Prince William 
+Sound, 1979-82. Area Data Report No. 83-6. Alaska Department of Fish 
+and Game, Cordova, AK. 
+Rathjen, W.F. and J.B. Rivers. 1964. Gulf of Alaska scallop explorations. 
+Commercial Fisheries Review 26(3): 1. 
+Sakuda, H.M. 1957. Meat content of Pavlof Bay king crabs. Commercial 
+Fisheries Review 19(11 ):4. 
+Seagram , H.L. 1958. Contribution to the chemistry of the king crab 
+(Parafithodes camtschatica). Commercial Fisheries Review 20(11 ):15. 
+Slabyj, B. 1982. Storage and processing of mussels. Department of Food 
+Science, Univ. Maine, Orono, ME. 
+Slatergood, L.W. 1961. The sea urchin fishery. Fishery Leaflet 511. U.S. 
+Department of the Interior, Fish and Wildlife Service, Bureau of Commercial 
+Fisheries, Washington , D.C. 
+
+--- Page 20 ---
+ED Recoveries and Yields from Pacific Fish and Shellfish 
+Stanley, RD. and A.C.C. Otterdyks . 1987. Round weight conversion factors for 
+Pacific Ocean perch (Sebastes alutus) processed by B.C. freezer trawlers. 
+Manuscript Report No.1 925. Department of Fisheries and Oceans, 
+Nanaimo, British Columbia. 
+Stokes, R.L. 1986. The Washington geoduck fishery: Commercial prospects. 
+Sea Grant Report No. WSG-AS-86-2. Univ. Washington, Seattle, WA. 
+Stroud, G.D. 1972. The Herring. Advisory Note No. 57. Torry Research 
+Station, Aberdeen , Scotland, U.K. 
+Stroud, G.D. 1978. Squid. Advisory Note No. 77. Torry Research Station, 
+Aberdeen, Scotland, U.K. 
+Stroud, G.D. 1981. Handling and processing oysters. Advisory Note No. 84. 
+Torry Research Station, Aberdeen , Scotland, U.K. 
+Sund, J. 2003. Norquest Seafoods, Inc., Seattle, WA. Personal Communication. 
+Talley, K. 1982. Petrale sole: The fish of the month. Pacific Fishing 3(4):42. 
+Thompson, H. 1989. Sitka Sound Seafoods , Sitka, AK. Pers. communication. 
+Tomlinson, N., S.E. Geiger, GA Gibbard, and S.J. Westrheim. 1972. Utilization 
+of Pacific rockfish. I. Comparison of Sebastes alutus, S. reed; and S. 
+pror;gorwith respect to their quality during chilled and frozen storage. 
+Technical Report No. 425. Fisheries Research Board of Canada, 
+Vancouver , British Columbia. 
+Washburn, J. 1985. The economic viability of harvesting the red urchin. Na­
+tional Marine Fisheries Service, Seattle, WA. 
+Waterman, J.J. 1968. The cod. Advisory Note No. 33. Torry Research Station, 
+Aberdeen , Scotland, UK 
+Waterman, J.J. 1979. Measures, stowage rates, and yields of fishery products. 
+Advisory Note No. 17. Torry Research Station, Aberdeen , Scotland, U.K. 
+Youde, J.G. and J.R. Wix. 1967. Economics of the dungeness crab industry. 
+Information Circular No. 627. Agricultural Experiment Station, Oregon State 
+Univ., Corvallis, OR. 
+
