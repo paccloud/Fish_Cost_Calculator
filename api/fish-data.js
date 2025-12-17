@@ -68,9 +68,9 @@ async function handler(req, res) {
         const label = `${fromLabel}${yieldRow.to_state}`;
         
         fishData[species.name].conversions[label] = {
-          yield: String(yieldRow.yield_percent),
-          range: yieldRow.range_min && yieldRow.range_max 
-                 ? `${yieldRow.range_min}-${yieldRow.range_max}` 
+          yield: parseFloat(yieldRow.yield_percent),
+          range: yieldRow.range_min && yieldRow.range_max
+                 ? [parseFloat(yieldRow.range_min), parseFloat(yieldRow.range_max)]
                  : null,
           from: yieldRow.from_state,
           to: yieldRow.to_state
