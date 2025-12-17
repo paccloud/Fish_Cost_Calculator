@@ -24,7 +24,7 @@ const ContributorProfile = () => {
 
         // Load existing profile
         const token = localStorage.getItem('token');
-        fetch(apiUrl('/api/contributor/me'), {
+        fetch(apiUrl('/api/contributor'), {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(res => {

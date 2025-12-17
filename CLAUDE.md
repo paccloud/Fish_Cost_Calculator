@@ -70,3 +70,38 @@ Calculations: `GET/POST /api/saved-calcs`, `POST /api/save-calc`
 User Data: `GET/POST/PUT/DELETE /api/user-data`, `POST /api/upload-data` (Excel/CSV)
 
 All endpoints except register/login require JWT Bearer token.
+
+## Git Workflow
+
+**IMPORTANT: Always use feature branches for ALL work, including bug fixes.**
+
+### Branch Naming Convention
+- Features: `feature/<short-description>`
+- Bug fixes: `fix/<short-description>`
+- Refactors: `refactor/<short-description>`
+- Docs: `docs/<short-description>`
+
+### Required Workflow
+1. **Create a new branch** before starting any work:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make changes** and commit frequently with clear messages
+
+3. **Push the branch** to remote:
+   ```bash
+   git push -u origin feature/your-feature-name
+   ```
+
+4. **Create a Pull Request** using GitHub CLI:
+   ```bash
+   gh pr create --title "Your PR title" --body "Description of changes"
+   ```
+
+5. **Never commit directly to main** - all changes must go through PRs
+
+### Commit Message Format
+- Use present tense ("Add feature" not "Added feature")
+- Keep first line under 70 characters
+- Reference issue numbers when applicable

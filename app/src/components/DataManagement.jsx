@@ -155,7 +155,7 @@ const DataManagement = () => {
                         onClick={async () => {
                             const token = localStorage.getItem('token');
                             try {
-                                const response = await fetch(apiUrl('/api/export-user-data'), {
+                                const response = await fetch(apiUrl('/api/export?type=data'), {
                                     headers: { 'Authorization': `Bearer ${token}` }
                                 });
                                 const blob = await response.blob();
