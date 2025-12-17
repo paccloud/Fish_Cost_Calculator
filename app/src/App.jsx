@@ -16,6 +16,7 @@ import { stackClientApp } from './config/neonAuth';
 const NavBar = () => {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
     return (
         <nav className="bg-stone-50/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-gray-200 dark:border-white/10 sticky top-0 z-50 transition-colors">
@@ -61,11 +62,60 @@ const NavBar = () => {
                         <span>Login</span>
                     </Link>
                 )}
-                <button className="md:hidden text-slate-600 dark:text-gray-300">
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="md:hidden text-slate-600 dark:text-gray-300 hover:text-slate-800 dark:hover:text-white transition-colors"
+                  aria-label="Toggle mobile menu"
+                >
                   <Menu className="h-6 w-6" />
                 </button>
               </div>
             </div>
+
+            {/* Mobile menu */}
+            {mobileMenuOpen && (
+              <div className="md:hidden border-t border-gray-200 dark:border-white/10">
+                <div className="px-2 pt-2 pb-3 space-y-1">
+                  <Link
+                    to="/"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Calculator
+                  </Link>
+                  <Link
+                    to="/data-sources"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                  >
+                    <BookOpen size={16} /> Data Sources
+                  </Link>
+                  {user && (
+                    <Link
+                      to="/manage-data"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                    >
+                      <Database size={16} /> My Data
+                    </Link>
+                  )}
+                  <Link
+                    to="/upload"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Upload
+                  </Link>
+                  <Link
+                    to="/about"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    About
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </nav>
     );

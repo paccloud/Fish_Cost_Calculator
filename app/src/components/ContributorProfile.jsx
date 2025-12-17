@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { stackClientApp } from '../config/neonAuth';
 
 const ContributorProfile = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [formData, setFormData] = useState({
         display_name: '',
@@ -16,53 +16,100 @@ const ContributorProfile = () => {
         show_on_page: true
     });
 
+    /**
+     * Get authentication headers for API requests
+     * Handles both password-based (JWT) and OAuth (Stack Auth) authentication
+     */
+    const getAuthHeaders = useCallback(async () => {
+        const headers = { 'Content-Type': 'application/json' };
+
+        // For OAuth users, get Stack Auth access token
+        if (user?.authProvider === 'oauth') {
+            try {
+                const stackUser = await stackClientApp.getUser();
+                if (stackUser) {
+                    const accessToken = await stackUser.getAuthJson();
+                    if (accessToken?.accessToken) {
+                        headers['x-stack-access-token'] = accessToken.accessToken;
+                        return headers;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to get Stack Auth token:', err);
+            }
+        }
+
+        // For password-based users, use JWT token from localStorage
+        const token = localStorage.getItem('token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        return headers;
+    }, [user]);
+
     useEffect(() => {
         if (!user) {
-            setLoading(false);
             return;
         }
 
         // Load existing profile
-        const token = localStorage.getItem('token');
-        fetch(apiUrl('/api/contributor'), {
-            headers: { 'Authorization': `Bearer ${token}` }
-        })
-        .then(res => {
-            if (res.status === 404) {
-                // No profile yet, that's okay
-                setLoading(false);
-                return null;
+        const loadProfile = async () => {
+            try {
+                const headers = await getAuthHeaders();
+                const res = await fetch(apiUrl('/api/contributor'), { headers });
+
+                if (res.status === 404) {
+                    // No profile yet, that's okay
+                    return;
+                }
+
+                if (!res.ok) {
+                    const rawError = await res.text().catch(() => '');
+                    let message = `Unable to load your profile (HTTP ${res.status}). Please try again.`;
+
+                    if (rawError) {
+                        try {
+                            const errorData = JSON.parse(rawError);
+                            message = errorData?.error || errorData?.message || message;
+                        } catch {
+                            const trimmed = rawError.trim();
+                            if (trimmed && trimmed.length <= 200 && !trimmed.includes('<')) {
+                                message = trimmed;
+                            }
+                        }
+                    }
+
+                    setStatus({ type: 'error', message });
+                    return;
+                }
+
+                const data = await res.json();
+                if (data) {
+                    setFormData({
+                        display_name: data.display_name || '',
+                        organization: data.organization || '',
+                        bio: data.bio || '',
+                        show_on_page: data.show_on_page === 1
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load profile:', err);
+                setStatus({ type: 'error', message: 'Unable to load your profile. Please try again.' });
             }
-            return res.json();
-        })
-        .then(data => {
-            if (data) {
-                setFormData({
-                    display_name: data.display_name || '',
-                    organization: data.organization || '',
-                    bio: data.bio || '',
-                    show_on_page: data.show_on_page === 1
-                });
-            }
-            setLoading(false);
-        })
-        .catch(err => {
-            console.error('Failed to load profile:', err);
-            setLoading(false);
-        });
-    }, [user]);
+        };
+
+        loadProfile();
+    }, [user, getAuthHeaders]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const token = localStorage.getItem('token');
 
         try {
+            const headers = await getAuthHeaders();
             const res = await fetch(apiUrl('/api/contributor'), {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify(formData)
             });
 
@@ -70,9 +117,14 @@ const ContributorProfile = () => {
                 setStatus({ type: 'success', message: 'Profile saved successfully!' });
                 setTimeout(() => navigate('/manage-data'), 2000);
             } else {
-                setStatus({ type: 'error', message: 'Failed to save profile.' });
+                const errorData = await res.json().catch(() => ({}));
+                setStatus({
+                    type: 'error',
+                    message: errorData.error || 'Failed to save profile.'
+                });
             }
         } catch (error) {
+            console.error('Save profile error:', error);
             setStatus({ type: 'error', message: 'Error saving profile.' });
         }
     };
