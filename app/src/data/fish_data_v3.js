@@ -327,7 +327,7 @@ export const FISH_DATA_V3 = {
       "Round → Mince": { yield: 50, range: [30, 60] },
       "Round → Surimi (Traditional)": { yield: 20, range: [15, 22] },
       "Round → Surimi (Decanter)": { yield: 27, range: [26, 32] },
-      "Round → Roe": { yield: 6.5, range: [3, 20] },
+      "Round → Roe": { yield: 7, range: [3, 20] },
       "Skin-On Fillets → Skinless Fillets": { yield: 85, range: null },
       "Trim → Mince": { yield: 87, range: null }
     }
