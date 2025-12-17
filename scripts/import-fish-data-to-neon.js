@@ -330,6 +330,315 @@ const FISH_DATA_V3 = {
       "Round → Roe": { yield: 12, range: [8, 18] },
       "Round → Pickled": { yield: 55, range: [48, 62] }
     }
+  },
+  "Tuna, Albacore": {
+    scientific_name: "Thunnus alalunga",
+    category: "Tuna",
+    conversions: {
+      "Round → D/H-On": { yield: 90, range: null },
+      "Round → D/H-Off": { yield: 75, range: null },
+      "Round → Skinless Fillet": { yield: 35, range: null },
+      "Round → Steaks": { yield: 65, range: null },
+      "D/H-On → D/H-Off": { yield: 83, range: null },
+      "D/H-On → Skinless Fillet": { yield: 39, range: null },
+      "D/H-On → Steaks": { yield: 72, range: null }
+    }
+  },
+  "Turbot, Greenland": {
+    scientific_name: "Reinhardtius hippoglossoides",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 90, range: null },
+      "Round → D/H-Off": { yield: 74, range: [70, 80] },
+      "Round → Skinless Fillet": { yield: 30, range: [25, 35] }
+    }
+  },
+  "Trout": {
+    scientific_name: "Salmo sp./Salvelinus sp.",
+    category: "Salmonids",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: null },
+      "Round → D/H-Off": { yield: 69, range: null },
+      "Round → Skin-On Fillet": { yield: 61, range: [60, 65] },
+      "Round → Skinless Fillet": { yield: 55, range: null },
+      "Round → Steaks": { yield: 60, range: null },
+      "Round → Smoked D/H-Off": { yield: 54, range: null },
+      "D/H-On → D/H-Off": { yield: 78, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 69, range: null },
+      "D/H-On → Skinless Fillet": { yield: 63, range: null },
+      "D/H-On → Steaks": { yield: 68, range: null },
+      "D/H-Off → Skin-On Fillet": { yield: 88, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 79, range: null },
+      "D/H-Off → Steaks": { yield: 86, range: null }
+    }
+  },
+  "Sturgeon": {
+    scientific_name: "Acipenser sp.",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 85, range: [82, 87] },
+      "Round → D/H-Off": { yield: 75, range: [72, 78] },
+      "Round → Skin-On Fillet": { yield: 56, range: [50, 59] },
+      "Round → Skinless Fillet": { yield: 45, range: null },
+      "Round → Steaks": { yield: 62, range: null },
+      "Round → Roe": { yield: 10, range: [8, 12] },
+      "D/H-On → D/H-Off": { yield: 88, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 66, range: null },
+      "D/H-On → Skinless Fillet": { yield: 53, range: null },
+      "D/H-On → Steaks": { yield: 73, range: null }
+    }
+  },
+  "Squid": {
+    scientific_name: "Loligo sp.",
+    category: "Shellfish",
+    conversions: {
+      "Whole → Edible Meats": { yield: 71, range: [64, 73] },
+      "Whole → Mantle w/Fins": { yield: 52, range: [45, 55] },
+      "Whole → Mantle w/o Fins": { yield: 39, range: [36, 42] },
+      "Whole → Tentacles": { yield: 17, range: [13, 20] },
+      "Whole → Fins": { yield: 12, range: [10, 13] }
+    }
+  },
+  "Abalone, Pinto": {
+    scientific_name: "Haliotis kamtschatkana",
+    category: "Shellfish",
+    conversions: {
+      "Whole → Edible Muscle": { yield: 42, range: [40, 45] },
+      "Whole → Meat": { yield: 25, range: null },
+      "Whole → Trimming": { yield: 16, range: null },
+      "Whole → Dried Muscle": { yield: 10, range: null }
+    }
+  },
+  "Capelin": {
+    scientific_name: "Mallotus villosus",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 89, range: [84, 93] },
+      "Round → D/H-Off": { yield: 78, range: [73, 81] },
+      "Round → Belly Flaps": { yield: 10, range: null }
+    }
+  },
+  "Dogfish": {
+    scientific_name: "Squalus acanthias",
+    category: "Shark",
+    conversions: {
+      "Round → D/H-On": { yield: 75, range: [69, 80] },
+      "Round → D/H-Off": { yield: 55, range: [41, 68] },
+      "Round → Edible Portion": { yield: 36, range: [32, 40] },
+      "Round → Backs": { yield: 30, range: null },
+      "Round → Belly Flaps": { yield: 5, range: null },
+      "Round → Liver": { yield: 13, range: [10, 21] },
+      "D/H-On → D/H-Off": { yield: 69, range: null },
+      "D/H-On → Backs": { yield: 38, range: null },
+      "D/H-On → Belly Flaps": { yield: 7, range: null }
+    }
+  },
+  "Tanner Crab": {
+    scientific_name: "Chionoecetes bairdi/opilio",
+    category: "Shellfish",
+    conversions: {
+      "Raw Whole → Raw Sections": { yield: 68, range: [65, 72] },
+      "Raw Whole → Cooked Whole": { yield: 92, range: [90, 95] },
+      "Raw Whole → Cooked Sections": { yield: 60, range: [58, 66] },
+      "Raw Whole → Cooked Meat": { yield: 17, range: [15, 21] },
+      "Raw Sections → Cooked Sections": { yield: 88, range: null },
+      "Cooked Whole → Cooked Meat": { yield: 19, range: null },
+      "Cooked Sections → Cooked Meat": { yield: 28, range: null }
+    }
+  },
+  "Octopus": {
+    scientific_name: "Octopus dofleini",
+    category: "Shellfish",
+    conversions: {
+      "Whole → Gutted/Skin-On": { yield: 80, range: [80, 85] },
+      "Whole → Gutted/Skinned": { yield: 65, range: null },
+      "Whole → Viscera": { yield: 20, range: null }
+    }
+  },
+  "Mussels": {
+    scientific_name: "Mytilus sp.",
+    category: "Shellfish",
+    conversions: {
+      "Whole → Edible Meat (wild)": { yield: 26, range: [19, 32] },
+      "Whole → Edible Meat (cultured)": { yield: 20, range: [11, 27] },
+      "Whole → Steamed": { yield: 14, range: [10, 18] }
+    }
+  },
+  "Scallops": {
+    scientific_name: "Chlamys sp./Pecten sp.",
+    category: "Shellfish",
+    conversions: {
+      "Raw Whole → Adductor Muscle": { yield: 10, range: [8, 12] },
+      "Raw Whole → Viscera": { yield: 22, range: [20, 26] },
+      "Raw Meats → Cooked Meats": { yield: 50, range: null }
+    }
+  },
+  "Sea Cucumber": {
+    scientific_name: "Cucumaria sp.",
+    category: "Shellfish",
+    conversions: {
+      "Whole → Eviscerated Meat": { yield: 36, range: null },
+      "Whole → Edible Meat": { yield: 25, range: null },
+      "Whole → Cooked Meat": { yield: 13, range: null },
+      "Whole → Dried Meat": { yield: 5, range: null }
+    }
+  },
+  "Shrimp, Pink": {
+    scientific_name: "Pandalus sp.",
+    category: "Shellfish",
+    conversions: {
+      "Raw Whole → Raw Headless": { yield: 53, range: null },
+      "Raw Whole → Cooked Whole": { yield: 90, range: null },
+      "Raw Whole → Raw Peeled": { yield: 36, range: null },
+      "Raw Whole → Cooked Peeled": { yield: 25, range: null },
+      "Raw Headless → Cooked Peeled": { yield: 69, range: null },
+      "Cooked Whole → Cooked Peeled": { yield: 28, range: null }
+    }
+  },
+  "Skates": {
+    scientific_name: "Raja sp.",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 90, range: [75, 95] },
+      "Round → D/H-Off": { yield: 39, range: null },
+      "Round → Wings": { yield: 23, range: [20, 23] }
+    }
+  },
+  "Smelt": {
+    scientific_name: "Hypomesus sp./Spirinchus sp.",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 85, range: [82, 90] },
+      "Round → D/H-Off": { yield: 71, range: [67, 78] },
+      "Round → Skinless Fillet": { yield: 38, range: null }
+    }
+  },
+  "Petrale Sole": {
+    scientific_name: "Eopsetta jordani",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 86, range: [75, 90] },
+      "Round → D/H-Off": { yield: 66, range: [55, 75] },
+      "Round → Skinless Fillet": { yield: 29, range: [28, 32] }
+    }
+  },
+  "Rex Sole": {
+    scientific_name: "Glyptocephalus zachirus",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 85, range: [75, 90] },
+      "Round → D/H-Off": { yield: 65, range: [55, 75] },
+      "Round → Skinless Fillet": { yield: 33, range: [27, 37] }
+    }
+  },
+  "English Sole": {
+    scientific_name: "Parophrys vetulus",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 85, range: [79, 94] },
+      "Round → D/H-Off": { yield: 65, range: [55, 75] },
+      "Round → Skinless Fillet": { yield: 27, range: [25, 28] }
+    }
+  },
+  "Flathead Sole": {
+    scientific_name: "Hippoglossoides elassodon",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 86, range: [80, 94] },
+      "Round → D/H-Off": { yield: 67, range: [60, 79] },
+      "Round → Skinless Fillet": { yield: 27, range: [25, 32] }
+    }
+  },
+  "Starry Flounder": {
+    scientific_name: "Platichthys stellatus",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 84, range: [79, 86] },
+      "Round → D/H-Off": { yield: 67, range: [63, 69] },
+      "Round → Skinless Fillet": { yield: 33, range: [25, 40] }
+    }
+  },
+  "Alaska Plaice": {
+    scientific_name: "Pleuronectes quadrituberculatus",
+    category: "Flatfish",
+    conversions: {
+      "Round → D/H-On": { yield: 84, range: [79, 86] },
+      "Round → D/H-Off": { yield: 68, range: [60, 72] },
+      "Round → Skinless Fillet": { yield: 35, range: [30, 40] }
+    }
+  },
+  "Eels": {
+    scientific_name: "Anguilliformes",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 90, range: null },
+      "Round → D/H-Off": { yield: 72, range: [70, 75] },
+      "Round → Skin-On Flesh": { yield: 62, range: [56, 65] },
+      "Round → Smoked D/H-Off": { yield: 65, range: null }
+    }
+  },
+  "Pacific Lamprey": {
+    scientific_name: "Lampetra tridentata",
+    category: "Other",
+    conversions: {
+      "Round → D/H-Off": { yield: 77, range: [74, 85] }
+    }
+  },
+  "Pacific Saury": {
+    scientific_name: "Cololabis saira",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: [83, 92] },
+      "Round → D/H-Off": { yield: 76, range: [71, 86] },
+      "Round → Skinless Fillet": { yield: 57, range: [54, 61] }
+    }
+  },
+  "American Shad": {
+    scientific_name: "Alosa sapidissima",
+    category: "Other",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: [85, 92] },
+      "Round → D/H-Off": { yield: 74, range: [69, 77] },
+      "Round → Skin-On Fillet": { yield: 65, range: [62, 67] },
+      "Round → Skinless Fillet": { yield: 54, range: null },
+      "Round → Roe": { yield: 10, range: [3, 17] }
+    }
+  },
+  "Salmon Shark": {
+    scientific_name: "Lamna ditropis",
+    category: "Shark",
+    conversions: {
+      "Round → D/H-On": { yield: 80, range: null },
+      "Round → D/H-Off": { yield: 63, range: [50, 66] },
+      "Round → Trunk": { yield: 58, range: [44, 59] },
+      "Round → Skin-On Fillet": { yield: 53, range: [39, 57] },
+      "Round → Skinless Fillet": { yield: 44, range: [32, 48] },
+      "Round → Fins": { yield: 5, range: null }
+    }
+  },
+  "Blue Shark": {
+    scientific_name: "Prionace glauca",
+    category: "Shark",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: null },
+      "Round → D/H-Off": { yield: 67, range: null },
+      "Round → Trunk": { yield: 54, range: null },
+      "Round → Skin-On Fillet": { yield: 51, range: null },
+      "Round → Skinless Fillet": { yield: 40, range: null },
+      "Round → Fins": { yield: 6, range: null }
+    }
+  },
+  "Thresher Shark": {
+    scientific_name: "Alopias vulpinus",
+    category: "Shark",
+    conversions: {
+      "Round → D/H-On": { yield: 85, range: null },
+      "Round → D/H-Off": { yield: 71, range: null },
+      "Round → Trunk": { yield: 57, range: null },
+      "Round → Skin-On Fillet": { yield: 49, range: null },
+      "Round → Skinless Fillet": { yield: 44, range: null },
+      "Round → Fins": { yield: 14, range: null }
+    }
   }
 };
 
