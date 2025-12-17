@@ -280,7 +280,12 @@ function checkMissingConversions(species) {
     return { species, exists: false, missing: [] };
   }
 
-  const currentConversions = Object.keys(FISH_DATA_V3[species].conversions);
+  const rawConversions = FISH_DATA_V3[species].conversions;
+  const conversions =
+    rawConversions && typeof rawConversions === 'object' && !Array.isArray(rawConversions)
+      ? rawConversions
+      : {};
+  const currentConversions = Object.keys(conversions);
   const expectedConversions = EXPECTED_CONVERSIONS[species] || [];
 
   const missing = expectedConversions.filter(conv => !currentConversions.includes(conv));
@@ -337,6 +342,10 @@ function validateYieldChain(species, chain) {
 function validateSchema(species) {
   const data = FISH_DATA_V3[species];
   const errors = [];
+
+  if (!data) {
+    return [`Species "${species}" not found in FISH_DATA_V3`];
+  }
 
   if (!data.scientific_name) {
     errors.push("Missing scientific_name");

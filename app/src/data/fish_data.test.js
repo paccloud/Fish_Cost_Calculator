@@ -140,8 +140,9 @@ describe('Fish Data V3 - Yield Chain Consistency', () => {
       const result = validateYieldChain(species, chain);
 
       if (result === null || result.valid === null) {
-        console.warn(`Cannot validate ${species}: ${result?.message || 'species not found'}`);
-        return; // Skip if conversions don't exist yet
+        const message = `Cannot validate ${species}: ${result?.message || 'species not found'}`;
+        console.error(message);
+        expect.fail(message);
       }
 
       if (!result.valid) {
