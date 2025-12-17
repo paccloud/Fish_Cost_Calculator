@@ -2,6 +2,8 @@
  * Fish Yield Data - Clean version matching Neon database structure
  * Source: MAB-37 "Recoveries and Yields from Pacific Fish and Shellfish" (2004)
  * Alaska Sea Grant College Program
+ *
+ * Authoritative source: scripts/import-fish-data-to-neon.js (uses app/src/data/fish_data_v3.js)
  */
 
 const FISH_DATA = {
@@ -123,16 +125,17 @@ const FISH_DATA = {
       "Round → D/H-On": { yield: 88, range: [85, 92] },
       "Round → D/H-Off": { yield: 72, range: [68, 80] },
       "Round → Steaks": { yield: 62, range: [60, 75] },
+      "Round → Cheeks": { yield: 2, range: [1, 3] },
       "Round → Skin-On Fillet": { yield: 49, range: [45, 56] },
       "Round → Skinless Fillet (Fletch)": { yield: 41, range: [34, 44] },
       "D/H-On → D/H-Off": { yield: 83, range: [73, 94] },
       "D/H-On → Steaks": { yield: 76, range: [71, 88] },
       "D/H-On → Skin-On Fillet": { yield: 56, range: [47, 64] },
       "D/H-On → Skinless Fillet (Fletch)": { yield: 46, range: [38, 50] },
+      "D/H-Off → Steaks": { yield: 79, range: [70, 94] },
       "D/H-Off → Skin-On Fillet": { yield: 68, range: [64, 73] },
       "D/H-Off → Skinless Fillet (Fletch)": { yield: 56, range: [45, 60] },
-      "D/H-Off → Steaks": { yield: 79, range: [70, 94] },
-      "Round → Cheeks": { yield: 2, range: [1, 3] }
+      "D/H-Off → Roasts": { yield: 84, range: null }
     }
   },
   "Sablefish": {
