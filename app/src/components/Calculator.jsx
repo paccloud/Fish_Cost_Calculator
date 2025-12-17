@@ -1,25 +1,67 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
 import { ACRONYMS } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
 
-// Tooltip component for acronyms
+// Tooltip component for acronyms (mouse-only)
 const Tooltip = ({ text, children }) => {
   const [show, setShow] = useState(false);
+  const tooltipId = useId();
+  const showTooltip = () => setShow(true);
+  const hideTooltip = () => setShow(false);
+
   return (
-    <span 
+    <span
       className="relative inline-block cursor-help"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      aria-describedby={tooltipId}
     >
       {children}
-      {show && (
-        <span className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30">
-          {text}
-          <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-slate-800"></span>
-        </span>
-      )}
+      <span
+        id={tooltipId}
+        role="tooltip"
+        aria-hidden={!show}
+        className={`absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30 ${show ? '' : 'hidden'}`}
+      >
+        {text}
+        <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-slate-800"></span>
+      </span>
+    </span>
+  );
+};
+
+// Help tooltip component for interactive help icons (keyboard-accessible)
+const HelpTooltip = ({ text, ariaLabel }) => {
+  const [show, setShow] = useState(false);
+  const tooltipId = useId();
+  const showTooltip = () => setShow(true);
+  const hideTooltip = () => setShow(false);
+
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-describedby={tooltipId}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
+        className="inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 rounded-full"
+      >
+        <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
+      </button>
+      <span
+        id={tooltipId}
+        role="tooltip"
+        aria-hidden={!show}
+        className={`absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30 ${show ? '' : 'hidden'}`}
+      >
+        {text}
+        <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-slate-800"></span>
+      </span>
     </span>
   );
 };
@@ -358,8 +400,9 @@ const Calculator = () => {
         <div className="space-y-6">
           {/* Species Selection */}
           <div>
-            <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Species</label>
+            <label htmlFor="species-select" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Species</label>
             <select
+              id="species-select"
               value={species}
               onChange={handleSpeciesChange}
               className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
@@ -375,13 +418,15 @@ const Calculator = () => {
           {/* From/To Conversion Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+              <label htmlFor="from-state" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                 From State
-                <Tooltip text="The starting form of the fish (e.g., Round = whole fish as caught)">
-                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
-                </Tooltip>
+                <HelpTooltip
+                  text="The starting form of the fish (e.g., Round = whole fish as caught)"
+                  ariaLabel="Help: Information about From State"
+                />
               </label>
               <select
+                id="from-state"
                 value={fromState}
                 onChange={handleFromChange}
                 className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
@@ -395,13 +440,15 @@ const Calculator = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+              <label htmlFor="to-product" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                 To Product
-                <Tooltip text="The final form after processing">
-                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
-                </Tooltip>
+                <HelpTooltip
+                  text="The final form after processing"
+                  ariaLabel="Help: Information about To Product"
+                />
               </label>
               <select
+                id="to-product"
                 value={toState}
                 onChange={handleToChange}
                 className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
@@ -482,10 +529,11 @@ const Calculator = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {mode === 'cost' ? (
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Cost per Pound ({fromState || 'Whole'})</label>
+                <label htmlFor="cost-per-pound" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Cost per Pound ({fromState || 'Whole'})</label>
                 <div className="relative">
                   <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
                   <input
+                    id="cost-per-pound"
                     type="number"
                     value={cost}
                     onChange={(e) => setCost(e.target.value)}
@@ -496,9 +544,10 @@ const Calculator = () => {
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Target Output (lbs of {toState || 'Product'})</label>
+                <label htmlFor="target-output" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Target Output (lbs of {toState || 'Product'})</label>
                 <div className="relative">
                   <input
+                    id="target-output"
                     type="number"
                     value={targetWeight}
                     onChange={(e) => setTargetWeight(e.target.value)}
@@ -511,14 +560,15 @@ const Calculator = () => {
             )}
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Yield Percentage</label>
+              <label htmlFor="yield-percentage" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Yield Percentage</label>
               <div className="relative">
                 <input
+                  id="yield-percentage"
                   type="number"
                   value={yieldPercent}
                   onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
                   className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
-                  placeholder="0"
+                  placeholder="e.g. 6.5"
                 />
                 <span className="absolute right-3 top-3 text-slate-500 dark:text-gray-500">%</span>
               </div>
@@ -532,10 +582,11 @@ const Calculator = () => {
           {mode === 'cost' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Processing Cost</label>
+                <label htmlFor="processing-cost" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Processing Cost</label>
                 <div className="relative">
                   <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
                   <input
+                    id="processing-cost"
                     type="number"
                     value={processingCost}
                     onChange={(e) => setProcessingCost(e.target.value)}
@@ -546,8 +597,9 @@ const Calculator = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Applied To</label>
+                <label htmlFor="weight-type" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Applied To</label>
                 <select
+                  id="weight-type"
                   value={weightType}
                   onChange={(e) => setWeightType(e.target.value)}
                   className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
@@ -618,7 +670,15 @@ const Calculator = () => {
                       <Download size={16} /> Export History
                     </button>
                   </div>
-                  {saveStatus && <p className="text-sm mt-2 text-slate-700 dark:text-gray-300">{saveStatus}</p>}
+                  {saveStatus && (
+                    <p
+                      className="text-sm mt-2 text-slate-700 dark:text-gray-300"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {saveStatus}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="mt-4 text-xs text-slate-500 dark:text-gray-500">Log in to save this calculation</p>

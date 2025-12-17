@@ -8,14 +8,64 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.JWT_SECRET || 'freshfishfixsecret'; // Fallback for dev
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+if (process.env.VERCEL_URL) {
+    const vercelOrigin = `https://${process.env.VERCEL_URL}`;
+    if (!allowedOrigins.includes(vercelOrigin)) {
+        allowedOrigins.push(vercelOrigin);
+    }
+}
+const allowCredentials = process.env.CORS_ALLOW_CREDENTIALS === 'true';
+const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10) || 86400;
+const SECRET_KEY = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development'
+  ? crypto.randomBytes(32).toString('hex')
+  : null);
+
+if (!SECRET_KEY) {
+  throw new Error('JWT_SECRET is required to start the server');
+}
+
+if (!process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist sessions.');
+}
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: allowCredentials,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+app.use((err, req, res, next) => {
+  if (err && err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS origin denied' });
+  }
+  return next(err);
+});
 app.use(express.json());
+
+const CSV_FORMULA_PREFIX = /^[=+\-@]/;
+const sanitizeCsvValue = (value) => {
+  const stringValue = value === null || value === undefined ? '' : String(value);
+  const escaped = stringValue.replace(/"/g, '""');
+  return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
+};
 
 // Database Setup
 const db = new sqlite3.Database('./fish_app.db', (err) => {
@@ -75,7 +125,10 @@ const authenticate = (req, res, next) => {
     if (!token) return res.sendStatus(401);
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            const status = err.name === 'TokenExpiredError' ? 401 : 403;
+            return res.status(status).json({ error: 'Invalid or expired token' });
+        }
         req.user = user;
         next();
     });
@@ -105,8 +158,12 @@ app.post('/api/login', (req, res) => {
         
         const match = await bcrypt.compare(password, user.password);
         if (match) {
-            const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY);
-            res.json({ token, username: user.username });
+            const token = jwt.sign(
+                { id: user.id, username: user.username },
+                SECRET_KEY,
+                { expiresIn: `${TOKEN_EXPIRY_SECONDS}s` }
+            );
+            res.json({ token, username: user.username, expiresIn: TOKEN_EXPIRY_SECONDS });
         } else {
             res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -135,44 +192,98 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
 });
 
 // Upload Data (Excel/CSV)
-const upload = multer({ dest: 'uploads/' });
+const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
+const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+const allowedMimeTypes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'text/csv',
+    'application/csv'
+];
 
-app.post('/api/upload-data', authenticate, upload.single('file'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    
-    try {
-        const workbook = xlsx.readFile(req.file.path);
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const data = xlsx.utils.sheet_to_json(sheet);
-        
-        let count = 0;
-        db.serialize(() => {
-            const stmt = db.prepare('INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)');
-            data.forEach(row => {
-                // Heuristic mapping - adjust based on user Excel structure ("Common name", "% Yield")
-                const species = row['Common name'] || row['Species'] || row['Name'];
-                const yieldVal = row['% Yield'] || row['Yield'];
-                const product = row['Product'] || 'General';
-                
-                if (species && yieldVal) {
-                    let finalYield = yieldVal;
-                    if (finalYield < 1) finalYield = finalYield * 100; // decimal to percent
-                    
-                    stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
-                    count++;
-                }
-            });
-            stmt.finalize();
-        });
-        
-        // Cleanup
-        fs.unlinkSync(req.file.path);
-        
-        res.json({ message: `Imported ${count} records` });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+const upload = multer({
+    dest: 'uploads/',
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowedExtensions.includes(ext) && allowedMimeTypes.includes(file.mimetype)) {
+            return cb(null, true);
+        }
+        const error = new Error('Invalid file type');
+        error.code = 'INVALID_FILE_TYPE';
+        return cb(error);
     }
+});
+
+const uploadSingle = upload.single('file');
+const cleanupUpload = (filePath) => {
+    if (filePath) {
+        fs.unlink(filePath, (err) => {
+            if (err) {
+                console.error('Failed to cleanup upload', err);
+            }
+        });
+    }
+};
+
+app.post('/api/upload-data', authenticate, (req, res) => {
+    uploadSingle(req, res, async (err) => {
+        if (err) {
+            let message = 'Failed to upload file.';
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                message = 'File too large. Max 4MB.';
+            } else if (err.code === 'INVALID_FILE_TYPE') {
+                message = 'Invalid file type. Only .xlsx, .xls, or .csv files are allowed.';
+            }
+            return res.status(400).json({ error: message });
+        }
+
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+        try {
+            const workbook = xlsx.readFile(req.file.path);
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const data = xlsx.utils.sheet_to_json(sheet);
+
+            const parseYield = (val) => {
+                if (val === undefined || val === null) return NaN;
+                if (typeof val === 'number') return val;
+                const str = String(val).trim();
+                if (!str) return NaN;
+                const cleaned = str.replace(/%/g, '').replace(/,/g, '');
+                const num = Number(cleaned);
+                return Number.isFinite(num) ? num : NaN;
+            };
+            
+            let count = 0;
+            db.serialize(() => {
+                const stmt = db.prepare('INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)');
+                data.forEach(row => {
+                    // Heuristic mapping - adjust based on user Excel structure ("Common name", "% Yield")
+                    const species = row['Common name'] || row['Species'] || row['Name'];
+                    const yieldVal = row['% Yield'] || row['Yield'];
+                    const product = row['Product'] || 'General';
+                    
+                    if (species && yieldVal) {
+                        let finalYield = parseYield(yieldVal);
+                        if (!Number.isFinite(finalYield)) return;
+                        // Yield values are treated as percentage numbers (e.g. 6.5 for 6.5%). No implicit scaling is applied.
+                        
+                        stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
+                        count++;
+                    }
+                });
+                stmt.finalize();
+            });
+
+            res.json({ message: `Imported ${count} records` });
+        } catch (e) {
+            res.status(400).json({ error: 'Failed to process file. Ensure it is a valid spreadsheet.' });
+        } finally {
+            cleanupUpload(req.file && req.file.path);
+        }
+    });
 });
 
 // Get User Custom Data
@@ -245,8 +356,16 @@ app.get('/api/export-calcs', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
         const csvRows = rows.map(row => {
-            const date = new Date(row.date).toLocaleDateString();
-            return `"${date}","${row.species}","${row.product}","${row.cost}","${row.yield}","${row.result}"`;
+            const date = sanitizeCsvValue(new Date(row.date).toLocaleDateString());
+            const values = [
+                date,
+                sanitizeCsvValue(row.species),
+                sanitizeCsvValue(row.product),
+                sanitizeCsvValue(row.cost),
+                sanitizeCsvValue(row.yield),
+                sanitizeCsvValue(row.result)
+            ];
+            return `"${values.join('","')}"`;
         }).join('\n');
 
         const csv = headers + csvRows;
@@ -265,7 +384,13 @@ app.get('/api/export-user-data', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Species,Product,Yield (%),Source\n';
         const csvRows = rows.map(row => {
-            return `"${row.species}","${row.product}","${row.yield}","${row.source || ''}"`;
+            const values = [
+                sanitizeCsvValue(row.species),
+                sanitizeCsvValue(row.product),
+                sanitizeCsvValue(row.yield),
+                sanitizeCsvValue(row.source || '')
+            ];
+            return `"${values.join('","')}"`;
         }).join('\n');
 
         const csv = headers + csvRows;
@@ -341,4 +466,3 @@ app.post('/api/contributor', authenticate, (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
-

@@ -97,7 +97,10 @@ Before deploying, add these environment variables in Vercel:
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `DATABASE_URL` | Your Neon connection string | From Step 1.1 |
-| `JWT_SECRET` | Your generated secret | From Step 2 |
+| `JWT_SECRET` | Your generated secret | From Step 2 (required; API fails fast if missing) |
+| `ALLOWED_ORIGINS` | Comma-separated allowlist (e.g. `https://your-app.vercel.app,http://localhost:5173`) | Required for CORS |
+| `CORS_ALLOW_CREDENTIALS` | `true` or `false` | Only enable when you need cookies across origins |
+| `JWT_EXPIRES_IN_SECONDS` | Optional, default `86400` | JWT lifetime (same value should be used locally) |
 
 **How to add:**
 1. In Vercel project settings → Environment Variables
@@ -143,13 +146,7 @@ In Vercel Dashboard → Functions → View logs for any errors
 
 ### Update Frontend URL (Optional)
 
-If you want to restrict CORS in production:
-
-1. Update `api/_lib/cors.js`:
-   ```javascript
-   res.setHeader('Access-Control-Allow-Origin', 'https://your-app.vercel.app');
-   ```
-2. Commit and push
+If you want to restrict CORS in production, set `ALLOWED_ORIGINS` to your live + preview URLs (for example `https://your-app.vercel.app,https://your-app-git-preview.vercel.app`). No code changes are required.
 
 ---
 
@@ -212,7 +209,7 @@ This will:
 ### "CORS errors"
 
 - Check browser console for specific error
-- Verify CORS headers in `api/_lib/cors.js`
+- Verify `ALLOWED_ORIGINS` includes your current origin
 - Test with public endpoints first (`/api/contributors`)
 
 ### Cold starts are slow

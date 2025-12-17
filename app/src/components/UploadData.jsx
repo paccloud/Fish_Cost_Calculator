@@ -76,7 +76,7 @@ const UploadData = () => {
 
                 <p className="text-slate-600 dark:text-gray-300 mb-8">
                     Upload an Excel (.xlsx) file with your custom species yield data.
-                    The file should have columns for <strong>Species</strong> (or Common Name) and <strong>% Yield</strong>.
+                    The file should have columns for <strong>Species</strong> (or Common Name) and <strong>% Yield</strong> (enter percentage numbers like <strong>6.5</strong> for 6.5%).
                 </p>
 
                 <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-10 text-center hover:border-cyan-500/50 transition bg-slate-100 dark:bg-slate-800/50">
@@ -103,7 +103,11 @@ const UploadData = () => {
                 </div>
 
                 {status && (
-                    <div className={`mt-6 p-4 rounded-lg flex items-center gap-3 ${status.type === 'success' ? 'bg-green-900/40 text-green-300 border border-green-500/30' : 'bg-red-900/40 text-red-300 border border-red-500/30'}`}>
+                    <div
+                        className={`mt-6 p-4 rounded-lg flex items-center gap-3 ${status.type === 'success' ? 'bg-green-900/40 text-green-300 border border-green-500/30' : 'bg-red-900/40 text-red-300 border border-red-500/30'}`}
+                        role={status.type === 'success' ? 'status' : 'alert'}
+                        aria-live={status.type === 'success' ? 'polite' : 'assertive'}
+                    >
                         {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
                         {status.message}
                     </div>

@@ -312,6 +312,7 @@ const DataManagement = () => {
                                         onClick={() => handleEdit(item)}
                                         className="p-2 text-slate-600 dark:text-gray-400 hover:text-cyan-400 transition"
                                         title="Edit"
+                                        aria-label={`Edit ${item.species} ${item.product}`}
                                     >
                                         <Edit2 size={18} />
                                     </button>
@@ -319,6 +320,7 @@ const DataManagement = () => {
                                         onClick={() => handleDelete(item.id)}
                                         className="p-2 text-slate-600 dark:text-gray-400 hover:text-red-400 transition"
                                         title="Delete"
+                                        aria-label={`Delete ${item.species} ${item.product}`}
                                     >
                                         <Trash2 size={18} />
                                     </button>

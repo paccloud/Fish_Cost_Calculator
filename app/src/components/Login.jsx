@@ -101,10 +101,11 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Username</label>
+            <label htmlFor="username" className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Username</label>
             <div className="relative">
               <User className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
               <input
+                id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -115,10 +116,11 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Password</label>
+            <label htmlFor="password" className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -128,7 +130,11 @@ const Login = () => {
             </div>
           </div>
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm text-center" role="alert" aria-live="assertive">
+              {error}
+            </p>
+          )}
 
           <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition shadow-lg flex items-center justify-center gap-2">
             {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={20} />

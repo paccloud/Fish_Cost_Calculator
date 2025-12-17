@@ -171,11 +171,12 @@ const ContributorProfile = () => {
 
             <form onSubmit={handleSubmit} className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-slate-200 dark:border-white/20 shadow-lg space-y-6">
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="display_name" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                         <User size={16} />
                         Display Name *
                     </label>
                     <input
+                        id="display_name"
                         type="text"
                         value={formData.display_name}
                         onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
@@ -189,11 +190,12 @@ const ContributorProfile = () => {
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="organization" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                         <Building2 size={16} />
                         Organization
                     </label>
                     <input
+                        id="organization"
                         type="text"
                         value={formData.organization}
                         onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
@@ -203,11 +205,12 @@ const ContributorProfile = () => {
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="bio" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
                         <FileText size={16} />
                         Bio
                     </label>
                     <textarea
+                        id="bio"
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                         className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
