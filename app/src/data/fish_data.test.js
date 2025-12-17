@@ -142,7 +142,7 @@ describe('Fish Data V3 - Yield Chain Consistency', () => {
       if (result === null || result.valid === null) {
         const message = `Cannot validate ${species}: ${result?.message || 'species not found'}`;
         console.error(message);
-        expect.fail(message);
+        throw new Error(message);
       }
 
       if (!result.valid) {

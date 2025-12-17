@@ -6,6 +6,8 @@
  */
 
 import { FISH_DATA_V3 } from './fish_data_v3.js';
+import { fileURLToPath } from 'url';
+import process from 'node:process';
 
 // ============ EXPECTED DATA FROM MAB-37 PDF ============
 
@@ -470,7 +472,9 @@ function runValidation() {
 }
 
 // Run if executed directly
-runValidation();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  runValidation();
+}
 
 export {
   checkMissingSpecies,

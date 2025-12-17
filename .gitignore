@@ -40,3 +40,7 @@ server/uploads/
 # Vercel
 .vercel
 .env*.local
+
+# Design and datasets
+Design Inspiration Ideas/
+datasets/
