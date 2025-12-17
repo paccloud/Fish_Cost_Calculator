@@ -175,7 +175,7 @@ describe('Fish Data V3 - Key Species Conversions', () => {
 
     it('should have D/H-Off to SIB fillet conversions', () => {
       const cod = FISH_DATA_V3['Pacific Cod'];
-      expect(cod.conversions['D/H-Off → SIB Fillets']).toBeDefined();
+      expect(cod.conversions['Round → SIB Fillets (V-cut)']).toBeDefined();
     });
   });
 

@@ -1387,6 +1387,11 @@ export const PROFILES_DATA = {
     description: "Also known as Black Cod. Rich, buttery flavor with silky texture and high oil content.",
     culinary_uses: "Excellent smoked or grilled. Used in Japanese misoyaki.",
     edible_portions: "Whole fish, steaks, and fillets. High oil content ideal for smoking."
+  },
+  "Tuna, Albacore": {
+    description: "Mild, light-colored flesh with a firm texture. Often called 'white tuna' when canned.",
+    culinary_uses: "Excellent grilled, seared, or canned. Popular for sashimi when fresh.",
+    edible_portions: "Steaks, loins, and fillets."
   }
 };
 
