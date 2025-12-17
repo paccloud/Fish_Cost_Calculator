@@ -257,7 +257,7 @@ const EXPECTED_CONVERSIONS = {
     "D/H-On → D/H-Off",
     "D/H-On → Skinless Fillet",
     "D/H-On → Steaks",
-    "D/H-Off → Skinless Fillets",
+    "D/H-Off → Skinless Fillet",
     "D/H-Off → Steaks",
   ],
 };
@@ -387,7 +387,7 @@ function validateSchema(species) {
 // ============ MAIN VALIDATION ============
 
 function runValidation() {
-  console.log("=" .repeat(60));
+  console.log("=".repeat(60));
   console.log("FISH DATA VALIDATION REPORT");
   console.log("=".repeat(60));
   console.log("");

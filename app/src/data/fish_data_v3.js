@@ -910,7 +910,7 @@ export const FISH_DATA_V3 = {
       "D/H-On → D/H-Off": { yield: 80, range: [67, 89] },
       "D/H-On → Skinless Fillet": { yield: 39, range: [31, 45] },
       "D/H-On → Steaks": { yield: 69, range: null },
-      "D/H-Off → Skinless Fillets": { yield: 49, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 49, range: null },
       "D/H-Off → Steaks": { yield: 86, range: null }
     }
   },
