@@ -1032,15 +1032,6 @@ export const FISH_DATA_V3 = {
     }
   },
 
-  "Fish Meal": {
-    scientific_name: "Various species",
-    category: "Other",
-    conversions: {
-      "Lean Fish → Meal": { yield: 18, range: [16, 20] },
-      "Fatty Fish → Meal": { yield: 22, range: [20, 25] }
-    }
-  },
-
   "American Shad": {
     scientific_name: "Alosa sapidissima",
     category: "Other",
@@ -1345,6 +1336,17 @@ export const UNCERTAIN_DATA = [
   { species: "Sea Urchin (Red)", field: "Roe range", note: "Very wide range (8-30%) - varies with season" }
 ];
 
+export const PROCESSING_DATA = {
+  "Fish Meal": {
+    scientific_name: "Various species",
+    category: "Other",
+    conversions: {
+      "Lean Fish → Meal": { yield: 18, range: [16, 20] },
+      "Fatty Fish → Meal": { yield: 22, range: [20, 25] }
+    }
+  }
+};
+
 // ============ EXPORT LEGACY FORMAT ============
 // Calculator expects: FISH_DATA[species].conversions[label] = { from, to, yield, range }
 export const FISH_DATA = {};
@@ -1388,4 +1390,4 @@ export const PROFILES_DATA = {
   }
 };
 
-export default { FISH_DATA, FISH_DATA_V3, ACRONYMS, PROFILES_DATA, DATA_SOURCE, UNCERTAIN_DATA };
+export default { FISH_DATA, FISH_DATA_V3, PROCESSING_DATA, ACRONYMS, PROFILES_DATA, DATA_SOURCE, UNCERTAIN_DATA };

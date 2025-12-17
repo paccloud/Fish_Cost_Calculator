@@ -114,9 +114,6 @@ const EXPECTED_SPECIES = {
   "Sea Cucumber": true,
   "Sea Urchin (Green)": true,
   "Sea Urchin (Red)": true,
-
-  // General
-  "Fish Meal": true,  // Missing
 };
 
 // Expected conversions that should exist for key species

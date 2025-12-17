@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { FISH_DATA_V3, DATA_SOURCE, ACRONYMS } from './fish_data_v3.js';
+import { FISH_DATA_V3, PROCESSING_DATA, DATA_SOURCE, ACRONYMS } from './fish_data_v3.js';
 import {
   checkMissingSpecies,
   checkMissingConversions,
@@ -235,8 +235,8 @@ describe('Fish Data V3 - Key Species Conversions', () => {
 });
 
 describe('Fish Data V3 - Special Cases', () => {
-  it('should have Fish Meal entry', () => {
-    expect(FISH_DATA_V3['Fish Meal']).toBeDefined();
+  it('should have Fish Meal entry in PROCESSING_DATA', () => {
+    expect(PROCESSING_DATA['Fish Meal']).toBeDefined();
   });
 
   it('should have Sharks General entry', () => {
