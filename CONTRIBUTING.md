@@ -66,8 +66,38 @@ cd ../server && npm install && node server.js
 
 1. Update documentation if needed
 2. Ensure the app runs without errors
-3. Create a PR with a clear description of changes
-4. Wait for review
+3. **Update the CHANGELOG.md** (see below)
+4. Create a PR with a clear description of changes
+5. Wait for review
+
+#### Maintaining the Changelog
+
+We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. For every PR with user-facing changes:
+
+1. **Add entries under `[Unreleased]`** in `CHANGELOG.md`
+2. **Use the appropriate category**:
+   - `Added` - New features
+   - `Changed` - Changes to existing functionality
+   - `Fixed` - Bug fixes
+   - `Removed` - Removed features
+   - `Security` - Security fixes
+   - `Data` - Fish species/yield data updates
+3. **Write in past tense**: "Added user authentication" (not "Add user authentication")
+4. **Link to PRs/issues when relevant**: `- Fixed login bug ([#123](link))`
+5. **Be descriptive but concise**: Help users understand what changed and why it matters
+
+Example:
+```markdown
+## [Unreleased]
+
+### Added
+- Export calculations to CSV format
+
+### Fixed
+- Calculator rounding errors for small yields
+```
+
+When we create a new release, maintainers will move entries from `[Unreleased]` to a new version section.
 
 ## Code of Conduct
 
