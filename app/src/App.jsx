@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { StackProvider, StackTheme, StackHandler } from "@stackframe/react";
+import { Analytics } from "@vercel/analytics/react";
 import Calculator from './components/Calculator';
 import Login from './components/Login';
 import UploadData from './components/UploadData';
@@ -131,6 +132,7 @@ function AppContent() {
     <div className="min-h-screen bg-stone-50 dark:bg-slate-900 text-slate-800 dark:text-gray-100 font-sans selection:bg-cyan-500 selection:text-white transition-colors">
       <NavBar />
       <main className="py-10 px-4">
+        <Analytics />
         <Routes>
           <Route path="/handler/*" element={<StackHandlerRoutes />} />
           <Route path="/" element={<Calculator />} />
