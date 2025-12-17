@@ -47,10 +47,37 @@ export const FISH_DATA_V3 = {
       "Round → Skinless Fillet": { yield: 42, range: [41, 46] },
       "Round → SIB Fillet (V-Cut)": { yield: 33, range: [30, 36] },
       "Round → SIB Fillet (Pinboning)": { yield: 41, range: [40, 44] },
+      "Round → SIB Trim": { yield: 14, range: [12, 16] },
       "Round → Steaks": { yield: 58, range: [53, 65] },
+      "Round → Dry-Salt Sides": { yield: 36, range: null },
+      "Round → Mild Cure Sides": { yield: 30, range: null },
+      "Round → Smoked Sides": { yield: 30, range: null },
       "Round → Roe": { yield: 6, range: [3, 10] },
       "D/H-On → D/H-Off": { yield: 81, range: [72, 90] },
-      "D/H-Off → Smoked Sides": { yield: 41, range: [35, 50] }
+      "D/H-On → Skin-On Fillet (Hand)": { yield: 57, range: [50, 64] },
+      "D/H-On → Skin-On Fillet (Machine)": { yield: 55, range: [48, 61] },
+      "D/H-On → Skinless Fillet": { yield: 46, range: [43, 55] },
+      "D/H-On → SIB Fillet (V-Cut)": { yield: 36, range: [32, 43] },
+      "D/H-On → SIB Fillet (Pinboning)": { yield: 44, range: [41, 53] },
+      "D/H-On → SIB Trim": { yield: 16, range: [13, 19] },
+      "D/H-On → Steaks": { yield: 63, range: [56, 77] },
+      "D/H-On → Dry-Salt Sides": { yield: 40, range: null },
+      "D/H-On → Mild Cure Sides": { yield: 33, range: null },
+      "D/H-On → Smoked Sides": { yield: 33, range: null },
+      "D/H-Off → Skin-On Fillet (Hand)": { yield: 74, range: null },
+      "D/H-Off → Skin-On Fillet (Machine)": { yield: 71, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 58, range: null },
+      "D/H-Off → SIB Fillet (V-Cut)": { yield: 45, range: null },
+      "D/H-Off → SIB Fillet (Pinboning)": { yield: 55, range: null },
+      "D/H-Off → SIB Trim": { yield: 19, range: null },
+      "D/H-Off → Steaks": { yield: 80, range: null },
+      "D/H-Off → Dry-Salt Sides": { yield: 49, range: null },
+      "D/H-Off → Mild Cure Sides": { yield: 41, range: null },
+      "D/H-Off → Smoked Sides": { yield: 41, range: [35, 50] },
+      "D/H-On (Thawed) → Skin-On Fillet": { yield: 54, range: null },
+      "D/H-On (Thawed) → Skinless Fillet": { yield: 45, range: null },
+      "D/H-Off (Thawed) → Skin-On Fillet": { yield: 67, range: null },
+      "D/H-Off (Thawed) → Skinless Fillet": { yield: 56, range: null }
     }
   },
 
@@ -64,10 +91,39 @@ export const FISH_DATA_V3 = {
       "Round → Skin-On Fillet (Hand)": { yield: 60, range: [55, 63] },
       "Round → Skin-On Fillet (Machine)": { yield: 57, range: [52, 59] },
       "Round → Skinless Fillet": { yield: 50, range: [45, 53] },
+      "Round → SIB Fillet (V-Cut)": { yield: 36, range: [30, 36] },
+      "Round → SIB Fillet (Pinboning)": { yield: 48, range: [43, 51] },
+      "Round → SIB Trim": { yield: 15, range: [12, 16] },
       "Round → Steaks": { yield: 58, range: [55, 65] },
+      "Round → Dry-Salt Sides": { yield: 43, range: null },
+      "Round → Mild Cure Sides": { yield: 35, range: null },
+      "Round → Smoked Sides": { yield: 35, range: null },
       "Round → Roe": { yield: 8, range: [4, 10] },
       "D/H-On → D/H-Off": { yield: 83, range: [79, 91] },
-      "D/H-Off → Smoked Sides": { yield: 55, range: [45, 60] }
+      "D/H-On → Skin-On Fillet (Hand)": { yield: 67, range: [61, 74] },
+      "D/H-On → Skin-On Fillet (Machine)": { yield: 64, range: [58, 66] },
+      "D/H-On → Skinless Fillet": { yield: 56, range: [49, 62] },
+      "D/H-On → SIB Fillet (V-Cut)": { yield: 43, range: [38, 47] },
+      "D/H-On → SIB Fillet (Pinboning)": { yield: 53, range: [47, 59] },
+      "D/H-On → SIB Trim": { yield: 17, range: [13, 19] },
+      "D/H-On → Steaks": { yield: 65, range: [61, 75] },
+      "D/H-On → Dry-Salt Sides": { yield: 48, range: null },
+      "D/H-On → Mild Cure Sides": { yield: 39, range: null },
+      "D/H-On → Smoked Sides": { yield: 39, range: null },
+      "D/H-Off → Skin-On Fillet (Hand)": { yield: 81, range: null },
+      "D/H-Off → Skin-On Fillet (Machine)": { yield: 77, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 67, range: null },
+      "D/H-Off → SIB Fillet (V-Cut)": { yield: 51, range: null },
+      "D/H-Off → SIB Fillet (Pinboning)": { yield: 64, range: null },
+      "D/H-Off → SIB Trim": { yield: 20, range: null },
+      "D/H-Off → Steaks": { yield: 78, range: null },
+      "D/H-Off → Dry-Salt Sides": { yield: 58, range: null },
+      "D/H-Off → Salted D/H-Off": { yield: 47, range: null },
+      "D/H-Off → Smoked Sides": { yield: 55, range: [45, 60] },
+      "D/H-On (Thawed) → Skin-On Fillet": { yield: 62, range: null },
+      "D/H-On (Thawed) → Skinless Fillet": { yield: 52, range: null },
+      "D/H-Off (Thawed) → Skin-On Fillet": { yield: 75, range: null },
+      "D/H-Off (Thawed) → Skinless Fillet": { yield: 63, range: null }
     }
   },
 
@@ -79,11 +135,41 @@ export const FISH_DATA_V3 = {
       "Round → D/H-Off": { yield: 74, range: [66, 82] },
       "Round → Canned": { yield: 67, range: [60, 70] },
       "Round → Skin-On Fillet (Hand)": { yield: 53, range: [50, 59] },
+      "Round → Skin-On Fillet (Machine)": { yield: 51, range: [48, 56] },
       "Round → Skinless Fillet": { yield: 46, range: [41, 49] },
+      "Round → SIB Fillet (V-Cut)": { yield: 35, range: [30, 38] },
+      "Round → SIB Fillet (Pinboning)": { yield: 45, range: [40, 48] },
+      "Round → SIB Trim": { yield: 15, range: [12, 16] },
       "Round → Steaks": { yield: 57, range: [55, 65] },
+      "Round → Dry-Salt Sides": { yield: 40, range: null },
+      "Round → Mild Cure Sides": { yield: 33, range: null },
+      "Round → Smoked Sides": { yield: 33, range: null },
       "Round → Roe": { yield: 4, range: [3, 6] },
       "D/H-On → D/H-Off": { yield: 80, range: [70, 94] },
-      "D/H-Off → Smoked Sides": { yield: 45, range: [35, 60] }
+      "D/H-On → Skin-On Fillet (Hand)": { yield: 57, range: [53, 68] },
+      "D/H-On → Skin-On Fillet (Machine)": { yield: 54, range: [49, 62] },
+      "D/H-On → Skinless Fillet": { yield: 50, range: [43, 56] },
+      "D/H-On → SIB Fillet (V-Cut)": { yield: 38, range: [32, 41] },
+      "D/H-On → SIB Fillet (Pinboning)": { yield: 48, range: [42, 54] },
+      "D/H-On → SIB Trim": { yield: 16, range: [13, 28] },
+      "D/H-On → Steaks": { yield: 62, range: [59, 75] },
+      "D/H-On → Dry-Salt Sides": { yield: 44, range: null },
+      "D/H-On → Mild Cure Sides": { yield: 36, range: null },
+      "D/H-On → Smoked Sides": { yield: 36, range: null },
+      "D/H-Off → Skin-On Fillet (Hand)": { yield: 72, range: null },
+      "D/H-Off → Skin-On Fillet (Machine)": { yield: 69, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 62, range: null },
+      "D/H-Off → SIB Fillet (V-Cut)": { yield: 47, range: null },
+      "D/H-Off → SIB Fillet (Pinboning)": { yield: 59, range: null },
+      "D/H-Off → SIB Trim": { yield: 20, range: null },
+      "D/H-Off → Steaks": { yield: 77, range: null },
+      "D/H-Off → Dry-Salt Sides": { yield: 54, range: null },
+      "D/H-Off → Mild Cure Sides": { yield: 45, range: null },
+      "D/H-Off → Smoked Sides": { yield: 45, range: [35, 60] },
+      "D/H-On (Thawed) → Skin-On Fillet": { yield: 52, range: null },
+      "D/H-On (Thawed) → Skinless Fillet": { yield: 47, range: null },
+      "D/H-Off (Thawed) → Skin-On Fillet": { yield: 65, range: null },
+      "D/H-Off (Thawed) → Skinless Fillet": { yield: 59, range: null }
     }
   },
 
@@ -95,11 +181,41 @@ export const FISH_DATA_V3 = {
       "Round → D/H-Off": { yield: 75, range: [70, 83] },
       "Round → Canned": { yield: 67, range: [60, 70] },
       "Round → Skin-On Fillet (Hand)": { yield: 57, range: [52, 60] },
+      "Round → Skin-On Fillet (Machine)": { yield: 55, range: [50, 57] },
       "Round → Skinless Fillet": { yield: 51, range: [46, 56] },
+      "Round → SIB Fillet (V-Cut)": { yield: 38, range: [30, 40] },
+      "Round → SIB Fillet (Pinboning)": { yield: 49, range: [44, 54] },
+      "Round → SIB Trim": { yield: 14, range: [12, 17] },
       "Round → Steaks": { yield: 62, range: [58, 65] },
+      "Round → Dry-Salt Sides": { yield: 43, range: null },
+      "Round → Mild Cure Sides": { yield: 36, range: null },
+      "Round → Smoked Sides": { yield: 36, range: null },
       "Round → Roe": { yield: 7, range: [5, 10] },
       "D/H-On → D/H-Off": { yield: 82, range: [76, 92] },
-      "D/H-Off → Smoked Sides": { yield: 48, range: [40, 60] }
+      "D/H-On → Skin-On Fillet (Hand)": { yield: 62, range: [58, 67] },
+      "D/H-On → Skin-On Fillet (Machine)": { yield: 59, range: [56, 63] },
+      "D/H-On → Skinless Fillet": { yield: 55, range: [49, 63] },
+      "D/H-On → SIB Fillet (V-Cut)": { yield: 41, range: [32, 45] },
+      "D/H-On → SIB Fillet (Pinboning)": { yield: 52, range: [46, 60] },
+      "D/H-On → SIB Trim": { yield: 15, range: [13, 18] },
+      "D/H-On → Steaks": { yield: 66, range: [63, 73] },
+      "D/H-On → Dry-Salt Sides": { yield: 47, range: null },
+      "D/H-On → Mild Cure Sides": { yield: 39, range: null },
+      "D/H-On → Smoked Sides": { yield: 39, range: null },
+      "D/H-Off → Skin-On Fillet (Hand)": { yield: 76, range: null },
+      "D/H-Off → Skin-On Fillet (Machine)": { yield: 73, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 68, range: null },
+      "D/H-Off → SIB Fillet (V-Cut)": { yield: 51, range: null },
+      "D/H-Off → SIB Fillet (Pinboning)": { yield: 64, range: null },
+      "D/H-Off → SIB Trim": { yield: 19, range: null },
+      "D/H-Off → Steaks": { yield: 81, range: null },
+      "D/H-Off → Dry-Salt Sides": { yield: 57, range: null },
+      "D/H-Off → Mild Cure Sides": { yield: 48, range: null },
+      "D/H-Off → Smoked Sides": { yield: 48, range: [40, 60] },
+      "D/H-On (Thawed) → Skin-On Fillet": { yield: 58, range: null },
+      "D/H-On (Thawed) → Skinless Fillet": { yield: 49, range: null },
+      "D/H-Off (Thawed) → Skin-On Fillet": { yield: 71, range: null },
+      "D/H-Off (Thawed) → Skinless Fillet": { yield: 60, range: null }
     }
   },
 
@@ -111,10 +227,55 @@ export const FISH_DATA_V3 = {
       "Round → D/H-Off": { yield: 72, range: [68, 74] },
       "Round → Skin-On Fillet (Hand)": { yield: 55, range: [52, 60] },
       "Round → Skinless Fillet": { yield: 46, range: [41, 49] },
+      "Round → SIB Fillet (V-Cut)": { yield: 36, range: [30, 40] },
+      "Round → SIB Fillet (Pinboning)": { yield: 45, range: [40, 48] },
+      "Round → SIB Trim": { yield: 14, range: [12, 16] },
       "Round → Steaks": { yield: 58, range: [54, 65] },
+      "Round → Dry-Salt Sides": { yield: 40, range: null },
+      "Round → Mild Cure Sides": { yield: 34, range: null },
+      "Round → Smoked Sides": { yield: 34, range: null },
       "Round → Roe": { yield: 6, range: [3, 10] },
       "D/H-On → D/H-Off": { yield: 82, range: [73, 90] },
+      "D/H-On → Skin-On Fillet (Hand)": { yield: 63, range: [55, 73] },
+      "D/H-On → Skinless Fillet": { yield: 52, range: [44, 59] },
+      "D/H-On → SIB Fillet (V-Cut)": { yield: 41, range: [32, 49] },
+      "D/H-On → SIB Fillet (Pinboning)": { yield: 50, range: [42, 57] },
+      "D/H-On → SIB Trim": { yield: 16, range: [13, 20] },
+      "D/H-On → Steaks": { yield: 66, range: [57, 79] },
+      "D/H-On → Dry-Salt Sides": { yield: 46, range: null },
+      "D/H-On → Mild Cure Sides": { yield: 39, range: null },
+      "D/H-On → Smoked Sides": { yield: 39, range: null },
+      "D/H-Off → Skin-On Fillet (Hand)": { yield: 76, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 64, range: null },
+      "D/H-Off → SIB Fillet (V-Cut)": { yield: 50, range: null },
+      "D/H-Off → SIB Fillet (Pinboning)": { yield: 61, range: null },
+      "D/H-Off → SIB Trim": { yield: 19, range: null },
+      "D/H-Off → Steaks": { yield: 81, range: null },
+      "D/H-Off → Dry-Salt Sides": { yield: 56, range: null },
+      "D/H-Off → Mild Cure Sides": { yield: 47, range: null },
       "D/H-Off → Smoked Sides": { yield: 47, range: [35, 60] }
+    }
+  },
+
+  "Norwegian Farmed Salmon": {
+    scientific_name: "Salmo salar (farmed)",
+    category: "Salmon",
+    conversions: {
+      "D/H-On → D/H-Off": { yield: 88, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 76, range: null },
+      "D/H-On → Skinless Fillet": { yield: 68, range: null },
+      "D/H-On → Roasts": { yield: 85, range: null }
+    }
+  },
+
+  "Chilean Farmed Salmon": {
+    scientific_name: "Salmo salar (farmed)",
+    category: "Salmon",
+    conversions: {
+      "D/H-On → D/H-Off": { yield: 86, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 72, range: null },
+      "D/H-On → Skinless Fillet": { yield: 66, range: null },
+      "D/H-On → Roasts": { yield: 83, range: null }
     }
   },
 
@@ -128,13 +289,29 @@ export const FISH_DATA_V3 = {
       "Round → Skin-On Fillets (V-cut)": { yield: 45, range: [38, 48] },
       "Round → Skinless Fillets (V-cut)": { yield: 39, range: [22, 45] },
       "Round → SIB Fillets (V-cut)": { yield: 33, range: [18, 39] },
+      "Round → Skin-On Fillets": { yield: 38, range: null },
+      "Round → Skinless Fillets (J-cut)": { yield: 32, range: null },
+      "Round → SIB Fillets (J-cut)": { yield: 26, range: null },
       "Round → Steaks": { yield: 62, range: null },
+      "Round → Salted D/H-Off": { yield: 45, range: null },
+      "Round → Smoked D/H-Off": { yield: 58, range: [50, 65] },
+      "Round → Belly Flaps": { yield: 10, range: null },
+      "Round → Liver": { yield: 5, range: [3, 7] },
+      "Round → Roe": { yield: 4, range: [1, 7] },
       "D/H-On → D/H-Off": { yield: 78, range: null },
+      "D/H-On → Skin-On Fillets": { yield: 55, range: [42, 60] },
+      "D/H-On → Skinless Fillets": { yield: 48, range: [34, 56] },
+      "D/H-On → SIB Fillets": { yield: 41, range: [20, 48] },
       "D/H-Off → Skin-On Fillets": { yield: 71, range: [54, 80] },
       "D/H-Off → Skinless Fillets": { yield: 62, range: [31, 81] },
+      "D/H-Off → SIB Fillets": { yield: 52, range: [25, 70] },
       "D/H-Off → Smoked": { yield: 58, range: [50, 65] },
-      "Round → Liver": { yield: 5, range: [3, 7] },
-      "Round → Roe": { yield: 4, range: [1, 7] }
+      "Skin-On Fillets → Skinless Fillets": { yield: 87, range: null },
+      "Skin-On Fillets → Trim": { yield: 12, range: null },
+      "Skin-On Fillets → SIB Fillets": { yield: 73, range: null },
+      "Skinless Fillets → SIB Fillets": { yield: 84, range: null },
+      "Skinless Fillets → Trim": { yield: 13, range: null },
+      "Trim → Mince": { yield: 90, range: [80, 95] }
     }
   },
 
@@ -150,7 +327,9 @@ export const FISH_DATA_V3 = {
       "Round → Mince": { yield: 50, range: [30, 60] },
       "Round → Surimi (Traditional)": { yield: 20, range: [15, 22] },
       "Round → Surimi (Decanter)": { yield: 27, range: [26, 32] },
-      "Round → Roe": { yield: 6.5, range: [3, 20] }
+      "Round → Roe": { yield: 6.5, range: [3, 20] },
+      "Skin-On Fillets → Skinless Fillets": { yield: 85, range: null },
+      "Trim → Mince": { yield: 87, range: null }
     }
   },
 
@@ -164,7 +343,12 @@ export const FISH_DATA_V3 = {
       "Round → Skinless Fillets": { yield: 32, range: null },
       "Round → SIB Fillets": { yield: 27, range: null },
       "Round → Surimi (Decanter)": { yield: 27, range: [26, 30] },
-      "Round → Roe": { yield: 5, range: [2, 8] } // ⚠️ UNCERTAIN - range reconstructed
+      "Round → Roe": { yield: 5, range: [2, 8] }, // ⚠️ UNCERTAIN - range reconstructed
+      "D/H-On → Skin-On Fillets": { yield: 54, range: null },
+      "D/H-On → Skinless Fillets": { yield: 40, range: null },
+      "D/H-On → SIB Fillets": { yield: 34, range: null },
+      "Skin-On Fillets → Skinless Fillets": { yield: 74, range: null },
+      "Skin-On Fillets → SIB Fillets": { yield: 63, range: null }
     }
   },
 
@@ -180,6 +364,8 @@ export const FISH_DATA_V3 = {
       "Round → Skinless Fillet (Fletch)": { yield: 41, range: [34, 44] },
       "D/H-On → D/H-Off": { yield: 83, range: [73, 94] },
       "D/H-On → Steaks": { yield: 76, range: [71, 88] },
+      "D/H-On → Skin-On Fillet": { yield: 56, range: [47, 64] },
+      "D/H-On → Skinless Fillet (Fletch)": { yield: 46, range: [38, 50] },
       "D/H-Off → Steaks": { yield: 79, range: [70, 94] },
       "D/H-Off → Skin-On Fillet": { yield: 68, range: [64, 73] },
       "D/H-Off → Skinless Fillet (Fletch)": { yield: 56, range: [45, 60] },
@@ -336,7 +522,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 32, range: [30, 36] },
-      "Round → Skinless Fillet": { yield: 27, range: [25, 33] }
+      "Round → Skinless Fillet": { yield: 27, range: [25, 33] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 56, range: null },
+      "D/H-On → Skinless Fillet": { yield: 48, range: null }
     }
   },
 
@@ -347,7 +536,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 32, range: [30, 36] },
-      "Round → Skinless Fillet": { yield: 27, range: [25, 33] }
+      "Round → Skinless Fillet": { yield: 27, range: [25, 33] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 56, range: null },
+      "D/H-On → Skinless Fillet": { yield: 48, range: null }
     }
   },
 
@@ -358,7 +550,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -369,7 +564,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -380,7 +578,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -391,7 +592,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -402,7 +606,42 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
+    }
+  },
+
+  "Redstriped Rockfish": {
+    scientific_name: "Sebastes proriger",
+    category: "Rockfish",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: [85, 91] },
+      "Round → D/H-Off": { yield: 57, range: [48, 62] },
+      "Round → D/H-Off (Eastern)": { yield: 50, range: null },
+      "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "Skin-On Fillet → Skinless Fillet": { yield: 82, range: null },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
+    }
+  },
+
+  "Rosethorn Rockfish": {
+    scientific_name: "Sebastes helvomaculatus",
+    category: "Rockfish",
+    conversions: {
+      "Round → D/H-On": { yield: 88, range: [85, 91] },
+      "Round → D/H-Off": { yield: 57, range: [48, 62] },
+      "Round → D/H-Off (Eastern)": { yield: 50, range: null },
+      "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "Skin-On Fillet → Skinless Fillet": { yield: 82, range: null },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -413,7 +652,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 32, range: [30, 36] },
-      "Round → Skinless Fillet": { yield: 27, range: [25, 33] }
+      "Round → Skinless Fillet": { yield: 27, range: [25, 33] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 56, range: null },
+      "D/H-On → Skinless Fillet": { yield: 48, range: null }
     }
   },
 
@@ -424,7 +666,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 32, range: [30, 36] },
-      "Round → Skinless Fillet": { yield: 27, range: [25, 33] }
+      "Round → Skinless Fillet": { yield: 27, range: [25, 33] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 56, range: null },
+      "D/H-On → Skinless Fillet": { yield: 48, range: null }
     }
   },
 
@@ -435,7 +680,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -446,7 +694,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -457,7 +708,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -468,7 +722,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -479,7 +736,10 @@ export const FISH_DATA_V3 = {
       "Round → D/H-On": { yield: 88, range: [85, 91] },
       "Round → D/H-Off": { yield: 57, range: [48, 62] },
       "Round → Skin-On Fillet": { yield: 28, range: [25, 35] },
-      "Round → Skinless Fillet": { yield: 23, range: [21, 30] }
+      "Round → Skinless Fillet": { yield: 23, range: [21, 30] },
+      "D/H-On → D/H-Off": { yield: 65, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 49, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null }
     }
   },
 
@@ -587,6 +847,28 @@ export const FISH_DATA_V3 = {
     }
   },
 
+  "Sharks General": {
+    scientific_name: "Various species",
+    category: "Shark",
+    conversions: {
+      "Round → D/H-On": { yield: 80, range: [62, 90] },
+      "Round → D/H-Off": { yield: 58, range: [22, 75] },
+      "Round → Trunk": { yield: 51, range: [33, 67] },
+      "Round → Skin-On Fillet": { yield: 42, range: [21, 60] },
+      "Round → Skinless Fillet": { yield: 32, range: [17, 56] },
+      "Round → Fins": { yield: 5, range: [1, 12] },
+      "D/H-On → D/H-Off": { yield: 73, range: null },
+      "D/H-On → Trunk": { yield: 64, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 53, range: null },
+      "D/H-On → Skinless Fillet": { yield: 40, range: null },
+      "D/H-On → Fins": { yield: 6, range: null },
+      "D/H-Off → Trunk": { yield: 88, range: null },
+      "D/H-Off → Skin-On Fillet": { yield: 73, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 55, range: null },
+      "D/H-Off → Fins": { yield: 9, range: null }
+    }
+  },
+
   // ============ PACIFIC SAURY ============
   "Pacific Saury": {
     scientific_name: "Cololabis saira",
@@ -611,6 +893,8 @@ export const FISH_DATA_V3 = {
       "Round → Steaks": { yield: 62, range: [60, 65] },
       "D/H-Off → Skin-On Fillet": { yield: 59, range: null },
       "D/H-Off → Smoked Sides": { yield: 45, range: [40, 49] },
+      "D/H-Off (Eastern) → Skin-On Fillet": { yield: 59, range: null },
+      "D/H-Off (Eastern) → Skinless Fillet": { yield: 52, range: null },
       "Skin-On Fillets → Smoked Fillets": { yield: 80, range: null }
     }
   },
@@ -625,6 +909,7 @@ export const FISH_DATA_V3 = {
       "Round → Steaks": { yield: 62, range: null },
       "D/H-On → D/H-Off": { yield: 80, range: [67, 89] },
       "D/H-On → Skinless Fillet": { yield: 39, range: [31, 45] },
+      "D/H-On → Steaks": { yield: 69, range: null },
       "D/H-Off → Skinless Fillets": { yield: 49, range: null },
       "D/H-Off → Steaks": { yield: 86, range: null }
     }
@@ -712,6 +997,8 @@ export const FISH_DATA_V3 = {
       "Round → Steaks": { yield: 62, range: null },
       "Round → Roe": { yield: 10, range: [8, 12] },
       "D/H-On → D/H-Off": { yield: 88, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 66, range: null },
+      "D/H-On → Skinless Fillet": { yield: 53, range: null },
       "D/H-Off → Salted": { yield: 46, range: null },
       "D/H-Off → Smoked": { yield: 56, range: null }
     }
@@ -726,8 +1013,31 @@ export const FISH_DATA_V3 = {
       "Round → Skin-On Fillet": { yield: 61, range: [60, 65] },
       "Round → Skinless Fillet": { yield: 55, range: null },
       "Round → Steaks": { yield: 60, range: null },
-      "D/H-Off → Smoked": { yield: 54, range: null },
-      "D/H-On → D/H-Off": { yield: 78, range: null }
+      "D/H-On → D/H-Off": { yield: 78, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 69, range: null },
+      "D/H-On → Skinless Fillet": { yield: 63, range: null },
+      "D/H-Off → Skin-On Fillet": { yield: 88, range: null },
+      "D/H-Off → Skinless Fillet": { yield: 80, range: null },
+      "D/H-Off → Smoked": { yield: 54, range: null }
+    }
+  },
+
+  "Norwegian Farmed Trout": {
+    scientific_name: "Oncorhynchus mykiss (farmed)",
+    category: "Other",
+    conversions: {
+      "D/H-On → D/H-Off": { yield: 78, range: null },
+      "D/H-On → Skin-On Fillet": { yield: 69, range: null },
+      "D/H-On → Skinless Fillet": { yield: 63, range: null }
+    }
+  },
+
+  "Fish Meal": {
+    scientific_name: "Various species",
+    category: "Other",
+    conversions: {
+      "Lean Fish → Meal": { yield: 18, range: [16, 20] },
+      "Fatty Fish → Meal": { yield: 22, range: [20, 25] }
     }
   },
 
