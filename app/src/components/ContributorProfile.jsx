@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,7 +8,6 @@ import { stackClientApp } from '../config/neonAuth';
 const ContributorProfile = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
     const [formData, setFormData] = useState({
         display_name: '',
@@ -21,7 +20,7 @@ const ContributorProfile = () => {
      * Get authentication headers for API requests
      * Handles both password-based (JWT) and OAuth (Stack Auth) authentication
      */
-    const getAuthHeaders = async () => {
+    const getAuthHeaders = useCallback(async () => {
         const headers = { 'Content-Type': 'application/json' };
 
         // For OAuth users, get Stack Auth access token
@@ -47,11 +46,10 @@ const ContributorProfile = () => {
         }
 
         return headers;
-    };
+    }, [user]);
 
     useEffect(() => {
         if (!user) {
-            setLoading(false);
             return;
         }
 
@@ -63,7 +61,26 @@ const ContributorProfile = () => {
 
                 if (res.status === 404) {
                     // No profile yet, that's okay
-                    setLoading(false);
+                    return;
+                }
+
+                if (!res.ok) {
+                    const rawError = await res.text().catch(() => '');
+                    let message = `Unable to load your profile (HTTP ${res.status}). Please try again.`;
+
+                    if (rawError) {
+                        try {
+                            const errorData = JSON.parse(rawError);
+                            message = errorData?.error || errorData?.message || message;
+                        } catch {
+                            const trimmed = rawError.trim();
+                            if (trimmed && trimmed.length <= 200 && !trimmed.includes('<')) {
+                                message = trimmed;
+                            }
+                        }
+                    }
+
+                    setStatus({ type: 'error', message });
                     return;
                 }
 
@@ -76,15 +93,14 @@ const ContributorProfile = () => {
                         show_on_page: data.show_on_page === 1
                     });
                 }
-                setLoading(false);
             } catch (err) {
                 console.error('Failed to load profile:', err);
-                setLoading(false);
+                setStatus({ type: 'error', message: 'Unable to load your profile. Please try again.' });
             }
         };
 
         loadProfile();
-    }, [user]);
+    }, [user, getAuthHeaders]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
