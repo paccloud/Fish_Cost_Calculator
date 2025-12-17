@@ -45,8 +45,6 @@ These are only accessible on the server:
 - `STACK_SECRET_SERVER_KEY` - Stack Auth secret key (**NEVER expose to client**)
 - `JWT_SECRET` - Secret for signing JWT tokens (required; API/server will fail fast if missing)
 - `JWT_EXPIRES_IN_SECONDS` - Optional; JWT lifetime in seconds (default 86400 / 24h)
-- `ALLOWED_ORIGINS` - Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`)
-- `CORS_ALLOW_CREDENTIALS` - Set to `true` only if you need to send cookies with cross-origin requests
 - `DATABASE_URL` - PostgreSQL connection string
 - All `POSTGRES_*` and `PG*` variables from Neon
 - `GEMINI_API_KEY` - **MUST be server-side only** (no `VITE_` prefix); Gemini API key for AI features (e.g., spreadsheet parsing). **NEVER expose to client code**. All Gemini API calls must be routed through server endpoints (e.g., `/api/parse-spreadsheet`) - the browser should never have direct access to this key.
