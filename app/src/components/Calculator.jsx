@@ -369,15 +369,36 @@ const Calculator = () => {
   // Custom entries state (persisted in localStorage)
   const [customSpecies, setCustomSpecies] = useState(() => {
     const saved = localStorage.getItem('customFishSpecies');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse customFishSpecies from localStorage:', e);
+      localStorage.removeItem('customFishSpecies');
+      return [];
+    }
   });
   const [customFromStates, setCustomFromStates] = useState(() => {
     const saved = localStorage.getItem('customFromStates');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse customFromStates from localStorage:', e);
+      localStorage.removeItem('customFromStates');
+      return [];
+    }
   });
   const [customToStates, setCustomToStates] = useState(() => {
     const saved = localStorage.getItem('customToStates');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse customToStates from localStorage:', e);
+      localStorage.removeItem('customToStates');
+      return [];
+    }
   });
 
   // Persist custom entries to localStorage
