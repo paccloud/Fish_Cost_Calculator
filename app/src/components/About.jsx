@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coffee, Heart, ExternalLink, Fish, Anchor, Sparkles, Github } from 'lucide-react';
+import { Coffee, Heart, Fish, Anchor, Sparkles, Github, Mail } from 'lucide-react';
 
 const About = () => {
     return (
@@ -15,10 +15,10 @@ const About = () => {
                     </div>
                 </div>
                 <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent mb-4">
-                    About Local Catch
+                    About This Calculator
                 </h1>
                 <p className="text-xl text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
-                    A community-driven fish cost calculator for sustainable seafood
+                    A simple fish cost calculator for the seafood industry
                 </p>
             </div>
 
@@ -28,7 +28,7 @@ const About = () => {
                 <div className="relative bg-white dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-white/10 rounded-2xl p-8 md:p-10 shadow-md dark:shadow-none">
                     <div className="flex items-center gap-3 mb-6">
                         <Anchor className="h-6 w-6 text-cyan-400" />
-                        <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">The Origin Story</h2>
+                        <h2 className="text-2xl font-semibold text-slate-800 dark:text-white">The Story</h2>
                     </div>
 
                     <div className="space-y-4 text-slate-600 dark:text-gray-300 leading-relaxed">
@@ -38,37 +38,29 @@ const About = () => {
                             evolved into something the community could benefit from.
                         </p>
                         <p>
-                            After some time away from active development, the project was <span className="text-cyan-400 font-medium">reinvigorated 
-                            by a conversation on the listserv of the local Catch network</span>. The discussions about 
-                            pricing transparency and the challenges fishers face when calculating fair prices for 
-                            their catch reminded me why this tool matters.
-                        </p>
-                        <p>
-                            The Catch network communities work tirelessly to support sustainable, community-based 
-                            fisheries. Their dedication to connecting fishers with consumers while promoting 
-                            transparency inspired me to dust off this project and make it available to everyone.
+                            The discussions about pricing transparency and the challenges fishers face when calculating 
+                            fair prices for their catch reminded me why this tool matters. I wanted to create something 
+                            that helps everyone in the seafood industry make informed decisions.
                         </p>
                     </div>
 
-                    {/* Catch Network Link */}
+                    {/* Contact Section */}
                     <div className="mt-8 p-4 bg-slate-100 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-white/5">
                         <div className="flex items-start gap-4">
                             <div className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-lg shrink-0">
-                                <ExternalLink className="h-5 w-5 text-white" />
+                                <Mail className="h-5 w-5 text-white" />
                             </div>
                             <div>
-                                <h3 className="font-medium text-slate-800 dark:text-white mb-1">Learn About Catch</h3>
+                                <h3 className="font-medium text-slate-800 dark:text-white mb-1">Get in Touch</h3>
                                 <p className="text-sm text-slate-600 dark:text-gray-400 mb-3">
-                                    The Catch network supports community-supported fisheries and sustainable seafood initiatives.
+                                    Have questions, suggestions, or feedback? I'd love to hear from you.
                                 </p>
                                 <a 
-                                    href="https://localcatch.org" 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
+                                    href="mailto:ryan@pacificcloudseafoods.com"
                                     className="inline-flex items-center gap-2 text-cyan-400 hover:text-cyan-300 transition-colors text-sm font-medium"
                                 >
-                                    Visit Local Catch Network
-                                    <ExternalLink className="h-4 w-4" />
+                                    ryan@pacificcloudseafoods.com
+                                    <Mail className="h-4 w-4" />
                                 </a>
                             </div>
                         </div>
