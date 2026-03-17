@@ -11,7 +11,7 @@ const DataManagement = () => {
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    
+
     const [formData, setFormData] = useState({
         species: '',
         product: '',
@@ -19,7 +19,6 @@ const DataManagement = () => {
         source: 'User Input'
     });
 
-    // Load user's custom data
     useEffect(() => {
         if (user) {
             loadUserData();
@@ -67,7 +66,7 @@ const DataManagement = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         const token = localStorage.getItem('token');
         const endpoint = editingId
             ? apiUrl(`/api/user-data/${editingId}`)
@@ -115,7 +114,7 @@ const DataManagement = () => {
 
     const handleDelete = async (id) => {
         if (!confirm('Are you sure you want to delete this entry?')) return;
-        
+
         try {
             const token = localStorage.getItem('token');
             const res = await fetch(apiUrl(`/api/user-data/${id}`), {
@@ -143,14 +142,14 @@ const DataManagement = () => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-slate-100 dark:bg-slate-800 p-8 rounded-full">
-                    <Database size={48} className="text-slate-500 dark:text-gray-500" />
+                <div className="bg-[#f0ebe4] dark:bg-white/8 p-8 rounded-full">
+                    <Database size={40} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Login Required</h2>
-                <p className="text-slate-600 dark:text-gray-400 max-w-md">
+                <h2 className="text-xl font-bold text-brand-teal dark:text-[#e8ddd4]">Login Required</h2>
+                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-md text-sm">
                     You need to be logged in to manage your custom yield data.
                 </p>
-                <Link to="/login" className="px-6 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition">
+                <Link to="/login" className="px-6 py-2 bg-brand-teal hover:bg-brand-teal-light text-white rounded transition text-sm font-medium">
                     Go to Login
                 </Link>
             </div>
@@ -159,17 +158,18 @@ const DataManagement = () => {
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                        <Database className="text-cyan-400" />
+                    <h1 className="text-2xl font-bold text-brand-teal dark:text-[#e8ddd4] flex items-center gap-3">
+                        <Database className="text-brand-terracotta" size={22} />
                         Manage Your Data
                     </h1>
-                    <p className="text-slate-600 dark:text-gray-400 mt-2">
-                        Add, edit, or delete your custom yield data • <Link to="/profile" className="text-cyan-600 dark:text-cyan-400 hover:underline">Edit Contributor Profile</Link>
+                    <p className="text-[#4a6572] dark:text-[#8fa8b2] mt-1 text-sm">
+                        Add, edit, or delete your custom yield data •{' '}
+                        <Link to="/profile" className="text-brand-terracotta hover:underline">Edit Contributor Profile</Link>
                     </p>
                 </div>
-                
+
                 <div className="flex gap-3">
                     <button
                         onClick={async () => {
@@ -191,17 +191,17 @@ const DataManagement = () => {
                                 console.error('Export failed:', error);
                             }
                         }}
-                        className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 bg-[#4a6572] hover:bg-[#3a5260] text-white px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                         disabled={userData.length === 0}
                     >
-                        <Download size={20} />
+                        <Download size={16} />
                         Export CSV
                     </button>
                     <button
                         onClick={() => setShowForm(!showForm)}
-                        className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-lg transition"
+                        className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
                     >
-                        <Plus size={20} />
+                        <Plus size={16} />
                         Add Entry
                     </button>
                 </div>
@@ -209,12 +209,12 @@ const DataManagement = () => {
 
             {/* Status Message */}
             {status && (
-                <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-                    status.type === 'success' 
-                        ? 'bg-green-900/40 text-green-300 border border-green-500/30' 
-                        : 'bg-red-900/40 text-red-300 border border-red-500/30'
+                <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
+                    status.type === 'success'
+                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30'
                 }`}>
-                    {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                    {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                     {status.message}
                     <button onClick={() => setStatus(null)} className="ml-auto">
                         <X size={16} />
@@ -224,39 +224,39 @@ const DataManagement = () => {
 
             {/* Add/Edit Form */}
             {showForm && (
-                <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl p-6 mb-8 shadow-md dark:shadow-none">
-                    <h2 className="text-xl font-semibold text-slate-800 dark:text-white mb-4">
+                <div className="bg-white dark:bg-white/5 border border-[#d6ccc4] dark:border-white/15 rounded-lg p-6 mb-8 shadow-sm">
+                    <h2 className="text-lg font-semibold text-brand-teal dark:text-[#e8ddd4] mb-4">
                         {editingId ? 'Edit Entry' : 'Add New Entry'}
                     </h2>
-                    
+
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-2">Species Name</label>
+                                <label className="block text-sm font-medium text-[#4a6572] dark:text-[#8fa8b2] mb-2">Species Name</label>
                                 <input
                                     type="text"
                                     value={formData.species}
                                     onChange={(e) => setFormData({...formData, species: e.target.value})}
-                                    className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 text-[#1a2e35] dark:text-[#e8ddd4] focus:ring-2 focus:ring-brand-teal outline-none text-sm"
                                     placeholder="e.g. Atlantic Salmon"
                                     required
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-2">Product/Conversion</label>
+                                <label className="block text-sm font-medium text-[#4a6572] dark:text-[#8fa8b2] mb-2">Product/Conversion</label>
                                 <input
                                     type="text"
                                     value={formData.product}
                                     onChange={(e) => setFormData({...formData, product: e.target.value})}
-                                    className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 text-[#1a2e35] dark:text-[#e8ddd4] focus:ring-2 focus:ring-brand-teal outline-none text-sm"
                                     placeholder="e.g. Skinless Fillet"
                                     required
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-2">Yield (%)</label>
+                                <label className="block text-sm font-medium text-[#4a6572] dark:text-[#8fa8b2] mb-2">Yield (%)</label>
                                 <input
                                     type="number"
                                     step="0.1"
@@ -264,38 +264,38 @@ const DataManagement = () => {
                                     max="100"
                                     value={formData.yield}
                                     onChange={(e) => setFormData({...formData, yield: e.target.value})}
-                                    className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 text-[#1a2e35] dark:text-[#e8ddd4] focus:ring-2 focus:ring-brand-teal outline-none text-sm"
                                     placeholder="e.g. 45"
                                     required
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 dark:text-gray-300 mb-2">Source/Notes</label>
+                                <label className="block text-sm font-medium text-[#4a6572] dark:text-[#8fa8b2] mb-2">Source/Notes</label>
                                 <input
                                     type="text"
                                     value={formData.source}
                                     onChange={(e) => setFormData({...formData, source: e.target.value})}
-                                    className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-800 dark:text-white focus:ring-2 focus:ring-cyan-500 outline-none"
+                                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 text-[#1a2e35] dark:text-[#e8ddd4] focus:ring-2 focus:ring-brand-teal outline-none text-sm"
                                     placeholder="e.g. Personal experience"
                                 />
                             </div>
                         </div>
-                        
+
                         <div className="flex gap-3">
                             <button
                                 type="submit"
-                                className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition"
+                                className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
                             >
-                                <Save size={18} />
+                                <Save size={16} />
                                 {editingId ? 'Update' : 'Save'}
                             </button>
                             <button
                                 type="button"
                                 onClick={resetForm}
-                                className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg transition"
+                                className="flex items-center gap-2 bg-[#ede7e0] dark:bg-white/10 hover:bg-[#d6ccc4] dark:hover:bg-white/15 text-[#4a6572] dark:text-[#8fa8b2] px-4 py-2 rounded transition text-sm font-medium"
                             >
-                                <X size={18} />
+                                <X size={16} />
                                 Cancel
                             </button>
                         </div>
@@ -304,55 +304,55 @@ const DataManagement = () => {
             )}
 
             {/* Data List */}
-            <div className="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-md dark:shadow-none">
-                <div className="p-4 border-b border-slate-200 dark:border-white/10">
-                    <h2 className="text-lg font-semibold text-slate-800 dark:text-white">Your Custom Data</h2>
+            <div className="bg-white dark:bg-white/5 border border-[#d6ccc4] dark:border-white/10 rounded-lg overflow-hidden shadow-sm">
+                <div className="p-4 border-b border-[#d6ccc4] dark:border-white/10">
+                    <h2 className="text-base font-semibold text-brand-teal dark:text-[#e8ddd4]">Your Custom Data</h2>
                 </div>
 
                 {loading ? (
-                    <div className="p-8 text-center text-slate-600 dark:text-gray-400">Loading...</div>
+                    <div className="p-8 text-center text-[#4a6572] dark:text-[#8fa8b2]">Loading...</div>
                 ) : userData.length === 0 ? (
-                    <div className="p-8 text-center text-slate-600 dark:text-gray-400">
-                        <Database size={48} className="mx-auto mb-4 opacity-50" />
+                    <div className="p-8 text-center text-[#4a6572] dark:text-[#8fa8b2]">
+                        <Database size={40} className="mx-auto mb-4 opacity-30" />
                         <p>No custom data yet. Add your first entry above!</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-slate-200 dark:divide-white/5">
+                    <div className="divide-y divide-[#ede7e0] dark:divide-white/5">
                         {userData.map((item) => (
-                            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 transition">
+                            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-[#f5f0eb] dark:hover:bg-white/5 transition">
                                 <div>
-                                    <p className="text-slate-800 dark:text-white font-medium flex items-center gap-2">
+                                    <p className="text-[#1a2e35] dark:text-[#e8ddd4] font-medium flex items-center gap-2 text-sm">
                                         {item.species}
                                         {item.is_shared ? (
-                                            <span className="text-xs bg-cyan-900/40 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full">Shared</span>
+                                            <span className="text-xs bg-brand-teal/10 text-brand-teal dark:text-brand-yellow border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
                                         ) : null}
                                     </p>
-                                    <p className="text-sm text-slate-600 dark:text-gray-400">
-                                        {item.product} → <span className="text-cyan-400">{item.yield}%</span>
-                                        {item.source && <span className="ml-2 text-slate-500 dark:text-gray-500">({item.source})</span>}
+                                    <p className="text-sm text-[#4a6572] dark:text-[#8fa8b2]">
+                                        {item.product} → <span className="text-brand-teal dark:text-brand-yellow font-medium">{item.yield}%</span>
+                                        {item.source && <span className="ml-2 text-[#4a6572]/60 dark:text-[#8fa8b2]/60">({item.source})</span>}
                                     </p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-1">
                                     <button
                                         onClick={() => handleToggleShare(item)}
-                                        className={`p-2 transition ${item.is_shared ? 'text-cyan-400 hover:text-slate-400' : 'text-slate-600 dark:text-gray-400 hover:text-cyan-400'}`}
+                                        className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal dark:text-brand-yellow hover:text-[#4a6572]' : 'text-[#4a6572] dark:text-[#8fa8b2] hover:text-brand-teal'}`}
                                         title={item.is_shared ? 'Remove from community' : 'Share with community'}
                                     >
-                                        {item.is_shared ? <EyeOff size={18} /> : <Share2 size={18} />}
+                                        {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
                                     </button>
                                     <button
                                         onClick={() => handleEdit(item)}
-                                        className="p-2 text-slate-600 dark:text-gray-400 hover:text-cyan-400 transition"
+                                        className="p-2 rounded text-[#4a6572] dark:text-[#8fa8b2] hover:text-brand-teal transition"
                                         title="Edit"
                                     >
-                                        <Edit2 size={18} />
+                                        <Edit2 size={16} />
                                     </button>
                                     <button
                                         onClick={() => handleDelete(item.id)}
-                                        className="p-2 text-slate-600 dark:text-gray-400 hover:text-red-400 transition"
+                                        className="p-2 rounded text-[#4a6572] dark:text-[#8fa8b2] hover:text-red-500 transition"
                                         title="Delete"
                                     >
-                                        <Trash2 size={18} />
+                                        <Trash2 size={16} />
                                     </button>
                                 </div>
                             </div>

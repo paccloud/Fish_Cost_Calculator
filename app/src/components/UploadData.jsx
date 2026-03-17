@@ -33,9 +33,9 @@ const UploadData = () => {
                 },
                 body: formData
             });
-            
+
             const data = await res.json();
-            
+
             if (res.ok) {
                 setStatus({ type: 'success', message: data.message || 'Upload successful!' });
             } else {
@@ -51,15 +51,15 @@ const UploadData = () => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-slate-100 dark:bg-slate-800 p-8 rounded-full">
-                    <Upload size={48} className="text-slate-500 dark:text-gray-500" />
+                <div className="bg-[#f0ebe4] dark:bg-white/8 p-8 rounded-full">
+                    <Upload size={40} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Login Required</h2>
-                <p className="text-slate-600 dark:text-gray-400 max-w-md">
+                <h2 className="text-xl font-bold text-brand-teal dark:text-[#e8ddd4]">Login Required</h2>
+                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-md text-sm">
                     You need to be logged in to upload your own yield data.
                     This allows you to customize the calculator with your specific experience.
                 </p>
-                <Link to="/login" className="px-6 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 transition">
+                <Link to="/login" className="px-6 py-2 bg-brand-teal hover:bg-brand-teal-light text-white rounded transition text-sm font-medium">
                     Go to Login
                 </Link>
             </div>
@@ -67,44 +67,48 @@ const UploadData = () => {
     }
 
     return (
-        <div className="max-w-2xl mx-auto p-6">
-            <div className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-xl border border-slate-200 dark:border-white/20">
-                <h2 className="text-3xl font-bold mb-6 text-slate-800 dark:text-white flex items-center gap-3">
-                    <Upload className="text-cyan-400" />
+        <div className="max-w-2xl mx-auto p-4 sm:p-6">
+            <div className="bg-white dark:bg-white/5 rounded-lg p-6 sm:p-8 shadow-sm border border-[#d6ccc4] dark:border-white/15">
+                <h2 className="text-2xl font-bold mb-2 text-brand-teal dark:text-[#e8ddd4] flex items-center gap-3">
+                    <Upload className="text-brand-terracotta" size={22} />
                     Upload Yield Data
                 </h2>
 
-                <p className="text-slate-600 dark:text-gray-300 mb-8">
+                <p className="text-[#4a6572] dark:text-[#8fa8b2] mb-8 text-sm">
                     Upload an Excel (.xlsx) file with your custom species yield data.
                     The file should have columns for <strong>Species</strong> (or Common Name) and <strong>% Yield</strong>.
                 </p>
 
-                <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-10 text-center hover:border-cyan-500/50 transition bg-slate-100 dark:bg-slate-800/50">
-                    <input 
-                        type="file" 
-                        accept=".xlsx, .xls, .csv" 
+                <div className="border-2 border-dashed border-[#d6ccc4] dark:border-white/20 rounded p-10 text-center hover:border-brand-teal/40 transition bg-[#f5f0eb] dark:bg-white/5">
+                    <input
+                        type="file"
+                        accept=".xlsx, .xls, .csv"
                         onChange={handleFileChange}
-                        className="hidden" 
+                        className="hidden"
                         id="file-upload"
                     />
                     <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-4">
                         {file ? (
-                            <FileText size={48} className="text-green-400" />
+                            <FileText size={40} className="text-brand-teal" />
                         ) : (
-                            <Upload size={48} className="text-slate-600 dark:text-gray-400" />
+                            <Upload size={40} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                         )}
-                        <span className="text-lg font-medium text-slate-800 dark:text-white">
-                            {file ? file.name : "Click to select a file"}
+                        <span className="text-base font-medium text-[#1a2e35] dark:text-[#e8ddd4]">
+                            {file ? file.name : 'Click to select a file'}
                         </span>
-                        <span className="text-sm text-slate-500 dark:text-gray-500">
+                        <span className="text-sm text-[#4a6572] dark:text-[#8fa8b2]">
                             Supported formats: .xlsx, .csv
                         </span>
                     </label>
                 </div>
 
                 {status && (
-                    <div className={`mt-6 p-4 rounded-lg flex items-center gap-3 ${status.type === 'success' ? 'bg-green-900/40 text-green-300 border border-green-500/30' : 'bg-red-900/40 text-red-300 border border-red-500/30'}`}>
-                        {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                    <div className={`mt-6 p-4 rounded flex items-center gap-3 text-sm ${
+                        status.type === 'success'
+                            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
+                            : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30'
+                    }`}>
+                        {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                         {status.message}
                     </div>
                 )}
@@ -112,11 +116,9 @@ const UploadData = () => {
                 <button
                     onClick={handleUpload}
                     disabled={!file || uploading}
-                    className={`mt-8 w-full py-3 rounded-lg font-bold shadow-lg transition
-                        ${!file || uploading
-                            ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed text-slate-500 dark:text-gray-400'
-                            : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 hover:scale-[1.02] text-white'
-                        }`}
+                    className="mt-6 w-full py-3 rounded font-semibold transition text-sm
+                        disabled:bg-[#ede7e0] disabled:dark:bg-white/8 disabled:cursor-not-allowed disabled:text-[#4a6572] disabled:dark:text-[#8fa8b2]
+                        bg-brand-teal hover:bg-brand-teal-light text-white enabled:cursor-pointer"
                 >
                     {uploading ? 'Uploading...' : 'Upload Data'}
                 </button>

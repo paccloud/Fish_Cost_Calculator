@@ -16,14 +16,9 @@ const ContributorProfile = () => {
         show_on_page: true
     });
 
-    /**
-     * Get authentication headers for API requests
-     * Handles both password-based (JWT) and OAuth (Stack Auth) authentication
-     */
     const getAuthHeaders = useCallback(async () => {
         const headers = { 'Content-Type': 'application/json' };
 
-        // For OAuth users, get Stack Auth access token
         if (user?.authProvider === 'oauth') {
             try {
                 const stackUser = await stackClientApp.getUser();
@@ -39,7 +34,6 @@ const ContributorProfile = () => {
             }
         }
 
-        // For password-based users, use JWT token from localStorage
         const token = localStorage.getItem('token');
         if (token) {
             headers['Authorization'] = `Bearer ${token}`;
@@ -49,20 +43,14 @@ const ContributorProfile = () => {
     }, [user]);
 
     useEffect(() => {
-        if (!user) {
-            return;
-        }
+        if (!user) return;
 
-        // Load existing profile
         const loadProfile = async () => {
             try {
                 const headers = await getAuthHeaders();
                 const res = await fetch(apiUrl('/api/contributor'), { headers });
 
-                if (res.status === 404) {
-                    // No profile yet, that's okay
-                    return;
-                }
+                if (res.status === 404) return;
 
                 if (!res.ok) {
                     const rawError = await res.text().catch(() => '');
@@ -132,14 +120,14 @@ const ContributorProfile = () => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-slate-100 dark:bg-slate-800 p-8 rounded-full">
-                    <User size={48} className="text-slate-500 dark:text-gray-500" />
+                <div className="bg-[#f0ebe4] dark:bg-white/8 p-8 rounded-full">
+                    <User size={40} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Login Required</h2>
-                <p className="text-slate-600 dark:text-gray-400 max-w-md">
+                <h2 className="text-xl font-bold text-brand-teal dark:text-[#e8ddd4]">Login Required</h2>
+                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-md text-sm">
                     You need to be logged in to create a contributor profile.
                 </p>
-                <Link to="/login" className="text-cyan-600 dark:text-cyan-400 hover:underline">
+                <Link to="/login" className="text-brand-terracotta hover:underline text-sm font-medium">
                     Go to Login
                 </Link>
             </div>
@@ -148,74 +136,74 @@ const ContributorProfile = () => {
 
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                    <User className="text-cyan-400" />
+            <div className="mb-6">
+                <h1 className="text-2xl font-bold text-brand-teal dark:text-[#e8ddd4] flex items-center gap-3">
+                    <User className="text-brand-terracotta" size={22} />
                     Contributor Profile
                 </h1>
-                <p className="text-slate-600 dark:text-gray-400 mt-2">
+                <p className="text-[#4a6572] dark:text-[#8fa8b2] mt-1 text-sm">
                     Share your information to be recognized on the Data Sources page
                 </p>
             </div>
 
             {status && (
-                <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+                <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
                     status.type === 'success'
-                        ? 'bg-green-50 dark:bg-green-900/40 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400'
-                        : 'bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400'
+                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400'
+                        : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400'
                 }`}>
-                    {status.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                    {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                     <p>{status.message}</p>
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-slate-200 dark:border-white/20 shadow-lg space-y-6">
+            <form onSubmit={handleSubmit} className="bg-white dark:bg-white/5 rounded-lg p-8 border border-[#d6ccc4] dark:border-white/15 shadow-sm space-y-5">
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
-                        <User size={16} />
+                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                        <User size={14} />
                         Display Name *
                     </label>
                     <input
                         type="text"
                         value={formData.display_name}
                         onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
                         placeholder="Your name"
                         required
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-gray-500">
+                    <p className="mt-1 text-xs text-[#4a6572] dark:text-[#8fa8b2]">
                         This is how your name will appear on the Data Sources page
                     </p>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
-                        <Building2 size={16} />
+                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                        <Building2 size={14} />
                         Organization
                     </label>
                     <input
                         type="text"
                         value={formData.organization}
                         onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
                         placeholder="Your organization (optional)"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
-                        <FileText size={16} />
+                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                        <FileText size={14} />
                         Bio
                     </label>
                     <textarea
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
                         placeholder="Tell us about your expertise (max 200 characters)"
                         rows="3"
                         maxLength="200"
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-gray-500 text-right">
+                    <p className="mt-1 text-xs text-[#4a6572] dark:text-[#8fa8b2] text-right">
                         {formData.bio.length}/200
                     </p>
                 </div>
@@ -226,25 +214,25 @@ const ContributorProfile = () => {
                         id="show_on_page"
                         checked={formData.show_on_page}
                         onChange={(e) => setFormData({ ...formData, show_on_page: e.target.checked })}
-                        className="w-4 h-4 text-cyan-600 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded focus:ring-cyan-500"
+                        className="w-4 h-4 accent-brand-teal"
                     />
-                    <label htmlFor="show_on_page" className="text-sm text-slate-700 dark:text-gray-300">
+                    <label htmlFor="show_on_page" className="text-sm text-[#4a6572] dark:text-[#8fa8b2]">
                         Show my profile on the Data Sources page
                     </label>
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3 pt-2">
                     <button
                         type="submit"
-                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition shadow-lg"
+                        className="flex-1 flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white font-semibold py-3 rounded transition text-sm"
                     >
-                        <Save size={20} />
+                        <Save size={16} />
                         Save Profile
                     </button>
                     <button
                         type="button"
                         onClick={() => navigate('/manage-data')}
-                        className="px-6 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-gray-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+                        className="px-5 py-3 bg-[#ede7e0] dark:bg-white/10 text-[#4a6572] dark:text-[#8fa8b2] rounded hover:bg-[#d6ccc4] dark:hover:bg-white/15 transition text-sm"
                     >
                         Cancel
                     </button>

@@ -21,55 +21,55 @@ const NavBar = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
     return (
-        <nav className="bg-stone-50/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-gray-200 dark:border-white/10 sticky top-0 z-50 transition-colors">
+        <nav className="bg-brand-teal sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
-                <div className="bg-gradient-to-tr from-cyan-500 to-blue-500 p-2 rounded-lg">
-                  <Fish className="text-white h-6 w-6" />
+                <div className="bg-white/15 p-2 rounded">
+                  <Fish className="text-white h-5 w-5" />
                 </div>
-                <Link to="/" className="font-bold text-xl tracking-tight text-slate-800 dark:text-white hover:text-slate-900 dark:hover:text-white transition-colors">Local Catch</Link>
-              </div>
-              
-              <div className="hidden md:flex items-center space-x-6">
-                <Link to="/" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition">Calculator</Link>
-                <Link to="/data-sources" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
-                    <BookOpen size={16} /> Data Sources
-                </Link>
-                <Link to="/community-data" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
-                    <Users size={16} /> Community
-                </Link>
-                {user && (
-                    <Link to="/manage-data" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
-                        <Database size={16} /> My Data
-                    </Link>
-                )}
-                <Link to="/upload" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition">Upload</Link>
-                <Link to="/about" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition">About</Link>
+                <Link to="/" className="font-semibold text-lg tracking-tight text-white hover:text-brand-yellow transition-colors">Local Catch</Link>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center space-x-6">
+                <Link to="/" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium">Calculator</Link>
+                <Link to="/data-sources" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium flex items-center gap-1">
+                    <BookOpen size={14} /> Data Sources
+                </Link>
+                <Link to="/community-data" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium flex items-center gap-1">
+                    <Users size={14} /> Community
+                </Link>
+                {user && (
+                    <Link to="/manage-data" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium flex items-center gap-1">
+                        <Database size={14} /> My Data
+                    </Link>
+                )}
+                <Link to="/upload" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium">Upload</Link>
+                <Link to="/about" className="text-white/80 hover:text-brand-yellow transition text-sm font-medium">About</Link>
+              </div>
+
+              <div className="flex items-center gap-3">
                 <button
                     onClick={toggleTheme}
-                    className="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-gray-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-all duration-200"
+                    className="p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition"
                     aria-label="Toggle theme"
                 >
-                    {theme === 'dark' ? <Sun size={20} className="transition-transform duration-200" /> : <Moon size={20} className="transition-transform duration-200" />}
+                    {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                 </button>
                 {user ? (
-                    <div className="flex items-center gap-4">
-                        <span className="text-slate-600 dark:text-gray-300 text-sm">Hi, {user.username}</span>
-                        <button onClick={logout} className="text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white text-sm border border-slate-300 dark:border-gray-600 px-3 py-1 rounded transition-colors">Logout</button>
+                    <div className="flex items-center gap-3">
+                        <span className="text-white/70 text-sm">Hi, {user.username}</span>
+                        <button onClick={logout} className="text-white/70 hover:text-white text-sm border border-white/30 px-3 py-1 rounded transition-colors">Logout</button>
                     </div>
                 ) : (
-                    <Link to="/login" className="flex items-center gap-2 text-slate-600 dark:text-gray-300 hover:text-slate-800 dark:hover:text-white transition-colors">
-                        <UserCircle className="h-6 w-6" />
+                    <Link to="/login" className="flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm">
+                        <UserCircle className="h-5 w-5" />
                         <span>Login</span>
                     </Link>
                 )}
                 <button
                   onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                  className="md:hidden text-slate-600 dark:text-gray-300 hover:text-slate-800 dark:hover:text-white transition-colors"
+                  className="md:hidden text-white/80 hover:text-white transition-colors"
                   aria-label="Toggle mobile menu"
                 >
                   <Menu className="h-6 w-6" />
@@ -79,49 +79,49 @@ const NavBar = () => {
 
             {/* Mobile menu */}
             {mobileMenuOpen && (
-              <div className="md:hidden border-t border-gray-200 dark:border-white/10">
+              <div className="md:hidden border-t border-white/15">
                 <div className="px-2 pt-2 pb-3 space-y-1">
                   <Link
                     to="/"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    className="block px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                   >
                     Calculator
                   </Link>
                   <Link
                     to="/data-sources"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                    className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                   >
-                    <BookOpen size={16} /> Data Sources
+                    <BookOpen size={14} /> Data Sources
                   </Link>
                   <Link
                     to="/community-data"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                    className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                   >
-                    <Users size={16} /> Community
+                    <Users size={14} /> Community
                   </Link>
                   {user && (
                     <Link
                       to="/manage-data"
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                      className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                     >
-                      <Database size={16} /> My Data
+                      <Database size={14} /> My Data
                     </Link>
                   )}
                   <Link
                     to="/upload"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    className="block px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                   >
                     Upload
                   </Link>
                   <Link
                     to="/about"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    className="block px-3 py-2 rounded text-sm font-medium text-white/80 hover:text-white hover:bg-white/10 transition"
                   >
                     About
                   </Link>
@@ -140,7 +140,7 @@ function StackHandlerRoutes() {
 
 function AppContent() {
   return (
-    <div className="min-h-screen bg-stone-50 dark:bg-slate-900 text-slate-800 dark:text-gray-100 font-sans selection:bg-cyan-500 selection:text-white transition-colors">
+    <div className="min-h-screen bg-[#f5f0eb] dark:bg-[#0d1f26] text-[#1a2e35] dark:text-[#e8ddd4] font-sans selection:bg-brand-terracotta selection:text-white transition-colors">
       <NavBar />
       <main className="py-10 px-4">
         <Analytics />

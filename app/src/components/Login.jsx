@@ -52,7 +52,6 @@ const Login = () => {
     setOauthLoading(provider);
     try {
       await signInWithOAuth(provider);
-      // OAuth will redirect, so we don't need to navigate here
     } catch (e) {
       setError(`Failed to sign in with ${provider}`);
       setOauthLoading(null);
@@ -61,8 +60,8 @@ const Login = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md bg-white dark:bg-white/10 backdrop-blur-lg p-8 rounded-xl border border-slate-200 dark:border-white/20 shadow-xl">
-        <h2 className="text-3xl font-bold mb-6 text-center text-slate-800 dark:text-white">
+      <div className="w-full max-w-md bg-white dark:bg-white/8 p-8 rounded-lg border border-[#d6ccc4] dark:border-white/15 shadow-sm">
+        <h2 className="text-2xl font-bold mb-6 text-center text-brand-teal dark:text-[#e8ddd4]">
           {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
 
@@ -71,7 +70,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('google')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-medium py-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 text-[#1a2e35] dark:text-[#e8ddd4] font-medium py-3 rounded hover:bg-[#f5f0eb] dark:hover:bg-white/12 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             <GoogleIcon />
             {oauthLoading === 'google' ? 'Connecting...' : 'Continue with Google'}
@@ -80,7 +79,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('github')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-slate-900 dark:bg-slate-700 text-white font-medium py-3 rounded-lg hover:bg-slate-800 dark:hover:bg-slate-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 bg-[#1a2e35] dark:bg-white/15 text-white font-medium py-3 rounded hover:bg-[#0d1f26] dark:hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             <GitHubIcon />
             {oauthLoading === 'github' ? 'Connecting...' : 'Continue with GitHub'}
@@ -90,62 +89,62 @@ const Login = () => {
         {/* Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-300 dark:border-slate-600"></div>
+            <div className="w-full border-t border-[#d6ccc4] dark:border-white/15"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white dark:bg-transparent text-slate-500 dark:text-gray-400">
+            <span className="px-4 bg-white dark:bg-[#0d1f26] text-[#4a6572] dark:text-[#8fa8b2]">
               or continue with username
             </span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Username</label>
+            <label className="block text-[#4a6572] dark:text-[#8fa8b2] text-sm mb-2">Username</label>
             <div className="relative">
-              <User className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
+              <User className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 text-[#1a2e35] dark:text-[#e8ddd4] pl-10 p-3 rounded focus:ring-2 focus:ring-brand-teal outline-none"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Password</label>
+            <label className="block text-[#4a6572] dark:text-[#8fa8b2] text-sm mb-2">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
+              <Lock className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 text-[#1a2e35] dark:text-[#e8ddd4] pl-10 p-3 rounded focus:ring-2 focus:ring-brand-teal outline-none"
                 required
               />
             </div>
           </div>
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
 
-          <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition shadow-lg flex items-center justify-center gap-2">
-            {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={20} />
+          <button type="submit" className="w-full bg-brand-teal hover:bg-brand-teal-light text-white font-semibold py-3 rounded transition flex items-center justify-center gap-2">
+            {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={18} />
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-5 text-center">
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white text-sm transition"
+            className="text-[#4a6572] dark:text-[#8fa8b2] hover:text-brand-terracotta text-sm transition"
           >
             {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}
           </button>
         </div>
 
-        <div className="mt-4 text-center">
-          <button onClick={() => navigate('/')} className="text-slate-500 dark:text-gray-500 hover:text-slate-700 dark:hover:text-gray-300 text-sm transition">
+        <div className="mt-3 text-center">
+          <button onClick={() => navigate('/')} className="text-[#4a6572] dark:text-[#8fa8b2] hover:text-[#1a2e35] dark:hover:text-[#e8ddd4] text-sm transition">
             Continue as Guest
           </button>
         </div>

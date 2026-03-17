@@ -15,9 +15,9 @@ const Tooltip = ({ text, children }) => {
     >
       {children}
       {show && (
-        <span className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded-lg shadow-xl whitespace-nowrap border border-cyan-500/30">
+        <span className="absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-sm bg-white dark:bg-[#0d1f26] text-[#1a2e35] dark:text-[#e8ddd4] rounded shadow-lg whitespace-nowrap border border-[#d6ccc4] dark:border-brand-teal/40">
           {text}
-          <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-slate-800"></span>
+          <span className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-white dark:border-t-[#0d1f26]"></span>
         </span>
       )}
     </span>
@@ -59,7 +59,7 @@ const TextWithTooltips = ({ text }) => {
       {parts.map((part, i) => 
         part.isAcronym ? (
           <Tooltip key={i} text={part.tooltip}>
-            <span className="border-b border-dashed border-cyan-500/50 dark:border-cyan-400/50 text-cyan-600 dark:text-cyan-300">{part.text}</span>
+            <span className="border-b border-dashed border-brand-terracotta/50 text-brand-teal dark:text-brand-yellow">{part.text}</span>
           </Tooltip>
         ) : (
           <span key={i}>{part.text}</span>
@@ -332,24 +332,24 @@ const Calculator = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-8 text-slate-800 dark:text-white">
-      <div className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 shadow-lg dark:shadow-xl border border-slate-200 dark:border-white/20">
-        <h2 className="text-3xl font-bold mb-6 flex items-center gap-3">
-          <CalcIcon className="w-8 h-8 text-cyan-400" />
+    <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 text-[#1a2e35] dark:text-[#e8ddd4]">
+      <div className="bg-white dark:bg-white/8 rounded-lg p-6 sm:p-8 shadow-sm border border-[#d6ccc4] dark:border-white/10">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-brand-teal dark:text-[#e8ddd4]">
+          <CalcIcon className="w-6 h-6 text-brand-terracotta" />
           Fish Yield Calculator
         </h2>
-        
+
         {/* Mode Toggle */}
-        <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg mb-6">
+        <div className="flex bg-[#ede7e0] dark:bg-white/8 p-1 rounded mb-6 border border-[#d6ccc4] dark:border-white/10">
           <button
             onClick={() => { setMode('cost'); setResult(null); }}
-            className={`flex-1 py-2 rounded-md transition ${mode === 'cost' ? 'bg-cyan-600 text-white' : 'text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white'}`}
+            className={`flex-1 py-2 rounded text-sm font-medium transition ${mode === 'cost' ? 'bg-brand-teal text-white' : 'text-[#4a6572] dark:text-[#8fa8b2] hover:text-[#1a2e35] dark:hover:text-white'}`}
           >
             Calculate Cost
           </button>
           <button
             onClick={() => { setMode('weight'); setResult(null); }}
-            className={`flex-1 py-2 rounded-md transition ${mode === 'weight' ? 'bg-cyan-600 text-white' : 'text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white'}`}
+            className={`flex-1 py-2 rounded text-sm font-medium transition ${mode === 'weight' ? 'bg-brand-teal text-white' : 'text-[#4a6572] dark:text-[#8fa8b2] hover:text-[#1a2e35] dark:hover:text-white'}`}
           >
             Calculate Input Weight
           </button>
@@ -358,33 +358,33 @@ const Calculator = () => {
         <div className="space-y-6">
           {/* Species Selection */}
           <div>
-            <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Species</label>
+            <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Species</label>
             <select
               value={species}
               onChange={handleSpeciesChange}
-              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+              className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
             >
               <option value="">Select Species</option>
               {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             {scientificName && (
-              <p className="mt-1 text-sm text-slate-600 dark:text-gray-400 italic">{scientificName}</p>
+              <p className="mt-1 text-sm text-[#4a6572] dark:text-[#8fa8b2] italic">{scientificName}</p>
             )}
           </div>
 
           {/* From/To Conversion Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+              <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
                 From State
                 <Tooltip text="The starting form of the fish (e.g., Round = whole fish as caught)">
-                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
+                  <HelpCircle size={14} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                 </Tooltip>
               </label>
               <select
                 value={fromState}
                 onChange={handleFromChange}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
+                className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] disabled:opacity-50"
                 disabled={!species}
               >
                 <option value="">Select From State</option>
@@ -395,16 +395,16 @@ const Calculator = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+              <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
                 To Product
                 <Tooltip text="The final form after processing">
-                  <HelpCircle size={14} className="text-slate-500 dark:text-gray-500" />
+                  <HelpCircle size={14} className="text-[#4a6572] dark:text-[#8fa8b2]" />
                 </Tooltip>
               </label>
               <select
                 value={toState}
                 onChange={handleToChange}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white disabled:opacity-50"
+                className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] disabled:opacity-50"
                 disabled={!fromState}
               >
                 <option value="">Select To Product</option>
@@ -419,47 +419,47 @@ const Calculator = () => {
 
           {/* Conversion Info Box */}
           {currentConversion && (
-            <div className="bg-cyan-50 dark:bg-cyan-900/30 p-4 rounded-lg border border-cyan-200 dark:border-cyan-800 space-y-3">
-              <h3 className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-2">
-                <Info size={16} /> Conversion Details
+            <div className="bg-[#eef3f5] dark:bg-brand-teal/20 p-4 rounded border border-[#c8d8dd] dark:border-brand-teal/40 space-y-3">
+              <h3 className="font-semibold text-brand-teal dark:text-[#8fa8b2] flex items-center gap-2 text-sm">
+                <Info size={15} /> Conversion Details
               </h3>
               <div className="text-sm space-y-1">
                 <p>
-                  <span className="text-slate-600 dark:text-gray-400">Converting:</span>{' '}
+                  <span className="text-[#4a6572] dark:text-[#8fa8b2]">Converting:</span>{' '}
                   <TextWithTooltips text={currentConversion.from} /> → <TextWithTooltips text={currentConversion.to} />
                 </p>
                 <p>
-                  <span className="text-slate-600 dark:text-gray-400">Average Yield:</span>{' '}
-                  <span className="text-slate-800 dark:text-white font-medium">{currentConversion.yield}%</span>
+                  <span className="text-[#4a6572] dark:text-[#8fa8b2]">Average Yield:</span>{' '}
+                  <span className="text-[#1a2e35] dark:text-[#e8ddd4] font-medium">{currentConversion.yield}%</span>
                 </p>
                 {currentConversion.range && (
                   <p>
-                    <span className="text-slate-600 dark:text-gray-400">Expected Range:</span>{' '}
-                    <span className="text-slate-800 dark:text-white">{currentConversion.range[0]}% - {currentConversion.range[1]}%</span>
+                    <span className="text-[#4a6572] dark:text-[#8fa8b2]">Expected Range:</span>{' '}
+                    <span className="text-[#1a2e35] dark:text-[#e8ddd4]">{currentConversion.range[0]}% - {currentConversion.range[1]}%</span>
                   </p>
                 )}
               </div>
-              
+
               {/* Range Quick Select */}
               {currentConversion.range && (
-                <div className="flex gap-2 mt-2">
+                <div className="flex gap-2 mt-2 flex-wrap">
                   <button
                     onClick={() => { setUseRangeMin(true); setUseRangeMax(false); }}
-                    className={`px-3 py-1 text-xs rounded text-white ${useRangeMin ? 'bg-yellow-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-yellow-500 transition`}
+                    className={`px-3 py-1 text-xs rounded font-medium transition ${useRangeMin ? 'bg-brand-terracotta text-white' : 'bg-white/60 dark:bg-white/10 text-[#4a6572] dark:text-[#8fa8b2] hover:bg-white dark:hover:bg-white/20'}`}
                   >
-                    Use Min ({currentConversion.range[0]}%)
+                    Min ({currentConversion.range[0]}%)
                   </button>
                   <button
                     onClick={() => { setUseRangeMin(false); setUseRangeMax(false); }}
-                    className={`px-3 py-1 text-xs rounded text-white ${!useRangeMin && !useRangeMax ? 'bg-cyan-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-cyan-500 transition`}
+                    className={`px-3 py-1 text-xs rounded font-medium transition ${!useRangeMin && !useRangeMax ? 'bg-brand-teal text-white' : 'bg-white/60 dark:bg-white/10 text-[#4a6572] dark:text-[#8fa8b2] hover:bg-white dark:hover:bg-white/20'}`}
                   >
-                    Use Average ({currentConversion.yield}%)
+                    Average ({currentConversion.yield}%)
                   </button>
                   <button
                     onClick={() => { setUseRangeMax(true); setUseRangeMin(false); }}
-                    className={`px-3 py-1 text-xs rounded text-white ${useRangeMax ? 'bg-green-600' : 'bg-slate-400 dark:bg-slate-700'} hover:bg-green-500 transition`}
+                    className={`px-3 py-1 text-xs rounded font-medium transition ${useRangeMax ? 'bg-brand-terracotta text-white' : 'bg-white/60 dark:bg-white/10 text-[#4a6572] dark:text-[#8fa8b2] hover:bg-white dark:hover:bg-white/20'}`}
                   >
-                    Use Max ({currentConversion.range[1]}%)
+                    Max ({currentConversion.range[1]}%)
                   </button>
                 </div>
               )}
@@ -468,13 +468,13 @@ const Calculator = () => {
 
           {/* Profile Info */}
           {profile && (
-            <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-300 dark:border-slate-700 text-sm space-y-2">
-              <h3 className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-2">
-                <Info size={16} /> Species Info
+            <div className="bg-[#f0ebe4] dark:bg-white/5 p-4 rounded border border-[#d6ccc4] dark:border-white/10 text-sm space-y-2">
+              <h3 className="font-semibold text-brand-teal dark:text-[#8fa8b2] flex items-center gap-2">
+                <Info size={15} /> Species Info
               </h3>
-              {profile.description && <p><span className="text-slate-600 dark:text-gray-400">Description:</span> {profile.description}</p>}
-              {profile.edible_portions && <p><span className="text-slate-600 dark:text-gray-400">Edible:</span> {profile.edible_portions}</p>}
-              {profile.url && <a href={profile.url} target="_blank" rel="noreferrer" className="text-cyan-600 dark:text-cyan-400 hover:underline">Read more</a>}
+              {profile.description && <p><span className="text-[#4a6572] dark:text-[#8fa8b2]">Description:</span> {profile.description}</p>}
+              {profile.edible_portions && <p><span className="text-[#4a6572] dark:text-[#8fa8b2]">Edible:</span> {profile.edible_portions}</p>}
+              {profile.url && <a href={profile.url} target="_blank" rel="noreferrer" className="text-brand-terracotta hover:underline">Read more</a>}
             </div>
           )}
 
@@ -482,48 +482,48 @@ const Calculator = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {mode === 'cost' ? (
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Cost per Pound ({fromState || 'Whole'})</label>
+                <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Cost per Pound ({fromState || 'Whole'})</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
+                  <span className="absolute left-3 top-3 text-[#4a6572] dark:text-[#8fa8b2]">$</span>
                   <input
                     type="number"
                     value={cost}
                     onChange={(e) => setCost(e.target.value)}
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 pl-8 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
                     placeholder="0.00"
                   />
                 </div>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Target Output (lbs of {toState || 'Product'})</label>
+                <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Target Output (lbs of {toState || 'Product'})</label>
                 <div className="relative">
                   <input
                     type="number"
                     value={targetWeight}
                     onChange={(e) => setTargetWeight(e.target.value)}
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 pr-8 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
                     placeholder="e.g. 100"
                   />
-                  <span className="absolute right-3 top-3 text-slate-500 dark:text-gray-500">lbs</span>
+                  <span className="absolute right-3 top-3 text-[#4a6572] dark:text-[#8fa8b2]">lbs</span>
                 </div>
               </div>
             )}
-            
+
             <div>
-              <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Yield Percentage</label>
+              <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Yield Percentage</label>
               <div className="relative">
                 <input
                   type="number"
                   value={yieldPercent}
                   onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
-                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pr-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                  className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 pr-8 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
                   placeholder="0"
                 />
-                <span className="absolute right-3 top-3 text-slate-500 dark:text-gray-500">%</span>
+                <span className="absolute right-3 top-3 text-[#4a6572] dark:text-[#8fa8b2]">%</span>
               </div>
               {yieldRange && (
-                <p className="mt-1 text-xs text-slate-600 dark:text-gray-500">Range: {yieldRange[0]}% - {yieldRange[1]}%</p>
+                <p className="mt-1 text-xs text-[#4a6572] dark:text-[#8fa8b2]">Range: {yieldRange[0]}% - {yieldRange[1]}%</p>
               )}
             </div>
           </div>
@@ -532,25 +532,25 @@ const Calculator = () => {
           {mode === 'cost' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Processing Cost</label>
+                <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Processing Cost</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-slate-500 dark:text-gray-500">$</span>
+                  <span className="absolute left-3 top-3 text-[#4a6572] dark:text-[#8fa8b2]">$</span>
                   <input
                     type="number"
                     value={processingCost}
                     onChange={(e) => setProcessingCost(e.target.value)}
-                    className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 pl-8 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                    className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 pl-8 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
                     placeholder="0.00"
                   />
                 </div>
               </div>
-              
+
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300">Applied To</label>
+                <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2]">Applied To</label>
                 <select
                   value={weightType}
                   onChange={(e) => setWeightType(e.target.value)}
-                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                  className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4]"
                 >
                   <option value="incoming">Incoming Weight ({fromState || 'Whole'})</option>
                   <option value="outgoing">Outgoing Weight ({toState || 'Product'})</option>
@@ -560,24 +560,24 @@ const Calculator = () => {
           )}
           
           {/* Calculate Button */}
-          <button 
+          <button
             onClick={calculate}
             disabled={!species || !toState}
-            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 rounded-lg shadow-lg transform transition hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full bg-brand-teal hover:bg-brand-teal-light disabled:bg-[#d6ccc4] disabled:text-[#8fa8b2] disabled:cursor-not-allowed text-white font-semibold py-3 rounded transition"
           >
             {mode === 'cost' ? 'Calculate Cost per Pound' : 'Calculate Required Input Weight'}
           </button>
 
           {/* Result */}
           {result !== null && (
-            <div className="mt-8 p-6 bg-green-50 dark:bg-green-900/40 border border-green-200 dark:border-green-500/30 rounded-xl text-center animate-fade-in relative">
-              <p className="text-slate-600 dark:text-gray-400 text-sm uppercase tracking-wide">
+            <div className="mt-6 p-6 bg-[#eef3f5] dark:bg-brand-teal/15 border border-[#c8d8dd] dark:border-brand-teal/30 rounded text-center">
+              <p className="text-[#4a6572] dark:text-[#8fa8b2] text-xs uppercase tracking-widest font-medium">
                 {mode === 'cost' ? `Cost per Pound of ${toState}` : `Required ${fromState} Input`}
               </p>
-              <p className="text-5xl font-bold text-green-600 dark:text-green-400 mt-2">
+              <p className="text-4xl font-bold text-brand-teal dark:text-[#e8ddd4] mt-2">
                 {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(2)} lbs`}
               </p>
-              <p className="text-sm text-slate-600 dark:text-gray-400 mt-2">
+              <p className="text-sm text-[#4a6572] dark:text-[#8fa8b2] mt-2">
                 {mode === 'cost'
                   ? `Based on ${yieldPercent}% yield from ${fromState} to ${toState}`
                   : `You need ${result.toFixed(2)} lbs of ${fromState} to get ${targetWeight} lbs of ${toState}`
@@ -589,9 +589,9 @@ const Calculator = () => {
                   <div className="flex items-center gap-4">
                     <button
                       onClick={handleSave}
-                      className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 transition"
+                      className="flex items-center gap-2 text-brand-terracotta hover:text-brand-terracotta-light transition text-sm font-medium"
                     >
-                      <Save size={20} /> Save Calculation
+                      <Save size={16} /> Save Calculation
                     </button>
                     <button
                       onClick={async () => {
@@ -613,15 +613,15 @@ const Calculator = () => {
                           console.error('Export failed:', error);
                         }
                       }}
-                      className="flex items-center gap-2 text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-gray-200 transition text-sm"
+                      className="flex items-center gap-2 text-[#4a6572] dark:text-[#8fa8b2] hover:text-[#1a2e35] dark:hover:text-[#e8ddd4] transition text-sm"
                     >
                       <Download size={16} /> Export History
                     </button>
                   </div>
-                  {saveStatus && <p className="text-sm mt-2 text-slate-700 dark:text-gray-300">{saveStatus}</p>}
+                  {saveStatus && <p className="text-sm mt-2 text-[#1a2e35] dark:text-[#e8ddd4]">{saveStatus}</p>}
                 </div>
               ) : (
-                <p className="mt-4 text-xs text-slate-500 dark:text-gray-500">Log in to save this calculation</p>
+                <p className="mt-4 text-xs text-[#4a6572] dark:text-[#8fa8b2]">Log in to save this calculation</p>
               )}
             </div>
           )}
@@ -629,16 +629,16 @@ const Calculator = () => {
       </div>
 
       {/* Acronym Reference */}
-      <div className="bg-white dark:bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-slate-200 dark:border-white/10 shadow-md dark:shadow-none">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
-          <HelpCircle size={18} className="text-cyan-600 dark:text-cyan-400" />
+      <div className="bg-white dark:bg-white/5 rounded-lg p-6 border border-[#d6ccc4] dark:border-white/10 shadow-sm">
+        <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-brand-teal dark:text-[#e8ddd4]">
+          <HelpCircle size={16} className="text-brand-terracotta" />
           Acronym Reference
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
           {Object.entries(ACRONYMS).slice(0, 9).map(([abbr, full]) => (
-            <div key={abbr} className="bg-slate-100 dark:bg-slate-800/50 p-2 rounded">
-              <span className="text-cyan-600 dark:text-cyan-400 font-medium">{abbr}</span>
-              <span className="text-slate-600 dark:text-gray-400 ml-2">{full.split(' - ')[0]}</span>
+            <div key={abbr} className="bg-[#f0ebe4] dark:bg-white/5 p-2 rounded">
+              <span className="text-brand-teal dark:text-brand-terracotta font-medium">{abbr}</span>
+              <span className="text-[#4a6572] dark:text-[#8fa8b2] ml-2">{full.split(' - ')[0]}</span>
             </div>
           ))}
         </div>
@@ -646,31 +646,29 @@ const Calculator = () => {
 
       {/* Public Calculation History - visible to all users including guests */}
       {publicHistory.length > 0 && (
-        <div className="bg-white dark:bg-white/5 backdrop-blur-lg rounded-xl p-6 border border-slate-200 dark:border-white/10 shadow-md dark:shadow-none">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
-            <CalcIcon size={18} className="text-cyan-600 dark:text-cyan-400" />
+        <div className="bg-white dark:bg-white/5 rounded-lg p-6 border border-[#d6ccc4] dark:border-white/10 shadow-sm">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-brand-teal dark:text-[#e8ddd4]">
+            <CalcIcon size={16} className="text-brand-terracotta" />
             Recent Calculations
-            <span className="text-xs font-normal text-slate-500 dark:text-gray-500 ml-2">
-              (Community)
-            </span>
+            <span className="text-xs font-normal text-[#4a6572] dark:text-[#8fa8b2] ml-2">(Community)</span>
           </h3>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {publicHistory.slice(0, 10).map((calc) => (
               <div
                 key={calc.id}
-                className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-sm"
+                className="flex justify-between items-center p-3 bg-[#f5f0eb] dark:bg-white/5 rounded text-sm"
               >
                 <div>
-                  <p className="font-medium text-slate-800 dark:text-white">{calc.name || calc.species}</p>
-                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                  <p className="font-medium text-[#1a2e35] dark:text-[#e8ddd4]">{calc.name || calc.species}</p>
+                  <p className="text-xs text-[#4a6572] dark:text-[#8fa8b2]">
                     {calc.product} • {calc.yield}% yield
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-green-600 dark:text-green-400">
+                  <p className="font-semibold text-brand-teal dark:text-brand-yellow">
                     ${parseFloat(calc.result).toFixed(2)}/lb
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                  <p className="text-xs text-[#4a6572] dark:text-[#8fa8b2]">
                     {new Date(calc.date).toLocaleDateString()}
                   </p>
                 </div>
@@ -678,7 +676,7 @@ const Calculator = () => {
             ))}
           </div>
           {!user && (
-            <p className="mt-4 text-xs text-center text-slate-500 dark:text-gray-500">
+            <p className="mt-4 text-xs text-center text-[#4a6572] dark:text-[#8fa8b2]">
               Sign in to save your own calculations
             </p>
           )}
