@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
@@ -42,6 +42,26 @@ const DataManagement = () => {
             console.error('Failed to load user data:', e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleToggleShare = async (item) => {
+        const token = localStorage.getItem('token');
+        const action = item.is_shared ? 'unshare' : 'share';
+        try {
+            const res = await fetch(apiUrl(`/api/user-data/${item.id}/${action}`), {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
+                loadUserData();
+            } else {
+                const err = await res.json();
+                setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
+            }
+        } catch (e) {
+            setStatus({ type: 'error', message: 'Network error occurred.' });
         }
     };
 
@@ -301,13 +321,25 @@ const DataManagement = () => {
                         {userData.map((item) => (
                             <div key={item.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 transition">
                                 <div>
-                                    <p className="text-slate-800 dark:text-white font-medium">{item.species}</p>
+                                    <p className="text-slate-800 dark:text-white font-medium flex items-center gap-2">
+                                        {item.species}
+                                        {item.is_shared ? (
+                                            <span className="text-xs bg-cyan-900/40 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full">Shared</span>
+                                        ) : null}
+                                    </p>
                                     <p className="text-sm text-slate-600 dark:text-gray-400">
                                         {item.product} → <span className="text-cyan-400">{item.yield}%</span>
                                         {item.source && <span className="ml-2 text-slate-500 dark:text-gray-500">({item.source})</span>}
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleToggleShare(item)}
+                                        className={`p-2 transition ${item.is_shared ? 'text-cyan-400 hover:text-slate-400' : 'text-slate-600 dark:text-gray-400 hover:text-cyan-400'}`}
+                                        title={item.is_shared ? 'Remove from community' : 'Share with community'}
+                                    >
+                                        {item.is_shared ? <EyeOff size={18} /> : <Share2 size={18} />}
+                                    </button>
                                     <button
                                         onClick={() => handleEdit(item)}
                                         className="p-2 text-slate-600 dark:text-gray-400 hover:text-cyan-400 transition"

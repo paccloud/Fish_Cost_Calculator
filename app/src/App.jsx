@@ -9,7 +9,8 @@ import About from './components/About';
 import DataTransparency from './components/DataTransparency';
 import DataManagement from './components/DataManagement';
 import ContributorProfile from './components/ContributorProfile';
-import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon } from 'lucide-react';
+import CommunityData from './components/CommunityData';
+import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, Users } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
 import { stackClientApp } from './config/neonAuth';
@@ -34,6 +35,9 @@ const NavBar = () => {
                 <Link to="/" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition">Calculator</Link>
                 <Link to="/data-sources" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
                     <BookOpen size={16} /> Data Sources
+                </Link>
+                <Link to="/community-data" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
+                    <Users size={16} /> Community
                 </Link>
                 {user && (
                     <Link to="/manage-data" className="text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 transition flex items-center gap-1">
@@ -91,6 +95,13 @@ const NavBar = () => {
                   >
                     <BookOpen size={16} /> Data Sources
                   </Link>
+                  <Link
+                    to="/community-data"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="block px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-gray-300 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-2"
+                  >
+                    <Users size={16} /> Community
+                  </Link>
                   {user && (
                     <Link
                       to="/manage-data"
@@ -142,6 +153,7 @@ function AppContent() {
           <Route path="/data-sources" element={<DataTransparency />} />
           <Route path="/manage-data" element={<DataManagement />} />
           <Route path="/profile" element={<ContributorProfile />} />
+          <Route path="/community-data" element={<CommunityData />} />
           <Route path="/inventory" element={<div className="text-center mt-20 text-gray-400">Inventory Management Coming Soon</div>} />
         </Routes>
       </main>

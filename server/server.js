@@ -66,6 +66,11 @@ db.serialize(() => {
         updated_at TEXT,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
+
+    // Add is_shared column to user_data if it doesn't exist (safe migration)
+    db.run(`ALTER TABLE user_data ADD COLUMN is_shared INTEGER DEFAULT 0`, (err) => {
+        // Ignore error if column already exists
+    });
 });
 
 // Auth Middleware
@@ -139,37 +144,72 @@ const upload = multer({ dest: 'uploads/' });
 
 app.post('/api/upload-data', authenticate, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    
+
     try {
         const workbook = xlsx.readFile(req.file.path);
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const data = xlsx.utils.sheet_to_json(sheet);
-        
-        let count = 0;
-        db.serialize(() => {
-            const stmt = db.prepare('INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)');
-            data.forEach(row => {
-                // Heuristic mapping - adjust based on user Excel structure ("Common name", "% Yield")
-                const species = row['Common name'] || row['Species'] || row['Name'];
-                const yieldVal = row['% Yield'] || row['Yield'];
-                const product = row['Product'] || 'General';
-                
-                if (species && yieldVal) {
-                    let finalYield = yieldVal;
-                    if (finalYield < 1) finalYield = finalYield * 100; // decimal to percent
-                    
-                    stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
-                    count++;
+
+        // Validate rows before any writes
+        const rows = [];
+        const skippedRows = [];
+        data.forEach((row, idx) => {
+            const species = (row['Common name'] || row['Species'] || row['Name'] || '').toString().trim();
+            const yieldRaw = row['% Yield'] || row['Yield'];
+            const product = (row['Product'] || 'General').toString().trim();
+
+            if (!species || yieldRaw === undefined || yieldRaw === null || yieldRaw === '') {
+                skippedRows.push(idx + 2); // 1-indexed + header row
+                return;
+            }
+            let finalYield = parseFloat(yieldRaw);
+            if (isNaN(finalYield) || finalYield < 0 || finalYield > 100) {
+                if (!isNaN(finalYield) && finalYield > 0 && finalYield <= 1) {
+                    finalYield = finalYield * 100; // decimal to percent
+                } else {
+                    skippedRows.push(idx + 2);
+                    return;
                 }
-            });
-            stmt.finalize();
+            }
+            rows.push({ species, product, yield: finalYield, source: req.file.originalname });
         });
-        
-        // Cleanup
+
+        let inserted = 0;
+        let updated = 0;
+        db.serialize(() => {
+            rows.forEach(row => {
+                db.get(
+                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+                    [req.user.id, row.species, row.product],
+                    (err, existing) => {
+                        if (err) return;
+                        if (existing) {
+                            db.run(
+                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ?',
+                                [row.yield, row.source, existing.id]
+                            );
+                            updated++;
+                        } else {
+                            db.run(
+                                'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                                [req.user.id, row.species, row.product, row.yield, row.source]
+                            );
+                            inserted++;
+                        }
+                    }
+                );
+            });
+        });
+
+        // Cleanup temp file
         fs.unlinkSync(req.file.path);
-        
-        res.json({ message: `Imported ${count} records` });
+
+        const parts = [];
+        if (inserted > 0) parts.push(`${inserted} added`);
+        if (updated > 0) parts.push(`${updated} updated`);
+        if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped (invalid rows)`);
+        res.json({ message: parts.length ? parts.join(', ') : 'No valid records found', inserted, updated, skipped: skippedRows.length });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -336,6 +376,109 @@ app.post('/api/contributor', authenticate, (req, res) => {
             );
         }
     });
+});
+
+// Share a user data entry to the community pool
+app.post('/api/user-data/:id/share', authenticate, (req, res) => {
+    const { id } = req.params;
+    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
+
+        db.run('UPDATE user_data SET is_shared = 1 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Shared with community' });
+        });
+    });
+});
+
+// Unshare a user data entry
+app.post('/api/user-data/:id/unshare', authenticate, (req, res) => {
+    const { id } = req.params;
+    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
+
+        db.run('UPDATE user_data SET is_shared = 0 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Removed from community' });
+        });
+    });
+});
+
+// Get community pool data (all shared entries, with contributor info)
+app.get('/api/community-data', (req, res) => {
+    const query = `
+        SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
+               COALESCE(c.display_name, u.username) as contributor,
+               c.organization
+        FROM user_data ud
+        JOIN users u ON ud.user_id = u.id
+        LEFT JOIN contributors c ON ud.user_id = c.user_id
+        WHERE ud.is_shared = 1
+        ORDER BY ud.species ASC, ud.product ASC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// Export community data as CSV
+app.get('/api/export-community-data', (req, res) => {
+    const query = `
+        SELECT ud.species, ud.product, ud.yield, ud.source,
+               COALESCE(c.display_name, u.username) as contributor,
+               c.organization
+        FROM user_data ud
+        JOIN users u ON ud.user_id = u.id
+        LEFT JOIN contributors c ON ud.user_id = c.user_id
+        WHERE ud.is_shared = 1
+        ORDER BY ud.species ASC
+    `;
+    db.all(query, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        const headers = 'Species,Product,Yield (%),Source,Contributor,Organization\n';
+        const csvRows = rows.map(row =>
+            `"${row.species}","${row.product}","${row.yield}","${row.source || ''}","${row.contributor || ''}","${row.organization || ''}"`
+        ).join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="community-yield-data.csv"');
+        res.send(headers + csvRows);
+    });
+});
+
+// Legacy export route alias (DataManagement.jsx uses /api/export?type=data)
+app.get('/api/export', authenticate, (req, res) => {
+    const type = req.query.type;
+    if (type === 'data') {
+        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const headers = 'Species,Product,Yield (%),Source\n';
+            const csvRows = rows.map(row =>
+                `"${row.species}","${row.product}","${row.yield}","${row.source || ''}"`
+            ).join('\n');
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="custom-yield-data.csv"');
+            res.send(headers + csvRows);
+        });
+    } else if (type === 'calcs') {
+        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
+            const csvRows = rows.map(row => {
+                const date = new Date(row.date).toLocaleDateString();
+                return `"${date}","${row.species}","${row.product}","${row.cost}","${row.yield}","${row.result}"`;
+            }).join('\n');
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="calculations.csv"');
+            res.send(headers + csvRows);
+        });
+    } else {
+        res.status(400).json({ error: 'Invalid export type. Use ?type=data or ?type=calcs' });
+    }
 });
 
 app.listen(PORT, () => {
