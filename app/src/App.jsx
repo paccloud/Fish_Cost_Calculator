@@ -15,6 +15,7 @@ import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
 import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext.jsx';
+import { DataProvider } from './context/DataContext';
 import { useAuth } from './context/useAuth';
 import { useTheme } from './context/ThemeContext';
 import { stackClientApp } from './config/neonAuth';
@@ -129,26 +130,28 @@ function StackHandlerRoutes() {
 function AppContent() {
   return (
     <div className="min-h-screen flex flex-col bg-surface text-text-primary font-body selection:bg-teal selection:text-white transition-colors">
-      <NavBar />
-      <main className="flex-1">
-        <Analytics />
-        <Routes>
-          <Route path="/handler/*" element={<StackHandlerRoutes />} />
-          <Route path="/" element={<div className="py-10 px-4"><Calculator /></div>} />
-          <Route path="/calculator" element={<div className="py-10 px-4"><Calculator /></div>} />
-          <Route path="/login" element={<div className="py-10 px-4"><Login /></div>} />
-          <Route path="/upload" element={<div className="py-10 px-4"><UploadData /></div>} />
-          <Route path="/about" element={<div className="py-10 px-4"><About /></div>} />
-          <Route path="/submit-request" element={<div className="py-10 px-4"><SubmitRequest /></div>} />
-          <Route path="/data-sources" element={<div className="py-10 px-4"><DataTransparency /></div>} />
-          <Route path="/manage-data" element={<div className="py-10 px-4"><DataManagement /></div>} />
-          <Route path="/profile" element={<div className="py-10 px-4"><ContributorProfile /></div>} />
-          <Route path="/roadmap" element={<div className="py-10 px-4"><FeaturesRoadmap /></div>} />
-          <Route path="/inventory" element={<div className="py-10 px-4 text-center mt-20 text-gray-400">Inventory Management Coming Soon</div>} />
-        </Routes>
-      </main>
-      <Footer />
-      <InstallPrompt />
+      <DataProvider>
+        <NavBar />
+        <main className="flex-1">
+          <Analytics />
+          <Routes>
+            <Route path="/handler/*" element={<StackHandlerRoutes />} />
+            <Route path="/" element={<div className="py-10 px-4"><Calculator /></div>} />
+            <Route path="/calculator" element={<div className="py-10 px-4"><Calculator /></div>} />
+            <Route path="/login" element={<div className="py-10 px-4"><Login /></div>} />
+            <Route path="/upload" element={<div className="py-10 px-4"><UploadData /></div>} />
+            <Route path="/about" element={<div className="py-10 px-4"><About /></div>} />
+            <Route path="/submit-request" element={<div className="py-10 px-4"><SubmitRequest /></div>} />
+            <Route path="/data-sources" element={<div className="py-10 px-4"><DataTransparency /></div>} />
+            <Route path="/manage-data" element={<div className="py-10 px-4"><DataManagement /></div>} />
+            <Route path="/profile" element={<div className="py-10 px-4"><ContributorProfile /></div>} />
+            <Route path="/roadmap" element={<div className="py-10 px-4"><FeaturesRoadmap /></div>} />
+            <Route path="/inventory" element={<div className="py-10 px-4 text-center mt-20 text-gray-400">Inventory Management Coming Soon</div>} />
+          </Routes>
+        </main>
+        <Footer />
+        <InstallPrompt />
+      </DataProvider>
     </div>
   );
 }
