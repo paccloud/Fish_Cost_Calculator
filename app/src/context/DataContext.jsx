@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   getSavedCalcs,
   addSavedCalc as addCalcLocal,
@@ -10,15 +10,20 @@ import {
   getCustomSpecies,
   setCustomSpecies as setSpeciesLocal,
 } from '../lib/localStore';
+import { syncAll } from '../lib/syncEngine';
+import { useAuth } from './useAuth';
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
+  const { user } = useAuth();
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'offline' | 'pending'
+  const syncTimeoutRef = useRef(null);
 
   // Load from IndexedDB on mount
   useEffect(() => {
@@ -38,8 +43,8 @@ export function DataProvider({ children }) {
 
   // Online/offline listeners
   useEffect(() => {
-    const goOnline = () => setIsOnline(true);
-    const goOffline = () => setIsOnline(false);
+    const goOnline = () => { setIsOnline(true); };
+    const goOffline = () => { setIsOnline(false); setSyncStatus('offline'); };
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
     return () => {
@@ -48,35 +53,82 @@ export function DataProvider({ children }) {
     };
   }, []);
 
+  const triggerSync = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token || !navigator.onLine) return;
+
+    setSyncStatus('syncing');
+    try {
+      const stats = await syncAll(token);
+      // Reload data from IndexedDB after sync to pick up merged server data
+      const [calcs, yields] = await Promise.all([
+        getSavedCalcs(),
+        getCustomYields(),
+      ]);
+      setSavedCalcs(calcs.filter((c) => c.syncStatus !== 'pending-delete'));
+      setCustomYields(yields.filter((y) => y.syncStatus !== 'pending-delete'));
+      setSyncStatus('synced');
+    } catch {
+      setSyncStatus('idle');
+    }
+  }, []);
+
+  const debouncedSync = useCallback(() => {
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    setSyncStatus('pending');
+    syncTimeoutRef.current = setTimeout(() => {
+      if (user && navigator.onLine) triggerSync();
+    }, 2000);
+  }, [user, triggerSync]);
+
+  // Sync on mount if online + logged in
+  useEffect(() => {
+    if (dataLoaded && user && navigator.onLine) {
+      triggerSync();
+    }
+  }, [dataLoaded, user, triggerSync]);
+
+  // Sync when coming back online
+  useEffect(() => {
+    if (isOnline && user && dataLoaded) {
+      triggerSync();
+    }
+  }, [isOnline, user, dataLoaded, triggerSync]);
+
   const saveCalc = useCallback(async (calc) => {
     const newCalc = await addCalcLocal(calc);
     setSavedCalcs((prev) => [...prev, newCalc]);
+    debouncedSync();
     return newCalc;
-  }, []);
+  }, [debouncedSync]);
 
   const removeCalc = useCallback(async (id) => {
     await deleteCalcLocal(id);
     setSavedCalcs((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+    debouncedSync();
+  }, [debouncedSync]);
 
   const addYield = useCallback(async (yieldData) => {
     const newYield = await addYieldLocal(yieldData);
     setCustomYields((prev) => [...prev, newYield]);
+    debouncedSync();
     return newYield;
-  }, []);
+  }, [debouncedSync]);
 
   const updateYield = useCallback(async (id, data) => {
     const updated = await updateYieldLocal(id, data);
     if (updated) {
       setCustomYields((prev) => prev.map((y) => (y.id === id ? updated : y)));
     }
+    debouncedSync();
     return updated;
-  }, []);
+  }, [debouncedSync]);
 
   const removeYield = useCallback(async (id) => {
     await deleteYieldLocal(id);
     setCustomYields((prev) => prev.filter((y) => y.id !== id));
-  }, []);
+    debouncedSync();
+  }, [debouncedSync]);
 
   const updateCustomSpecies = useCallback(async (data) => {
     await setSpeciesLocal(data);
@@ -89,6 +141,7 @@ export function DataProvider({ children }) {
     customSpecies,
     isOnline,
     dataLoaded,
+    syncStatus,
     saveCalc,
     removeCalc,
     addYield,

@@ -15,7 +15,7 @@ import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
 import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext.jsx';
-import { DataProvider } from './context/DataContext';
+import { DataProvider, useData } from './context/DataContext';
 import { useAuth } from './context/useAuth';
 import { useTheme } from './context/ThemeContext';
 import { stackClientApp } from './config/neonAuth';
@@ -23,6 +23,7 @@ import { stackClientApp } from './config/neonAuth';
 const NavBar = () => {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const { syncStatus, isOnline } = useData();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
     return (
@@ -52,13 +53,31 @@ const NavBar = () => {
               </div>
 
               <div className="flex items-center gap-4">
-                <button
-                    onClick={toggleTheme}
-                    className="p-2 rounded-lg text-white/70 hover:text-white bg-white/10 hover:bg-white/15 transition-all duration-200"
-                    aria-label="Toggle theme"
-                >
-                    {theme === 'dark' ? <Sun size={20} className="transition-transform duration-200" /> : <Moon size={20} className="transition-transform duration-200" />}
-                </button>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      !isOnline ? 'bg-gray-400' :
+                      syncStatus === 'syncing' ? 'bg-amber-400 animate-pulse' :
+                      syncStatus === 'synced' ? 'bg-emerald-400' :
+                      syncStatus === 'pending' ? 'bg-orange-400' :
+                      'bg-gray-400'
+                    }`}
+                    title={
+                      !isOnline ? 'Offline' :
+                      syncStatus === 'syncing' ? 'Syncing...' :
+                      syncStatus === 'synced' ? 'Synced' :
+                      syncStatus === 'pending' ? 'Changes pending' :
+                      'Ready'
+                    }
+                  />
+                  <button
+                      onClick={toggleTheme}
+                      className="p-2 rounded-lg text-white/70 hover:text-white bg-white/10 hover:bg-white/15 transition-all duration-200"
+                      aria-label="Toggle theme"
+                  >
+                      {theme === 'dark' ? <Sun size={20} className="transition-transform duration-200" /> : <Moon size={20} className="transition-transform duration-200" />}
+                  </button>
+                </div>
                 {user ? (
                     <div className="flex items-center gap-4">
                         <span className="text-white/70 text-sm">Hi, {user.username}</span>
