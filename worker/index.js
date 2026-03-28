@@ -30,7 +30,7 @@ app.use(
 // Better Auth catch-all  (must come before other /api/auth/* routes)
 // ---------------------------------------------------------------------------
 app.all('/api/auth/*', async (c) => {
-  const auth = createAuth(c.env.DB, c.env);
+  const auth = createAuth(c.env.DB, c.env, c.req.raw);
   return auth.handler(c.req.raw);
 });
 
@@ -112,6 +112,10 @@ protectedApi.get('/saved-calcs', async (c) => {
 protectedApi.post('/save-calc', async (c) => {
   const userId = c.get('user').id;
   const { name, species, product, cost, yield: yieldVal, result } = await c.req.json();
+
+  if (!species || !product || cost == null || yieldVal == null || result == null) {
+    return c.json({ error: 'Missing required fields: species, product, cost, yield, result' }, 400);
+  }
 
   try {
     const info = await c.env.DB.prepare(
@@ -398,13 +402,50 @@ protectedApi.post('/upload-data', async (c) => {
       return c.json({ error: 'No file uploaded' }, 400);
     }
 
-    // Dynamic import — xlsx is large; lazy-load keeps cold starts faster
-    const xlsx = await import('xlsx');
-    const buffer = await file.arrayBuffer();
-    const workbook = xlsx.read(buffer, { type: 'array' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet);
+    const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+    if (file.size > MAX_FILE_SIZE) {
+      return c.json({ error: 'File too large. Maximum size is 4MB.' }, 400);
+    }
+
+    // Try dynamic import of xlsx — may not be available in Workers runtime
+    let data;
+    let xlsx;
+    try {
+      xlsx = await import('xlsx');
+    } catch (_e) {
+      // xlsx not available in Workers runtime — CSV only
+      xlsx = null;
+    }
+
+    if (xlsx) {
+      const buffer = await file.arrayBuffer();
+      const workbook = xlsx.read(buffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      data = xlsx.utils.sheet_to_json(sheet);
+    } else {
+      // Fallback: CSV-only parsing
+      if (!file.name?.endsWith('.csv')) {
+        return c.json(
+          { error: 'Only CSV files are supported in this environment. Excel support coming soon.' },
+          400
+        );
+      }
+      const text = await file.text();
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        return c.json({ error: 'CSV file is empty or has no data rows' }, 400);
+      }
+      const headers = lines[0].split(',').map((h) => h.replace(/^"|"$/g, '').trim());
+      data = lines.slice(1).map((line) => {
+        const values = line.split(',').map((v) => v.replace(/^"|"$/g, '').trim());
+        const row = {};
+        headers.forEach((h, i) => {
+          row[h] = values[i] || '';
+        });
+        return row;
+      });
+    }
 
     let count = 0;
     for (const row of data) {

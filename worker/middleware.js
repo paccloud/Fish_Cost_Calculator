@@ -6,7 +6,7 @@ import { createAuth } from './auth.js';
  */
 export function authMiddleware() {
   return async (c, next) => {
-    const auth = createAuth(c.env.DB, c.env);
+    const auth = createAuth(c.env.DB, c.env, c.req.raw);
     const session = await auth.api.getSession({
       headers: c.req.raw.headers,
     });

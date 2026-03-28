@@ -9,4 +9,7 @@ directory = "app/dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "fish-cost-calculator"
+# After creating the D1 database, replace with actual ID:
+# Run: wrangler d1 create fish-cost-calculator
+# Then paste the database_id from the output below
 database_id = "placeholder-will-be-set-on-deploy"
