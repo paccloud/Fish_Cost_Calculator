@@ -1,66 +1,96 @@
-import jwt from 'jsonwebtoken';
-import { verifyNeonAuthSession, getOrCreateLocalUser } from './neon-auth.js';
+import { auth } from './better-auth.js';
+import { fromNodeHeaders } from 'better-auth/node';
 import { query } from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET is required for JWT authentication');
-}
-
 /**
- * Verify JWT token from Authorization header
- * @param {Object} req - Request object
- * @returns {Object|null} Decoded token payload or null if invalid
+ * Look up the local `users` table record that corresponds to a Better Auth user.
+ *
+ * Better Auth stores users in its own `user` table with its own IDs.
+ * The app's tables (calculations, user_data, contributors) reference
+ * the legacy `users.id` column. This function bridges the two by
+ * matching on email, then falling back to creating a new local record.
+ *
+ * @param {Object} betterAuthUser - User object from Better Auth session
+ * @returns {Object|null} Local user record { id, username, email, authProvider }
  */
-export function verifyToken(req) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+async function getLocalUser(betterAuthUser) {
+  if (!betterAuthUser?.email) {
     return null;
   }
 
-  const token = authHeader.split(' ')[1];
   try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    return null;
-  }
-}
+    // Try to find existing local user by email
+    let result = await query(
+      'SELECT id, username, email, auth_provider FROM users WHERE email = $1',
+      [betterAuthUser.email]
+    );
 
-/**
- * Verify user from either JWT token or Neon Auth session
- * Tries JWT first (faster), then falls back to Neon Auth
- * @param {Object} req - Request object
- * @returns {Object|null} User object or null if not authenticated
- */
-export async function verifyUser(req) {
-  // First try JWT token (existing password auth)
-  const jwtUser = verifyToken(req);
-  if (jwtUser) {
-    return { ...jwtUser, authProvider: 'password' };
-  }
-
-  // Fall back to Neon Auth session (OAuth)
-  const neonUser = await verifyNeonAuthSession(req);
-  if (neonUser) {
-    // Get or create local user record for database operations
-    const localUser = await getOrCreateLocalUser(neonUser, query);
-    if (localUser) {
+    if (result.rows.length > 0) {
       return {
-        id: localUser.id,
-        username: localUser.username,
-        email: localUser.email,
-        authProvider: 'oauth',
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        email: result.rows[0].email,
+        authProvider: result.rows[0].auth_provider || 'better-auth',
       };
     }
-  }
 
-  return null;
+    // No local user found — create one
+    const username =
+      betterAuthUser.name ||
+      betterAuthUser.email.split('@')[0] ||
+      `user_${Date.now()}`;
+
+    result = await query(
+      `INSERT INTO users (username, email, auth_provider)
+       VALUES ($1, $2, 'better-auth')
+       RETURNING id, username, email, auth_provider`,
+      [username, betterAuthUser.email]
+    );
+
+    return {
+      id: result.rows[0].id,
+      username: result.rows[0].username,
+      email: result.rows[0].email,
+      authProvider: 'better-auth',
+    };
+  } catch (err) {
+    console.error('Error resolving local user:', err);
+    return null;
+  }
 }
 
 /**
- * Higher-order function to require authentication for a handler
- * Supports both JWT tokens (password auth) and Neon Auth sessions (OAuth)
+ * Verify the current request's session via Better Auth.
+ *
+ * @param {Object} req - Node/Vercel request object
+ * @returns {Object|null} Local user object or null if not authenticated
+ */
+export async function verifyUser(req) {
+  try {
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    if (!session?.user) {
+      return null;
+    }
+
+    // Map Better Auth user to local database user
+    const localUser = await getLocalUser(session.user);
+    return localUser;
+  } catch (err) {
+    console.error('Better Auth session verification error:', err);
+    return null;
+  }
+}
+
+/**
+ * Higher-order function to require authentication for a handler.
+ *
+ * Verifies the Better Auth session cookie and attaches `req.user`
+ * with the LOCAL database user ID (not Better Auth's internal ID),
+ * because all app queries use `users.id` as the foreign key.
+ *
  * @param {Function} handler - The route handler function
  * @returns {Function} Wrapped handler that requires auth
  */
