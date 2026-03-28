@@ -3,23 +3,36 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #fafaf9;
-  --color-surface-elevated: #ffffff;
-  --color-text-primary: #1e293b;
-  --color-text-secondary: #64748b;
-  --color-border: #e2e8f0;
+  --color-navy: #0A2540;
+  --color-teal: #0E7C6B;
+  --color-rust: #D4622B;
+  --color-surface: #F8F9FA;
+  --color-surface-elevated: #FFFFFF;
+  --color-text-primary: #1A2B3D;
+  --color-text-secondary: #5A6B7D;
+  --color-border: #D8DEE4;
+  --color-success: #16A34A;
+  --color-error: #DC2626;
 }
 
 .dark {
-  --color-surface: #0f172a;
-  --color-surface-elevated: rgba(255, 255, 255, 0.1);
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #94a3b8;
-  --color-border: rgba(255, 255, 255, 0.1);
+  --color-navy: #0F1A2E;
+  --color-teal: #12A08C;
+  --color-rust: #E8713E;
+  --color-surface: #0F1A2E;
+  --color-surface-elevated: #162033;
+  --color-text-primary: #E8ECF1;
+  --color-text-secondary: #8A9BB0;
+  --color-border: #253349;
+  --color-success: #22C55E;
+  --color-error: #EF4444;
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded;
+    @apply bg-[var(--color-rust)] hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] text-white font-semibold py-2 px-4 rounded-lg transition-colors active:scale-[0.98];
+  }
+  .btn-secondary {
+    @apply border border-[var(--color-teal)] text-[var(--color-teal)] hover:bg-[var(--color-teal)] hover:text-white font-semibold py-2 px-4 rounded-lg transition-colors;
   }
 }
