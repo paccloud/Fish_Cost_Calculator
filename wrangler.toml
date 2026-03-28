@@ -1,0 +1,12 @@
+name = "fish-cost-calculator"
+main = "worker/index.js"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "app/dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fish-cost-calculator"
+database_id = "placeholder-will-be-set-on-deploy"

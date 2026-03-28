@@ -14,8 +14,14 @@
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
     "formidable": "^3.5.1",
+    "hono": "^4.12.9",
     "jsonwebtoken": "^9.0.2",
+    "kysely": "^0.28.14",
+    "kysely-d1": "^0.4.0",
     "pg": "^8.16.3",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.78.0"
   }
 }
