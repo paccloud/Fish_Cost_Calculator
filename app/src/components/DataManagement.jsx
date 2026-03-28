@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
-import { apiUrl } from '../config/api';
 
 const DataManagement = () => {
     const { user } = useAuth();
-    const [userData, setUserData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { customYields, addYield, updateYield, removeYield, dataLoaded } = useData();
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    
+
     const [formData, setFormData] = useState({
         species: '',
         product: '',
@@ -19,66 +18,27 @@ const DataManagement = () => {
         source: 'User Input'
     });
 
-    // Load user's custom data
-    useEffect(() => {
-        if (user) {
-            loadUserData();
-        } else {
-            setLoading(false);
-        }
-    }, [user]);
-
-    const loadUserData = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(apiUrl('/api/user-data'), {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
-            if (Array.isArray(data)) {
-                setUserData(data);
-            }
-        } catch (e) {
-            console.error('Failed to load user data:', e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        const token = localStorage.getItem('token');
-        const endpoint = editingId
-            ? apiUrl(`/api/user-data/${editingId}`)
-            : apiUrl('/api/user-data');
-        const method = editingId ? 'PUT' : 'POST';
+
+        const payload = {
+            species: formData.species,
+            product: formData.product,
+            yield: parseFloat(formData.yield),
+            source: formData.source
+        };
 
         try {
-            const res = await fetch(endpoint, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    species: formData.species,
-                    product: formData.product,
-                    yield: parseFloat(formData.yield),
-                    source: formData.source
-                })
-            });
-
-            if (res.ok) {
-                setStatus({ type: 'success', message: editingId ? 'Updated successfully!' : 'Added successfully!' });
-                resetForm();
-                loadUserData();
+            if (editingId) {
+                await updateYield(editingId, payload);
+                setStatus({ type: 'success', message: 'Updated successfully!' });
             } else {
-                const err = await res.json();
-                setStatus({ type: 'error', message: err.error || 'Operation failed.' });
+                await addYield(payload);
+                setStatus({ type: 'success', message: 'Added successfully!' });
             }
+            resetForm();
         } catch (e) {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
+            setStatus({ type: 'error', message: 'Operation failed.' });
         }
     };
 
@@ -95,22 +55,12 @@ const DataManagement = () => {
 
     const handleDelete = async (id) => {
         if (!confirm('Are you sure you want to delete this entry?')) return;
-        
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(apiUrl(`/api/user-data/${id}`), {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
 
-            if (res.ok) {
-                setStatus({ type: 'success', message: 'Deleted successfully!' });
-                loadUserData();
-            } else {
-                setStatus({ type: 'error', message: 'Failed to delete.' });
-            }
+        try {
+            await removeYield(id);
+            setStatus({ type: 'success', message: 'Deleted successfully!' });
         } catch (e) {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
+            setStatus({ type: 'error', message: 'Failed to delete.' });
         }
     };
 
@@ -120,25 +70,14 @@ const DataManagement = () => {
         setShowForm(false);
     };
 
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-surface border border-border p-8 rounded-full">
-                    <Database size={48} className="text-text-secondary" />
-                </div>
-                <h2 className="text-2xl font-heading font-bold text-navy dark:text-text-primary">Login Required</h2>
-                <p className="text-text-secondary max-w-md">
-                    You need to be logged in to manage your custom yield data.
-                </p>
-                <Link to="/login" className="px-6 py-2 bg-rust text-white rounded-lg hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] transition">
-                    Go to Login
-                </Link>
-            </div>
-        );
-    }
-
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
+            {!user && (
+                <div className="bg-teal/10 border border-teal/20 rounded-lg p-3 text-text-secondary text-sm mb-6">
+                    <Link to="/login" className="text-teal font-medium hover:underline">Sign in</Link> to sync your data across devices
+                </div>
+            )}
+
             <div className="flex items-center justify-between mb-8">
                 <div>
                     <h1 className="text-3xl font-heading font-bold text-navy dark:text-text-primary flex items-center gap-3">
@@ -152,27 +91,23 @@ const DataManagement = () => {
                 
                 <div className="flex gap-3">
                     <button
-                        onClick={async () => {
-                            const token = localStorage.getItem('token');
-                            try {
-                                const response = await fetch(apiUrl('/api/export?type=data'), {
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                });
-                                const blob = await response.blob();
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'custom-yield-data.csv';
-                                document.body.appendChild(a);
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                            } catch (error) {
-                                console.error('Export failed:', error);
-                            }
+                        onClick={() => {
+                            const header = 'species,product,yield,source\n';
+                            const rows = customYields.map((item) =>
+                                [item.species, item.product, item.yield, item.source || ''].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
+                            ).join('\n');
+                            const blob = new Blob([header + rows], { type: 'text/csv' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'custom-yield-data.csv';
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
                         }}
                         className="flex items-center gap-2 bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={userData.length === 0}
+                        disabled={customYields.length === 0}
                     >
                         <Download size={20} />
                         Export CSV
@@ -289,16 +224,16 @@ const DataManagement = () => {
                     <h2 className="text-lg font-heading font-semibold text-navy dark:text-text-primary">Your Custom Data</h2>
                 </div>
 
-                {loading ? (
+                {!dataLoaded ? (
                     <div className="p-8 text-center text-text-secondary">Loading...</div>
-                ) : userData.length === 0 ? (
+                ) : customYields.length === 0 ? (
                     <div className="p-8 text-center text-text-secondary">
                         <Database size={48} className="mx-auto mb-4 opacity-50" />
                         <p>No custom data yet. Add your first entry above!</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-border">
-                        {userData.map((item) => (
+                        {customYields.map((item) => (
                             <div key={item.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 transition">
                                 <div>
                                     <p className="text-navy dark:text-text-primary font-medium">{item.species}</p>

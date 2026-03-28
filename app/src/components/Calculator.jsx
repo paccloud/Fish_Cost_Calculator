@@ -1,8 +1,33 @@
 import React, { useState, useEffect, useMemo, useId } from 'react';
-import { ACRONYMS } from '../data/fish_data_v3';
+import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Clock, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
+
+// Process FISH_DATA_V3 into the format expected by the calculator
+// (same shape as the API response: numeric yield, array range, from/to strings)
+const PROCESSED_FISH_DATA = {};
+Object.entries(FISH_DATA_V3).forEach(([species, data]) => {
+  PROCESSED_FISH_DATA[species] = {
+    scientific_name: data.scientific_name,
+    category: data.category,
+    conversions: {}
+  };
+  Object.entries(data.conversions).forEach(([convKey, conv]) => {
+    const parts = convKey.split(' \u2192 ');
+    const from = parts[0];
+    const to = parts[1];
+    const fromLabel = from !== 'Round' && from !== 'Whole' && from !== 'Raw Whole' ? `From ${from}: ` : '';
+    const label = `${fromLabel}${to}`;
+    PROCESSED_FISH_DATA[species].conversions[label] = {
+      yield: conv.yield,
+      range: conv.range || null,
+      from,
+      to
+    };
+  });
+});
 
 // Tooltip component for acronyms (mouse-only)
 const Tooltip = ({ text, children }) => {
@@ -113,6 +138,7 @@ const TextWithTooltips = ({ text }) => {
 
 const Calculator = () => {
   const { user } = useAuth();
+  const { savedCalcs, customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, removeCalc, dataLoaded, updateCustomSpecies } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -130,14 +156,11 @@ const Calculator = () => {
   const [useRangeMin, setUseRangeMin] = useState(false);
   const [useRangeMax, setUseRangeMax] = useState(false);
   
-  const [customData, setCustomData] = useState({});
-  const [history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
-  
-  // Fish data from API
-  const [fishData, setFishData] = useState({});
-  const [profilesData, setProfilesData] = useState({});
-  const [dataLoading, setDataLoading] = useState(true);
+
+  // Fish data from static import (instant, no loading needed)
+  const fishData = PROCESSED_FISH_DATA;
+  const profilesData = PROFILES_DATA;
   
   // Custom species state
   const [showCustomSpeciesModal, setShowCustomSpeciesModal] = useState(false);
@@ -145,10 +168,8 @@ const Calculator = () => {
   const [customSpeciesYield, setCustomSpeciesYield] = useState('');
   const [customSpeciesFrom, setCustomSpeciesFrom] = useState('Round');
   const [customSpeciesTo, setCustomSpeciesTo] = useState('Fillet');
-  const [localCustomSpecies, setLocalCustomSpecies] = useState(() => {
-    const saved = localStorage.getItem('customSpecies');
-    return saved ? JSON.parse(saved) : {};
-  });
+  // Custom species from DataContext (persisted in IndexedDB)
+  const localCustomSpecies = dataContextCustomSpecies;
 
   // Time tracking state (optional)
   const [showTimeTracking, setShowTimeTracking] = useState(false);
@@ -166,25 +187,6 @@ const Calculator = () => {
   ]);
   const [appliedDiscount, setAppliedDiscount] = useState(0);
 
-  // Load fish data from API on mount
-  useEffect(() => {
-    fetch(apiUrl('/api/fish-data'))
-      .then(res => res.json())
-      .then(data => {
-        if (data.fishData) {
-          setFishData(data.fishData);
-        }
-        if (data.profiles) {
-          setProfilesData(data.profiles);
-        }
-        setDataLoading(false);
-      })
-      .catch(err => {
-        console.error("Failed to load fish data:", err);
-        setDataLoading(false);
-      });
-  }, []);
-
   // Load public calculations for all users (including guests)
   useEffect(() => {
     fetch(apiUrl('/api/public-calcs'))
@@ -197,43 +199,19 @@ const Calculator = () => {
       .catch(err => console.error("Failed to load public calculations", err));
   }, []);
 
-  // Load user-specific data on login
-  useEffect(() => {
-    if (user) {
-      const token = localStorage.getItem('token');
-      fetch(apiUrl('/api/user-data'), {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include'
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          const mapped = {};
-          data.forEach(item => {
-            if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-            mapped[item.species].conversions[`Custom: ${item.product}`] = {
-              yield: parseFloat(item.yield),
-              from: 'Custom',
-              to: item.product
-            };
-          });
-          setCustomData(mapped);
-        }
-      })
-      .catch(err => console.error("Failed to load custom data", err));
-
-      fetch(apiUrl('/api/saved-calcs'), {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include'
-      })
-      .then(res => res.json())
-      .then(data => setHistory(data))
-      .catch(err => console.error("Failed to load history", err));
-    } else {
-      setCustomData({});
-      setHistory([]);
-    }
-  }, [user]);
+  // Custom yields from DataContext (replaces API user-data fetch)
+  const customData = useMemo(() => {
+    const mapped = {};
+    customYields.forEach(item => {
+      if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
+      mapped[item.species].conversions[`Custom: ${item.product}`] = {
+        yield: parseFloat(item.yield),
+        from: 'Custom',
+        to: item.product
+      };
+    });
+    return mapped;
+  }, [customYields]);
 
   // Merge Data - combine API fish data with user custom data and local custom species
   const combinedData = useMemo(() => {
@@ -353,8 +331,7 @@ const Calculator = () => {
       updated[customSpeciesName.trim()] = newSpecies;
     }
     
-    setLocalCustomSpecies(updated);
-    localStorage.setItem('customSpecies', JSON.stringify(updated));
+    updateCustomSpecies(updated);
     
     // Auto-select the new species
     setSpecies(customSpeciesName.trim());
@@ -458,33 +435,21 @@ const Calculator = () => {
   };
 
   const handleSave = async () => {
-    if (!user || !result) return;
+    if (!result) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(apiUrl('/api/save-calc'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          name: `${species} - ${fromState} → ${toState}`,
-          species,
-          product: `${fromState} → ${toState}`,
-          mode,
-          cost: mode === 'cost' ? parseFloat(cost) : 0,
-          target_weight: mode === 'weight' ? parseFloat(targetWeight) : 0,
-          yield: parseFloat(yieldPercent),
-          result
-        })
+      await contextSaveCalc({
+        name: `${species} - ${fromState} → ${toState}`,
+        species,
+        product: `${fromState} → ${toState}`,
+        mode,
+        cost: mode === 'cost' ? parseFloat(cost) : 0,
+        target_weight: mode === 'weight' ? parseFloat(targetWeight) : 0,
+        yield: parseFloat(yieldPercent),
+        result,
+        date: new Date().toISOString()
       });
-      
-      if (res.ok) {
-        setSaveStatus('Saved to History!');
-      } else {
-        setSaveStatus('Failed to save.');
-      }
+      setSaveStatus('Saved to History!');
     } catch (e) {
       setSaveStatus('Error saving.');
     }
@@ -942,8 +907,7 @@ const Calculator = () => {
                 </div>
               )}
 
-              {user ? (
-                <div className="mt-4 flex flex-col items-center gap-2">
+              <div className="mt-4 flex flex-col items-center gap-2">
                   <div className="flex items-center gap-4">
                     <button
                       onClick={handleSave}
@@ -951,30 +915,32 @@ const Calculator = () => {
                     >
                       <Save size={20} /> Save Calculation
                     </button>
-                    <button
-                      onClick={async () => {
-                        const token = localStorage.getItem('token');
-                        try {
-                          const response = await fetch(apiUrl('/api/export?type=calcs'), {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                          });
-                          const blob = await response.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = 'calculations.csv';
-                          document.body.appendChild(a);
-                          a.click();
-                          window.URL.revokeObjectURL(url);
-                          document.body.removeChild(a);
-                        } catch (error) {
-                          console.error('Export failed:', error);
-                        }
-                      }}
-                      className="flex items-center gap-2 text-text-secondary hover:text-navy dark:hover:text-text-primary transition text-sm"
-                    >
-                      <Download size={16} /> Export History
-                    </button>
+                    {user && (
+                      <button
+                        onClick={async () => {
+                          const token = localStorage.getItem('token');
+                          try {
+                            const response = await fetch(apiUrl('/api/export?type=calcs'), {
+                              headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'calculations.csv';
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                          } catch (error) {
+                            console.error('Export failed:', error);
+                          }
+                        }}
+                        className="flex items-center gap-2 text-text-secondary hover:text-navy dark:hover:text-text-primary transition text-sm"
+                      >
+                        <Download size={16} /> Export History
+                      </button>
+                    )}
                   </div>
                   {saveStatus && (
                     <p
@@ -986,9 +952,6 @@ const Calculator = () => {
                     </p>
                   )}
                 </div>
-              ) : (
-                <p className="mt-4 text-xs text-text-secondary">Log in to save this calculation</p>
-              )}
             </div>
           )}
         </div>
@@ -1045,7 +1008,7 @@ const Calculator = () => {
           </div>
           {!user && (
             <p className="mt-4 text-xs text-center text-text-secondary">
-              Sign in to save your own calculations
+              Sign in to sync your calculations across devices
             </p>
           )}
         </div>
