@@ -41,6 +41,9 @@ server/uploads/
 .vercel
 .env*.local
 
+# Worktrees
+worktrees/
+
 # Design and datasets
 Design Inspiration Ideas/
 datasets/

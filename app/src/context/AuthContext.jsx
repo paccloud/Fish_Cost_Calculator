@@ -1,8 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';
-
-const AuthContext = createContext(null);
+import { AuthContext } from './authContext';
+export { useAuth } from './useAuth';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -109,7 +109,6 @@ export const AuthProvider = ({ children }) => {
 
             clearToken();
           }, Math.min(msUntilExpiry, MAX_TIMEOUT));
-          }, Math.min(msUntilExpiry, MAX_TIMEOUT));
         };
 
         scheduleExpiry();
@@ -210,5 +209,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);
