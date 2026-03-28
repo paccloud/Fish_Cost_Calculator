@@ -12,6 +12,7 @@ import DataManagement from './components/DataManagement';
 import ContributorProfile from './components/ContributorProfile';
 import FeaturesRoadmap from './components/FeaturesRoadmap';
 import Footer from './components/Footer';
+import InstallPrompt from './components/InstallPrompt';
 import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { useAuth } from './context/useAuth';
@@ -147,6 +148,7 @@ function AppContent() {
         </Routes>
       </main>
       <Footer />
+      <InstallPrompt />
     </div>
   );
 }
