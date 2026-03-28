@@ -61,8 +61,8 @@ const Login = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md bg-white dark:bg-white/10 backdrop-blur-lg p-8 rounded-xl border border-slate-200 dark:border-white/20 shadow-xl">
-        <h2 className="text-3xl font-bold mb-6 text-center text-slate-800 dark:text-white">
+      <div className="w-full max-w-md bg-surface-elevated border border-border p-8 rounded-xl shadow-sm">
+        <h2 className="font-heading text-2xl font-bold mb-6 text-center text-navy dark:text-text-primary">
           {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
 
@@ -71,7 +71,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('google')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white font-medium py-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 bg-surface-elevated border border-border text-text-primary font-medium py-3 rounded-lg hover:bg-surface transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <GoogleIcon />
             {oauthLoading === 'google' ? 'Connecting...' : 'Continue with Google'}
@@ -80,7 +80,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('github')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-slate-900 dark:bg-slate-700 text-white font-medium py-3 rounded-lg hover:bg-slate-800 dark:hover:bg-slate-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 bg-navy text-white font-medium py-3 rounded-lg hover:bg-[#0D1F35] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <GitHubIcon />
             {oauthLoading === 'github' ? 'Connecting...' : 'Continue with GitHub'}
@@ -90,10 +90,10 @@ const Login = () => {
         {/* Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-300 dark:border-slate-600"></div>
+            <div className="w-full border-t border-border"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-white dark:bg-transparent text-slate-500 dark:text-gray-400">
+            <span className="px-4 bg-surface-elevated dark:bg-surface-elevated text-text-secondary">
               or continue with username
             </span>
           </div>
@@ -101,36 +101,42 @@ const Login = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Username</label>
+            <label htmlFor="username" className="block text-text-secondary text-sm font-medium mb-2">Username</label>
             <div className="relative">
-              <User className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
+              <User className="absolute left-3 top-3 text-teal w-5 h-5" />
               <input
+                id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-surface border border-border text-text-primary pl-10 p-3 rounded-lg focus:ring-2 focus:ring-teal outline-none"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-slate-600 dark:text-gray-400 text-sm mb-2">Password</label>
+            <label htmlFor="password" className="block text-text-secondary text-sm font-medium mb-2">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 text-cyan-500 w-5 h-5" />
+              <Lock className="absolute left-3 top-3 text-teal w-5 h-5" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-white pl-10 p-3 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none"
+                className="w-full bg-surface border border-border text-text-primary pl-10 p-3 rounded-lg focus:ring-2 focus:ring-teal outline-none"
                 required
               />
             </div>
           </div>
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm text-center" role="alert" aria-live="assertive">
+              {error}
+            </p>
+          )}
 
-          <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition shadow-lg flex items-center justify-center gap-2">
+          <button type="submit" className="w-full bg-rust hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] text-white font-semibold py-3 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2">
             {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={20} />
           </button>
         </form>
@@ -138,14 +144,14 @@ const Login = () => {
         <div className="mt-6 text-center">
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="text-slate-600 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white text-sm transition"
+            className="text-text-secondary hover:text-teal text-sm transition"
           >
             {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}
           </button>
         </div>
 
         <div className="mt-4 text-center">
-          <button onClick={() => navigate('/')} className="text-slate-500 dark:text-gray-500 hover:text-slate-700 dark:hover:text-gray-300 text-sm transition">
+          <button onClick={() => navigate('/')} className="text-text-secondary hover:text-text-primary text-sm transition">
             Continue as Guest
           </button>
         </div>

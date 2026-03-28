@@ -3,6 +3,9 @@ import jwt from 'jsonwebtoken';
 import { query } from './_lib/db.js';
 import { handleCors } from './_lib/cors.js';
 
+const JWT_SECRET = process.env.JWT_SECRET;
+const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10) || 86400;
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -12,6 +15,11 @@ async function handler(req, res) {
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  if (!JWT_SECRET) {
+    console.error('JWT_SECRET is not set for login handler');
+    return res.status(500).json({ error: 'Server misconfigured' });
   }
 
   try {
@@ -35,10 +43,11 @@ async function handler(req, res) {
     // Generate JWT token
     const token = jwt.sign(
       { id: user.id, username: user.username },
-      process.env.JWT_SECRET
+      JWT_SECRET,
+      { expiresIn: `${TOKEN_EXPIRY_SECONDS}s` }
     );
 
-    return res.status(200).json({ token, username: user.username });
+    return res.status(200).json({ token, username: user.username, expiresIn: TOKEN_EXPIRY_SECONDS });
   } catch (err) {
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Server error' });

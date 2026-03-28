@@ -15,7 +15,7 @@ async function handler(req, res) {
     // Get all calculations, excluding user_id for privacy
     // Order by date descending, limit to 100 for performance
     const result = await query(
-      `SELECT id, name, species, product, cost, yield, result, date
+      `SELECT id, species, product, cost, yield, result, date
        FROM calculations
        ORDER BY date DESC
        LIMIT 100`

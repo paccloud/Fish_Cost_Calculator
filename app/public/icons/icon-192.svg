@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0E7C6B"/>
+
+  <text x="100" y="338"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="240" fill="white"
+    text-anchor="middle" font-weight="bold">$</text>
+
+  <path d="
+    M 138,256
+    C 155,162  285,108  390,138
+    C 448,155  478,212  482,256
+    C 478,300  448,357  390,374
+    C 285,404  155,350  138,256Z"
+    fill="white"/>
+
+  <path d="M 275,122 C 282,78 322,82 325,122" fill="white"/>
+  <path d="M 290,392 C 296,428 328,424 326,392" fill="white"/>
+
+  <circle cx="418" cy="224" r="18" fill="#0E7C6B"/>
+
+  <text x="310" y="288"
+    font-family="-apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+    font-size="96" fill="#0E7C6B" text-anchor="middle"
+    font-weight="800" letter-spacing="-3">FC</text>
+</svg>

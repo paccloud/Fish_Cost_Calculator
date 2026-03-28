@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';
 
@@ -32,18 +32,102 @@ export const AuthProvider = ({ children }) => {
 
       // Fall back to JWT token
       if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          setUser({ username: payload.username, authProvider: 'password' });
-        } catch {
+        const tokenParts = token.split('.');
+        if (tokenParts.length !== 3) {
           localStorage.removeItem('token');
           setToken(null);
+          setUser(null);
+        } else {
+          try {
+            const payload = JSON.parse(atob(tokenParts[1]));
+            if (payload.exp && payload.exp * 1000 < Date.now()) {
+              localStorage.removeItem('token');
+              setToken(null);
+              setUser(null);
+            } else {
+              setUser({ username: payload.username, authProvider: 'password' });
+            }
+          } catch {
+            localStorage.removeItem('token');
+            setToken(null);
+            setUser(null);
+          }
         }
       }
       setLoading(false);
     };
 
     checkSession();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const MAX_TIMEOUT = 2147483647;
+    let timeoutId;
+    let cancelled = false;
+
+    const clearToken = () => {
+      localStorage.removeItem('token');
+      setToken(null);
+      setUser(null);
+    };
+
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      localStorage.removeItem('token');
+      queueMicrotask(() => {
+        setToken(null);
+        setUser(null);
+      });
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(tokenParts[1]));
+      if (payload.exp) {
+        const expiryMs = payload.exp * 1000;
+
+        const scheduleExpiry = () => {
+          const msUntilExpiry = expiryMs - Date.now();
+          if (msUntilExpiry <= 0) {
+            localStorage.removeItem('token');
+            queueMicrotask(() => {
+              setToken(null);
+              setUser(null);
+            });
+            return;
+          }
+          timeoutId = setTimeout(() => {
+            if (cancelled) return;
+
+            const remainingMs = expiryMs - Date.now();
+            if (remainingMs > 0) {
+              scheduleExpiry();
+              return;
+            }
+
+            clearToken();
+          }, Math.min(msUntilExpiry, MAX_TIMEOUT));
+        };
+
+        scheduleExpiry();
+      }
+    } catch {
+      // If decoding fails, clear invalid token
+      localStorage.removeItem('token');
+      queueMicrotask(() => {
+        setToken(null);
+        setUser(null);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [token]);
 
   // Traditional username/password login
@@ -126,4 +210,8 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+};
