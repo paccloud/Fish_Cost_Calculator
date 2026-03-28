@@ -46,9 +46,9 @@ const Login = () => {
     setOauthLoading(true);
     try {
       await signInWithGoogle();
-      // OAuth will redirect, so we don't need to navigate here
     } catch (e) {
       setError('Failed to sign in with Google');
+    } finally {
       setOauthLoading(false);
     }
   };
