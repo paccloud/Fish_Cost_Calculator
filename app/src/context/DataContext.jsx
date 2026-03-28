@@ -60,12 +60,11 @@ export function DataProvider({ children }) {
   }, []);
 
   const triggerSync = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token || !navigator.onLine) return;
+    if (!navigator.onLine) return;
 
     setSyncStatus('syncing');
     try {
-      const stats = await syncAll(token);
+      const stats = await syncAll();
       // Reload data from IndexedDB after sync to pick up merged server data
       const [calcs, yields] = await Promise.all([
         getSavedCalcs(),

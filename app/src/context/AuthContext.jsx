@@ -1,209 +1,79 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiUrl } from '../config/api';
-import { stackClientApp } from '../config/neonAuth';
+import React, { createContext, useContext, useCallback } from 'react';
+import { authClient } from '../config/auth';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+  const { data: session, isPending: loading } = authClient.useSession();
 
-  // Check for Stack Auth (Neon Auth) session on mount
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // First check Stack Auth session
-        const stackUser = await stackClientApp.getUser();
-        if (stackUser) {
-          setUser({
-            username: stackUser.displayName || stackUser.primaryEmail,
-            email: stackUser.primaryEmail,
-            avatar: stackUser.profileImageUrl,
-            authProvider: 'oauth',
-            stackAuthId: stackUser.id
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.log('No Stack Auth session:', e.message);
+  const user = session?.user
+    ? {
+        username: session.user.name || session.user.email,
+        email: session.user.email,
+        avatar: session.user.image,
+        authProvider: session.user.name ? 'email' : 'email',
+        role: session.user.role || 'user',
       }
+    : null;
 
-      // Fall back to JWT token
-      if (token) {
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
-        } else {
-          try {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              localStorage.removeItem('token');
-              setToken(null);
-              setUser(null);
-            } else {
-              setUser({ username: payload.username, authProvider: 'password' });
-            }
-          } catch {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
-          }
-        }
-      }
-      setLoading(false);
-    };
-
-    checkSession();
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    const MAX_TIMEOUT = 2147483647;
-    let timeoutId;
-    let cancelled = false;
-
-    const clearToken = () => {
-      localStorage.removeItem('token');
-      setToken(null);
-      setUser(null);
-    };
-
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-      return;
-    }
-
+  const login = useCallback(async (email, password) => {
     try {
-      const payload = JSON.parse(atob(tokenParts[1]));
-      if (payload.exp) {
-        const expiryMs = payload.exp * 1000;
-
-        const scheduleExpiry = () => {
-          const msUntilExpiry = expiryMs - Date.now();
-          if (msUntilExpiry <= 0) {
-            localStorage.removeItem('token');
-            queueMicrotask(() => {
-              setToken(null);
-              setUser(null);
-            });
-            return;
-          }
-          timeoutId = setTimeout(() => {
-            if (cancelled) return;
-
-            const remainingMs = expiryMs - Date.now();
-            if (remainingMs > 0) {
-              scheduleExpiry();
-              return;
-            }
-
-            clearToken();
-          }, Math.min(msUntilExpiry, MAX_TIMEOUT));
-        };
-
-        scheduleExpiry();
+      const result = await authClient.signIn.email({ email, password });
+      if (result.error) {
+        console.error('Login error:', result.error);
+        return false;
       }
-    } catch {
-      // If decoding fails, clear invalid token
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [token]);
-
-  // Traditional username/password login
-  const login = async (username, password) => {
-    try {
-      const res = await fetch(apiUrl('/api/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setToken(data.token);
-        localStorage.setItem('token', data.token);
-        setUser({ username: data.username, authProvider: 'password' });
-        return true;
-      }
-      return false;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
-  };
-
-  // Traditional username/password registration
-  const register = async (username, password) => {
-    try {
-      const res = await fetch(apiUrl('/api/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      if (res.ok) return true;
-      return false;
-    } catch {
-      return false;
-    }
-  };
-
-  // OAuth sign in (Google, GitHub)
-  const signInWithOAuth = async (provider) => {
-    try {
-      await stackClientApp.signInWithOAuth(provider);
       return true;
-    } catch (err) {
-      console.error(`${provider} sign-in error:`, err);
+    } catch (e) {
+      console.error('Login error:', e);
       return false;
     }
-  };
+  }, []);
 
-  // Logout - handles both auth methods
-  const logout = async () => {
+  const register = useCallback(async (email, password, username) => {
     try {
-      // Sign out from Stack Auth if using OAuth
-      if (user?.authProvider === 'oauth') {
-        await stackClientApp.signOut();
+      const result = await authClient.signUp.email({
+        email,
+        password,
+        name: username,
+      });
+      if (result.error) {
+        console.error('Register error:', result.error);
+        return false;
       }
-    } catch (err) {
-      console.log('Stack Auth signout error:', err);
+      return true;
+    } catch (e) {
+      console.error('Register error:', e);
+      return false;
     }
+  }, []);
 
-    // Clear local state
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-  };
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      await authClient.signIn.social({ provider: "google" });
+      return true;
+    } catch (e) {
+      console.error('Google sign-in error:', e);
+      return false;
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await authClient.signOut();
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{
       user,
-      token,
       loading,
       login,
       logout,
       register,
-      signInWithOAuth
+      signInWithGoogle,
     }}>
       {children}
     </AuthContext.Provider>
