@@ -1,6 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from '@neondatabase/serverless';
 
+if (!process.env.BETTER_AUTH_SECRET) {
+  throw new Error('BETTER_AUTH_SECRET is required for authentication');
+}
+
 /**
  * Parse trusted origins from ALLOWED_ORIGINS env var.
  * Falls back to localhost defaults for development.
@@ -31,6 +35,8 @@ export const auth = betterAuth({
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
   }),
+
+  secret: process.env.BETTER_AUTH_SECRET,
 
   baseURL: process.env.BETTER_AUTH_URL
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined)

@@ -9,7 +9,7 @@ if (process.env.VERCEL_URL) {
     allowedOrigins.push(vercelUrl);
   }
 }
-const allowCredentials = process.env.CORS_ALLOW_CREDENTIALS === 'true';
+const allowCredentials = process.env.CORS_ALLOW_CREDENTIALS !== 'false';
 
 /**
  * Resolve allowed origin for a request

@@ -40,19 +40,39 @@ async function getLocalUser(betterAuthUser) {
       betterAuthUser.email.split('@')[0] ||
       `user_${Date.now()}`;
 
-    result = await query(
-      `INSERT INTO users (username, email, auth_provider)
-       VALUES ($1, $2, 'better-auth')
-       RETURNING id, username, email, auth_provider`,
-      [username, betterAuthUser.email]
-    );
+    try {
+      result = await query(
+        `INSERT INTO users (username, email, auth_provider)
+         VALUES ($1, $2, 'better-auth')
+         RETURNING id, username, email, auth_provider`,
+        [username, betterAuthUser.email]
+      );
 
-    return {
-      id: result.rows[0].id,
-      username: result.rows[0].username,
-      email: result.rows[0].email,
-      authProvider: 'better-auth',
-    };
+      return {
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        email: result.rows[0].email,
+        authProvider: 'better-auth',
+      };
+    } catch (insertErr) {
+      // Race condition: another request may have inserted this email
+      // between our SELECT and INSERT. Fall back to SELECT.
+      if (insertErr.code === '23505') {
+        result = await query(
+          'SELECT id, username, email, auth_provider FROM users WHERE email = $1',
+          [betterAuthUser.email]
+        );
+        if (result.rows.length > 0) {
+          return {
+            id: result.rows[0].id,
+            username: result.rows[0].username,
+            email: result.rows[0].email,
+            authProvider: result.rows[0].auth_provider || 'better-auth',
+          };
+        }
+      }
+      throw insertErr;
+    }
   } catch (err) {
     console.error('Error resolving local user:', err);
     return null;
