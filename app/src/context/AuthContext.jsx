@@ -11,7 +11,7 @@ export const AuthProvider = ({ children }) => {
         username: session.user.name || session.user.email,
         email: session.user.email,
         avatar: session.user.image,
-        authProvider: session.user.name ? 'email' : 'email',
+        authProvider: 'email',
         role: session.user.role || 'user',
       }
     : null;
