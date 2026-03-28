@@ -35,30 +35,6 @@ const About = () => {
         </p>
       </div>
 
-      {/* Ryan Horwath Bio */}
-      <div className="mb-12">
-        <div className="bg-surface-elevated border border-border rounded-xl p-8 md:p-10">
-          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
-            <img
-              src="https://www.namanet.org/wp-content/uploads/inline-images/ryan_jig-Fish-750x750.jpg"
-              alt="Ryan Horwath"
-              className="rounded-xl border border-border w-full md:w-[200px] h-auto object-cover"
-            />
-            <div>
-              <h2 className="font-heading text-xl font-bold text-navy dark:text-text-primary mb-1">
-                Ryan Horwath
-              </h2>
-              <p className="text-text-secondary text-sm mb-4">
-                NAMA Board Member &middot; Pacific Cloud Seafood &middot; Kodiak, AK
-              </p>
-              <p className="text-text-secondary leading-relaxed">
-                Ryan owns and operates Pacific Cloud Seafood out of Kodiak, Alaska, where he's been commercial fishing since 2003. After years of struggling with the challenges of running a solo small seafood business — from pricing to processing to logistics — he taught himself to code and built Fish Cost Calculator to solve the pricing transparency problem he and fellow fishers kept running into.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* How It Works Section (from Home) */}
       <div className="mb-12">
         <div className="text-center mb-10">
@@ -403,12 +379,63 @@ const About = () => {
           </p>
 
           <a
-            href="mailto:ryan@pacificcloudseafoods.com"
+            href="mailto:ryan@ryan-h.org"
             className="inline-flex items-center gap-3 bg-teal hover:bg-[#0B6958] text-white font-semibold px-6 py-3 rounded-lg transition-colors"
           >
             <Mail className="h-5 w-5" />
-            ryan@pacificcloudseafoods.com
+            ryan@ryan-h.org
           </a>
+        </div>
+      </div>
+
+      {/* About the Creator */}
+      <div className="mb-12">
+        <div className="bg-surface-elevated border border-border rounded-xl p-8 md:p-10">
+          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
+            <img
+              src="https://www.namanet.org/wp-content/uploads/inline-images/ryan_jig-Fish-750x750.jpg"
+              alt="Ryan Horwath"
+              className="rounded-xl border border-border w-full md:w-[200px] h-auto object-cover"
+            />
+            <div>
+              <h2 className="font-heading text-xl font-bold text-navy dark:text-text-primary mb-1">
+                Ryan Horwath
+              </h2>
+              <p className="text-text-secondary text-sm mb-4">
+                NAMA Board Member &middot; Pacific Cloud Seafood &middot; Kodiak, AK
+              </p>
+              <p className="text-text-secondary leading-relaxed mb-4">
+                Ryan owns and operates Pacific Cloud Seafood out of Kodiak, Alaska, where he's been commercial fishing since 2003. After years of struggling with the challenges of running a solo small seafood business — from pricing to processing to logistics — he taught himself to code and built Fish Cost Calculator to solve the pricing transparency problem he and fellow fishers kept running into.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="https://pacificcloudseafoods.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-teal hover:text-[#12A08C] text-sm font-medium transition-colors"
+                >
+                  <Fish className="h-4 w-4" />
+                  Pacific Cloud Seafood
+                </a>
+                <a
+                  href="https://ryan-h.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-teal hover:text-[#12A08C] text-sm font-medium transition-colors"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  ryan-h.org
+                </a>
+                <a
+                  href="mailto:ryan@ryan-h.org"
+                  className="inline-flex items-center gap-1.5 text-teal hover:text-[#12A08C] text-sm font-medium transition-colors"
+                >
+                  <Mail className="h-4 w-4" />
+                  ryan@ryan-h.org
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
