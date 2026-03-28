@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';
@@ -132,14 +132,14 @@ const ContributorProfile = () => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-slate-100 dark:bg-slate-800 p-8 rounded-full">
-                    <User size={48} className="text-slate-500 dark:text-gray-500" />
+                <div className="bg-surface border border-border p-8 rounded-full">
+                    <User size={48} className="text-text-secondary" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Login Required</h2>
-                <p className="text-slate-600 dark:text-gray-400 max-w-md">
+                <h2 className="text-2xl font-heading font-bold text-navy dark:text-text-primary">Login Required</h2>
+                <p className="text-text-secondary max-w-md">
                     You need to be logged in to create a contributor profile.
                 </p>
-                <Link to="/login" className="text-cyan-600 dark:text-cyan-400 hover:underline">
+                <Link to="/login" className="text-teal hover:underline">
                     Go to Login
                 </Link>
             </div>
@@ -149,11 +149,11 @@ const ContributorProfile = () => {
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
-                    <User className="text-cyan-400" />
+                <h1 className="text-3xl font-heading font-bold text-navy dark:text-text-primary flex items-center gap-3">
+                    <User className="text-teal" />
                     Contributor Profile
                 </h1>
-                <p className="text-slate-600 dark:text-gray-400 mt-2">
+                <p className="text-text-secondary mt-2">
                     Share your information to be recognized on the Data Sources page
                 </p>
             </div>
@@ -169,9 +169,9 @@ const ContributorProfile = () => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-white/10 backdrop-blur-lg rounded-xl p-8 border border-slate-200 dark:border-white/20 shadow-lg space-y-6">
+            <form onSubmit={handleSubmit} className="bg-surface-elevated border border-border rounded-xl p-8 shadow-lg space-y-6">
                 <div>
-                    <label htmlFor="display_name" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="display_name" className="block text-sm font-medium mb-2 text-text-secondary flex items-center gap-2">
                         <User size={16} />
                         Display Name *
                     </label>
@@ -180,17 +180,17 @@ const ContributorProfile = () => {
                         type="text"
                         value={formData.display_name}
                         onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-surface border border-border rounded-lg p-3 focus:ring-2 focus:ring-teal outline-none text-navy dark:text-text-primary"
                         placeholder="Your name"
                         required
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-gray-500">
+                    <p className="mt-1 text-xs text-text-secondary">
                         This is how your name will appear on the Data Sources page
                     </p>
                 </div>
 
                 <div>
-                    <label htmlFor="organization" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="organization" className="block text-sm font-medium mb-2 text-text-secondary flex items-center gap-2">
                         <Building2 size={16} />
                         Organization
                     </label>
@@ -199,13 +199,13 @@ const ContributorProfile = () => {
                         type="text"
                         value={formData.organization}
                         onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-surface border border-border rounded-lg p-3 focus:ring-2 focus:ring-teal outline-none text-navy dark:text-text-primary"
                         placeholder="Your organization (optional)"
                     />
                 </div>
 
                 <div>
-                    <label htmlFor="bio" className="block text-sm font-medium mb-2 text-slate-700 dark:text-gray-300 flex items-center gap-2">
+                    <label htmlFor="bio" className="block text-sm font-medium mb-2 text-text-secondary flex items-center gap-2">
                         <FileText size={16} />
                         Bio
                     </label>
@@ -213,12 +213,12 @@ const ContributorProfile = () => {
                         id="bio"
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                        className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 outline-none text-slate-800 dark:text-white"
+                        className="w-full bg-surface border border-border rounded-lg p-3 focus:ring-2 focus:ring-teal outline-none text-navy dark:text-text-primary"
                         placeholder="Tell us about your expertise (max 200 characters)"
                         rows="3"
                         maxLength="200"
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-gray-500 text-right">
+                    <p className="mt-1 text-xs text-text-secondary text-right">
                         {formData.bio.length}/200
                     </p>
                 </div>
@@ -229,9 +229,9 @@ const ContributorProfile = () => {
                         id="show_on_page"
                         checked={formData.show_on_page}
                         onChange={(e) => setFormData({ ...formData, show_on_page: e.target.checked })}
-                        className="w-4 h-4 text-cyan-600 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded focus:ring-cyan-500"
+                        className="w-4 h-4 text-teal bg-surface border-border rounded focus:ring-teal"
                     />
-                    <label htmlFor="show_on_page" className="text-sm text-slate-700 dark:text-gray-300">
+                    <label htmlFor="show_on_page" className="text-sm text-text-secondary">
                         Show my profile on the Data Sources page
                     </label>
                 </div>
@@ -239,7 +239,7 @@ const ContributorProfile = () => {
                 <div className="flex gap-3 pt-4">
                     <button
                         type="submit"
-                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold py-3 rounded-lg hover:from-cyan-400 hover:to-blue-500 transition shadow-lg"
+                        className="flex-1 flex items-center justify-center gap-2 bg-rust text-white font-bold py-3 rounded-lg hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] transition"
                     >
                         <Save size={20} />
                         Save Profile
@@ -247,7 +247,7 @@ const ContributorProfile = () => {
                     <button
                         type="button"
                         onClick={() => navigate('/manage-data')}
-                        className="px-6 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-gray-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+                        className="px-6 py-3 bg-surface border border-border text-text-secondary rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition"
                     >
                         Cancel
                     </button>
