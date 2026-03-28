@@ -5,90 +5,103 @@ const SAVED_CALCS_KEY = 'fish-calc-saved-calcs';
 const CUSTOM_YIELDS_KEY = 'fish-calc-custom-yields';
 const CUSTOM_SPECIES_KEY = 'fish-calc-custom-species';
 
-// --- Saved Calculations ---
+// --- Generic synced store factory ---
 
-export async function getSavedCalcs() {
-  return (await get(SAVED_CALCS_KEY)) || [];
-}
+function createSyncedStore(storageKey) {
+  const getAll = async () => (await get(storageKey)) || [];
 
-export async function addSavedCalc(calc) {
-  const calcs = await getSavedCalcs();
-  const newCalc = {
-    ...calc,
-    id: calc.id || crypto.randomUUID(),
-    syncStatus: 'local',
-    updatedAt: new Date().toISOString(),
-    createdAt: calc.createdAt || new Date().toISOString(),
+  const add = async (item) => {
+    const items = await getAll();
+    const newItem = {
+      ...item,
+      id: item.id || crypto.randomUUID(),
+      syncStatus: 'local',
+      updatedAt: new Date().toISOString(),
+      createdAt: item.createdAt || new Date().toISOString(),
+    };
+    items.push(newItem);
+    await set(storageKey, items);
+    return newItem;
   };
-  calcs.push(newCalc);
-  await set(SAVED_CALCS_KEY, calcs);
-  return newCalc;
-}
 
-export async function deleteSavedCalc(id) {
-  const calcs = await getSavedCalcs();
-  const calc = calcs.find((c) => c.id === id);
-  if (!calc) return;
-
-  if (calc.syncStatus === 'synced') {
-    // Mark for server deletion on next sync
-    calc.syncStatus = 'pending-delete';
-    calc.updatedAt = new Date().toISOString();
-    await set(SAVED_CALCS_KEY, calcs);
-  } else {
-    // Local-only, just remove
-    await set(SAVED_CALCS_KEY, calcs.filter((c) => c.id !== id));
-  }
-}
-
-// --- Custom Yields ---
-
-export async function getCustomYields() {
-  return (await get(CUSTOM_YIELDS_KEY)) || [];
-}
-
-export async function addCustomYield(yieldData) {
-  const yields = await getCustomYields();
-  const newYield = {
-    ...yieldData,
-    id: yieldData.id || crypto.randomUUID(),
-    syncStatus: 'local',
-    updatedAt: new Date().toISOString(),
+  const update = async (id, data) => {
+    const items = await getAll();
+    const index = items.findIndex((i) => i.id === id);
+    if (index === -1) return null;
+    items[index] = {
+      ...items[index],
+      ...data,
+      syncStatus: items[index].syncStatus === 'synced' ? 'local' : items[index].syncStatus,
+      updatedAt: new Date().toISOString(),
+    };
+    await set(storageKey, items);
+    return items[index];
   };
-  yields.push(newYield);
-  await set(CUSTOM_YIELDS_KEY, yields);
-  return newYield;
-}
 
-export async function updateCustomYield(id, data) {
-  const yields = await getCustomYields();
-  const index = yields.findIndex((y) => y.id === id);
-  if (index === -1) return null;
-  yields[index] = {
-    ...yields[index],
-    ...data,
-    syncStatus: yields[index].syncStatus === 'synced' ? 'local' : yields[index].syncStatus,
-    updatedAt: new Date().toISOString(),
+  const remove = async (id) => {
+    const items = await getAll();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+
+    if (item.syncStatus === 'synced') {
+      item.syncStatus = 'pending-delete';
+      item.updatedAt = new Date().toISOString();
+      await set(storageKey, items);
+    } else {
+      await set(storageKey, items.filter((i) => i.id !== id));
+    }
   };
-  await set(CUSTOM_YIELDS_KEY, yields);
-  return yields[index];
+
+  const markSynced = async (id, serverId) => {
+    const items = await getAll();
+    const item = items.find((i) => i.id === id);
+    if (item) {
+      item.syncStatus = 'synced';
+      if (serverId) item.serverId = serverId;
+      await set(storageKey, items);
+    }
+  };
+
+  const removeSyncedDelete = async (id) => {
+    const items = await getAll();
+    await set(storageKey, items.filter((i) => i.id !== id));
+  };
+
+  return { getAll, add, update, remove, markSynced, removeSyncedDelete };
 }
 
-export async function deleteCustomYield(id) {
-  const yields = await getCustomYields();
-  const yieldItem = yields.find((y) => y.id === id);
-  if (!yieldItem) return;
+// --- Store instances ---
 
-  if (yieldItem.syncStatus === 'synced') {
-    yieldItem.syncStatus = 'pending-delete';
-    yieldItem.updatedAt = new Date().toISOString();
-    await set(CUSTOM_YIELDS_KEY, yields);
-  } else {
-    await set(CUSTOM_YIELDS_KEY, yields.filter((y) => y.id !== id));
-  }
+const calcsStore = createSyncedStore(SAVED_CALCS_KEY);
+const yieldsStore = createSyncedStore(CUSTOM_YIELDS_KEY);
+
+// --- Named exports for backward compatibility ---
+
+export const getSavedCalcs = calcsStore.getAll;
+export const addSavedCalc = calcsStore.add;
+export const deleteSavedCalc = calcsStore.remove;
+
+export const getCustomYields = yieldsStore.getAll;
+export const addCustomYield = yieldsStore.add;
+export const updateCustomYield = yieldsStore.update;
+export const deleteCustomYield = yieldsStore.remove;
+
+// --- Sync helpers (typed exports instead of string dispatch) ---
+
+export const markCalcSynced = calcsStore.markSynced;
+export const markYieldSynced = yieldsStore.markSynced;
+export const removeCalcSyncedDelete = calcsStore.removeSyncedDelete;
+export const removeYieldSyncedDelete = yieldsStore.removeSyncedDelete;
+
+export async function getAllPendingSync() {
+  const [calcs, yields] = await Promise.all([calcsStore.getAll(), yieldsStore.getAll()]);
+  return {
+    calcs: calcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete'),
+    yields: yields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),
+  };
 }
 
-// --- Custom Species ---
+// --- Custom Species (different data model, no sync) ---
 
 export async function getCustomSpecies() {
   return (await get(CUSTOM_SPECIES_KEY)) || {};
@@ -98,51 +111,10 @@ export async function setCustomSpecies(data) {
   await set(CUSTOM_SPECIES_KEY, data);
 }
 
-// --- Sync Helpers ---
-
-export async function getAllPendingSync() {
-  const calcs = await getSavedCalcs();
-  const yields = await getCustomYields();
-  return {
-    calcs: calcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete'),
-    yields: yields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),
-  };
-}
-
-export async function markSynced(store, id, serverId) {
-  if (store === 'calcs') {
-    const calcs = await getSavedCalcs();
-    const calc = calcs.find((c) => c.id === id);
-    if (calc) {
-      calc.syncStatus = 'synced';
-      if (serverId) calc.serverId = serverId;
-      await set(SAVED_CALCS_KEY, calcs);
-    }
-  } else if (store === 'yields') {
-    const yields = await getCustomYields();
-    const yieldItem = yields.find((y) => y.id === id);
-    if (yieldItem) {
-      yieldItem.syncStatus = 'synced';
-      if (serverId) yieldItem.serverId = serverId;
-      await set(CUSTOM_YIELDS_KEY, yields);
-    }
-  }
-}
-
-export async function removeSyncedDelete(store, id) {
-  if (store === 'calcs') {
-    const calcs = await getSavedCalcs();
-    await set(SAVED_CALCS_KEY, calcs.filter((c) => c.id !== id));
-  } else if (store === 'yields') {
-    const yields = await getCustomYields();
-    await set(CUSTOM_YIELDS_KEY, yields.filter((y) => y.id !== id));
-  }
-}
-
-// --- Bulk operations for sync ---
+// --- Bulk merge operations (keep separate due to different field mappings) ---
 
 export async function mergeSyncedCalcs(serverCalcs) {
-  const local = await getSavedCalcs();
+  const local = await calcsStore.getAll();
   const localIds = new Set(local.map((c) => c.serverId || c.id));
 
   for (const sc of serverCalcs) {
@@ -161,7 +133,7 @@ export async function mergeSyncedCalcs(serverCalcs) {
 }
 
 export async function mergeSyncedYields(serverYields) {
-  const local = await getCustomYields();
+  const local = await yieldsStore.getAll();
   const localServerIds = new Set(local.filter((y) => y.serverId).map((y) => String(y.serverId)));
 
   for (const sy of serverYields) {

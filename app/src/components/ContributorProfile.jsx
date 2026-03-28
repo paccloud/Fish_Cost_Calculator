@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../context/useAuth';
+import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';

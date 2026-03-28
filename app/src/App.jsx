@@ -16,14 +16,14 @@ import InstallPrompt from './components/InstallPrompt';
 import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { DataProvider, useData } from './context/DataContext';
-import { useAuth } from './context/useAuth';
+import { useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
 import { stackClientApp } from './config/neonAuth';
 
 const NavBar = () => {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
-    const { syncStatus, isOnline } = useData();
+    const { syncStatus, syncError, isOnline } = useData();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
     return (
@@ -57,6 +57,7 @@ const NavBar = () => {
                   <span
                     className={`w-2 h-2 rounded-full ${
                       !isOnline ? 'bg-gray-400' :
+                      syncStatus === 'error' ? 'bg-red-400' :
                       syncStatus === 'syncing' ? 'bg-amber-400 animate-pulse' :
                       syncStatus === 'synced' ? 'bg-emerald-400' :
                       syncStatus === 'pending' ? 'bg-orange-400' :
@@ -64,6 +65,7 @@ const NavBar = () => {
                     }`}
                     title={
                       !isOnline ? 'Offline' :
+                      syncStatus === 'error' ? (syncError === 'auth' ? 'Login expired' : 'Sync failed') :
                       syncStatus === 'syncing' ? 'Syncing...' :
                       syncStatus === 'synced' ? 'Synced' :
                       syncStatus === 'pending' ? 'Changes pending' :

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
-import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Clock, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
-import { useAuth } from '../context/useAuth';
+import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Clock, TrendingDown, ChevronDown, ChevronUp, Share2, Link2, Copy, Check } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 
@@ -138,7 +138,7 @@ const TextWithTooltips = ({ text }) => {
 
 const Calculator = () => {
   const { user } = useAuth();
-  const { savedCalcs, customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, removeCalc, dataLoaded, updateCustomSpecies } = useData();
+  const { savedCalcs, customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, removeCalc, addYield: contextAddYield, dataLoaded, updateCustomSpecies } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -157,6 +157,8 @@ const Calculator = () => {
   const [useRangeMax, setUseRangeMax] = useState(false);
   
   const [publicHistory, setPublicHistory] = useState([]);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [shareCopied, setShareCopied] = useState(null); // 'link' | 'summary' | null
 
   // Fish data from static import (instant, no loading needed)
   const fishData = PROCESSED_FISH_DATA;
@@ -177,15 +179,39 @@ const Calculator = () => {
     { id: 1, name: 'Processing', timeMinutes: '', laborCostPerHour: '' }
   ]);
 
+  // Yield modification tracking
+  const [showSaveYieldPrompt, setShowSaveYieldPrompt] = useState(false);
+
+  // Get the original research yield for the current conversion (before user overrides)
+  const originalResearchYield = useMemo(() => {
+    if (!species || !fromState || !toState) return null;
+    const researchSpecies = PROCESSED_FISH_DATA[species];
+    if (!researchSpecies) return null;
+    const conv = Object.values(researchSpecies.conversions || {}).find(
+      c => c.from === fromState && c.to === toState
+    );
+    return conv ? conv.yield : null;
+  }, [species, fromState, toState]);
+
+  const yieldIsModified = originalResearchYield !== null && yieldPercent !== '' && yieldPercent !== String(originalResearchYield);
+
   // Economy of Scale state (optional)
-  const [showEconomyOfScale, setShowEconomyOfScale] = useState(false);
-  const [quantity, setQuantity] = useState('');
-  const [priceBreaks, setPriceBreaks] = useState([
+  const DEFAULT_PRICE_BREAKS = [
     { minQty: 100, discount: 5 },
     { minQty: 500, discount: 10 },
     { minQty: 1000, discount: 15 },
-  ]);
+  ];
+  const [showEconomyOfScale, setShowEconomyOfScale] = useState(false);
+  const [quantity, setQuantity] = useState('');
+  const [priceBreaks, setPriceBreaks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fish-calc-custom-price-breaks');
+      return saved ? JSON.parse(saved) : DEFAULT_PRICE_BREAKS;
+    } catch { return DEFAULT_PRICE_BREAKS; }
+  });
   const [appliedDiscount, setAppliedDiscount] = useState(0);
+  const [editingTierIndex, setEditingTierIndex] = useState(null);
+  const tiersAreCustom = JSON.stringify(priceBreaks) !== JSON.stringify(DEFAULT_PRICE_BREAKS);
 
   // Load public calculations for all users (including guests)
   useEffect(() => {
@@ -197,6 +223,23 @@ const Calculator = () => {
         }
       })
       .catch(err => console.error("Failed to load public calculations", err));
+  }, []);
+
+  // Parse URL params to pre-fill calculator from shared links
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlSpecies = params.get('species');
+    if (urlSpecies) {
+      setSpecies(urlSpecies);
+      if (params.get('from')) setFromState(params.get('from'));
+      if (params.get('to')) setToState(params.get('to'));
+      if (params.get('yield')) setYieldPercent(params.get('yield'));
+      if (params.get('cost')) setCost(params.get('cost'));
+      if (params.get('mode')) setMode(params.get('mode'));
+      if (params.get('target')) setTargetWeight(params.get('target'));
+      // Clean URL after loading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   // Custom yields from DataContext (replaces API user-data fetch)
@@ -275,25 +318,73 @@ const Calculator = () => {
   const profile = species ? profilesData[species] : null;
   const scientificName = species && combinedData[species] ? combinedData[species].scientific_name : null;
 
-  // Handle species change
+  // Handle species change — auto-select first from state and first to product
   const handleSpeciesChange = (e) => {
     const s = e.target.value;
     setSpecies(s);
-    setFromState('');
-    setToState('');
-    setYieldPercent('');
-    setYieldRange(null);
     setResult(null);
+
+    if (!s || !combinedData[s]) {
+      setFromState('');
+      setToState('');
+      setYieldPercent('');
+      setYieldRange(null);
+      return;
+    }
+
+    // Compute first fromState for the selected species
+    const convs = Object.values(combinedData[s].conversions || {});
+    const froms = [...new Set(convs.map(c => c.from).filter(Boolean))].sort();
+    const firstFrom = froms[0] || '';
+    setFromState(firstFrom);
+
+    // Compute first toState for that fromState
+    if (firstFrom) {
+      const tos = convs
+        .filter(c => c.from === firstFrom && c.to)
+        .sort((a, b) => a.to.localeCompare(b.to));
+      const firstTo = tos[0];
+      setToState(firstTo?.to || '');
+      if (firstTo) {
+        setYieldPercent(String(firstTo.yield));
+        setYieldRange(firstTo.range || null);
+      } else {
+        setYieldPercent('');
+        setYieldRange(null);
+      }
+    } else {
+      setToState('');
+      setYieldPercent('');
+      setYieldRange(null);
+    }
   };
 
-  // Handle from state change
+  // Handle from state change — auto-select first to product
   const handleFromChange = (e) => {
     const f = e.target.value;
     setFromState(f);
-    setToState('');
-    setYieldPercent('');
-    setYieldRange(null);
     setResult(null);
+
+    if (!f || !species || !combinedData[species]) {
+      setToState('');
+      setYieldPercent('');
+      setYieldRange(null);
+      return;
+    }
+
+    const convs = Object.values(combinedData[species].conversions || {});
+    const tos = convs
+      .filter(c => c.from === f && c.to)
+      .sort((a, b) => a.to.localeCompare(b.to));
+    const firstTo = tos[0];
+    setToState(firstTo?.to || '');
+    if (firstTo) {
+      setYieldPercent(String(firstTo.yield));
+      setYieldRange(firstTo.range || null);
+    } else {
+      setYieldPercent('');
+      setYieldRange(null);
+    }
   };
 
   // Handle to state change
@@ -667,6 +758,57 @@ const Calculator = () => {
               {yieldRange && (
                 <p className="mt-1 text-xs text-text-secondary font-mono">Range: {yieldRange[0]}% - {yieldRange[1]}%</p>
               )}
+              {yieldIsModified && (
+                <div className="mt-1 flex items-center gap-2 text-xs">
+                  <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded font-medium">Modified</span>
+                  <span className="text-text-secondary">
+                    Original: {originalResearchYield}% (MAB-37) ·{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setYieldPercent(String(originalResearchYield)); setUseRangeMin(false); setUseRangeMax(false); setShowSaveYieldPrompt(false); }}
+                      className="text-teal hover:underline"
+                    >
+                      Reset
+                    </button>
+                  </span>
+                </div>
+              )}
+              {yieldIsModified && !showSaveYieldPrompt && (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveYieldPrompt(true)}
+                  className="mt-1 text-xs text-teal hover:underline"
+                >
+                  Save as my default for this conversion?
+                </button>
+              )}
+              {showSaveYieldPrompt && yieldIsModified && (
+                <div className="mt-2 p-2 bg-teal/5 dark:bg-teal/10 border border-teal/20 rounded-lg flex items-center gap-2 text-xs">
+                  <span className="text-text-secondary">Save {yieldPercent}% as your default for {species} ({fromState} → {toState})?</span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await contextAddYield({
+                        species,
+                        product: `${fromState} → ${toState}`,
+                        yield: parseFloat(yieldPercent),
+                        source: 'User Override',
+                      });
+                      setShowSaveYieldPrompt(false);
+                    }}
+                    className="px-2 py-1 bg-teal text-white rounded text-xs hover:bg-teal/80 transition"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowSaveYieldPrompt(false)}
+                    className="px-2 py-1 text-text-secondary hover:text-navy dark:hover:text-text-primary transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -834,30 +976,104 @@ const Calculator = () => {
                       {priceBreaks.map((pb, idx) => (
                         <div
                           key={idx}
-                          className={`p-3 rounded-lg border-2 transition-all ${
+                          className={`p-3 rounded-lg border-2 transition-all relative group cursor-pointer ${
                             quantity && parseFloat(quantity) >= pb.minQty
                               ? 'border-green-500 bg-green-100 dark:bg-green-900/30'
-                              : 'border-border bg-surface-elevated'
+                              : 'border-border bg-surface-elevated hover:border-teal/40'
                           }`}
+                          onClick={() => setEditingTierIndex(idx)}
                         >
-                          <p className="font-semibold text-navy dark:text-text-primary">{pb.minQty}+ lbs</p>
-                          <p className="text-green-600 dark:text-green-400 text-lg font-bold">{pb.discount}% off</p>
+                          {priceBreaks.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setPriceBreaks(priceBreaks.filter((_, i) => i !== idx)); setEditingTierIndex(null); }}
+                              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                          {editingTierIndex === idx ? (
+                            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                              <div>
+                                <label className="block text-xs text-text-secondary mb-0.5">Min lbs</label>
+                                <input
+                                  type="number"
+                                  value={pb.minQty}
+                                  onChange={(e) => {
+                                    const updated = [...priceBreaks];
+                                    updated[idx] = { ...updated[idx], minQty: parseFloat(e.target.value) || 0 };
+                                    setPriceBreaks(updated);
+                                  }}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingTierIndex(null); }}
+                                  onBlur={() => setEditingTierIndex(null)}
+                                  autoFocus
+                                  className="w-full bg-surface border border-border rounded p-1.5 text-sm focus:ring-2 focus:ring-green-500 outline-none text-navy dark:text-text-primary"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-text-secondary mb-0.5">Discount %</label>
+                                <input
+                                  type="number"
+                                  value={pb.discount}
+                                  onChange={(e) => {
+                                    const updated = [...priceBreaks];
+                                    updated[idx] = { ...updated[idx], discount: parseFloat(e.target.value) || 0 };
+                                    setPriceBreaks(updated);
+                                  }}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingTierIndex(null); }}
+                                  onBlur={() => setEditingTierIndex(null)}
+                                  className="w-full bg-surface border border-border rounded p-1.5 text-sm focus:ring-2 focus:ring-green-500 outline-none text-navy dark:text-text-primary"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="font-semibold text-navy dark:text-text-primary">{pb.minQty}+ lbs</p>
+                              <p className="text-green-600 dark:text-green-400 text-lg font-bold">{pb.discount}% off</p>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
-                    
+
                     <button
                       onClick={() => setPriceBreaks([...priceBreaks, { minQty: (priceBreaks[priceBreaks.length - 1]?.minQty || 0) + 500, discount: (priceBreaks[priceBreaks.length - 1]?.discount || 0) + 5 }])}
                       className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition mt-2"
                     >
                       <Plus size={16} /> Add Price Break
                     </button>
+
+                    {tiersAreCustom && (
+                      <div className="flex items-center gap-2 text-xs mt-2">
+                        <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded font-medium">Custom</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            localStorage.setItem('fish-calc-custom-price-breaks', JSON.stringify(priceBreaks));
+                          }}
+                          className="text-teal hover:underline"
+                        >
+                          Save as my defaults
+                        </button>
+                        <span className="text-text-secondary">·</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPriceBreaks(DEFAULT_PRICE_BREAKS);
+                            localStorage.removeItem('fish-calc-custom-price-breaks');
+                          }}
+                          className="text-text-secondary hover:underline"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  
+
                   {quantity && appliedDiscount > 0 && (
                     <div className="p-3 bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 rounded-lg text-center">
                       <p className="text-green-700 dark:text-green-300 font-medium">
-                        🎉 You qualify for a <span className="text-lg font-bold">{appliedDiscount}%</span> bulk discount!
+                        You qualify for a <span className="text-lg font-bold">{appliedDiscount}%</span> bulk discount!
                       </p>
                     </div>
                   )}
@@ -915,6 +1131,68 @@ const Calculator = () => {
                     >
                       <Save size={20} /> Save Calculation
                     </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowShareMenu(!showShareMenu)}
+                        className="flex items-center gap-2 text-text-secondary hover:text-navy dark:hover:text-text-primary transition"
+                      >
+                        <Share2 size={20} /> Share
+                      </button>
+                      {showShareMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-surface-elevated border border-border rounded-lg shadow-xl z-50 py-1">
+                          <button
+                            onClick={async () => {
+                              const params = new URLSearchParams({
+                                species, from: fromState, to: toState, yield: yieldPercent, mode,
+                                ...(mode === 'cost' ? { cost } : { target: targetWeight }),
+                              });
+                              const url = `${window.location.origin}${window.location.pathname}?${params}`;
+                              await navigator.clipboard.writeText(url);
+                              setShareCopied('link');
+                              setTimeout(() => { setShareCopied(null); setShowShareMenu(false); }, 1500);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-surface transition"
+                          >
+                            {shareCopied === 'link' ? <Check size={16} className="text-green-500" /> : <Link2 size={16} />}
+                            {shareCopied === 'link' ? 'Copied!' : 'Copy Link'}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const summary = `${species}: ${fromState} → ${toState}\nYield: ${yieldPercent}% | ${mode === 'cost' ? `Cost: $${parseFloat(cost).toFixed(2)}/lb → $${result.toFixed(2)}/lb finished` : `${targetWeight} lbs output → ${result.toFixed(2)} lbs input`}\nvia Fish Cost Calculator`;
+                              await navigator.clipboard.writeText(summary);
+                              setShareCopied('summary');
+                              setTimeout(() => { setShareCopied(null); setShowShareMenu(false); }, 1500);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-surface transition"
+                          >
+                            {shareCopied === 'summary' ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                            {shareCopied === 'summary' ? 'Copied!' : 'Copy Summary'}
+                          </button>
+                          {typeof navigator.share === 'function' && (
+                            <button
+                              onClick={async () => {
+                                const params = new URLSearchParams({
+                                  species, from: fromState, to: toState, yield: yieldPercent, mode,
+                                  ...(mode === 'cost' ? { cost } : { target: targetWeight }),
+                                });
+                                const url = `${window.location.origin}${window.location.pathname}?${params}`;
+                                try {
+                                  await navigator.share({
+                                    title: 'Fish Cost Calculator',
+                                    text: `${species}: ${fromState} → ${toState} at ${yieldPercent}% yield`,
+                                    url,
+                                  });
+                                } catch { /* user cancelled share */ }
+                                setShowShareMenu(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-surface transition"
+                            >
+                              <Share2 size={16} /> Share via...
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     {user && (
                       <button
                         onClick={async () => {

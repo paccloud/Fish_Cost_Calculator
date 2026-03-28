@@ -1,8 +1,10 @@
 import { apiUrl } from '../config/api';
 import {
   getAllPendingSync,
-  markSynced,
-  removeSyncedDelete,
+  markCalcSynced,
+  markYieldSynced,
+  removeCalcSyncedDelete,
+  removeYieldSyncedDelete,
   mergeSyncedCalcs,
   mergeSyncedYields,
 } from './localStore';
@@ -10,10 +12,10 @@ import {
 /**
  * Sync all pending local changes to the server, then pull latest.
  * @param {string} token - JWT auth token
- * @returns {Promise<{pushed: number, pulled: number, errors: number}>}
+ * @returns {Promise<{pushed: number, pulled: number, errors: number, errorDetails: Array}>}
  */
 export async function syncAll(token) {
-  const stats = { pushed: 0, pulled: 0, errors: 0 };
+  const stats = { pushed: 0, pulled: 0, errors: 0, errorDetails: [] };
   if (!token) return stats;
 
   const headers = {
@@ -43,13 +45,16 @@ export async function syncAll(token) {
       });
       if (res.ok) {
         const data = await res.json();
-        await markSynced('calcs', calc.id, data.id);
+        await markCalcSynced(calc.id, data.id);
         stats.pushed++;
       } else {
         stats.errors++;
+        stats.errorDetails.push({ type: 'push-calc', id: calc.id, status: res.status, isAuthError: res.status === 401 });
+        if (res.status === 401) break;
       }
-    } catch {
+    } catch (err) {
       stats.errors++;
+      stats.errorDetails.push({ type: 'push-calc', id: calc.id, message: err.message });
     }
   }
 
@@ -62,17 +67,20 @@ export async function syncAll(token) {
           headers,
         });
         if (res.ok || res.status === 404) {
-          await removeSyncedDelete('calcs', calc.id);
+          await removeCalcSyncedDelete(calc.id);
           stats.pushed++;
         } else {
           stats.errors++;
+          stats.errorDetails.push({ type: 'delete-calc', id: calc.id, status: res.status, isAuthError: res.status === 401 });
+          if (res.status === 401) break;
         }
       } else {
-        await removeSyncedDelete('calcs', calc.id);
+        await removeCalcSyncedDelete(calc.id);
         stats.pushed++;
       }
-    } catch {
+    } catch (err) {
       stats.errors++;
+      stats.errorDetails.push({ type: 'delete-calc', id: calc.id, message: err.message });
     }
   }
 
@@ -91,13 +99,16 @@ export async function syncAll(token) {
       });
       if (res.ok) {
         const data = await res.json();
-        await markSynced('yields', yld.id, data.id);
+        await markYieldSynced(yld.id, data.id);
         stats.pushed++;
       } else {
         stats.errors++;
+        stats.errorDetails.push({ type: 'push-yield', id: yld.id, status: res.status, isAuthError: res.status === 401 });
+        if (res.status === 401) break;
       }
-    } catch {
+    } catch (err) {
       stats.errors++;
+      stats.errorDetails.push({ type: 'push-yield', id: yld.id, message: err.message });
     }
   }
 
@@ -110,17 +121,20 @@ export async function syncAll(token) {
           headers,
         });
         if (res.ok || res.status === 404) {
-          await removeSyncedDelete('yields', yld.id);
+          await removeYieldSyncedDelete(yld.id);
           stats.pushed++;
         } else {
           stats.errors++;
+          stats.errorDetails.push({ type: 'delete-yield', id: yld.id, status: res.status, isAuthError: res.status === 401 });
+          if (res.status === 401) break;
         }
       } else {
-        await removeSyncedDelete('yields', yld.id);
+        await removeYieldSyncedDelete(yld.id);
         stats.pushed++;
       }
-    } catch {
+    } catch (err) {
       stats.errors++;
+      stats.errorDetails.push({ type: 'delete-yield', id: yld.id, message: err.message });
     }
   }
 
@@ -135,7 +149,7 @@ export async function syncAll(token) {
       }
     }
   } catch {
-    // Silently skip pull errors
+    // Pull errors are non-critical — local data is still intact
   }
 
   try {
@@ -148,7 +162,7 @@ export async function syncAll(token) {
       }
     }
   } catch {
-    // Silently skip pull errors
+    // Pull errors are non-critical — local data is still intact
   }
 
   return stats;

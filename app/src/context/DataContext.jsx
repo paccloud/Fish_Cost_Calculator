@@ -11,7 +11,7 @@ import {
   setCustomSpecies as setSpeciesLocal,
 } from '../lib/localStore';
 import { syncAll } from '../lib/syncEngine';
-import { useAuth } from './useAuth';
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
 
@@ -22,7 +22,8 @@ export function DataProvider({ children }) {
   const [customSpecies, setCustomSpeciesState] = useState({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'offline' | 'pending'
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'offline' | 'pending' | 'error'
+  const [syncError, setSyncError] = useState(null); // null | 'auth' | 'network'
   const syncTimeoutRef = useRef(null);
 
   // Load from IndexedDB on mount
@@ -53,6 +54,11 @@ export function DataProvider({ children }) {
     };
   }, []);
 
+  // Clean up debounced sync timeout on unmount
+  useEffect(() => {
+    return () => clearTimeout(syncTimeoutRef.current);
+  }, []);
+
   const triggerSync = useCallback(async () => {
     const token = localStorage.getItem('token');
     if (!token || !navigator.onLine) return;
@@ -67,9 +73,18 @@ export function DataProvider({ children }) {
       ]);
       setSavedCalcs(calcs.filter((c) => c.syncStatus !== 'pending-delete'));
       setCustomYields(yields.filter((y) => y.syncStatus !== 'pending-delete'));
-      setSyncStatus('synced');
+
+      if (stats.errors > 0) {
+        const hasAuthError = stats.errorDetails?.some((e) => e.isAuthError);
+        setSyncError(hasAuthError ? 'auth' : 'network');
+        setSyncStatus('error');
+      } else {
+        setSyncError(null);
+        setSyncStatus('synced');
+      }
     } catch {
-      setSyncStatus('idle');
+      setSyncError('network');
+      setSyncStatus('error');
     }
   }, []);
 
@@ -142,6 +157,7 @@ export function DataProvider({ children }) {
     isOnline,
     dataLoaded,
     syncStatus,
+    syncError,
     saveCalc,
     removeCalc,
     addYield,
