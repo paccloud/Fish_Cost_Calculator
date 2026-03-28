@@ -13,7 +13,7 @@ import ContributorProfile from './components/ContributorProfile';
 import FeaturesRoadmap from './components/FeaturesRoadmap';
 import Footer from './components/Footer';
 import InstallPrompt from './components/InstallPrompt';
-import { Fish, UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
+import { UserCircle, Menu, Database, BookOpen, Sun, Moon, MessageSquarePlus, Target } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { DataProvider, useData } from './context/DataContext';
 import { useAuth } from './context/AuthContext';
@@ -31,9 +31,7 @@ const NavBar = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
-                <div className="bg-teal p-2 rounded-lg">
-                  <Fish className="text-white h-6 w-6" />
-                </div>
+                <img src="/icons/icon-192.svg" alt="" className="h-10 w-10 rounded-lg" />
                 <Link to="/" className="font-heading font-bold text-lg text-white hover:text-white transition-colors">Fish Cost Calculator</Link>
               </div>
 
