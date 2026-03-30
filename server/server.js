@@ -268,7 +268,10 @@ app.post('/api/upload-data', authenticate, (req, res) => {
                     if (species && yieldVal) {
                         let finalYield = parseYield(yieldVal);
                         if (!Number.isFinite(finalYield)) return;
-                        // Yield values are treated as percentage numbers (e.g. 6.5 for 6.5%). No implicit scaling is applied.
+                        // Convert decimal to percentage if needed (e.g. 0.42 → 42)
+                        if (finalYield > 0 && finalYield < 1) {
+                            finalYield = finalYield * 100;
+                        }
                         
                         stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
                         count++;
