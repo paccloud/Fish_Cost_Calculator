@@ -359,7 +359,7 @@ app.get('/api/export-calcs', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
         const csvRows = rows.map(row => {
-            const date = sanitizeCsvValue(new Date(row.date).toLocaleDateString());
+            const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
             const values = [
                 date,
                 sanitizeCsvValue(row.species),
