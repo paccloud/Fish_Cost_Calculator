@@ -11,17 +11,14 @@ import {
 
 /**
  * Sync all pending local changes to the server, then pull latest.
- * @param {string} token - JWT auth token
+ * Uses cookie-based auth (Better Auth) — no token parameter needed.
  * @returns {Promise<{pushed: number, pulled: number, errors: number, errorDetails: Array}>}
  */
-export async function syncAll(token) {
+export async function syncAll() {
   const stats = { pushed: 0, pulled: 0, errors: 0, errorDetails: [] };
-  if (!token) return stats;
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const fetchOpts = { credentials: 'include' };
+  const jsonHeaders = { 'Content-Type': 'application/json' };
 
   // --- Push local changes ---
   const pending = await getAllPendingSync();
@@ -31,7 +28,8 @@ export async function syncAll(token) {
     try {
       const res = await fetch(apiUrl('/api/save-calc'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        ...fetchOpts,
         body: JSON.stringify({
           name: calc.name || '',
           species: calc.species,
@@ -64,7 +62,8 @@ export async function syncAll(token) {
       if (calc.serverId) {
         const res = await fetch(apiUrl(`/api/saved-calcs/${calc.serverId}`), {
           method: 'DELETE',
-          headers,
+          headers: jsonHeaders,
+          ...fetchOpts,
         });
         if (res.ok || res.status === 404) {
           await removeCalcSyncedDelete(calc.id);
@@ -89,7 +88,8 @@ export async function syncAll(token) {
     try {
       const res = await fetch(apiUrl('/api/user-data'), {
         method: 'POST',
-        headers,
+        headers: jsonHeaders,
+        ...fetchOpts,
         body: JSON.stringify({
           species: yld.species,
           product: yld.product,
@@ -118,7 +118,8 @@ export async function syncAll(token) {
       if (yld.serverId) {
         const res = await fetch(apiUrl(`/api/user-data/${yld.serverId}`), {
           method: 'DELETE',
-          headers,
+          headers: jsonHeaders,
+          ...fetchOpts,
         });
         if (res.ok || res.status === 404) {
           await removeYieldSyncedDelete(yld.id);
@@ -140,7 +141,7 @@ export async function syncAll(token) {
 
   // --- Pull server data ---
   try {
-    const res = await fetch(apiUrl('/api/saved-calcs'), { headers });
+    const res = await fetch(apiUrl('/api/saved-calcs'), { headers: jsonHeaders, ...fetchOpts });
     if (res.ok) {
       const serverCalcs = await res.json();
       if (Array.isArray(serverCalcs)) {
@@ -153,7 +154,7 @@ export async function syncAll(token) {
   }
 
   try {
-    const res = await fetch(apiUrl('/api/user-data'), { headers });
+    const res = await fetch(apiUrl('/api/user-data'), { headers: jsonHeaders, ...fetchOpts });
     if (res.ok) {
       const serverYields = await res.json();
       if (Array.isArray(serverYields)) {

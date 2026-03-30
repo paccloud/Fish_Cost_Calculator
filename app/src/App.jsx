@@ -1,7 +1,5 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { StackProvider, StackTheme, StackHandler } from "@stackframe/react";
-import { Analytics } from "@vercel/analytics/react";
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import Calculator from './components/Calculator';
 import Login from './components/Login';
 import UploadData from './components/UploadData';
@@ -18,7 +16,6 @@ import { AuthProvider } from './context/AuthContext.jsx';
 import { DataProvider, useData } from './context/DataContext';
 import { useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
-import { stackClientApp } from './config/neonAuth';
 
 const NavBar = () => {
     const { user, logout } = useAuth();
@@ -141,20 +138,13 @@ const NavBar = () => {
     );
 };
 
-function StackHandlerRoutes() {
-  const location = useLocation();
-  return <StackHandler app={stackClientApp} location={location.pathname} fullPage />;
-}
-
 function AppContent() {
   return (
     <div className="min-h-screen flex flex-col bg-surface text-text-primary font-body selection:bg-teal selection:text-white transition-colors">
       <DataProvider>
         <NavBar />
         <main className="flex-1">
-          <Analytics />
           <Routes>
-            <Route path="/handler/*" element={<StackHandlerRoutes />} />
             <Route path="/" element={<div className="py-10 px-4"><Calculator /></div>} />
             <Route path="/calculator" element={<div className="py-10 px-4"><Calculator /></div>} />
             <Route path="/login" element={<div className="py-10 px-4"><Login /></div>} />
@@ -178,18 +168,13 @@ function AppContent() {
 function App() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
-      <StackProvider app={stackClientApp}>
-        <StackTheme>
-          <Router>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
-          </Router>
-        </StackTheme>
-      </StackProvider>
+      <Router>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </Router>
     </Suspense>
   );
 }
 
 export default App;
-

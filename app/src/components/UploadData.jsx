@@ -25,12 +25,9 @@ const UploadData = () => {
         formData.append('file', file);
 
         try {
-            const token = localStorage.getItem('token');
             const res = await fetch(apiUrl('/api/upload-data'), {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
+                credentials: 'include',
                 body: formData
             });
             

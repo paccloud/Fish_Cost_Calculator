@@ -3,7 +3,6 @@ import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucid
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
-import { stackClientApp } from '../config/neonAuth';
 
 const ContributorProfile = () => {
     const { user } = useAuth();
@@ -16,38 +15,6 @@ const ContributorProfile = () => {
         show_on_page: true
     });
 
-    /**
-     * Get authentication headers for API requests
-     * Handles both password-based (JWT) and OAuth (Stack Auth) authentication
-     */
-    const getAuthHeaders = useCallback(async () => {
-        const headers = { 'Content-Type': 'application/json' };
-
-        // For OAuth users, get Stack Auth access token
-        if (user?.authProvider === 'oauth') {
-            try {
-                const stackUser = await stackClientApp.getUser();
-                if (stackUser) {
-                    const accessToken = await stackUser.getAuthJson();
-                    if (accessToken?.accessToken) {
-                        headers['x-stack-access-token'] = accessToken.accessToken;
-                        return headers;
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to get Stack Auth token:', err);
-            }
-        }
-
-        // For password-based users, use JWT token from localStorage
-        const token = localStorage.getItem('token');
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        return headers;
-    }, [user]);
-
     useEffect(() => {
         if (!user) {
             return;
@@ -56,8 +23,10 @@ const ContributorProfile = () => {
         // Load existing profile
         const loadProfile = async () => {
             try {
-                const headers = await getAuthHeaders();
-                const res = await fetch(apiUrl('/api/contributor'), { headers });
+                const res = await fetch(apiUrl('/api/contributor'), {
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                });
 
                 if (res.status === 404) {
                     // No profile yet, that's okay
@@ -100,16 +69,16 @@ const ContributorProfile = () => {
         };
 
         loadProfile();
-    }, [user, getAuthHeaders]);
+    }, [user]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         try {
-            const headers = await getAuthHeaders();
             const res = await fetch(apiUrl('/api/contributor'), {
                 method: 'POST',
-                headers,
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(formData)
             });
 

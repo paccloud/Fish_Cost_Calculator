@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local Catch is a fish yield calculator for the seafood industry. It calculates the true cost of fish products after accounting for processing yields, helping fishers and processors determine prices for finished products.
+Fish Cost Calculator is a fish yield calculator for the seafood industry. It calculates the true cost of fish products after accounting for processing yields, helping fishers and processors determine prices for finished products.
 
 ## Commands
 
 ### Development
 ```bash
 # Frontend (Vite + React) - runs on http://localhost:5173
-cd app && npm run dev
+npm run dev:frontend
 
-# Backend (Express + SQLite) - local dev only, runs on http://localhost:3000
-cd server && node server.js
+# Cloudflare Worker (Hono API) - runs on http://localhost:8787
+npm run dev:worker
 
-# Alternative: test Vercel serverless functions locally (uses Neon DB)
-vercel dev
+# Local Express backend (SQLite) - runs on http://localhost:3000
+npm run dev:server
 
 # Lint frontend
 cd app && npm run lint
@@ -26,57 +26,66 @@ cd app && npm run lint
 cd app && npm test
 
 # Build frontend for production
-cd app && npm run build
+npm run build
+
+# Deploy to Cloudflare (builds frontend + deploys Worker)
+npm run deploy
+
+# Apply D1 database migrations
+npm run db:migrate
 ```
 
 ### First-time Setup
 ```bash
 cd app && npm install
 cd ../server && npm install
+npm install
 # Copy and configure env files (no quotes around values — Vite includes them literally)
 cp app/.env.example app/.env.development
 ```
 
 ## Architecture
 
-### Dual Backend Design
+### Backend Design
 
-The project has **two separate backend implementations** that serve different environments:
+The project has **two backend implementations** for different environments:
 
-1. **`server/server.js`** — Local development Express server with SQLite (`fish_app.db`). Single-file, JWT auth with bcrypt. Used when running `node server.js`.
+1. **`worker/`** — Cloudflare Worker using Hono framework for production. Deployed to Cloudflare with D1 (SQLite-based) database. Uses Better Auth for authentication (email/password + Google OAuth).
+   - `index.js` — Hono app with all API routes
+   - `auth.js` — Better Auth configuration with Kysely + D1 adapter
+   - `middleware.js` — CORS handling and auth session middleware
 
-2. **`api/`** — Vercel serverless functions for production. Each file is a separate endpoint. Uses Neon PostgreSQL via `@neondatabase/serverless`. Shared helpers in `api/_lib/`:
-   - `db.js` — Neon connection pool
-   - `auth.js` — Dual auth: JWT tokens (password) + Neon Auth/Stack Auth sessions (OAuth), with `requireAuth()` HOF
-   - `cors.js` — Origin allowlist from `ALLOWED_ORIGINS` env var, with `handleCors()` HOF
-   - `neon-auth.js` — Stack Auth session verification + local user auto-creation
+2. **`server/server.js`** — Local development Express server with SQLite (`fish_app.db`). Single-file, JWT auth with bcrypt. Used when running `npm run dev:server`.
 
-**Important:** Changes to API logic must be applied to both `server/server.js` (local) and the corresponding `api/*.js` file (production) to stay in sync.
+**Important:** Changes to API logic should be applied to both `worker/index.js` (production) and `server/server.js` (local dev) to stay in sync.
+
+### Configuration
+- `wrangler.toml` — Cloudflare Worker configuration, D1 database binding, asset directory
+- `migrations/` — D1 SQL migration files applied via `npm run db:migrate`
 
 ### Frontend (`app/`)
 - **React 19 + Vite 7** with Tailwind CSS 3
 - Entry: `src/main.jsx` → `src/App.jsx`
-- Auth: Stack Auth (OAuth) via `@stackframe/react` wrapping the entire app, plus custom JWT-based password auth via `src/context/AuthContext.jsx`
+- Auth: Better Auth (email/password + Google OAuth) via `src/context/AuthContext.jsx`
 - API base URL configured in `src/config/api.js` — uses `VITE_API_URL` in dev (localhost:3000), empty string in prod (same-origin)
 - Routes defined in `App.jsx`:
   - `/` (Home), `/calculator`, `/login`, `/upload`, `/about`, `/submit-request`
   - `/data-sources`, `/manage-data`, `/profile`, `/roadmap`
-  - `/handler/*` (Stack Auth handler routes)
 - Fish yield data in `src/data/fish_data_v3.js` — 60+ species with conversion yields from MAB-37 research publication
 
 ### Data Flow
 1. Fish yield data is static in `fish_data_v3.js` (from MAB-37 PDF research document)
-2. Users can add custom yield data stored in SQLite (local) or Neon PostgreSQL (prod) `user_data` table
+2. Users can add custom yield data stored in SQLite (local) or D1 (prod) `user_data` table
 3. Calculator merges static + user data, performs yield/cost calculations client-side
 4. Saved calculations stored in `calculations` table
 
 ### Key Data Structures
-Fish conversions use "From State → To Product" pattern with yield percentages:
+Fish conversions use "From State -> To Product" pattern with yield percentages:
 ```javascript
 "Pink Salmon": {
   conversions: {
-    "Round → D/H-On": { yield: 91, range: [84, 94] },
-    "Round → Skinless Fillet": { yield: 42, range: [41, 46] }
+    "Round -> D/H-On": { yield: 91, range: [84, 94] },
+    "Round -> Skinless Fillet": { yield: 42, range: [41, 46] }
   }
 }
 ```
@@ -84,21 +93,26 @@ Common acronyms: Round (whole fish), D/H-On (dressed/head-on), D/H-Off (dressed/
 
 ## API Endpoints
 
-Auth: `POST /api/register`, `POST /api/login`
+Auth: `POST /api/auth/*` (Better Auth handles registration, login, OAuth)
 Calculations: `GET/POST /api/saved-calcs`, `POST /api/save-calc`
 User Data: `GET/POST/PUT/DELETE /api/user-data`, `POST /api/upload-data` (Excel/CSV)
 Public: `GET /api/public-calcs`, `GET /api/contributors`, `GET /api/fish-data`
 Export: `GET /api/export`
 
-All endpoints except register/login/public require JWT Bearer token or Stack Auth session.
+All endpoints except public ones require a valid Better Auth session.
 
 ## Deployment
 
-Deployed on **Vercel** with Neon PostgreSQL. See `DEPLOYMENT.md` for full guide.
-- `vercel.json` configures build, output dir (`app/dist`), and API rewrites
+Deployed on **Cloudflare Workers** with D1 database.
+- `wrangler.toml` configures the Worker, D1 binding, and static asset directory (`app/dist`)
+- Frontend is served as static assets from the Worker
+- Environment secrets set via `wrangler secret put`:
+  - `BETTER_AUTH_SECRET` — session signing secret
+  - `GOOGLE_CLIENT_ID` — Google OAuth client ID
+  - `GOOGLE_CLIENT_SECRET` — Google OAuth client secret
+  - `ALLOWED_ORIGINS` — CORS origin allowlist
 - Frontend env vars use `VITE_` prefix (bundled into client, not secret)
-- Server env vars: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `STACK_SECRET_SERVER_KEY`
-- **No quotes in `.env` files** — Vite includes them literally. See `docs/ENVIRONMENT_VARIABLES.md`
+- **No quotes in `.env` files** — Vite includes them literally
 
 ## Git Workflow
 

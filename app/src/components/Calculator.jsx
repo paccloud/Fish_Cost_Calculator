@@ -1196,10 +1196,9 @@ const Calculator = () => {
                     {user && (
                       <button
                         onClick={async () => {
-                          const token = localStorage.getItem('token');
                           try {
                             const response = await fetch(apiUrl('/api/export?type=calcs'), {
-                              headers: { 'Authorization': `Bearer ${token}` }
+                              credentials: 'include',
                             });
                             const blob = await response.blob();
                             const url = window.URL.createObjectURL(blob);
