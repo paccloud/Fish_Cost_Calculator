@@ -143,7 +143,7 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function(err) {
             if (err) return res.status(400).json({ error: 'User already exists' });
-            res.json({ id: this.lastID, username });
+            res.status(201).json({ id: this.lastID, username });
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -178,7 +178,7 @@ app.post('/api/save-calc', authenticate, (req, res) => {
         [req.user.id, name, species, product, cost, yieldPercent, result, date], 
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Saved successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Saved successfully' });
         }
     );
 });
@@ -309,7 +309,7 @@ app.post('/api/user-data', authenticate, (req, res) => {
         [req.user.id, species, product, yieldVal, source || 'User Input'],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Added successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
         }
     );
 });
