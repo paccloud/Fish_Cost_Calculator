@@ -1,5 +1,5 @@
 import formidable from 'formidable';
-import * as xlsx from 'xlsx';
+import ExcelJS from 'exceljs';
 import { promises as fs } from 'fs';
 import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
@@ -43,10 +43,30 @@ async function handler(req, res) {
     const buffer = await fs.readFile(file.filepath);
 
     // Parse Excel/CSV file
-    const workbook = xlsx.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet);
+    const workbook = new ExcelJS.Workbook();
+    const ext = (file.originalFilename || '').split('.').pop()?.toLowerCase();
+    if (ext === 'csv') {
+      await workbook.csv.read(new (await import('stream')).Readable({
+        read() { this.push(buffer); this.push(null); }
+      }));
+    } else {
+      await workbook.xlsx.load(buffer);
+    }
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error('No worksheet found');
+    const headers = [];
+    worksheet.getRow(1).eachCell((cell, colNumber) => {
+      headers[colNumber] = cell.value != null ? String(cell.value) : `Column${colNumber}`;
+    });
+    const data = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const obj = {};
+      row.eachCell((cell, colNumber) => {
+        if (headers[colNumber]) obj[headers[colNumber]] = cell.value;
+      });
+      if (Object.keys(obj).length > 0) data.push(obj);
+    });
 
     let count = 0;
 

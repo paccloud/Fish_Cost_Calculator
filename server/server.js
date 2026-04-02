@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
-const xlsx = require('xlsx');
+const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -143,7 +143,7 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function(err) {
             if (err) return res.status(400).json({ error: 'User already exists' });
-            res.json({ id: this.lastID, username });
+            res.status(201).json({ id: this.lastID, username });
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -178,7 +178,7 @@ app.post('/api/save-calc', authenticate, (req, res) => {
         [req.user.id, name, species, product, cost, yieldPercent, result, date], 
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Saved successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Saved successfully' });
         }
     );
 });
@@ -193,10 +193,9 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
 
 // Upload Data (Excel/CSV)
 const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
-const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+const allowedExtensions = ['.xlsx', '.csv'];
 const allowedMimeTypes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
     'text/csv',
     'application/csv'
 ];
@@ -233,7 +232,7 @@ app.post('/api/upload-data', authenticate, (req, res) => {
             if (err.code === 'LIMIT_FILE_SIZE') {
                 message = 'File too large. Max 4MB.';
             } else if (err.code === 'INVALID_FILE_TYPE') {
-                message = 'Invalid file type. Only .xlsx, .xls, or .csv files are allowed.';
+                message = 'Invalid file type. Only .xlsx or .csv files are allowed.';
             }
             return res.status(400).json({ error: message });
         }
@@ -241,10 +240,28 @@ app.post('/api/upload-data', authenticate, (req, res) => {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
         try {
-            const workbook = xlsx.readFile(req.file.path);
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const data = xlsx.utils.sheet_to_json(sheet);
+            const workbook = new ExcelJS.Workbook();
+            const ext = path.extname(req.file.originalname).toLowerCase();
+            if (ext === '.csv') {
+                await workbook.csv.readFile(req.file.path);
+            } else {
+                await workbook.xlsx.readFile(req.file.path);
+            }
+            const worksheet = workbook.worksheets[0];
+            if (!worksheet) throw new Error('No worksheet found');
+            const headers = [];
+            worksheet.getRow(1).eachCell((cell, colNumber) => {
+                headers[colNumber] = cell.value != null ? String(cell.value) : `Column${colNumber}`;
+            });
+            const data = [];
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return;
+                const obj = {};
+                row.eachCell((cell, colNumber) => {
+                    if (headers[colNumber]) obj[headers[colNumber]] = cell.value;
+                });
+                if (Object.keys(obj).length > 0) data.push(obj);
+            });
 
             const parseYield = (val) => {
                 if (val === undefined || val === null) return NaN;
@@ -268,7 +285,10 @@ app.post('/api/upload-data', authenticate, (req, res) => {
                     if (species && yieldVal) {
                         let finalYield = parseYield(yieldVal);
                         if (!Number.isFinite(finalYield)) return;
-                        // Yield values are treated as percentage numbers (e.g. 6.5 for 6.5%). No implicit scaling is applied.
+                        // Convert decimal to percentage if needed (e.g. 0.42 → 42)
+                        if (finalYield > 0 && finalYield < 1) {
+                            finalYield = finalYield * 100;
+                        }
                         
                         stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
                         count++;
@@ -306,7 +326,7 @@ app.post('/api/user-data', authenticate, (req, res) => {
         [req.user.id, species, product, yieldVal, source || 'User Input'],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Added successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
         }
     );
 });
@@ -356,7 +376,7 @@ app.get('/api/export-calcs', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
         const csvRows = rows.map(row => {
-            const date = sanitizeCsvValue(new Date(row.date).toLocaleDateString());
+            const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
             const values = [
                 date,
                 sanitizeCsvValue(row.species),
