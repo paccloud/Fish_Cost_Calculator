@@ -1,15 +1,16 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
 import { StackProvider, StackTheme, StackHandler } from "@stackframe/react";
 import { Analytics } from "@vercel/analytics/react";
 import Calculator from './components/Calculator';
-import Login from './components/Login';
-import UploadData from './components/UploadData';
-import About from './components/About';
-import DataTransparency from './components/DataTransparency';
-import DataManagement from './components/DataManagement';
-import ContributorProfile from './components/ContributorProfile';
-import CommunityData from './components/CommunityData';
+
+const Login = lazy(() => import('./components/Login'));
+const UploadData = lazy(() => import('./components/UploadData'));
+const About = lazy(() => import('./components/About'));
+const DataTransparency = lazy(() => import('./components/DataTransparency'));
+const DataManagement = lazy(() => import('./components/DataManagement'));
+const ContributorProfile = lazy(() => import('./components/ContributorProfile'));
+const CommunityData = lazy(() => import('./components/CommunityData'));
 import { Fish, UserCircle, Menu, X, Database, BookOpen, Sun, Moon, Users, Upload } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
@@ -171,22 +172,26 @@ function AppContent() {
             <NavBar />
             <main className="py-8 px-4">
                 <Analytics />
-                <Routes>
-                    <Route path="/handler/*" element={<StackHandlerRoutes />} />
-                    <Route path="/" element={<Calculator />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/upload" element={<UploadData />} />
-                    <Route path="/about" element={<About />} />
-                    <Route path="/data-sources" element={<DataTransparency />} />
-                    <Route path="/manage-data" element={<DataManagement />} />
-                    <Route path="/profile" element={<ContributorProfile />} />
-                    <Route path="/community-data" element={<CommunityData />} />
-                    <Route path="/inventory" element={
-                        <div className="max-w-5xl mx-auto text-center mt-20 text-text-muted">
-                            Inventory management coming soon
-                        </div>
-                    } />
-                </Routes>
+                <Suspense fallback={
+                    <div className="flex items-center justify-center py-20 text-text-muted text-sm">Loading…</div>
+                }>
+                    <Routes>
+                        <Route path="/handler/*" element={<StackHandlerRoutes />} />
+                        <Route path="/" element={<Calculator />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/upload" element={<UploadData />} />
+                        <Route path="/about" element={<About />} />
+                        <Route path="/data-sources" element={<DataTransparency />} />
+                        <Route path="/manage-data" element={<DataManagement />} />
+                        <Route path="/profile" element={<ContributorProfile />} />
+                        <Route path="/community-data" element={<CommunityData />} />
+                        <Route path="/inventory" element={
+                            <div className="max-w-5xl mx-auto text-center mt-20 text-text-muted">
+                                Inventory management coming soon
+                            </div>
+                        } />
+                    </Routes>
+                </Suspense>
             </main>
         </div>
     );
