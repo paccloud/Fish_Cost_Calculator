@@ -48,7 +48,7 @@ const ContributorProfile = () => {
         const loadProfile = async () => {
             try {
                 const headers = await getAuthHeaders();
-                const res = await fetch(apiUrl('/api/contributor'), { headers });
+                const res = await fetch(apiUrl('/api/contributor/me'), { headers });
 
                 if (res.status === 404) return;
 

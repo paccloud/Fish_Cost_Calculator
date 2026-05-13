@@ -190,6 +190,15 @@ function AppContent() {
                                 Inventory management coming soon
                             </div>
                         } />
+                        <Route path="*" element={
+                            <div className="max-w-2xl mx-auto text-center mt-20 space-y-4">
+                                <p className="text-6xl font-bold text-brand-teal">404</p>
+                                <p className="text-text-secondary">Page not found.</p>
+                                <Link to="/" className="inline-block text-brand-terracotta hover:underline text-sm font-medium">
+                                    Back to calculator
+                                </Link>
+                            </div>
+                        } />
                     </Routes>
                 </Suspense>
             </main>
