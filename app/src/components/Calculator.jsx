@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ACRONYMS } from '../data/fish_data_v3';
+import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
@@ -93,19 +93,18 @@ const Calculator = () => {
   const [history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
 
-  const [fishData, setFishData] = useState({});
-  const [profilesData, setProfilesData] = useState({});
-  const [dataLoading, setDataLoading] = useState(true);
+  const [fishData, setFishData] = useState(FISH_DATA_V3);
+  const [profilesData, setProfilesData] = useState(PROFILES_DATA);
+  const [dataLoading, setDataLoading] = useState(false);
 
   useEffect(() => {
     fetch(apiUrl('/api/fish-data'))
       .then(res => res.json())
       .then(data => {
-        if (data.fishData) setFishData(data.fishData);
-        if (data.profiles) setProfilesData(data.profiles);
-        setDataLoading(false);
+        if (data.fishData && Object.keys(data.fishData).length > 0) setFishData(data.fishData);
+        if (data.profiles && Object.keys(data.profiles).length > 0) setProfilesData(data.profiles);
       })
-      .catch(() => setDataLoading(false));
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
