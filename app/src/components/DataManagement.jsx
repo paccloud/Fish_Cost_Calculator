@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
 
 const DataManagement = () => {
-    const { user } = useAuth();
+    const { user, getAuthHeaders } = useAuth();
     const [userData, setUserData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
@@ -29,10 +29,8 @@ const DataManagement = () => {
 
     const loadUserData = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(apiUrl('/api/user-data'), {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const headers = await getAuthHeaders();
+            const res = await fetch(apiUrl('/api/user-data'), { headers });
             const data = await res.json();
             if (Array.isArray(data)) {
                 setUserData(data);
@@ -45,12 +43,12 @@ const DataManagement = () => {
     };
 
     const handleToggleShare = async (item) => {
-        const token = localStorage.getItem('token');
         const action = item.is_shared ? 'unshare' : 'share';
         try {
+            const headers = await getAuthHeaders();
             const res = await fetch(apiUrl(`/api/user-data/${item.id}/${action}`), {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers
             });
             if (res.ok) {
                 setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
@@ -67,19 +65,16 @@ const DataManagement = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const token = localStorage.getItem('token');
         const endpoint = editingId
             ? apiUrl(`/api/user-data/${editingId}`)
             : apiUrl('/api/user-data');
         const method = editingId ? 'PUT' : 'POST';
 
         try {
+            const headers = await getAuthHeaders('application/json');
             const res = await fetch(endpoint, {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify({
                     species: formData.species,
                     product: formData.product,
@@ -116,10 +111,10 @@ const DataManagement = () => {
         if (!confirm('Are you sure you want to delete this entry?')) return;
 
         try {
-            const token = localStorage.getItem('token');
+            const headers = await getAuthHeaders();
             const res = await fetch(apiUrl(`/api/user-data/${id}`), {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers
             });
 
             if (res.ok) {
@@ -173,11 +168,9 @@ const DataManagement = () => {
                 <div className="flex gap-3">
                     <button
                         onClick={async () => {
-                            const token = localStorage.getItem('token');
                             try {
-                                const response = await fetch(apiUrl('/api/export?type=data'), {
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                });
+                                const headers = await getAuthHeaders();
+                                const response = await fetch(apiUrl('/api/export?type=data'), { headers });
                                 const blob = await response.blob();
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');

@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';
 
@@ -94,6 +94,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Build fetch headers with correct auth token for either password or OAuth users
+  const getAuthHeaders = useCallback(async (contentType = null) => {
+    const headers = {};
+    if (contentType) headers['Content-Type'] = contentType;
+
+    if (user?.authProvider === 'oauth') {
+      try {
+        const stackUser = await stackClientApp.getUser();
+        if (stackUser) {
+          const tokenData = await stackUser.getAuthJson();
+          if (tokenData?.accessToken) {
+            headers['x-stack-access-token'] = tokenData.accessToken;
+            return headers;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to get Stack Auth token:', err);
+      }
+    }
+
+    const token = localStorage.getItem('token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return headers;
+  }, [user]);
+
   // Logout - handles both auth methods
   const logout = async () => {
     try {
@@ -119,7 +144,8 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
-      signInWithOAuth
+      signInWithOAuth,
+      getAuthHeaders
     }}>
       {children}
     </AuthContext.Provider>

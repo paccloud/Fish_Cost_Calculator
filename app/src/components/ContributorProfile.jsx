@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
-import { stackClientApp } from '../config/neonAuth';
 
 const ContributorProfile = () => {
-    const { user } = useAuth();
+    const { user, getAuthHeaders } = useAuth();
     const navigate = useNavigate();
     const [status, setStatus] = useState(null);
     const [formData, setFormData] = useState({
@@ -15,32 +14,6 @@ const ContributorProfile = () => {
         bio: '',
         show_on_page: true
     });
-
-    const getAuthHeaders = useCallback(async () => {
-        const headers = { 'Content-Type': 'application/json' };
-
-        if (user?.authProvider === 'oauth') {
-            try {
-                const stackUser = await stackClientApp.getUser();
-                if (stackUser) {
-                    const accessToken = await stackUser.getAuthJson();
-                    if (accessToken?.accessToken) {
-                        headers['x-stack-access-token'] = accessToken.accessToken;
-                        return headers;
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to get Stack Auth token:', err);
-            }
-        }
-
-        const token = localStorage.getItem('token');
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        return headers;
-    }, [user]);
 
     useEffect(() => {
         if (!user) return;
@@ -94,7 +67,7 @@ const ContributorProfile = () => {
         e.preventDefault();
 
         try {
-            const headers = await getAuthHeaders();
+            const headers = await getAuthHeaders('application/json');
             const res = await fetch(apiUrl('/api/contributor'), {
                 method: 'POST',
                 headers,

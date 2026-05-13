@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
 
 const UploadData = () => {
-    const { user } = useAuth();
+    const { user, getAuthHeaders } = useAuth();
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [status, setStatus] = useState(null);
@@ -25,12 +25,10 @@ const UploadData = () => {
         formData.append('file', file);
 
         try {
-            const token = localStorage.getItem('token');
+            const authHeaders = await getAuthHeaders();
             const res = await fetch(apiUrl('/api/upload-data'), {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
+                headers: authHeaders,
                 body: formData
             });
 

@@ -71,7 +71,7 @@ const RangeButton = ({ active, onClick, label }) => (
 );
 
 const Calculator = () => {
-  const { user } = useAuth();
+  const { user, getAuthHeaders } = useAuth();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -116,40 +116,35 @@ const Calculator = () => {
 
   useEffect(() => {
     if (user) {
-      const token = localStorage.getItem('token');
-      fetch(apiUrl('/api/user-data'), {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include'
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            const mapped = {};
-            data.forEach(item => {
-              if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-              mapped[item.species].conversions[`Custom: ${item.product}`] = {
-                yield: parseFloat(item.yield),
-                from: 'Custom',
-                to: item.product
-              };
-            });
-            setCustomData(mapped);
-          }
-        })
-        .catch(() => {});
+      getAuthHeaders().then(headers => {
+        fetch(apiUrl('/api/user-data'), { headers })
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data)) {
+              const mapped = {};
+              data.forEach(item => {
+                if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
+                mapped[item.species].conversions[`Custom: ${item.product}`] = {
+                  yield: parseFloat(item.yield),
+                  from: 'Custom',
+                  to: item.product
+                };
+              });
+              setCustomData(mapped);
+            }
+          })
+          .catch(() => {});
 
-      fetch(apiUrl('/api/saved-calcs'), {
-        headers: { 'Authorization': `Bearer ${token}` },
-        credentials: 'include'
-      })
-        .then(res => res.json())
-        .then(data => setHistory(data))
-        .catch(() => {});
+        fetch(apiUrl('/api/saved-calcs'), { headers })
+          .then(res => res.json())
+          .then(data => setHistory(data))
+          .catch(() => {});
+      });
     } else {
       setCustomData({});
       setHistory([]);
     }
-  }, [user]);
+  }, [user, getAuthHeaders]);
 
   const combinedData = useMemo(() => {
     const merged = { ...fishData };
@@ -246,10 +241,10 @@ const Calculator = () => {
   const handleSave = async () => {
     if (!user || !result) return;
     try {
-      const token = localStorage.getItem('token');
+      const headers = await getAuthHeaders('application/json');
       const res = await fetch(apiUrl('/api/save-calc'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers,
         body: JSON.stringify({
           name: `${species} - ${fromState} → ${toState}`,
           species, product: `${fromState} → ${toState}`,
@@ -265,11 +260,9 @@ const Calculator = () => {
   };
 
   const handleExport = async () => {
-    const token = localStorage.getItem('token');
     try {
-      const response = await fetch(apiUrl('/api/export?type=calcs'), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const headers = await getAuthHeaders();
+      const response = await fetch(apiUrl('/api/export?type=calcs'), { headers });
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
