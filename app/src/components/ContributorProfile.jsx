@@ -120,11 +120,11 @@ const ContributorProfile = () => {
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-[#f0ebe4] dark:bg-white/8 p-8 rounded-full">
-                    <User size={40} className="text-[#4a6572] dark:text-[#8fa8b2]" />
+                <div className="bg-surface p-8 rounded-full">
+                    <User size={40} className="text-text-secondary" />
                 </div>
-                <h2 className="text-xl font-bold text-brand-teal dark:text-[#e8ddd4]">Login Required</h2>
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-md text-sm">
+                <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+                <p className="text-text-secondary max-w-md text-sm">
                     You need to be logged in to create a contributor profile.
                 </p>
                 <Link to="/login" className="text-brand-terracotta hover:underline text-sm font-medium">
@@ -137,11 +137,11 @@ const ContributorProfile = () => {
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-brand-teal dark:text-[#e8ddd4] flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
                     <User className="text-brand-terracotta" size={22} />
                     Contributor Profile
                 </h1>
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] mt-1 text-sm">
+                <p className="text-text-secondary mt-1 text-sm">
                     Share your information to be recognized on the Data Sources page
                 </p>
             </div>
@@ -157,9 +157,9 @@ const ContributorProfile = () => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="bg-white dark:bg-white/5 rounded-lg p-8 border border-[#d6ccc4] dark:border-white/15 shadow-sm space-y-5">
+            <form onSubmit={handleSubmit} className="card p-8 space-y-5">
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                    <label className="form-label flex items-center gap-2">
                         <User size={14} />
                         Display Name *
                     </label>
@@ -167,17 +167,17 @@ const ContributorProfile = () => {
                         type="text"
                         value={formData.display_name}
                         onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
+                        className="form-input"
                         placeholder="Your name"
                         required
                     />
-                    <p className="mt-1 text-xs text-[#4a6572] dark:text-[#8fa8b2]">
+                    <p className="mt-1 text-xs text-text-secondary">
                         This is how your name will appear on the Data Sources page
                     </p>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                    <label className="form-label flex items-center gap-2">
                         <Building2 size={14} />
                         Organization
                     </label>
@@ -185,25 +185,25 @@ const ContributorProfile = () => {
                         type="text"
                         value={formData.organization}
                         onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
+                        className="form-input"
                         placeholder="Your organization (optional)"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium mb-2 text-[#4a6572] dark:text-[#8fa8b2] flex items-center gap-2">
+                    <label className="form-label flex items-center gap-2">
                         <FileText size={14} />
                         Bio
                     </label>
                     <textarea
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                        className="w-full bg-[#f0ebe4] dark:bg-white/8 border border-[#d6ccc4] dark:border-white/15 rounded p-3 focus:ring-2 focus:ring-brand-teal outline-none text-[#1a2e35] dark:text-[#e8ddd4] text-sm"
+                        className="form-input"
                         placeholder="Tell us about your expertise (max 200 characters)"
                         rows="3"
                         maxLength="200"
                     />
-                    <p className="mt-1 text-xs text-[#4a6572] dark:text-[#8fa8b2] text-right">
+                    <p className="mt-1 text-xs text-text-secondary text-right">
                         {formData.bio.length}/200
                     </p>
                 </div>
@@ -216,7 +216,7 @@ const ContributorProfile = () => {
                         onChange={(e) => setFormData({ ...formData, show_on_page: e.target.checked })}
                         className="w-4 h-4 accent-brand-teal"
                     />
-                    <label htmlFor="show_on_page" className="text-sm text-[#4a6572] dark:text-[#8fa8b2]">
+                    <label htmlFor="show_on_page" className="text-sm text-text-secondary">
                         Show my profile on the Data Sources page
                     </label>
                 </div>
@@ -224,7 +224,7 @@ const ContributorProfile = () => {
                 <div className="flex gap-3 pt-2">
                     <button
                         type="submit"
-                        className="flex-1 flex items-center justify-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white font-semibold py-3 rounded transition text-sm"
+                        className="flex-1 btn-primary flex items-center justify-center gap-2"
                     >
                         <Save size={16} />
                         Save Profile
@@ -232,7 +232,7 @@ const ContributorProfile = () => {
                     <button
                         type="button"
                         onClick={() => navigate('/manage-data')}
-                        className="px-5 py-3 bg-[#ede7e0] dark:bg-white/10 text-[#4a6572] dark:text-[#8fa8b2] rounded hover:bg-[#d6ccc4] dark:hover:bg-white/15 transition text-sm"
+                        className="px-5 py-3 bg-surface border border-line text-text-secondary rounded hover:bg-surface-raised transition text-sm"
                     >
                         Cancel
                     </button>

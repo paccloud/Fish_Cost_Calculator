@@ -209,7 +209,7 @@ app.post('/api/upload-data', authenticate, upload.single('file'), (req, res) => 
         if (inserted > 0) parts.push(`${inserted} added`);
         if (updated > 0) parts.push(`${updated} updated`);
         if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped (invalid rows)`);
-        res.json({ message: parts.length ? parts.join(', ') : 'No valid records found', inserted, updated, skipped: skippedRows.length });
+        res.json({ message: parts.length ? parts.join(', ') : 'No valid records found', inserted, updated, skipped: skippedRows.length, skippedRows });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

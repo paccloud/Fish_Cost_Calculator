@@ -11,22 +11,22 @@ const About = () => {
                         <Fish className="h-10 w-10 text-white" />
                     </div>
                 </div>
-                <h1 className="text-3xl font-bold text-brand-teal dark:text-[#e8ddd4] mb-3">
+                <h1 className="text-3xl font-bold text-brand-teal mb-3">
                     About Local Catch
                 </h1>
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-xl mx-auto">
+                <p className="text-text-secondary max-w-xl mx-auto">
                     A community-driven fish cost calculator for sustainable seafood
                 </p>
             </div>
 
             {/* Origin Story */}
-            <div className="bg-white dark:bg-white/5 border border-[#d6ccc4] dark:border-white/10 rounded-lg p-8 shadow-sm">
+            <div className="card p-8">
                 <div className="flex items-center gap-3 mb-5">
                     <Anchor className="h-5 w-5 text-brand-terracotta" />
-                    <h2 className="text-xl font-semibold text-brand-teal dark:text-[#e8ddd4]">The Origin Story</h2>
+                    <h2 className="text-xl font-semibold text-brand-teal">The Origin Story</h2>
                 </div>
 
-                <div className="space-y-4 text-[#4a6572] dark:text-[#8fa8b2] leading-relaxed text-sm">
+                <div className="space-y-4 text-text-secondary leading-relaxed text-sm">
                     <p>
                         This project started years ago as a simple tool to help calculate the true cost of fish
                         products after processing yields and various fees. What began as a personal spreadsheet
@@ -46,14 +46,14 @@ const About = () => {
                     </p>
                 </div>
 
-                <div className="mt-6 p-4 bg-[#f0ebe4] dark:bg-white/5 rounded border border-[#d6ccc4] dark:border-white/10">
+                <div className="mt-6 p-4 bg-surface rounded border border-line">
                     <div className="flex items-start gap-4">
                         <div className="bg-brand-teal p-2 rounded shrink-0">
                             <ExternalLink className="h-4 w-4 text-white" />
                         </div>
                         <div>
-                            <h3 className="font-medium text-[#1a2e35] dark:text-[#e8ddd4] mb-1 text-sm">Learn About Catch</h3>
-                            <p className="text-sm text-[#4a6572] dark:text-[#8fa8b2] mb-3">
+                            <h3 className="font-medium text-text-primary mb-1 text-sm">Learn About Catch</h3>
+                            <p className="text-sm text-text-secondary mb-3">
                                 The Catch network supports community-supported fisheries and sustainable seafood initiatives.
                             </p>
                             <a
@@ -71,15 +71,15 @@ const About = () => {
             </div>
 
             {/* Open Source */}
-            <div className="bg-white dark:bg-white/5 border border-[#d6ccc4] dark:border-white/10 rounded-lg p-8 shadow-sm">
+            <div className="card p-8">
                 <div className="flex items-center gap-3 mb-5">
                     <Github className="h-5 w-5 text-brand-terracotta" />
-                    <h2 className="text-xl font-semibold text-brand-teal dark:text-[#e8ddd4]">Open Source & Free Forever</h2>
+                    <h2 className="text-xl font-semibold text-brand-teal">Open Source & Free Forever</h2>
                 </div>
 
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] leading-relaxed mb-6 text-sm">
+                <p className="text-text-secondary leading-relaxed mb-6 text-sm">
                     This calculator is and will always be{' '}
-                    <span className="text-brand-teal dark:text-brand-yellow font-medium">free and open source</span>.
+                    <span className="text-brand-teal font-medium">free and open source</span>.
                     It's built for and by the fishing community. Whether you're a small-scale fisher calculating
                     prices for direct sales, or a processor working with multiple species, this tool is here to help.
                 </p>
@@ -88,7 +88,7 @@ const About = () => {
                     href="https://github.com/paccloud/Fish_Cost_Calculator"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-[#1a2e35] dark:bg-white/10 hover:bg-[#0d1f26] dark:hover:bg-white/15 text-white px-4 py-2 rounded transition text-sm font-medium"
+                    className="inline-flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded-md transition text-sm font-medium"
                 >
                     <Github className="h-4 w-4" />
                     View on GitHub
@@ -96,16 +96,16 @@ const About = () => {
             </div>
 
             {/* Support */}
-            <div className="bg-white dark:bg-white/5 border border-[#d6ccc4] dark:border-white/10 rounded-lg p-8 shadow-sm text-center">
+            <div className="card p-8 text-center">
                 <div className="inline-flex items-center justify-center mb-5">
                     <div className="bg-brand-terracotta p-3 rounded">
                         <Coffee className="h-6 w-6 text-white" />
                     </div>
                 </div>
 
-                <h2 className="text-xl font-semibold text-brand-teal dark:text-[#e8ddd4] mb-3">Support Future Updates</h2>
+                <h2 className="text-xl font-semibold text-brand-teal mb-3">Support Future Updates</h2>
 
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] max-w-lg mx-auto mb-6 leading-relaxed text-sm">
+                <p className="text-text-secondary max-w-lg mx-auto mb-6 leading-relaxed text-sm">
                     If you find this tool useful and want to support continued development, consider buying me a coffee!
                     Your support helps fund new features, better data, and keeping this tool free for everyone.
                 </p>
@@ -114,7 +114,7 @@ const About = () => {
                     href="https://buymeacoffee.com/pcswny"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-brand-terracotta hover:bg-brand-terracotta-light text-white font-semibold px-6 py-3 rounded transition"
+                    className="inline-flex items-center gap-2 bg-brand-terracotta hover:bg-brand-terracotta-light text-white font-semibold px-6 py-3 rounded-md transition"
                 >
                     <Coffee className="h-4 w-4" />
                     Buy Me a Coffee
@@ -123,8 +123,8 @@ const About = () => {
             </div>
 
             {/* Footer */}
-            <div className="text-center py-6 border-t border-[#d6ccc4] dark:border-white/10">
-                <p className="text-[#4a6572] dark:text-[#8fa8b2] text-sm">
+            <div className="text-center py-6 border-t border-line">
+                <p className="text-text-secondary text-sm">
                     Built with care for the fishing community
                 </p>
             </div>

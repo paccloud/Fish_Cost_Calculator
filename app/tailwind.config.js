@@ -7,12 +7,17 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         surface: 'var(--color-surface)',
-        'surface-elevated': 'var(--color-surface-elevated)',
+        'surface-raised': 'var(--color-surface-raised)',
         'text-primary': 'var(--color-text-primary)',
         'text-secondary': 'var(--color-text-secondary)',
-        border: 'var(--color-border)',
+        'text-muted': 'var(--color-text-muted)',
+        line: 'var(--color-border)',
+        'line-subtle': 'var(--color-border-subtle)',
         brand: {
           teal: '#014457',
           'teal-light': '#025a72',
