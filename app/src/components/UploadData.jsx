@@ -74,14 +74,14 @@ const UploadData = () => {
                 </h2>
 
                 <p className="text-text-secondary mb-8 text-sm">
-                    Upload an Excel (.xlsx) file with your custom species yield data.
+                    Upload a CSV or Excel (.xlsx) file with your custom species yield data.
                     The file should have columns for <strong>Species</strong> (or Common Name) and <strong>% Yield</strong>.
                 </p>
 
                 <div className="border-2 border-dashed border-line rounded p-10 text-center hover:border-brand-teal/40 transition bg-surface">
                     <input
                         type="file"
-                        accept=".xlsx, .xls, .csv"
+                        accept=".xlsx, .csv"
                         onChange={handleFileChange}
                         className="hidden"
                         id="file-upload"

@@ -1,0 +1,138 @@
+const ExcelJS = require('exceljs');
+const Papa = require('papaparse');
+
+const MAX_CELL_LENGTH = 500;
+const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx']);
+const ALLOWED_MIME_TYPES = new Set([
+    'text/csv',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream',
+]);
+
+function getUploadExtension(filename = '') {
+    const lower = filename.toLowerCase();
+    const dot = lower.lastIndexOf('.');
+    return dot >= 0 ? lower.slice(dot) : '';
+}
+
+function assertAllowedImportFile(file) {
+    const filename = file?.originalname || file?.originalFilename || '';
+    const extension = getUploadExtension(filename);
+    const mimetype = file?.mimetype || '';
+
+    if (!ALLOWED_EXTENSIONS.has(extension)) {
+        throw new Error('Unsupported file type. Please upload a .csv or .xlsx file.');
+    }
+
+    if (mimetype && !ALLOWED_MIME_TYPES.has(mimetype)) {
+        throw new Error('Unsupported file content type. Please upload a CSV or XLSX file.');
+    }
+
+    return extension;
+}
+
+function normalizeCell(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') {
+        if (value.text) return String(value.text).trim();
+        if (value.result !== undefined) return String(value.result).trim();
+        if (value.richText) return value.richText.map((part) => part.text || '').join('').trim();
+        return String(value).trim();
+    }
+    return String(value).trim().slice(0, MAX_CELL_LENGTH);
+}
+
+function rowsFromWorksheet(worksheet) {
+    const rows = [];
+    const headerRow = worksheet.getRow(1);
+    const headers = [];
+
+    headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        headers[colNumber] = normalizeCell(cell.value);
+    });
+
+    if (!headers.some(Boolean)) return rows;
+
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const item = {};
+        headers.forEach((header, colNumber) => {
+            if (!header) return;
+            item[header] = normalizeCell(row.getCell(colNumber).value);
+        });
+        if (Object.values(item).some(Boolean)) rows.push(item);
+    });
+
+    return rows;
+}
+
+async function parseImportRows(buffer, extension) {
+    if (extension === '.csv') {
+        const parsed = Papa.parse(buffer.toString('utf8'), {
+            header: true,
+            skipEmptyLines: true,
+            transformHeader: (header) => String(header || '').trim(),
+            transform: (value) => normalizeCell(value),
+        });
+
+        if (parsed.errors?.length) {
+            throw new Error(`Could not parse CSV: ${parsed.errors[0].message}`);
+        }
+
+        return parsed.data.filter((row) => Object.values(row).some(Boolean));
+    }
+
+    if (extension === '.xlsx') {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) return [];
+        return rowsFromWorksheet(worksheet);
+    }
+
+    throw new Error('Unsupported file type. Please upload a .csv or .xlsx file.');
+}
+
+function normalizeYieldRows(data, sourceName) {
+    const rows = [];
+    const skippedRows = [];
+
+    data.forEach((row, idx) => {
+        const species = normalizeCell(row['Common name'] || row['Common Name'] || row.Species || row.Name);
+        const yieldRaw = row['% Yield'] ?? row.Yield;
+        const product = normalizeCell(row.Product || 'General') || 'General';
+
+        if (!species || yieldRaw === undefined || yieldRaw === null || yieldRaw === '') {
+            skippedRows.push(idx + 2);
+            return;
+        }
+
+        let finalYield = Number.parseFloat(String(yieldRaw).replace('%', '').trim());
+        if (Number.isNaN(finalYield)) {
+            skippedRows.push(idx + 2);
+            return;
+        }
+
+        if (finalYield > 0 && finalYield <= 1) {
+            finalYield *= 100;
+        }
+
+        if (finalYield < 0 || finalYield > 100) {
+            skippedRows.push(idx + 2);
+            return;
+        }
+
+        rows.push({ species, product, yield: finalYield, source: sourceName || 'Uploaded File' });
+    });
+
+    return { rows, skippedRows };
+}
+
+module.exports = {
+    assertAllowedImportFile,
+    getUploadExtension,
+    normalizeYieldRows,
+    parseImportRows,
+};

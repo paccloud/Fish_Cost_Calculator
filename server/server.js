@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
-const xlsx = require('xlsx');
+const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
 const fs = require('fs');
 const path = require('path');
 
@@ -139,71 +139,52 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
     });
 });
 
-// Upload Data (Excel/CSV)
-const upload = multer({ dest: 'uploads/' });
+// Upload Data (XLSX/CSV)
+const upload = multer({
+    dest: 'uploads/',
+    limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+});
 
-app.post('/api/upload-data', authenticate, upload.single('file'), (req, res) => {
+app.post('/api/upload-data', authenticate, upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     try {
-        const workbook = xlsx.readFile(req.file.path);
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const data = xlsx.utils.sheet_to_json(sheet);
-
-        // Validate rows before any writes
-        const rows = [];
-        const skippedRows = [];
-        data.forEach((row, idx) => {
-            const species = (row['Common name'] || row['Species'] || row['Name'] || '').toString().trim();
-            const yieldRaw = row['% Yield'] || row['Yield'];
-            const product = (row['Product'] || 'General').toString().trim();
-
-            if (!species || yieldRaw === undefined || yieldRaw === null || yieldRaw === '') {
-                skippedRows.push(idx + 2); // 1-indexed + header row
-                return;
-            }
-            let finalYield = parseFloat(yieldRaw);
-            if (isNaN(finalYield) || finalYield < 0 || finalYield > 100) {
-                if (!isNaN(finalYield) && finalYield > 0 && finalYield <= 1) {
-                    finalYield = finalYield * 100; // decimal to percent
-                } else {
-                    skippedRows.push(idx + 2);
-                    return;
-                }
-            }
-            rows.push({ species, product, yield: finalYield, source: req.file.originalname });
-        });
+        const extension = assertAllowedImportFile(req.file);
+        const buffer = fs.readFileSync(req.file.path);
+        const data = await parseImportRows(buffer, extension);
+        const { rows, skippedRows } = normalizeYieldRows(data, req.file.originalname);
 
         let inserted = 0;
         let updated = 0;
-        db.serialize(() => {
-            rows.forEach(row => {
-                db.get(
-                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
-                    [req.user.id, row.species, row.product],
-                    (err, existing) => {
-                        if (err) return;
-                        if (existing) {
-                            db.run(
-                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ?',
-                                [row.yield, row.source, existing.id]
-                            );
-                            updated++;
-                        } else {
-                            db.run(
-                                'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-                                [req.user.id, row.species, row.product, row.yield, row.source]
-                            );
-                            inserted++;
-                        }
-                    }
-                );
-            });
-        });
 
-        // Cleanup temp file
-        fs.unlinkSync(req.file.path);
+        await Promise.all(rows.map((row) => new Promise((resolve) => {
+            db.get(
+                'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+                [req.user.id, row.species, row.product],
+                (err, existing) => {
+                    if (err) return resolve();
+                    if (existing) {
+                        db.run(
+                            'UPDATE user_data SET yield = ?, source = ? WHERE id = ?',
+                            [row.yield, row.source, existing.id],
+                            () => {
+                                updated++;
+                                resolve();
+                            }
+                        );
+                    } else {
+                        db.run(
+                            'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                            [req.user.id, row.species, row.product, row.yield, row.source],
+                            () => {
+                                inserted++;
+                                resolve();
+                            }
+                        );
+                    }
+                }
+            );
+        })));
 
         const parts = [];
         if (inserted > 0) parts.push(`${inserted} added`);
@@ -211,7 +192,10 @@ app.post('/api/upload-data', authenticate, upload.single('file'), (req, res) => 
         if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped (invalid rows)`);
         res.json({ message: parts.length ? parts.join(', ') : 'No valid records found', inserted, updated, skipped: skippedRows.length, skippedRows });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
+        res.status(status).json({ error: e.message });
+    } finally {
+        if (req.file?.path) fs.unlink(req.file.path, () => {});
     }
 });
 

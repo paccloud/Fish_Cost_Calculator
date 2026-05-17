@@ -1,9 +1,9 @@
 import formidable from 'formidable';
-import * as xlsx from 'xlsx';
 import { promises as fs } from 'fs';
 import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
+import { assertAllowedImportFile, normalizeYieldRows, parseImportRows } from './_lib/importRows.js';
 
 // Disable default body parser for multipart form data
 export const config = {
@@ -25,6 +25,8 @@ async function handler(req, res) {
     keepExtensions: true,
   });
 
+  let uploadedFilePath;
+
   try {
     // Parse multipart form
     const [fields, files] = await new Promise((resolve, reject) => {
@@ -38,46 +40,38 @@ async function handler(req, res) {
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    uploadedFilePath = file.filepath;
 
-    // Read file buffer
+    const extension = assertAllowedImportFile(file);
+    const sourceName = file.originalFilename || 'Uploaded File';
+
+    // Read and parse the upload with non-SheetJS parsers. SheetJS xlsx was removed
+    // because npm audit reports unfixed prototype-pollution/ReDoS advisories.
     const buffer = await fs.readFile(file.filepath);
-
-    // Parse Excel/CSV file
-    const workbook = xlsx.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet);
+    const data = await parseImportRows(buffer, extension);
+    const { rows, skippedRows } = normalizeYieldRows(data, sourceName);
 
     let count = 0;
-
-    // Process each row
-    for (const row of data) {
-      // Heuristic column mapping (same as original)
-      const species = row['Common name'] || row['Species'] || row['Name'];
-      let yieldVal = row['% Yield'] || row['Yield'];
-      const product = row['Product'] || 'General';
-
-      if (species && yieldVal !== undefined && yieldVal !== null) {
-        // Convert decimal to percentage if needed
-        if (yieldVal < 1) {
-          yieldVal = yieldVal * 100;
-        }
-
-        await query(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-          [userId, species, product, yieldVal, file.originalFilename || 'Uploaded File']
-        );
-        count++;
-      }
+    for (const row of rows) {
+      await query(
+        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
+        [userId, row.species, row.product, row.yield, row.source]
+      );
+      count++;
     }
 
-    // Clean up temp file
-    await fs.unlink(file.filepath).catch(() => {});
-
-    return res.status(200).json({ message: `Imported ${count} records successfully` });
+    return res.status(200).json({
+      message: `Imported ${count} records successfully`,
+      imported: count,
+      skipped: skippedRows.length,
+      skippedRows,
+    });
   } catch (err) {
     console.error('Upload error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to process file' });
+    const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;
+    return res.status(status).json({ error: err.message || 'Failed to process file' });
+  } finally {
+    if (uploadedFilePath) await fs.unlink(uploadedFilePath).catch(() => {});
   }
 }
 
