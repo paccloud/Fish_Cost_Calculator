@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
 const crypto = require('crypto');
 
@@ -132,40 +133,12 @@ const authenticate = (req, res, next) => {
     });
 };
 
-const createRateLimit = ({ windowMs, max }) => {
-    const buckets = new Map();
-
-    return (req, res, next) => {
-        const now = Date.now();
-        const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.user?.id || 'anonymous'}`;
-        let bucket = buckets.get(key);
-
-        if (!bucket || bucket.resetAt <= now) {
-            bucket = { count: 0, resetAt: now + windowMs };
-            buckets.set(key, bucket);
-        }
-
-        bucket.count++;
-
-        if (bucket.count > max) {
-            const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
-            res.setHeader('Retry-After', String(retryAfter));
-            return res.status(429).json({ error: 'Too many requests. Please try again later.' });
-        }
-
-        if (buckets.size > 1000) {
-            for (const [bucketKey, bucketValue] of buckets.entries()) {
-                if (bucketValue.resetAt <= now) buckets.delete(bucketKey);
-            }
-        }
-
-        return next();
-    };
-};
-
-const contributorProfileRateLimit = createRateLimit({
+const contributorProfileRateLimit = rateLimit({
     windowMs: 60 * 1000,
     max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
 });
 
 // Routes
