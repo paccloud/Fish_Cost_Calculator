@@ -55,6 +55,33 @@ describe('auth headers', () => {
     expect(headers).not.toHaveProperty('Content-Type');
   });
 
+  it('preserves base headers and adds a Stack Auth access token for OAuth sessions', async () => {
+    stackClientApp.getUser.mockResolvedValue({
+      getAuthJson: vi.fn(async () => ({ accessToken: 'stack-token' })),
+    });
+
+    const headers = await getAuthHeaders(
+      { username: 'processor', authProvider: 'oauth' },
+      { 'Content-Type': 'application/json' }
+    );
+
+    expect(headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-stack-access-token': 'stack-token',
+    });
+  });
+
+  it('does not fall back to a password token for OAuth sessions', async () => {
+    localStorage.setItem('token', 'stale-jwt-token');
+    stackClientApp.getUser.mockResolvedValue({
+      getAuthJson: vi.fn(async () => ({})),
+    });
+
+    const headers = await getAuthHeaders({ username: 'processor', authProvider: 'oauth' });
+
+    expect(headers).toEqual({});
+  });
+
   it('knows whether any auth credential is available', () => {
     expect(hasAuthCredential({ username: 'oauth-user', authProvider: 'oauth' })).toBe(true);
 

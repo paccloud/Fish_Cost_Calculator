@@ -14,6 +14,8 @@ export async function getAuthHeaders(user, baseHeaders = {}) {
     } catch (err) {
       console.error('Failed to get Stack Auth token:', err);
     }
+
+    return headers;
   }
 
   const token = localStorage.getItem('token');

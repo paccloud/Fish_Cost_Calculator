@@ -20,7 +20,15 @@ export async function syncAll(user) {
   if (!hasAuthCredential(user)) return stats;
 
   const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
-  if (!headers.Authorization && !headers['x-stack-access-token']) return stats;
+  if (!headers.Authorization && !headers['x-stack-access-token']) {
+    stats.errors++;
+    stats.errorDetails.push({
+      type: 'auth',
+      isAuthError: true,
+      message: 'Missing authentication headers',
+    });
+    return stats;
+  }
 
   // --- Push local changes ---
   const pending = await getAllPendingSync();

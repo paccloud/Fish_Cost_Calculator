@@ -225,6 +225,39 @@ describe('syncAll', () => {
     expect(markYieldSynced).not.toHaveBeenCalled();
   });
 
+  it('reports an auth error when shared headers contain no usable credential', async () => {
+    getAuthHeaders.mockResolvedValue({ 'Content-Type': 'application/json' });
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'local-calc-id',
+          syncStatus: 'local',
+          species: 'Pacific Cod',
+          product: 'Round → Skinless Fillets',
+          yield: 42,
+          result: 10.71,
+        },
+      ],
+      yields: [],
+    });
+
+    const stats = await syncAll(passwordUser);
+
+    expect(stats).toMatchObject({
+      errors: 1,
+      errorDetails: [
+        {
+          type: 'auth',
+          isAuthError: true,
+          message: 'Missing authentication headers',
+        },
+      ],
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(markCalcSynced).not.toHaveBeenCalled();
+    expect(markYieldSynced).not.toHaveBeenCalled();
+  });
+
   it('passes pulled custom yields with the server yield field intact', async () => {
     getAllPendingSync.mockResolvedValue({ calcs: [], yields: [] });
     vi.stubGlobal('fetch', vi.fn(async (url) => {
