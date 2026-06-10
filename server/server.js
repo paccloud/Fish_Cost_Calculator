@@ -7,15 +7,64 @@ const cors = require('cors');
 const multer = require('multer');
 const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
 const fs = require('fs');
-const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.JWT_SECRET || 'freshfishfixsecret'; // Fallback for dev
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+if (process.env.VERCEL_URL) {
+    const vercelOrigin = `https://${process.env.VERCEL_URL}`;
+    if (!allowedOrigins.includes(vercelOrigin)) {
+        allowedOrigins.push(vercelOrigin);
+    }
+}
+const allowCredentials = process.env.CORS_ALLOW_CREDENTIALS === 'true';
+const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10) || 86400;
+const SECRET_KEY = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development'
+  ? crypto.randomBytes(32).toString('hex')
+  : null);
+
+if (!SECRET_KEY) {
+  throw new Error('JWT_SECRET is required to start the server');
+}
+
+if (!process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist sessions.');
+}
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: allowCredentials,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+app.use((err, req, res, next) => {
+  if (err && err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS origin denied' });
+  }
+  return next(err);
+});
 app.use(express.json());
+
+const CSV_FORMULA_PREFIX = /^[=+\-@]/;
+const sanitizeCsvValue = (value) => {
+  const stringValue = value === null || value === undefined ? '' : String(value);
+  const escaped = stringValue.replace(/"/g, '""');
+  return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
+};
 
 // Database Setup
 const db = new sqlite3.Database('./fish_app.db', (err) => {
@@ -66,11 +115,6 @@ db.serialize(() => {
         updated_at TEXT,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
-
-    // Add is_shared column to user_data if it doesn't exist (safe migration)
-    db.run(`ALTER TABLE user_data ADD COLUMN is_shared INTEGER DEFAULT 0`, (err) => {
-        // Ignore error if column already exists
-    });
 });
 
 // Auth Middleware
@@ -80,7 +124,10 @@ const authenticate = (req, res, next) => {
     if (!token) return res.sendStatus(401);
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            const status = err.name === 'TokenExpiredError' ? 401 : 403;
+            return res.status(status).json({ error: 'Invalid or expired token' });
+        }
         req.user = user;
         next();
     });
@@ -95,7 +142,7 @@ app.post('/api/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function(err) {
             if (err) return res.status(400).json({ error: 'User already exists' });
-            res.json({ id: this.lastID, username });
+            res.status(201).json({ id: this.lastID, username });
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -110,8 +157,12 @@ app.post('/api/login', (req, res) => {
         
         const match = await bcrypt.compare(password, user.password);
         if (match) {
-            const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY);
-            res.json({ token, username: user.username });
+            const token = jwt.sign(
+                { id: user.id, username: user.username },
+                SECRET_KEY,
+                { expiresIn: `${TOKEN_EXPIRY_SECONDS}s` }
+            );
+            res.json({ token, username: user.username, expiresIn: TOKEN_EXPIRY_SECONDS });
         } else {
             res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -126,7 +177,7 @@ app.post('/api/save-calc', authenticate, (req, res) => {
         [req.user.id, name, species, product, cost, yieldPercent, result, date], 
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Saved successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Saved successfully' });
         }
     );
 });
@@ -140,63 +191,105 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
 });
 
 // Upload Data (XLSX/CSV)
+const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
+
 const upload = multer({
     dest: 'uploads/',
-    limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+    limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
+    fileFilter: (req, file, cb) => {
+        try {
+            assertAllowedImportFile(file);
+            cb(null, true);
+        } catch (error) {
+            error.code = 'INVALID_FILE_TYPE';
+            cb(error);
+        }
+    },
 });
 
-app.post('/api/upload-data', authenticate, upload.single('file'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+const uploadSingle = upload.single('file');
+const cleanupUpload = (filePath) => {
+    if (filePath) {
+        fs.unlink(filePath, (err) => {
+            if (err) {
+                console.error('Failed to cleanup upload', err);
+            }
+        });
+    }
+};
 
-    try {
-        const extension = assertAllowedImportFile(req.file);
-        const buffer = fs.readFileSync(req.file.path);
-        const data = await parseImportRows(buffer, extension);
-        const { rows, skippedRows } = normalizeYieldRows(data, req.file.originalname);
+app.post('/api/upload-data', authenticate, (req, res) => {
+    uploadSingle(req, res, async (err) => {
+        if (err) {
+            let message = 'Failed to upload file.';
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                message = 'File too large. Max 4MB.';
+            } else if (err.code === 'INVALID_FILE_TYPE') {
+                message = 'Invalid file type. Only .xlsx or .csv files are allowed.';
+            }
+            return res.status(400).json({ error: message });
+        }
 
-        let inserted = 0;
-        let updated = 0;
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-        await Promise.all(rows.map((row) => new Promise((resolve) => {
-            db.get(
-                'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
-                [req.user.id, row.species, row.product],
-                (err, existing) => {
-                    if (err) return resolve();
-                    if (existing) {
-                        db.run(
-                            'UPDATE user_data SET yield = ?, source = ? WHERE id = ?',
-                            [row.yield, row.source, existing.id],
-                            () => {
-                                updated++;
-                                resolve();
-                            }
-                        );
-                    } else {
-                        db.run(
+        try {
+            const extension = assertAllowedImportFile(req.file);
+            const buffer = fs.readFileSync(req.file.path);
+            const data = await parseImportRows(buffer, extension);
+            const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
+
+            let inserted = 0;
+            let updated = 0;
+
+            await Promise.all(rows.map((row) => new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+                    [req.user.id, row.species, row.product],
+                    (selectErr, existing) => {
+                        if (selectErr) return reject(selectErr);
+                        if (existing) {
+                            return db.run(
+                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
+                                [row.yield, row.source, existing.id, req.user.id],
+                                (updateErr) => {
+                                    if (updateErr) return reject(updateErr);
+                                    updated++;
+                                    return resolve();
+                                }
+                            );
+                        }
+
+                        return db.run(
                             'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
                             [req.user.id, row.species, row.product, row.yield, row.source],
-                            () => {
+                            (insertErr) => {
+                                if (insertErr) return reject(insertErr);
                                 inserted++;
-                                resolve();
+                                return resolve();
                             }
                         );
                     }
-                }
-            );
-        })));
+                );
+            })));
 
-        const parts = [];
-        if (inserted > 0) parts.push(`${inserted} added`);
-        if (updated > 0) parts.push(`${updated} updated`);
-        if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped (invalid rows)`);
-        res.json({ message: parts.length ? parts.join(', ') : 'No valid records found', inserted, updated, skipped: skippedRows.length, skippedRows });
-    } catch (e) {
-        const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
-        res.status(status).json({ error: e.message });
-    } finally {
-        if (req.file?.path) fs.unlink(req.file.path, () => {});
-    }
+            const parts = [];
+            if (inserted > 0) parts.push(`${inserted} added`);
+            if (updated > 0) parts.push(`${updated} updated`);
+            if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
+            res.json({
+                message: parts.length ? parts.join(', ') : 'No valid records found',
+                inserted,
+                updated,
+                skipped: skippedRows.length,
+                skippedRows,
+            });
+        } catch (e) {
+            const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
+            res.status(status).json({ error: e.message || 'Failed to process file. Ensure it is a valid spreadsheet.' });
+        } finally {
+            cleanupUpload(req.file && req.file.path);
+        }
+    });
 });
 
 // Get User Custom Data
@@ -219,7 +312,7 @@ app.post('/api/user-data', authenticate, (req, res) => {
         [req.user.id, species, product, yieldVal, source || 'User Input'],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID, message: 'Added successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
         }
     );
 });
@@ -269,8 +362,16 @@ app.get('/api/export-calcs', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
         const csvRows = rows.map(row => {
-            const date = new Date(row.date).toLocaleDateString();
-            return `"${date}","${row.species}","${row.product}","${row.cost}","${row.yield}","${row.result}"`;
+            const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
+            const values = [
+                date,
+                sanitizeCsvValue(row.species),
+                sanitizeCsvValue(row.product),
+                sanitizeCsvValue(row.cost),
+                sanitizeCsvValue(row.yield),
+                sanitizeCsvValue(row.result)
+            ];
+            return `"${values.join('","')}"`;
         }).join('\n');
 
         const csv = headers + csvRows;
@@ -289,7 +390,13 @@ app.get('/api/export-user-data', authenticate, (req, res) => {
         // Create CSV content
         const headers = 'Species,Product,Yield (%),Source\n';
         const csvRows = rows.map(row => {
-            return `"${row.species}","${row.product}","${row.yield}","${row.source || ''}"`;
+            const values = [
+                sanitizeCsvValue(row.species),
+                sanitizeCsvValue(row.product),
+                sanitizeCsvValue(row.yield),
+                sanitizeCsvValue(row.source || '')
+            ];
+            return `"${values.join('","')}"`;
         }).join('\n');
 
         const csv = headers + csvRows;
@@ -317,14 +424,17 @@ app.get('/api/contributors', (req, res) => {
     });
 });
 
-// Get current user's contributor profile
-app.get('/api/contributor/me', authenticate, (req, res) => {
+const getCurrentContributorProfile = (req, res) => {
     db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Profile not found' });
         res.json(row);
     });
-});
+};
+
+// Get current user's contributor profile
+app.get('/api/contributor', authenticate, getCurrentContributorProfile);
+app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
 
 // Create or update contributor profile
 app.post('/api/contributor', authenticate, (req, res) => {
@@ -362,110 +472,6 @@ app.post('/api/contributor', authenticate, (req, res) => {
     });
 });
 
-// Share a user data entry to the community pool
-app.post('/api/user-data/:id/share', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-
-        db.run('UPDATE user_data SET is_shared = 1 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Shared with community' });
-        });
-    });
-});
-
-// Unshare a user data entry
-app.post('/api/user-data/:id/unshare', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-
-        db.run('UPDATE user_data SET is_shared = 0 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Removed from community' });
-        });
-    });
-});
-
-// Get community pool data (all shared entries, with contributor info)
-app.get('/api/community-data', (req, res) => {
-    const query = `
-        SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) as contributor,
-               c.organization
-        FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
-        LEFT JOIN contributors c ON ud.user_id = c.user_id
-        WHERE ud.is_shared = 1
-        ORDER BY ud.species ASC, ud.product ASC
-    `;
-    db.all(query, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
-});
-
-// Export community data as CSV
-app.get('/api/export-community-data', (req, res) => {
-    const query = `
-        SELECT ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) as contributor,
-               c.organization
-        FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
-        LEFT JOIN contributors c ON ud.user_id = c.user_id
-        WHERE ud.is_shared = 1
-        ORDER BY ud.species ASC
-    `;
-    db.all(query, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        const headers = 'Species,Product,Yield (%),Source,Contributor,Organization\n';
-        const csvRows = rows.map(row =>
-            `"${row.species}","${row.product}","${row.yield}","${row.source || ''}","${row.contributor || ''}","${row.organization || ''}"`
-        ).join('\n');
-
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="community-yield-data.csv"');
-        res.send(headers + csvRows);
-    });
-});
-
-// Legacy export route alias (DataManagement.jsx uses /api/export?type=data)
-app.get('/api/export', authenticate, (req, res) => {
-    const type = req.query.type;
-    if (type === 'data') {
-        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            const headers = 'Species,Product,Yield (%),Source\n';
-            const csvRows = rows.map(row =>
-                `"${row.species}","${row.product}","${row.yield}","${row.source || ''}"`
-            ).join('\n');
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename="custom-yield-data.csv"');
-            res.send(headers + csvRows);
-        });
-    } else if (type === 'calcs') {
-        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
-            const csvRows = rows.map(row => {
-                const date = new Date(row.date).toLocaleDateString();
-                return `"${date}","${row.species}","${row.product}","${row.cost}","${row.yield}","${row.result}"`;
-            }).join('\n');
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename="calculations.csv"');
-            res.send(headers + csvRows);
-        });
-    } else {
-        res.status(400).json({ error: 'Invalid export type. Use ?type=data or ?type=calcs' });
-    }
-});
-
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
-

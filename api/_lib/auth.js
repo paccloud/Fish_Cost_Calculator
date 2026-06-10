@@ -2,6 +2,12 @@ import jwt from 'jsonwebtoken';
 import { verifyNeonAuthSession, getOrCreateLocalUser } from './neon-auth.js';
 import { query } from './db.js';
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required for JWT authentication');
+}
+
 /**
  * Verify JWT token from Authorization header
  * @param {Object} req - Request object
@@ -15,7 +21,7 @@ export function verifyToken(req) {
 
   const token = authHeader.split(' ')[1];
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET);
   } catch (err) {
     return null;
   }

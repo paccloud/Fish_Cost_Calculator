@@ -357,6 +357,8 @@ Content-Type: multipart/form-data
 | Atlantic Salmon | Skinless Fillet | 48.5  |
 | Rainbow Trout   | Smoked          | 35    |
 
+Yield values are interpreted as percentage numbers (e.g. `6.5` for 6.5%). Decimal fractions like `0.065` are not auto-converted.
+
 **Success Response (200):**
 
 ```json

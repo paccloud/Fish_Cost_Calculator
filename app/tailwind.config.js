@@ -7,24 +7,20 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-      },
       colors: {
+        navy: 'var(--color-navy)',
+        teal: 'var(--color-teal)',
+        rust: 'var(--color-rust)',
         surface: 'var(--color-surface)',
-        'surface-raised': 'var(--color-surface-raised)',
+        'surface-elevated': 'var(--color-surface-elevated)',
         'text-primary': 'var(--color-text-primary)',
         'text-secondary': 'var(--color-text-secondary)',
-        'text-muted': 'var(--color-text-muted)',
-        line: 'var(--color-border)',
-        'line-subtle': 'var(--color-border-subtle)',
-        brand: {
-          teal: '#014457',
-          'teal-light': '#025a72',
-          terracotta: '#CA5F40',
-          'terracotta-light': '#d97356',
-          yellow: '#F7C648',
-        },
+        border: 'var(--color-border)',
+      },
+      fontFamily: {
+        heading: ['Outfit', 'system-ui', 'sans-serif'],
+        body: ['"Open Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
     },
   },

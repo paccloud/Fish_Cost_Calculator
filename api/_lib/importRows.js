@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import Papa from 'papaparse';
+import { Readable } from 'stream';
 
 const MAX_CELL_LENGTH = 500;
 const ALLOWED_EXTENSIONS = new Set(['.csv', '.xlsx']);
@@ -36,10 +36,12 @@ export function assertAllowedImportFile(file) {
 function normalizeCell(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') {
-    if (value.text) return String(value.text).trim();
-    if (value.result !== undefined) return String(value.result).trim();
-    if (value.richText) return value.richText.map((part) => part.text || '').join('').trim();
-    return String(value).trim();
+    if (value.text) return String(value.text).trim().slice(0, MAX_CELL_LENGTH);
+    if (value.result !== undefined) return String(value.result).trim().slice(0, MAX_CELL_LENGTH);
+    if (value.richText) {
+      return value.richText.map((part) => part.text || '').join('').trim().slice(0, MAX_CELL_LENGTH);
+    }
+    return String(value).trim().slice(0, MAX_CELL_LENGTH);
   }
   return String(value).trim().slice(0, MAX_CELL_LENGTH);
 }
@@ -71,23 +73,15 @@ function rowsFromWorksheet(worksheet) {
 }
 
 export async function parseImportRows(buffer, extension) {
+  const workbook = new ExcelJS.Workbook();
+
   if (extension === '.csv') {
-    const parsed = Papa.parse(buffer.toString('utf8'), {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => String(header || '').trim(),
-      transform: (value) => normalizeCell(value),
-    });
-
-    if (parsed.errors?.length) {
-      throw new Error(`Could not parse CSV: ${parsed.errors[0].message}`);
-    }
-
-    return parsed.data.filter((row) => Object.values(row).some(Boolean));
+    await workbook.csv.read(Readable.from([buffer]));
+    const worksheet = workbook.worksheets[0];
+    return worksheet ? rowsFromWorksheet(worksheet) : [];
   }
 
   if (extension === '.xlsx') {
-    const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
     const worksheet = workbook.worksheets[0];
     if (!worksheet) return [];
@@ -103,8 +97,9 @@ export function normalizeYieldRows(data, sourceName) {
 
   data.forEach((row, idx) => {
     const species = normalizeCell(row['Common name'] || row['Common Name'] || row.Species || row.Name);
-    const yieldRaw = row['% Yield'] ?? row.Yield;
+    const yieldRaw = row['% Yield'] ?? row['Yield (%)'] ?? row.Yield;
     const product = normalizeCell(row.Product || 'General') || 'General';
+    const source = normalizeCell(row.Source || row.source || sourceName || 'Uploaded File') || 'Uploaded File';
 
     if (!species || yieldRaw === undefined || yieldRaw === null || yieldRaw === '') {
       skippedRows.push(idx + 2);
@@ -126,7 +121,7 @@ export function normalizeYieldRows(data, sourceName) {
       return;
     }
 
-    rows.push({ species, product, yield: finalYield, source: sourceName || 'Uploaded File' });
+    rows.push({ species, product, yield: finalYield, source });
   });
 
   return { rows, skippedRows };

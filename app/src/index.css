@@ -3,62 +3,36 @@
 @tailwind utilities;
 
 :root {
-  --color-surface: #f5f0eb;
-  --color-surface-raised: #ffffff;
-  --color-text-primary: #1a2e35;
-  --color-text-secondary: #4a6572;
-  --color-text-muted: #7a9aaa;
-  --color-border: #d6ccc4;
-  --color-border-subtle: #ede7e0;
-  --color-accent: #014457;
-  --color-accent-warm: #CA5F40;
+  --color-navy: #0A2540;
+  --color-teal: #0E7C6B;
+  --color-rust: #D4622B;
+  --color-surface: #F8F9FA;
+  --color-surface-elevated: #FFFFFF;
+  --color-text-primary: #1A2B3D;
+  --color-text-secondary: #5A6B7D;
+  --color-border: #D8DEE4;
+  --color-success: #16A34A;
+  --color-error: #DC2626;
 }
 
 .dark {
-  --color-surface: #0d1f26;
-  --color-surface-raised: #132830;
-  --color-text-primary: #e8ddd4;
-  --color-text-secondary: #8fa8b2;
-  --color-text-muted: #5d7f8c;
-  --color-border: rgba(255, 255, 255, 0.12);
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
-  --color-accent: #025a72;
-  --color-accent-warm: #d97356;
-}
-
-@layer base {
-  body {
-    font-feature-settings: "cv11", "ss01";
-    -webkit-font-smoothing: antialiased;
-  }
+  --color-navy: #0F1A2E;
+  --color-teal: #12A08C;
+  --color-rust: #E8713E;
+  --color-surface: #0F1A2E;
+  --color-surface-elevated: #162033;
+  --color-text-primary: #E8ECF1;
+  --color-text-secondary: #8A9BB0;
+  --color-border: #253349;
+  --color-success: #22C55E;
+  --color-error: #EF4444;
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-brand-teal hover:bg-brand-teal-light text-white font-semibold py-3 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-[var(--color-rust)] hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] text-white font-semibold py-2 px-4 rounded-lg transition-colors active:scale-[0.98];
   }
-
-  .card {
-    @apply bg-surface-raised rounded-lg border border-line shadow-sm;
-  }
-
-  .form-label {
-    @apply block text-sm font-medium mb-1.5 text-text-secondary;
-  }
-
-  .form-input {
-    @apply w-full bg-surface border border-line rounded-md px-3 py-2.5 text-sm text-text-primary
-           placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
-  .form-select {
-    @apply w-full bg-surface border border-line rounded-md px-3 py-2.5 text-sm text-text-primary
-           focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
-  .section-divider {
-    @apply border-t border-line-subtle my-5;
+  .btn-secondary {
+    @apply border border-[var(--color-teal)] text-[var(--color-teal)] hover:bg-[var(--color-teal)] hover:text-white font-semibold py-2 px-4 rounded-lg transition-colors;
   }
 }

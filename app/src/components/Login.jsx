@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, ArrowRight } from 'lucide-react';
 
+// Simple SVG icons for OAuth providers
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -51,6 +52,7 @@ const Login = () => {
     setOauthLoading(provider);
     try {
       await signInWithOAuth(provider);
+      // OAuth will redirect, so we don't need to navigate here
     } catch (e) {
       setError(`Failed to sign in with ${provider}`);
       setOauthLoading(null);
@@ -59,8 +61,8 @@ const Login = () => {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="card w-full max-w-md p-8">
-        <h2 className="text-2xl font-bold mb-6 text-center text-brand-teal">
+      <div className="w-full max-w-md bg-surface-elevated border border-border p-8 rounded-xl shadow-sm">
+        <h2 className="font-heading text-2xl font-bold mb-6 text-center text-navy dark:text-text-primary">
           {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
 
@@ -69,7 +71,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('google')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-surface-raised border border-line text-text-primary font-medium py-3 rounded-md hover:bg-surface transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="w-full flex items-center justify-center gap-3 bg-surface-elevated border border-border text-text-primary font-medium py-3 rounded-lg hover:bg-surface transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <GoogleIcon />
             {oauthLoading === 'google' ? 'Connecting...' : 'Continue with Google'}
@@ -78,7 +80,7 @@ const Login = () => {
           <button
             onClick={() => handleOAuthSignIn('github')}
             disabled={oauthLoading}
-            className="w-full flex items-center justify-center gap-3 bg-brand-teal text-white font-medium py-3 rounded-md hover:bg-brand-teal-light transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="w-full flex items-center justify-center gap-3 bg-navy text-white font-medium py-3 rounded-lg hover:bg-[#0D1F35] transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <GitHubIcon />
             {oauthLoading === 'github' ? 'Connecting...' : 'Continue with GitHub'}
@@ -88,61 +90,67 @@ const Login = () => {
         {/* Divider */}
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-line"></div>
+            <div className="w-full border-t border-border"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-4 bg-surface-raised text-text-secondary">
+            <span className="px-4 bg-surface-elevated dark:bg-surface-elevated text-text-secondary">
               or continue with username
             </span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="form-label">Username</label>
+            <label htmlFor="username" className="block text-text-secondary text-sm font-medium mb-2">Username</label>
             <div className="relative">
-              <User className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
+              <User className="absolute left-3 top-3 text-teal w-5 h-5" />
               <input
+                id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="form-input pl-10"
+                className="w-full bg-surface border border-border text-text-primary pl-10 p-3 rounded-lg focus:ring-2 focus:ring-teal outline-none"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="form-label">Password</label>
+            <label htmlFor="password" className="block text-text-secondary text-sm font-medium mb-2">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
+              <Lock className="absolute left-3 top-3 text-teal w-5 h-5" />
               <input
+                id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="form-input pl-10"
+                className="w-full bg-surface border border-border text-text-primary pl-10 p-3 rounded-lg focus:ring-2 focus:ring-teal outline-none"
                 required
               />
             </div>
           </div>
 
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm text-center" role="alert" aria-live="assertive">
+              {error}
+            </p>
+          )}
 
-          <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
-            {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={18} />
+          <button type="submit" className="w-full bg-rust hover:bg-[#B8532A] dark:hover:bg-[#F07D4A] text-white font-semibold py-3 rounded-lg transition active:scale-[0.98] flex items-center justify-center gap-2">
+            {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={20} />
           </button>
         </form>
 
-        <div className="mt-5 text-center">
+        <div className="mt-6 text-center">
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="text-text-secondary hover:text-brand-terracotta text-sm transition"
+            className="text-text-secondary hover:text-teal text-sm transition"
           >
             {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}
           </button>
         </div>
 
-        <div className="mt-3 text-center">
+        <div className="mt-4 text-center">
           <button onClick={() => navigate('/')} className="text-text-secondary hover:text-text-primary text-sm transition">
             Continue as Guest
           </button>

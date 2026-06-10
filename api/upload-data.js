@@ -43,26 +43,43 @@ async function handler(req, res) {
     uploadedFilePath = file.filepath;
 
     const extension = assertAllowedImportFile(file);
-    const sourceName = file.originalFilename || 'Uploaded File';
-
-    // Read and parse the upload with non-SheetJS parsers. SheetJS xlsx was removed
-    // because npm audit reports unfixed prototype-pollution/ReDoS advisories.
     const buffer = await fs.readFile(file.filepath);
     const data = await parseImportRows(buffer, extension);
-    const { rows, skippedRows } = normalizeYieldRows(data, sourceName);
+    const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-    let count = 0;
+    let inserted = 0;
+    let updated = 0;
+
     for (const row of rows) {
-      await query(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-        [userId, row.species, row.product, row.yield, row.source]
+      const existing = await query(
+        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
+        [userId, row.species, row.product]
       );
-      count++;
+
+      if (existing.rows?.[0]) {
+        await query(
+          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
+          [row.yield, row.source, existing.rows[0].id, userId]
+        );
+        updated++;
+      } else {
+        await query(
+          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
+          [userId, row.species, row.product, row.yield, row.source]
+        );
+        inserted++;
+      }
     }
 
+    const parts = [];
+    if (inserted > 0) parts.push(`${inserted} added`);
+    if (updated > 0) parts.push(`${updated} updated`);
+    if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
+
     return res.status(200).json({
-      message: `Imported ${count} records successfully`,
-      imported: count,
+      message: parts.length ? parts.join(', ') : 'No valid records found',
+      inserted,
+      updated,
       skipped: skippedRows.length,
       skippedRows,
     });

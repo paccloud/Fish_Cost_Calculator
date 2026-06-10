@@ -2,6 +2,13 @@ import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
 
+const CSV_FORMULA_PREFIX = /^[=+\-@]/;
+const sanitizeCsvValue = (value) => {
+  const stringValue = value === null || value === undefined ? '' : String(value);
+  const escaped = stringValue.replace(/"/g, '""');
+  return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
+};
+
 /**
  * Consolidated export endpoint
  * GET /api/export?type=calcs - Export calculations
@@ -25,7 +32,13 @@ async function handler(req, res) {
 
       const csvHeader = 'Species,Product,Yield (%),Source\n';
       const csvRows = result.rows.map(data => {
-        return `"${data.species}","${data.product}",${data.yield},"${data.source || ''}"`;
+        const values = [
+          sanitizeCsvValue(data.species),
+          sanitizeCsvValue(data.product),
+          sanitizeCsvValue(data.yield),
+          sanitizeCsvValue(data.source || '')
+        ];
+        return `"${values.join('","')}"`;
       }).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
@@ -41,8 +54,16 @@ async function handler(req, res) {
 
       const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
       const csvRows = result.rows.map(calc => {
-        const date = new Date(calc.date).toLocaleString();
-        return `"${date}","${calc.species}","${calc.product}",${calc.cost},${calc.yield},${calc.result}`;
+        const date = sanitizeCsvValue(new Date(calc.date).toLocaleString());
+        const values = [
+          date,
+          sanitizeCsvValue(calc.species),
+          sanitizeCsvValue(calc.product),
+          sanitizeCsvValue(calc.cost),
+          sanitizeCsvValue(calc.yield),
+          sanitizeCsvValue(calc.result)
+        ];
+        return `"${values.join('","')}"`;
       }).join('\n');
 
       res.setHeader('Content-Type', 'text/csv');
