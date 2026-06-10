@@ -26,6 +26,13 @@ const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS 
 const SECRET_KEY = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development'
   ? crypto.randomBytes(32).toString('hex')
   : null);
+const apiRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
+});
 
 if (!SECRET_KEY) {
   throw new Error('JWT_SECRET is required to start the server');
@@ -57,6 +64,7 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+app.use('/api', apiRateLimit);
 app.use(express.json());
 
 const CSV_FORMULA_PREFIX = /^[=+\-@]/;
@@ -132,14 +140,6 @@ const authenticate = (req, res, next) => {
         next();
     });
 };
-
-const contributorProfileRateLimit = rateLimit({
-    windowMs: 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
-});
 
 // Routes
 
@@ -433,11 +433,11 @@ const getCurrentContributorProfile = (req, res) => {
 };
 
 // Get current user's contributor profile
-app.get('/api/contributor', authenticate, contributorProfileRateLimit, getCurrentContributorProfile);
-app.get('/api/contributor/me', authenticate, contributorProfileRateLimit, getCurrentContributorProfile);
+app.get('/api/contributor', authenticate, getCurrentContributorProfile);
+app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
 
 // Create or update contributor profile
-app.post('/api/contributor', authenticate, contributorProfileRateLimit, (req, res) => {
+app.post('/api/contributor', authenticate, (req, res) => {
     const { display_name, organization, bio, show_on_page } = req.body;
     const now = new Date().toISOString();
 
