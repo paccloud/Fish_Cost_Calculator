@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
 const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
-const fs = require('fs');
 const crypto = require('crypto');
 
 const app = express();
@@ -133,6 +132,42 @@ const authenticate = (req, res, next) => {
     });
 };
 
+const createRateLimit = ({ windowMs, max }) => {
+    const buckets = new Map();
+
+    return (req, res, next) => {
+        const now = Date.now();
+        const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.user?.id || 'anonymous'}`;
+        let bucket = buckets.get(key);
+
+        if (!bucket || bucket.resetAt <= now) {
+            bucket = { count: 0, resetAt: now + windowMs };
+            buckets.set(key, bucket);
+        }
+
+        bucket.count++;
+
+        if (bucket.count > max) {
+            const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+            res.setHeader('Retry-After', String(retryAfter));
+            return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+        }
+
+        if (buckets.size > 1000) {
+            for (const [bucketKey, bucketValue] of buckets.entries()) {
+                if (bucketValue.resetAt <= now) buckets.delete(bucketKey);
+            }
+        }
+
+        return next();
+    };
+};
+
+const contributorProfileRateLimit = createRateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+});
+
 // Routes
 
 // Register
@@ -194,7 +229,7 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
 const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
 
 const upload = multer({
-    dest: 'uploads/',
+    storage: multer.memoryStorage(),
     limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
     fileFilter: (req, file, cb) => {
         try {
@@ -208,15 +243,6 @@ const upload = multer({
 });
 
 const uploadSingle = upload.single('file');
-const cleanupUpload = (filePath) => {
-    if (filePath) {
-        fs.unlink(filePath, (err) => {
-            if (err) {
-                console.error('Failed to cleanup upload', err);
-            }
-        });
-    }
-};
 
 app.post('/api/upload-data', authenticate, (req, res) => {
     uploadSingle(req, res, async (err) => {
@@ -234,7 +260,10 @@ app.post('/api/upload-data', authenticate, (req, res) => {
 
         try {
             const extension = assertAllowedImportFile(req.file);
-            const buffer = fs.readFileSync(req.file.path);
+            const buffer = req.file.buffer;
+            if (!Buffer.isBuffer(buffer)) {
+                return res.status(400).json({ error: 'Invalid upload payload' });
+            }
             const data = await parseImportRows(buffer, extension);
             const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
@@ -286,8 +315,6 @@ app.post('/api/upload-data', authenticate, (req, res) => {
         } catch (e) {
             const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
             res.status(status).json({ error: e.message || 'Failed to process file. Ensure it is a valid spreadsheet.' });
-        } finally {
-            cleanupUpload(req.file && req.file.path);
         }
     });
 });
@@ -433,11 +460,11 @@ const getCurrentContributorProfile = (req, res) => {
 };
 
 // Get current user's contributor profile
-app.get('/api/contributor', authenticate, getCurrentContributorProfile);
-app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
+app.get('/api/contributor', authenticate, contributorProfileRateLimit, getCurrentContributorProfile);
+app.get('/api/contributor/me', authenticate, contributorProfileRateLimit, getCurrentContributorProfile);
 
 // Create or update contributor profile
-app.post('/api/contributor', authenticate, (req, res) => {
+app.post('/api/contributor', authenticate, contributorProfileRateLimit, (req, res) => {
     const { display_name, organization, bio, show_on_page } = req.body;
     const now = new Date().toISOString();
 
