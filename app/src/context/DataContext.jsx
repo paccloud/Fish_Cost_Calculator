@@ -11,6 +11,7 @@ import {
   setCustomSpecies as setSpeciesLocal,
 } from '../lib/localStore';
 import { syncAll } from '../lib/syncEngine';
+import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 
 const DataContext = createContext(null);
@@ -60,12 +61,11 @@ export function DataProvider({ children }) {
   }, []);
 
   const triggerSync = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token || !navigator.onLine) return;
+    if (!hasAuthCredential(user) || !navigator.onLine) return;
 
     setSyncStatus('syncing');
     try {
-      const stats = await syncAll(token);
+      const stats = await syncAll(user);
       // Reload data from IndexedDB after sync to pick up merged server data
       const [calcs, yields] = await Promise.all([
         getSavedCalcs(),
@@ -86,7 +86,7 @@ export function DataProvider({ children }) {
       setSyncError('network');
       setSyncStatus('error');
     }
-  }, []);
+  }, [user]);
 
   const debouncedSync = useCallback(() => {
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);

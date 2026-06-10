@@ -4,6 +4,7 @@ import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Cloc
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
+import { getAuthHeaders } from '../lib/authHeaders';
 
 // Process FISH_DATA_V3 into the format expected by the calculator
 // (same shape as the API response: numeric yield, array range, from/to strings)
@@ -1196,10 +1197,10 @@ const Calculator = () => {
                     {user && (
                       <button
                         onClick={async () => {
-                          const token = localStorage.getItem('token');
                           try {
+                            const headers = await getAuthHeaders(user);
                             const response = await fetch(apiUrl('/api/export?type=calcs'), {
-                              headers: { 'Authorization': `Bearer ${token}` }
+                              headers
                             });
                             const blob = await response.blob();
                             const url = window.URL.createObjectURL(blob);

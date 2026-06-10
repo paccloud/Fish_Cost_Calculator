@@ -112,19 +112,20 @@ Content-Type: application/json
   "name": "Sockeye - Round to Fillet",
   "species": "Sockeye Salmon",
   "product": "Round → Skinless Fillet",
-  "mode": "cost",
   "cost": 8.5,
-  "target_weight": 0,
   "yield": 46,
   "result": 18.48
 }
 ```
 
-**Success Response (200):**
+The remote calculation history schema stores the calculation result, cost, product, and yield. Mode-specific client metadata such as input-weight mode and target output weight remains local-only unless a future schema migration adds remote columns for those fields.
+
+**Success Response (201):**
 
 ```json
 {
-  "message": "Calculation saved"
+  "id": 1,
+  "message": "Calculation saved successfully"
 }
 ```
 
