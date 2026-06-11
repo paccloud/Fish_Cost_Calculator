@@ -1200,6 +1200,9 @@ const Calculator = () => {
                             const response = await fetch(apiUrl('/api/export?type=calcs'), {
                               credentials: 'include',
                             });
+                            if (!response.ok) {
+                              throw new Error(`Export failed with HTTP ${response.status}`);
+                            }
                             const blob = await response.blob();
                             const url = window.URL.createObjectURL(blob);
                             const a = document.createElement('a');

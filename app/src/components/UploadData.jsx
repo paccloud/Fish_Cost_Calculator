@@ -77,11 +77,11 @@ const UploadData = () => {
                 </p>
 
                 <div className="border-2 border-dashed border-border rounded-xl p-10 text-center hover:border-teal/50 transition bg-surface">
-                    <input 
-                        type="file" 
-                        accept=".xlsx, .xls, .csv" 
+                    <input
+                        type="file"
+                        accept=".xlsx, .csv"
                         onChange={handleFileChange}
-                        className="hidden" 
+                        className="hidden"
                         id="file-upload"
                     />
                     <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-4">
