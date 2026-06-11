@@ -39,11 +39,12 @@ Create a new user account.
 
 ```json
 {
-  "message": "User created successfully"
+  "id": 1,
+  "username": "fisherman_joe"
 }
 ```
 
-**Error Response (400):**
+**Error Response (409):**
 
 ```json
 {
@@ -73,10 +74,8 @@ Authenticate and receive a JWT token.
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": 1,
-    "username": "fisherman_joe"
-  }
+  "username": "fisherman_joe",
+  "expiresIn": 86400
 }
 ```
 
@@ -374,6 +373,91 @@ Yield values are interpreted as percentage numbers (e.g. `6.5` for 6.5%). Decima
 {
   "error": "Invalid file format. Please upload .xlsx, .xls, or .csv"
 }
+```
+
+---
+
+## Export Endpoints
+
+### Export Data as CSV
+
+Export the authenticated user's calculations or custom yield data as a CSV file.
+
+**Endpoint:** `GET /api/export`
+
+**Headers:**
+
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+
+- `type` - `calcs` (default) or `data`
+
+**`type=calcs` Response:** CSV file with columns `Date,Species,Conversion,Cost,Yield (%),Result`
+
+**`type=data` Response:** CSV file with columns `Species,Product,Yield (%),Source`
+
+**Success Response (200):** `text/csv` file download
+
+**Error Response (401):**
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+---
+
+## Public Endpoints
+
+### Get Public Calculations
+
+Retrieve the 100 most recent calculations. No authentication required.
+
+**Endpoint:** `GET /api/public-calcs`
+
+**Success Response (200):**
+
+```json
+[
+  {
+    "id": 1,
+    "species": "Sockeye Salmon",
+    "product": "Round → Skinless Fillet",
+    "cost": 8.5,
+    "yield": 46,
+    "result": 18.48,
+    "date": "2024-12-16T10:30:00.000Z"
+  }
+]
+```
+
+---
+
+### Get Contributors
+
+Retrieve opt-in contributor profiles. No authentication required.
+
+**Endpoint:** `GET /api/contributors`
+
+**Success Response (200):**
+
+```json
+[
+  {
+    "id": 1,
+    "user_id": 42,
+    "username": "fisherman_joe",
+    "display_name": "Joe Fisher",
+    "organization": "Pacific Catch Co.",
+    "bio": "20 years of commercial fishing.",
+    "show_on_page": true,
+    "contribution_count": 15
+  }
+]
 ```
 
 ---

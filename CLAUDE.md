@@ -76,7 +76,7 @@ The project has **two separate backend implementations** that serve different en
   - `/` (Home), `/calculator`, `/login`, `/upload`, `/about`, `/submit-request`
   - `/data-sources`, `/manage-data`, `/profile`, `/roadmap`
   - `/handler/*` (Stack Auth handler routes)
-- Fish yield data in `src/data/fish_data_v3.js` — 60+ species with conversion yields from MAB-37 research publication
+- Fish yield data in `src/data/fish_data_v3.js` — 89 species with conversion yields from MAB-37 research publication
 
 ### Data Flow
 1. Fish yield data is static in `fish_data_v3.js` (from MAB-37 PDF research document)
