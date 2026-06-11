@@ -98,6 +98,9 @@ Before deploying, add these environment variables in Vercel:
 |----------|-------|-------|
 | `DATABASE_URL` | Your Neon connection string | From Step 1.1 |
 | `JWT_SECRET` | Your generated secret | From Step 2 (required; API fails fast if missing) |
+| `VITE_STACK_PROJECT_ID` | Stack Auth project ID | Required for frontend OAuth |
+| `VITE_STACK_PUBLISHABLE_CLIENT_KEY` | Stack Auth publishable client key | Required for frontend OAuth |
+| `STACK_SECRET_SERVER_KEY` | Stack Auth server secret key | Required for backend OAuth session verification |
 | `ALLOWED_ORIGINS` | Comma-separated allowlist (e.g. `https://your-app.vercel.app,http://localhost:5173`) | Required for CORS |
 | `CORS_ALLOW_CREDENTIALS` | `true` or `false` | Only enable when you need cookies across origins |
 | `JWT_EXPIRES_IN_SECONDS` | Optional, default `86400` | JWT lifetime (same value should be used locally) |
@@ -116,9 +119,43 @@ Click "Deploy" and Vercel will:
 
 ---
 
-## Step 5: Verify Deployment
+## Step 5: Configure Stack Auth Trusted Domains
 
-### 5.1 Test Public Endpoints
+After deploying to Vercel, register the deployed domain in Stack Auth so OAuth
+redirects can complete.
+
+### 5.1 Add Domains to Stack Auth
+
+1. Log in to https://app.stack-auth.com
+2. Select the project matching `VITE_STACK_PROJECT_ID`.
+3. Open Project Settings -> Domains or Trusted Domains.
+4. Add each domain where users will sign in:
+   - Production Vercel URL, for example `https://your-app.vercel.app`
+   - Custom production domain, if configured
+   - Preview deployment URLs, or a preview wildcard if your Stack Auth project supports it
+5. Save the domain settings.
+
+The callback route in this app is `/handler/*`, but Stack Auth needs the domain
+root in Trusted Domains, not the full callback path.
+
+### 5.2 Clean Up Vercel Integrations
+
+1. Open the Vercel project settings.
+2. Remove the Clerk integration if it is present and unused. This repository
+   does not import Clerk.
+3. Remove stale duplicate Neon integrations after confirming the active Neon
+   integration owns the current database and Stack Auth configuration.
+4. Confirm the remaining integration and environment variables match the
+   intended Stack Auth and Neon projects.
+
+See `AUTH_ARCHITECTURE.md` for the current auth architecture and migration
+options.
+
+---
+
+## Step 6: Verify Deployment
+
+### 6.1 Test Public Endpoints
 
 1. Visit your Vercel URL: `https://your-app.vercel.app`
 2. Test public pages:
@@ -126,7 +163,7 @@ Click "Deploy" and Vercel will:
    - Data Sources page - should load contributors
    - About page
 
-### 5.2 Test Authentication
+### 6.2 Test Authentication
 
 1. Register a new account
 2. Login
@@ -136,13 +173,13 @@ Click "Deploy" and Vercel will:
    - Uploading Excel file (under 4MB for Hobby plan)
    - Exporting data
 
-### 5.3 Check API Logs
+### 6.3 Check API Logs
 
 In Vercel Dashboard → Functions → View logs for any errors
 
 ---
 
-## Step 6: Post-Deployment
+## Step 7: Post-Deployment
 
 ### Update Frontend URL (Optional)
 
@@ -211,6 +248,20 @@ This will:
 - Check browser console for specific error
 - Verify `ALLOWED_ORIGINS` includes your current origin
 - Test with public endpoints first (`/api/contributors`)
+
+### "REDIRECT_URL_NOT_WHITELISTED" error on deployed domain
+
+- The deployed domain has not been added to Stack Auth's Trusted Domains list
+- Go to https://app.stack-auth.com -> Project Settings -> Domains or Trusted Domains
+- Add the Vercel URL or custom domain where users are signing in
+- Save the setting and test OAuth again
+
+### OAuth login fails but password login works
+
+- Confirm Stack Auth Trusted Domains includes the deployed domain
+- Verify `VITE_STACK_PROJECT_ID` and `VITE_STACK_PUBLISHABLE_CLIENT_KEY` are set in Vercel
+- Verify `STACK_SECRET_SERVER_KEY` is set for backend session verification
+- Check Vercel integrations and remove unused Clerk or stale duplicate Neon integrations
 
 ### Cold starts are slow
 
