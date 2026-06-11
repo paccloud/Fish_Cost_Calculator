@@ -40,7 +40,7 @@ const UploadData = () => {
             } else {
                 setStatus({ type: 'error', message: data.error || 'Upload failed.' });
             }
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Network error occurred.' });
         } finally {
             setUploading(false);
