@@ -1,7 +1,19 @@
 #!/usr/bin/env node
 /**
- * Migration script to import SQLite data into Neon PostgreSQL
- * Run with: node scripts/migrate-sqlite-to-neon.js
+ * One-off migration script: copies data from the local SQLite database into
+ * Neon PostgreSQL.  This script is NOT part of the Vercel build — it runs
+ * locally on a developer machine only.
+ *
+ * Prerequisites (install ad-hoc — these are NOT in root package.json to avoid
+ * native-module compilation on every Vercel deploy):
+ *
+ *   npm install --no-save better-sqlite3 pg
+ *
+ * Usage:
+ *   DATABASE_URL=<neon-connection-string> node scripts/migrate-sqlite-to-neon.js
+ *
+ *   Or set DATABASE_URL in app/.env.development and run:
+ *   node scripts/migrate-sqlite-to-neon.js
  */
 
 import Database from 'better-sqlite3';
