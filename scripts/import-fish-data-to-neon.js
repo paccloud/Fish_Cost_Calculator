@@ -1,7 +1,16 @@
 #!/usr/bin/env node
 /**
- * Import script to populate Neon PostgreSQL with fish yield data
- * Run with: node scripts/import-fish-data-to-neon.js
+ * One-off import script: populates Neon PostgreSQL with fish yield data.
+ * This script is NOT part of the Vercel build — it runs locally on a
+ * developer machine only.
+ *
+ * Prerequisites (install ad-hoc — `pg` is NOT in root package.json to avoid
+ * shipping unused deps on every Vercel deploy):
+ *
+ *   npm install --no-save pg
+ *
+ * Usage:
+ *   node scripts/import-fish-data-to-neon.js
  */
 
 import pg from 'pg';
