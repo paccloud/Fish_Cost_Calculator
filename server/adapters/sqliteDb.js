@@ -347,6 +347,211 @@ function makeSqliteAdapter(db) {
         );
       });
     },
+
+    // -----------------------------------------------------------------------
+    // Public methods (no auth)
+    // -----------------------------------------------------------------------
+
+    /**
+     * List recent public calculations (no user_id), ordered by date DESC,
+     * limited to 100 rows.
+     *
+     * @returns {Promise<Array>}
+     */
+    listPublicCalcs() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT id, species, product, cost, yield, result, date
+           FROM calculations
+           ORDER BY date DESC
+           LIMIT 100`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    /**
+     * List all visible contributors joined with username and contribution_count,
+     * ordered by contribution_count DESC.
+     *
+     * @returns {Promise<Array>}
+     */
+    listContributors() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+           FROM contributors c
+           JOIN users u ON c.user_id = u.id
+           LEFT JOIN user_data ud ON c.user_id = ud.user_id
+           WHERE c.show_on_page = 1
+           GROUP BY c.id
+           ORDER BY contribution_count DESC`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    /**
+     * Return the full fish-data payload built from three tables:
+     *   species, fish_yields, species_profiles.
+     *
+     * Note: the local SQLite dev database may not have these tables populated —
+     * in that case each query returns empty rows and getFishData returns empty
+     * objects.  That is correct local behaviour; the production Neon database
+     * holds the imported MAB-37 data.
+     *
+     * @returns {Promise<{fishData: Object, profiles: Object, source: Object}>}
+     */
+    getFishData() {
+      const allRows = (sql) =>
+        new Promise((resolve, reject) => {
+          db.all(sql, [], (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          });
+        });
+
+      return Promise.all([
+        allRows('SELECT id, name, scientific_name, category FROM species ORDER BY category, name'),
+        allRows('SELECT species_id, from_state, to_state, yield_percent, range_min, range_max FROM fish_yields ORDER BY species_id, from_state, to_state'),
+        allRows('SELECT species_id, description, culinary_uses, edible_portions, url FROM species_profiles'),
+      ]).then(([speciesRows, yieldRows, profileRows]) => {
+        const fishData = {};
+        const profiles = {};
+        const speciesMap = {};
+
+        for (const species of speciesRows) {
+          speciesMap[species.id] = species;
+          fishData[species.name] = {
+            scientific_name: species.scientific_name,
+            category: species.category,
+            conversions: {},
+          };
+        }
+
+        for (const yieldRow of yieldRows) {
+          const species = speciesMap[yieldRow.species_id];
+          if (species && fishData[species.name]) {
+            const fromLabel =
+              yieldRow.from_state !== 'Round' &&
+              yieldRow.from_state !== 'Whole' &&
+              yieldRow.from_state !== 'Raw Whole'
+                ? `From ${yieldRow.from_state}: `
+                : '';
+            const label = `${fromLabel}${yieldRow.to_state}`;
+            fishData[species.name].conversions[label] = {
+              yield: parseFloat(yieldRow.yield_percent),
+              range:
+                yieldRow.range_min && yieldRow.range_max
+                  ? [parseFloat(yieldRow.range_min), parseFloat(yieldRow.range_max)]
+                  : null,
+              from: yieldRow.from_state,
+              to: yieldRow.to_state,
+            };
+          }
+        }
+
+        for (const profile of profileRows) {
+          const species = speciesMap[profile.species_id];
+          if (species) {
+            profiles[species.name] = {
+              description: profile.description,
+              culinary_uses: profile.culinary_uses,
+              edible_portions: profile.edible_portions,
+              url: profile.url,
+            };
+          }
+        }
+
+        return {
+          fishData,
+          profiles,
+          source: {
+            title: 'Recoveries and Yields from Pacific Fish and Shellfish',
+            authors: ['Chuck Crapo', 'Brian Paust', 'Jerry Babbitt'],
+            publisher: 'Alaska Sea Grant College Program',
+            publication: 'Marine Advisory Bulletin No. 37',
+            year: 2004,
+          },
+        };
+      });
+    },
+
+    // -----------------------------------------------------------------------
+    // Contributor profile methods (authenticated)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Return the contributor profile row for userId, or null if none exists.
+     *
+     * @param {number|string} userId
+     * @returns {Promise<Object|null>}
+     */
+    getContributorProfile(userId) {
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT * FROM contributors WHERE user_id = ?',
+          [userId],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+    },
+
+    /**
+     * Upsert a contributor profile.  Returns {id, created} where created is
+     * true for an insert, false for an update.
+     *
+     * @param {number|string} userId
+     * @param {{ display_name, organization, bio, show_on_page }} fields
+     * @returns {Promise<{id: number|string, created: boolean}>}
+     */
+    saveContributorProfile(userId, fields) {
+      const { display_name, organization, bio, show_on_page } = fields;
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id FROM contributors WHERE user_id = ?',
+          [userId],
+          (selectErr, existing) => {
+            if (selectErr) return reject(selectErr);
+
+            const now = new Date().toISOString();
+            if (existing) {
+              db.run(
+                `UPDATE contributors
+                 SET display_name = ?, organization = ?, bio = ?, show_on_page = ?, updated_at = ?
+                 WHERE user_id = ?`,
+                [display_name, organization, bio, show_on_page ? 1 : 0, now, userId],
+                (updateErr) => {
+                  if (updateErr) return reject(updateErr);
+                  resolve({ id: existing.id, created: false });
+                }
+              );
+            } else {
+              db.run(
+                `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [userId, display_name, organization, bio, show_on_page ? 1 : 0, now, now],
+                function callback(insertErr) {
+                  if (insertErr) return reject(insertErr);
+                  resolve({ id: this.lastID, created: true });
+                }
+              );
+            }
+          }
+        );
+      });
+    },
   };
 }
 

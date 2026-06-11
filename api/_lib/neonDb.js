@@ -257,5 +257,184 @@ export function makeNeonAdapter() {
       );
       return result.rows;
     },
+
+    // -----------------------------------------------------------------------
+    // Public methods (no auth)
+    // -----------------------------------------------------------------------
+
+    /**
+     * List recent public calculations (no user_id), ordered by date DESC,
+     * limited to 100 rows.
+     *
+     * @returns {Promise<Array>}
+     */
+    async listPublicCalcs() {
+      const result = await query(
+        `SELECT id, species, product, cost, yield, result, date
+         FROM calculations
+         ORDER BY date DESC
+         LIMIT 100`
+      );
+      return result.rows;
+    },
+
+    /**
+     * List all visible contributors joined with username and contribution_count,
+     * ordered by contribution_count DESC.
+     *
+     * @returns {Promise<Array>}
+     */
+    async listContributors() {
+      const result = await query(
+        `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+         FROM contributors c
+         JOIN users u ON c.user_id = u.id
+         LEFT JOIN user_data ud ON c.user_id = ud.user_id
+         WHERE c.show_on_page = true
+         GROUP BY c.id, u.username
+         ORDER BY contribution_count DESC`
+      );
+      return result.rows;
+    },
+
+    /**
+     * Return the full fish-data payload built from three tables:
+     *   species, fish_yields, species_profiles.
+     *
+     * @returns {Promise<{fishData: Object, profiles: Object, source: Object}>}
+     */
+    async getFishData() {
+      const speciesResult = await query(
+        `SELECT id, name, scientific_name, category
+         FROM species
+         ORDER BY category, name`
+      );
+
+      const yieldsResult = await query(
+        `SELECT species_id, from_state, to_state, yield_percent, range_min, range_max
+         FROM fish_yields
+         ORDER BY species_id, from_state, to_state`
+      );
+
+      const profilesResult = await query(
+        `SELECT species_id, description, culinary_uses, edible_portions, url
+         FROM species_profiles`
+      );
+
+      const fishData = {};
+      const profiles = {};
+      const speciesMap = {};
+
+      for (const species of speciesResult.rows) {
+        speciesMap[species.id] = species;
+        fishData[species.name] = {
+          scientific_name: species.scientific_name,
+          category: species.category,
+          conversions: {},
+        };
+      }
+
+      for (const yieldRow of yieldsResult.rows) {
+        const species = speciesMap[yieldRow.species_id];
+        if (species && fishData[species.name]) {
+          const fromLabel =
+            yieldRow.from_state !== 'Round' &&
+            yieldRow.from_state !== 'Whole' &&
+            yieldRow.from_state !== 'Raw Whole'
+              ? `From ${yieldRow.from_state}: `
+              : '';
+          const label = `${fromLabel}${yieldRow.to_state}`;
+          fishData[species.name].conversions[label] = {
+            yield: parseFloat(yieldRow.yield_percent),
+            range:
+              yieldRow.range_min && yieldRow.range_max
+                ? [parseFloat(yieldRow.range_min), parseFloat(yieldRow.range_max)]
+                : null,
+            from: yieldRow.from_state,
+            to: yieldRow.to_state,
+          };
+        }
+      }
+
+      for (const profile of profilesResult.rows) {
+        const species = speciesMap[profile.species_id];
+        if (species) {
+          profiles[species.name] = {
+            description: profile.description,
+            culinary_uses: profile.culinary_uses,
+            edible_portions: profile.edible_portions,
+            url: profile.url,
+          };
+        }
+      }
+
+      return {
+        fishData,
+        profiles,
+        source: {
+          title: 'Recoveries and Yields from Pacific Fish and Shellfish',
+          authors: ['Chuck Crapo', 'Brian Paust', 'Jerry Babbitt'],
+          publisher: 'Alaska Sea Grant College Program',
+          publication: 'Marine Advisory Bulletin No. 37',
+          year: 2004,
+        },
+      };
+    },
+
+    // -----------------------------------------------------------------------
+    // Contributor profile methods (authenticated)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Return the contributor profile row for userId, or null if none exists.
+     *
+     * @param {string|number} userId
+     * @returns {Promise<Object|null>}
+     */
+    async getContributorProfile(userId) {
+      const result = await query(
+        'SELECT * FROM contributors WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    /**
+     * Upsert a contributor profile.  Returns {id, created} where created is
+     * true for an insert, false for an update.
+     *
+     * @param {string|number} userId
+     * @param {{ display_name, organization, bio, show_on_page }} fields
+     * @returns {Promise<{id: string|number, created: boolean}>}
+     */
+    async saveContributorProfile(userId, fields) {
+      const { display_name, organization, bio, show_on_page } = fields;
+      const existing = await query(
+        'SELECT id FROM contributors WHERE user_id = $1',
+        [userId]
+      );
+
+      if (existing.rows[0]) {
+        await query(
+          `UPDATE contributors
+           SET display_name = $1,
+               organization = $2,
+               bio = $3,
+               show_on_page = $4,
+               updated_at = NOW()
+           WHERE user_id = $5`,
+          [display_name, organization, bio, show_on_page, userId]
+        );
+        return { id: existing.rows[0].id, created: false };
+      } else {
+        const result = await query(
+          `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+           RETURNING id`,
+          [userId, display_name, organization, bio, show_on_page]
+        );
+        return { id: result.rows[0].id, created: true };
+      }
+    },
   };
 }

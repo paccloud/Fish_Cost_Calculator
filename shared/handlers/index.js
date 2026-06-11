@@ -18,3 +18,10 @@ export {
 } from './userData.js';
 export { handleUploadData } from './uploadData.js';
 export { handleExport, sanitizeCsvValue } from './export.js';
+export { handlePublicCalcs } from './publicCalcs.js';
+export { handleFishData } from './fishData.js';
+export {
+  handleListContributors,
+  handleGetContributor,
+  handleSaveContributor,
+} from './contributors.js';

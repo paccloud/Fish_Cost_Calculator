@@ -1,28 +1,28 @@
-import { query } from './_lib/db.js';
+/**
+ * Vercel serverless adapter for the contributors list endpoint.
+ *
+ * Delegates all business logic to the transport-agnostic handler core
+ * (shared/handlers/contributors.js) and the Neon data-layer adapter.
+ * This file is responsible only for:
+ *   - CORS wrapping
+ *   - Method guard
+ *   - Mapping the Vercel req/res shape into and out of the handler envelope
+ *
+ * @module api/contributors
+ */
+
 import { handleCors } from './_lib/cors.js';
+import { handleListContributors } from '../shared/handlers/index.js';
+import { makeNeonAdapter } from './_lib/neonDb.js';
 
 async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    // Public endpoint - get all visible contributors with contribution count
-    const result = await query(
-      `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
-       FROM contributors c
-       JOIN users u ON c.user_id = u.id
-       LEFT JOIN user_data ud ON c.user_id = ud.user_id
-       WHERE c.show_on_page = true
-       GROUP BY c.id, u.username
-       ORDER BY contribution_count DESC`
-    );
-
-    return res.status(200).json(result.rows);
-  } catch (err) {
-    console.error('Fetch contributors error:', err);
-    return res.status(500).json({ error: 'Failed to fetch contributors' });
-  }
+  const db = makeNeonAdapter();
+  const { status, body } = await handleListContributors({}, db);
+  return res.status(status).json(body);
 }
 
 export default handleCors(handler);

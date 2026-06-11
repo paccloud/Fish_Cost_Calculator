@@ -82,6 +82,25 @@
  * @property {function(string|number): Promise<DbCalc[]>} listCalcsForExport
  *   Return all calculation rows for the given userId ordered by date DESC
  *   (for CSV export).
+ *
+ * @property {function(): Promise<DbCalc[]>} listPublicCalcs
+ *   Return recent calculations without user_id, ordered by date DESC, limited
+ *   to 100 rows.  No auth required — caller passes no userId.
+ *
+ * @property {function(): Promise<DbContributor[]>} listContributors
+ *   Return all contributor rows where show_on_page is true, joined with
+ *   username and contribution_count, ordered by contribution_count DESC.
+ *
+ * @property {function(): Promise<{fishData: Object, profiles: Object, source: Object}>} getFishData
+ *   Return the full fish-data payload: species keyed by name (with conversions),
+ *   profiles keyed by name, and the MAB-37 source citation object.
+ *
+ * @property {function(string|number): Promise<DbContributor|null>} getContributorProfile
+ *   Return the contributor row for userId, or null if none exists.
+ *
+ * @property {function(string|number, {display_name, organization, bio, show_on_page}): Promise<{id: string|number, created: boolean}>} saveContributorProfile
+ *   Upsert a contributor profile for userId.
+ *   Returns {id, created: true} on insert, {id, created: false} on update.
  */
 
 /**
@@ -92,6 +111,18 @@
  * @property {string}        product
  * @property {number}        yield
  * @property {string}        [source]
+ */
+
+/**
+ * @typedef {Object} DbContributor
+ * @property {number|string} id
+ * @property {number|string} user_id
+ * @property {string}        [display_name]
+ * @property {string}        [organization]
+ * @property {string}        [bio]
+ * @property {boolean|number} show_on_page
+ * @property {string}        [created_at]
+ * @property {string}        [updated_at]
  */
 
 /**

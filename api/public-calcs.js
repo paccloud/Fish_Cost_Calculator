@@ -1,31 +1,28 @@
-import { query } from './_lib/db.js';
-import { handleCors } from './_lib/cors.js';
-
 /**
- * Public endpoint to get all saved calculations
- * No authentication required - for guest access
- * GET /api/public-calcs
+ * Vercel serverless adapter for the public-calcs endpoint.
+ *
+ * Delegates all business logic to the transport-agnostic handler core
+ * (shared/handlers/publicCalcs.js) and the Neon data-layer adapter.
+ * This file is responsible only for:
+ *   - CORS wrapping
+ *   - Method guard
+ *   - Mapping the Vercel req/res shape into and out of the handler envelope
+ *
+ * @module api/public-calcs
  */
+
+import { handleCors } from './_lib/cors.js';
+import { handlePublicCalcs } from '../shared/handlers/index.js';
+import { makeNeonAdapter } from './_lib/neonDb.js';
+
 async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  try {
-    // Get all calculations, excluding user_id for privacy
-    // Order by date descending, limit to 100 for performance
-    const result = await query(
-      `SELECT id, species, product, cost, yield, result, date
-       FROM calculations
-       ORDER BY date DESC
-       LIMIT 100`
-    );
-
-    return res.status(200).json(result.rows);
-  } catch (err) {
-    console.error('Fetch public calculations error:', err);
-    return res.status(500).json({ error: 'Failed to fetch calculations' });
-  }
+  const db = makeNeonAdapter();
+  const { status, body } = await handlePublicCalcs({}, db);
+  return res.status(status).json(body);
 }
 
 export default handleCors(handler);
