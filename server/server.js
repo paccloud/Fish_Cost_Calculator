@@ -143,18 +143,16 @@ const authenticate = (req, res, next) => {
 
 // Routes
 
-// Register
+// Register — delegates to shared handler core (shared/handlers/register.js).
+// Dynamic import() bridges the CJS server to the ESM handler core without
+// converting server.js to ESM.  The import resolves once and is cached by
+// Node's module registry on subsequent requests.
+const { makeSqliteAdapter } = require('./adapters/sqliteDb');
 app.post('/api/register', async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function(err) {
-            if (err) return res.status(400).json({ error: 'User already exists' });
-            res.status(201).json({ id: this.lastID, username });
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    const { handleRegister } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleRegister(req.body ?? {}, dbAdapter);
+    return res.status(status).json(body);
 });
 
 // Login
