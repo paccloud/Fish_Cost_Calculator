@@ -99,14 +99,18 @@ export function DataProvider({ children }) {
   // Sync on mount if online + logged in
   useEffect(() => {
     if (dataLoaded && user && navigator.onLine) {
-      triggerSync();
+      // Schedule outside the synchronous effect body to avoid cascading renders
+      const id = setTimeout(() => { triggerSync(); }, 0);
+      return () => clearTimeout(id);
     }
   }, [dataLoaded, user, triggerSync]);
 
   // Sync when coming back online
   useEffect(() => {
     if (isOnline && user && dataLoaded) {
-      triggerSync();
+      // Schedule outside the synchronous effect body to avoid cascading renders
+      const id = setTimeout(() => { triggerSync(); }, 0);
+      return () => clearTimeout(id);
     }
   }, [isOnline, user, dataLoaded, triggerSync]);
 

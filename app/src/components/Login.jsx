@@ -53,7 +53,7 @@ const Login = () => {
     try {
       await signInWithOAuth(provider);
       // OAuth will redirect, so we don't need to navigate here
-    } catch (e) {
+    } catch {
       setError(`Failed to sign in with ${provider}`);
       setOauthLoading(null);
     }

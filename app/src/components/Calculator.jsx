@@ -139,7 +139,7 @@ const TextWithTooltips = ({ text }) => {
 
 const Calculator = () => {
   const { user } = useAuth();
-  const { savedCalcs, customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, removeCalc, addYield: contextAddYield, dataLoaded, updateCustomSpecies } = useData();
+  const { customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, addYield: contextAddYield, updateCustomSpecies } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -149,8 +149,8 @@ const Calculator = () => {
   const [yieldPercent, setYieldPercent] = useState('');
   const [yieldRange, setYieldRange] = useState(null);
   const [processingCost, setProcessingCost] = useState('');
-  const [coldStorage, setColdStorage] = useState('');
-  const [shipping, setShipping] = useState('');
+  const [coldStorage] = useState('');
+  const [shipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
   const [result, setResult] = useState(null);
   const [saveStatus, setSaveStatus] = useState('');
@@ -542,7 +542,7 @@ const Calculator = () => {
         date: new Date().toISOString()
       });
       setSaveStatus('Saved to History!');
-    } catch (e) {
+    } catch {
       setSaveStatus('Error saving.');
     }
   };
