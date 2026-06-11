@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 import { getAuthHeaders } from '../lib/authHeaders';
+import { calculate as calcEngine } from '../lib/calcEngine';
 
 // Process FISH_DATA_V3 into the format expected by the calculator
 // (same shape as the API response: numeric yield, array range, from/to strings)
@@ -461,68 +462,23 @@ const Calculator = () => {
   }, [useRangeMin, useRangeMax, yieldRange, currentConversion]);
 
   const calculate = () => {
-    const y = (parseFloat(yieldPercent) || 100) / 100;
-
-    if (mode === 'weight') {
-      const target = parseFloat(targetWeight) || 0;
-      if (y > 0) {
-        setResult(target / y);
-      } else {
-        setResult(0);
-      }
-      setSaveStatus('');
-      setAppliedDiscount(0);
-      return;
-    }
-
-    const c = parseFloat(cost) || 0;
-    const proc = parseFloat(processingCost) || 0;
-    const cold = parseFloat(coldStorage) || 0;
-    const ship = parseFloat(shipping) || 0;
-
-    let baseRes = c / y;
-    
-    if (weightType === 'incoming') {
-      baseRes += proc / y;
-    } else {
-      baseRes += proc;
-    }
-
-    baseRes += cold + ship;
-
-    // Add time-based costs if enabled
-    if (showTimeTracking) {
-      let totalTimeCost = 0;
-      processingSteps.forEach(step => {
-        const time = parseFloat(step.timeMinutes) || 0;
-        const laborRate = parseFloat(step.laborCostPerHour) || 0;
-        // Convert minutes to hours and calculate cost
-        totalTimeCost += (time / 60) * laborRate;
-      });
-      // Add time cost per pound (assuming time is per unit processed)
-      baseRes += totalTimeCost;
-    }
-
-    // Apply economy of scale discount if enabled
-    let discount = 0;
-    if (showEconomyOfScale && quantity) {
-      const qty = parseFloat(quantity) || 0;
-      // Find the highest applicable discount
-      const sortedBreaks = [...priceBreaks].sort((a, b) => b.minQty - a.minQty);
-      for (const pb of sortedBreaks) {
-        if (qty >= pb.minQty) {
-          discount = pb.discount;
-          break;
-        }
-      }
-    }
-    setAppliedDiscount(discount);
-    
-    if (discount > 0) {
-      baseRes = baseRes * (1 - discount / 100);
-    }
-
-    setResult(baseRes);
+    const { result: calcResult, appliedDiscount: calcDiscount } = calcEngine({
+      mode,
+      yieldPercent,
+      targetWeight,
+      cost,
+      processingCost,
+      weightType,
+      coldStorage,
+      shipping,
+      showTimeTracking,
+      processingSteps,
+      showEconomyOfScale,
+      quantity,
+      priceBreaks,
+    });
+    setResult(calcResult);
+    setAppliedDiscount(calcDiscount);
     setSaveStatus('');
   };
 
