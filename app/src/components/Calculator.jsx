@@ -1201,7 +1201,8 @@ const Calculator = () => {
                               credentials: 'include',
                             });
                             if (!response.ok) {
-                              throw new Error(`Export failed with HTTP ${response.status}`);
+                              const message = await response.text();
+                              throw new Error(message || `Export failed with status ${response.status}`);
                             }
                             const blob = await response.blob();
                             const url = window.URL.createObjectURL(blob);
@@ -1212,8 +1213,10 @@ const Calculator = () => {
                             a.click();
                             window.URL.revokeObjectURL(url);
                             document.body.removeChild(a);
+                            setSaveStatus('Export downloaded.');
                           } catch (error) {
                             console.error('Export failed:', error);
+                            setSaveStatus('Export failed.');
                           }
                         }}
                         className="flex items-center gap-2 text-text-secondary hover:text-navy dark:hover:text-text-primary transition text-sm"

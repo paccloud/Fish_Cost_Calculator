@@ -85,7 +85,7 @@ export function DataProvider({ children }) {
       setSyncError('network');
       setSyncStatus('error');
     }
-  }, []);
+  }, [user]);
 
   const debouncedSync = useCallback(() => {
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);

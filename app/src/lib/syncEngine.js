@@ -34,10 +34,8 @@ export async function syncAll() {
           name: calc.name || '',
           species: calc.species,
           product: calc.product,
-          mode: calc.mode,
           cost: calc.cost,
-          target_weight: calc.target_weight,
-          yield_value: calc.yield,
+          yield: calc.yield,
           result: calc.result,
         }),
       });
@@ -93,7 +91,7 @@ export async function syncAll() {
         body: JSON.stringify({
           species: yld.species,
           product: yld.product,
-          yield_percentage: yld.yield,
+          yield: yld.yield,
           source: yld.source || 'User Input',
         }),
       });
