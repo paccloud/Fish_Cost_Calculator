@@ -3,7 +3,6 @@ import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Clock, TrendingDown, ChevronDown, ChevronUp, Share2, Link2, Copy, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { apiUrl } from '../config/api';
 import { calculate as calcEngine } from '../lib/calcEngine';
 import { apiClient } from '../lib/apiClient';
 import { mergeFishData } from '../lib/fishDataMerge';
@@ -218,8 +217,7 @@ const Calculator = () => {
 
   // Load public calculations for all users (including guests)
   useEffect(() => {
-    fetch(apiUrl('/api/public-calcs'))
-      .then(res => res.json())
+    apiClient.publicCalcs()
       .then(data => {
         if (Array.isArray(data)) {
           setPublicHistory(data);

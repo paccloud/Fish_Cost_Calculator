@@ -23,22 +23,64 @@ vi.mock('./authHeaders', () => ({
   hasAuthCredential: vi.fn(),
 }));
 
+// Mock apiClient so tests control HTTP responses without a live network.
+// Each *Raw method returns a fake Response; the non-raw methods aren't used
+// by syncEngine so they're left as no-ops.
+vi.mock('./apiClient', () => {
+  const saveCalcRaw = vi.fn();
+  const deleteCalcRaw = vi.fn();
+  const createUserDataRaw = vi.fn();
+  const deleteUserDataRaw = vi.fn();
+  const listSavedCalcsRaw = vi.fn();
+  const listUserDataRaw = vi.fn();
+  return {
+    apiClient: {
+      saveCalcRaw,
+      deleteCalcRaw,
+      createUserDataRaw,
+      deleteUserDataRaw,
+      listSavedCalcsRaw,
+      listUserDataRaw,
+    },
+  };
+});
+
+import { apiClient } from './apiClient';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Build a fake Response-like object (same helper style as apiClient.test.js). */
+function fakeResponse({ ok, status, body }) {
+  return {
+    ok,
+    status,
+    json: async () => body,
+    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+    headers: { get: () => null },
+  };
+}
+
 const passwordUser = { username: 'processor', authProvider: 'password' };
+const AUTH_HEADERS = {
+  'Content-Type': 'application/json',
+  Authorization: 'Bearer jwt-token',
+};
 
 describe('syncAll', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasAuthCredential.mockReturnValue(true);
-    getAuthHeaders.mockResolvedValue({
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer jwt-token',
-    });
-    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
-      if (options.method === 'POST') {
-        return Response.json({ id: 'server-id' }, { status: 201 });
-      }
-      return Response.json([], { status: 200 });
-    }));
+    getAuthHeaders.mockResolvedValue(AUTH_HEADERS);
+
+    // Default: push succeeds with id, pull returns empty arrays
+    apiClient.saveCalcRaw.mockResolvedValue(fakeResponse({ ok: true, status: 201, body: { id: 'server-id' } }));
+    apiClient.deleteCalcRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: {} }));
+    apiClient.createUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 201, body: { id: 'server-id' } }));
+    apiClient.deleteUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: {} }));
+    apiClient.listSavedCalcsRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: [] }));
+    apiClient.listUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: [] }));
   });
 
   it('sends saved calculations with the yield field the server accepts', async () => {
@@ -62,15 +104,14 @@ describe('syncAll', () => {
 
     await syncAll(passwordUser);
 
-    const saveRequest = fetch.mock.calls.find(([url]) => url === '/api/save-calc');
-    expect(saveRequest).toBeDefined();
-    const requestBody = JSON.parse(saveRequest[1].body);
-    expect(requestBody).toMatchObject({
+    expect(apiClient.saveCalcRaw).toHaveBeenCalledTimes(1);
+    const [body] = apiClient.saveCalcRaw.mock.calls[0];
+    expect(body).toMatchObject({
       species: 'Pacific Cod',
       product: 'Round → Skinless Fillets',
       yield: 42,
     });
-    expect(requestBody).not.toHaveProperty('yield_value');
+    expect(body).not.toHaveProperty('yield_value');
     expect(markCalcSynced).toHaveBeenCalledWith('local-calc-id', 'server-id');
   });
 
@@ -95,11 +136,10 @@ describe('syncAll', () => {
 
     await syncAll(passwordUser);
 
-    const saveRequest = fetch.mock.calls.find(([url]) => url === '/api/save-calc');
-    expect(saveRequest).toBeDefined();
-    const requestBody = JSON.parse(saveRequest[1].body);
-    expect(requestBody).not.toHaveProperty('mode');
-    expect(requestBody).not.toHaveProperty('target_weight');
+    expect(apiClient.saveCalcRaw).toHaveBeenCalledTimes(1);
+    const [body] = apiClient.saveCalcRaw.mock.calls[0];
+    expect(body).not.toHaveProperty('mode');
+    expect(body).not.toHaveProperty('target_weight');
   });
 
   it('sends custom yields with the yield field the server accepts', async () => {
@@ -119,16 +159,15 @@ describe('syncAll', () => {
 
     await syncAll(passwordUser);
 
-    const userDataRequest = fetch.mock.calls.find(([url]) => url === '/api/user-data');
-    expect(userDataRequest).toBeDefined();
-    const requestBody = JSON.parse(userDataRequest[1].body);
-    expect(requestBody).toMatchObject({
+    expect(apiClient.createUserDataRaw).toHaveBeenCalledTimes(1);
+    const [body] = apiClient.createUserDataRaw.mock.calls[0];
+    expect(body).toMatchObject({
       species: 'Pacific Halibut',
       product: 'Round → Skinless Fillet',
       yield: 48,
       source: 'User Input',
     });
-    expect(requestBody).not.toHaveProperty('yield_percentage');
+    expect(body).not.toHaveProperty('yield_percentage');
     expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id');
   });
 
@@ -163,10 +202,11 @@ describe('syncAll', () => {
 
   it('uses shared auth headers so OAuth sessions can sync without a JWT', async () => {
     const oauthUser = { username: 'oauth-user', authProvider: 'oauth' };
-    getAuthHeaders.mockResolvedValue({
+    const oauthHeaders = {
       'Content-Type': 'application/json',
       'x-stack-access-token': 'stack-token',
-    });
+    };
+    getAuthHeaders.mockResolvedValue(oauthHeaders);
     getAllPendingSync.mockResolvedValue({
       calcs: [
         {
@@ -183,9 +223,10 @@ describe('syncAll', () => {
 
     await syncAll(oauthUser);
 
-    const saveRequest = fetch.mock.calls.find(([url]) => url === '/api/save-calc');
     expect(getAuthHeaders).toHaveBeenCalledWith(oauthUser, { 'Content-Type': 'application/json' });
-    expect(saveRequest[1].headers).toMatchObject({
+    // extraHeaders passed to saveCalcRaw must include the OAuth token
+    const [, extraHeaders] = apiClient.saveCalcRaw.mock.calls[0];
+    expect(extraHeaders).toMatchObject({
       'Content-Type': 'application/json',
       'x-stack-access-token': 'stack-token',
     });
@@ -205,12 +246,9 @@ describe('syncAll', () => {
       ],
       yields: [],
     });
-    vi.stubGlobal('fetch', vi.fn(async (url, options = {}) => {
-      if (options.method === 'POST') {
-        return Response.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-      return Response.json([], { status: 200 });
-    }));
+    apiClient.saveCalcRaw.mockResolvedValue(
+      fakeResponse({ ok: false, status: 401, body: { error: 'Unauthorized' } })
+    );
 
     const stats = await syncAll(passwordUser);
 
@@ -253,38 +291,26 @@ describe('syncAll', () => {
         },
       ],
     });
-    expect(fetch).not.toHaveBeenCalled();
+    expect(apiClient.saveCalcRaw).not.toHaveBeenCalled();
     expect(markCalcSynced).not.toHaveBeenCalled();
     expect(markYieldSynced).not.toHaveBeenCalled();
   });
 
   it('passes pulled custom yields with the server yield field intact', async () => {
     getAllPendingSync.mockResolvedValue({ calcs: [], yields: [] });
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
-      if (url === '/api/user-data') {
-        return Response.json([
-          {
-            id: 12,
-            species: 'Pacific Halibut',
-            product: 'Round → Skinless Fillet',
-            yield: 48,
-            source: 'User Input',
-          },
-        ]);
-      }
-      return Response.json([]);
-    }));
+    const yieldRow = {
+      id: 12,
+      species: 'Pacific Halibut',
+      product: 'Round → Skinless Fillet',
+      yield: 48,
+      source: 'User Input',
+    };
+    apiClient.listUserDataRaw.mockResolvedValue(
+      fakeResponse({ ok: true, status: 200, body: [yieldRow] })
+    );
 
     await syncAll(passwordUser);
 
-    expect(mergeSyncedYields).toHaveBeenCalledWith([
-      {
-        id: 12,
-        species: 'Pacific Halibut',
-        product: 'Round → Skinless Fillet',
-        yield: 48,
-        source: 'User Input',
-      },
-    ]);
+    expect(mergeSyncedYields).toHaveBeenCalledWith([yieldRow]);
   });
 });
