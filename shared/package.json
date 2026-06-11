@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Transport-agnostic handler core for Fish Cost Calculator",
   "dependencies": {
-    "bcrypt": "^6.0.0"
+    "bcrypt": "^6.0.0",
+    "jsonwebtoken": "^9.0.0"
   }
 }

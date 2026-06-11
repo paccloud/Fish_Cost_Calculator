@@ -155,45 +155,46 @@ app.post('/api/register', async (req, res) => {
     return res.status(status).json(body);
 });
 
-// Login
-app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-        if (err || !user) return res.status(401).json({ error: 'Invalid credentials' });
-        
-        const match = await bcrypt.compare(password, user.password);
-        if (match) {
-            const token = jwt.sign(
-                { id: user.id, username: user.username },
-                SECRET_KEY,
-                { expiresIn: `${TOKEN_EXPIRY_SECONDS}s` }
-            );
-            res.json({ token, username: user.username, expiresIn: TOKEN_EXPIRY_SECONDS });
-        } else {
-            res.status(401).json({ error: 'Invalid credentials' });
-        }
-    });
-});
-
-// Save Calculation
-app.post('/api/save-calc', authenticate, (req, res) => {
-    const { name, species, product, cost, yield: yieldPercent, result } = req.body;
-    const date = new Date().toISOString();
-    db.run('INSERT INTO calculations (user_id, name, species, product, cost, yield, result, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [req.user.id, name, species, product, cost, yieldPercent, result, date], 
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID, message: 'Calculation saved successfully' });
-        }
+// Login — delegates to shared handler core (shared/handlers/login.js).
+app.post('/api/login', async (req, res) => {
+    const { handleLogin } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleLogin(
+        req.body ?? {},
+        dbAdapter,
+        { jwtSecret: SECRET_KEY, tokenExpirySeconds: TOKEN_EXPIRY_SECONDS }
     );
+    return res.status(status).json(body);
 });
 
-// Get Calculations
-app.get('/api/saved-calcs', authenticate, (req, res) => {
-    db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// Save Calculation — delegates to shared handler core.
+app.post('/api/save-calc', authenticate, async (req, res) => {
+    const { handleSaveCalc } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSaveCalc(
+        { userId: req.user.id, ...req.body },
+        dbAdapter
+    );
+    return res.status(status).json(body);
+});
+
+// List Calculations — delegates to shared handler core.
+app.get('/api/saved-calcs', authenticate, async (req, res) => {
+    const { handleListSavedCalcs } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListSavedCalcs({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
+});
+
+// Delete Calculation — delegates to shared handler core.
+app.delete('/api/saved-calcs/:id', authenticate, async (req, res) => {
+    const { handleDeleteCalc } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleDeleteCalc(
+        { userId: req.user.id, id: req.params.id },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
 // Upload Data (XLSX/CSV)
