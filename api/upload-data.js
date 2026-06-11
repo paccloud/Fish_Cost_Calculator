@@ -65,8 +65,11 @@ async function handler(req, res) {
     return res.status(status).json(body);
   } catch (err) {
     console.error('Upload error:', err);
-    const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;
-    return res.status(status).json({ error: err.message || 'Failed to process file' });
+    const isValidation = /unsupported file|parse csv|no valid|too many rows/i.test(err.message || '');
+    const status = isValidation ? 400 : 500;
+    // Never echo raw internal messages to the client — only user-safe messages.
+    const safeMessage = isValidation ? (err.message || 'Invalid file') : 'Failed to process file';
+    return res.status(status).json({ error: safeMessage });
   } finally {
     if (uploadedFilePath) await fs.unlink(uploadedFilePath).catch(() => {});
   }
