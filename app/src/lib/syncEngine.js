@@ -1,5 +1,5 @@
-import { apiUrl } from '../config/api';
 import { getAuthHeaders, hasAuthCredential } from './authHeaders';
+import { apiClient } from './apiClient';
 import {
   getAllPendingSync,
   markCalcSynced,
@@ -36,18 +36,14 @@ export async function syncAll(user) {
   // Push new/updated calcs
   for (const calc of pending.calcs.filter((c) => c.syncStatus === 'local')) {
     try {
-      const res = await fetch(apiUrl('/api/save-calc'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: calc.name || '',
-          species: calc.species,
-          product: calc.product,
-          cost: calc.cost,
-          yield: calc.yield,
-          result: calc.result,
-        }),
-      });
+      const res = await apiClient.saveCalcRaw({
+        name: calc.name || '',
+        species: calc.species,
+        product: calc.product,
+        cost: calc.cost,
+        yield: calc.yield,
+        result: calc.result,
+      }, headers);
       if (res.ok) {
         const data = await res.json();
         await markCalcSynced(calc.id, data.id);
@@ -67,10 +63,7 @@ export async function syncAll(user) {
   for (const calc of pending.calcs.filter((c) => c.syncStatus === 'pending-delete')) {
     try {
       if (calc.serverId) {
-        const res = await fetch(apiUrl(`/api/saved-calcs/${calc.serverId}`), {
-          method: 'DELETE',
-          headers,
-        });
+        const res = await apiClient.deleteCalcRaw(calc.serverId, headers);
         if (res.ok || res.status === 404) {
           await removeCalcSyncedDelete(calc.id);
           stats.pushed++;
@@ -92,16 +85,12 @@ export async function syncAll(user) {
   // Push new/updated yields
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'local')) {
     try {
-      const res = await fetch(apiUrl('/api/user-data'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          species: yld.species,
-          product: yld.product,
-          yield: yld.yield,
-          source: yld.source || 'User Input',
-        }),
-      });
+      const res = await apiClient.createUserDataRaw({
+        species: yld.species,
+        product: yld.product,
+        yield: yld.yield,
+        source: yld.source || 'User Input',
+      }, headers);
       if (res.ok) {
         const data = await res.json();
         await markYieldSynced(yld.id, data.id);
@@ -121,10 +110,7 @@ export async function syncAll(user) {
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'pending-delete')) {
     try {
       if (yld.serverId) {
-        const res = await fetch(apiUrl(`/api/user-data/${yld.serverId}`), {
-          method: 'DELETE',
-          headers,
-        });
+        const res = await apiClient.deleteUserDataRaw(yld.serverId, headers);
         if (res.ok || res.status === 404) {
           await removeYieldSyncedDelete(yld.id);
           stats.pushed++;
@@ -145,7 +131,7 @@ export async function syncAll(user) {
 
   // --- Pull server data ---
   try {
-    const res = await fetch(apiUrl('/api/saved-calcs'), { headers });
+    const res = await apiClient.listSavedCalcsRaw(headers);
     if (res.ok) {
       const serverCalcs = await res.json();
       if (Array.isArray(serverCalcs)) {
@@ -158,7 +144,7 @@ export async function syncAll(user) {
   }
 
   try {
-    const res = await fetch(apiUrl('/api/user-data'), { headers });
+    const res = await apiClient.listUserDataRaw(headers);
     if (res.ok) {
       const serverYields = await res.json();
       if (Array.isArray(serverYields)) {
