@@ -4,6 +4,8 @@
   "outputDirectory": "app/dist",
   "installCommand": "npm install && cd app && npm install",
   "rewrites": [
+    { "source": "/api/save-calc", "destination": "/api/saved-calcs" },
+    { "source": "/api/saved-calcs/:id", "destination": "/api/saved-calcs?id=:id" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
