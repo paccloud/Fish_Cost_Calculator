@@ -315,69 +315,58 @@ app.get('/api/export', authenticate, async (req, res) => {
     return res.status(result.status).json(result.body);
 });
 
-// Get all visible contributors (public)
-app.get('/api/contributors', (req, res) => {
-    const query = `
-        SELECT c.*, u.username, COUNT(ud.id) as contribution_count
-        FROM contributors c
-        JOIN users u ON c.user_id = u.id
-        LEFT JOIN user_data ud ON c.user_id = ud.user_id
-        WHERE c.show_on_page = 1
-        GROUP BY c.id
-        ORDER BY contribution_count DESC
-    `;
-    db.all(query, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// Public calculations — delegates to shared handler core.
+// GET /api/public-calcs — unauthenticated, returns recent calcs without user_id
+app.get('/api/public-calcs', async (req, res) => {
+    const { handlePublicCalcs } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handlePublicCalcs({}, dbAdapter);
+    return res.status(status).json(body);
 });
 
-const getCurrentContributorProfile = (req, res) => {
-    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Profile not found' });
-        res.json(row);
-    });
-};
+// Fish data — delegates to shared handler core.
+// GET /api/fish-data — unauthenticated, returns species/yields/profiles from DB
+app.get('/api/fish-data', async (req, res) => {
+    const { handleFishData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleFishData({}, dbAdapter);
+    return res.status(status).json(body);
+});
 
-// Get current user's contributor profile
-app.get('/api/contributor', authenticate, getCurrentContributorProfile);
-app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
+// Contributors — delegates to shared handler core.
+// GET /api/contributors — unauthenticated, returns visible contributors
+app.get('/api/contributors', async (req, res) => {
+    const { handleListContributors } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListContributors({}, dbAdapter);
+    return res.status(status).json(body);
+});
 
-// Create or update contributor profile
-app.post('/api/contributor', authenticate, (req, res) => {
-    const { display_name, organization, bio, show_on_page } = req.body;
-    const now = new Date().toISOString();
+// Contributor profile — delegates to shared handler core.
+// GET /api/contributor — authenticated, returns current user's profile
+// GET /api/contributor/me — alias
+app.get('/api/contributor', authenticate, async (req, res) => {
+    const { handleGetContributor } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleGetContributor({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
+});
+app.get('/api/contributor/me', authenticate, async (req, res) => {
+    const { handleGetContributor } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleGetContributor({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
+});
 
-    // Check if profile exists
-    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        if (row) {
-            // Update existing profile
-            db.run(
-                `UPDATE contributors
-                 SET display_name = ?, organization = ?, bio = ?, show_on_page = ?, updated_at = ?
-                 WHERE user_id = ?`,
-                [display_name, organization, bio, show_on_page ? 1 : 0, now, req.user.id],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'Profile updated successfully' });
-                }
-            );
-        } else {
-            // Create new profile
-            db.run(
-                `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [req.user.id, display_name, organization, bio, show_on_page ? 1 : 0, now, now],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ id: this.lastID, message: 'Profile created successfully' });
-                }
-            );
-        }
-    });
+// POST /api/contributor — authenticated, create or update contributor profile
+app.post('/api/contributor', authenticate, async (req, res) => {
+    const { handleSaveContributor } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSaveContributor(
+        { userId: req.user.id, ...req.body },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
 app.listen(PORT, () => {
