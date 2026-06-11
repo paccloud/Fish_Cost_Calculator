@@ -1,9 +1,9 @@
 import formidable from 'formidable';
-import ExcelJS from 'exceljs';
 import { promises as fs } from 'fs';
 import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
+import { assertAllowedImportFile, normalizeYieldRows, parseImportRows } from './_lib/importRows.js';
 
 // Disable default body parser for multipart form data
 export const config = {
@@ -25,6 +25,8 @@ async function handler(req, res) {
     keepExtensions: true,
   });
 
+  let uploadedFilePath;
+
   try {
     // Parse multipart form
     const [fields, files] = await new Promise((resolve, reject) => {
@@ -38,66 +40,55 @@ async function handler(req, res) {
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    uploadedFilePath = file.filepath;
 
-    // Read file buffer
+    const extension = assertAllowedImportFile(file);
     const buffer = await fs.readFile(file.filepath);
+    const data = await parseImportRows(buffer, extension);
+    const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-    // Parse Excel/CSV file
-    const workbook = new ExcelJS.Workbook();
-    const ext = (file.originalFilename || '').split('.').pop()?.toLowerCase();
-    if (ext === 'csv') {
-      await workbook.csv.read(new (await import('stream')).Readable({
-        read() { this.push(buffer); this.push(null); }
-      }));
-    } else {
-      await workbook.xlsx.load(buffer);
-    }
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) throw new Error('No worksheet found');
-    const headers = [];
-    worksheet.getRow(1).eachCell((cell, colNumber) => {
-      headers[colNumber] = cell.value != null ? String(cell.value) : `Column${colNumber}`;
-    });
-    const data = [];
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const obj = {};
-      row.eachCell((cell, colNumber) => {
-        if (headers[colNumber]) obj[headers[colNumber]] = cell.value;
-      });
-      if (Object.keys(obj).length > 0) data.push(obj);
-    });
+    let inserted = 0;
+    let updated = 0;
 
-    let count = 0;
+    for (const row of rows) {
+      const existing = await query(
+        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
+        [userId, row.species, row.product]
+      );
 
-    // Process each row
-    for (const row of data) {
-      // Heuristic column mapping (same as original)
-      const species = row['Common name'] || row['Species'] || row['Name'];
-      let yieldVal = row['% Yield'] || row['Yield'];
-      const product = row['Product'] || 'General';
-
-      if (species && yieldVal !== undefined && yieldVal !== null) {
-        // Convert decimal to percentage if needed
-        if (yieldVal < 1) {
-          yieldVal = yieldVal * 100;
-        }
-
+      if (existing.rows?.[0]) {
+        await query(
+          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
+          [row.yield, row.source, existing.rows[0].id, userId]
+        );
+        updated++;
+      } else {
         await query(
           'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-          [userId, species, product, yieldVal, file.originalFilename || 'Uploaded File']
+          [userId, row.species, row.product, row.yield, row.source]
         );
-        count++;
+        inserted++;
       }
     }
 
-    // Clean up temp file
-    await fs.unlink(file.filepath).catch(() => {});
+    const parts = [];
+    if (inserted > 0) parts.push(`${inserted} added`);
+    if (updated > 0) parts.push(`${updated} updated`);
+    if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
 
-    return res.status(200).json({ message: `Imported ${count} records successfully` });
+    return res.status(200).json({
+      message: parts.length ? parts.join(', ') : 'No valid records found',
+      inserted,
+      updated,
+      skipped: skippedRows.length,
+      skippedRows,
+    });
   } catch (err) {
     console.error('Upload error:', err);
-    return res.status(500).json({ error: err.message || 'Failed to process file' });
+    const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;
+    return res.status(status).json({ error: err.message || 'Failed to process file' });
+  } finally {
+    if (uploadedFilePath) await fs.unlink(uploadedFilePath).catch(() => {});
   }
 }
 
