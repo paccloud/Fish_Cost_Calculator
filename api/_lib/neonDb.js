@@ -114,5 +114,148 @@ export function makeNeonAdapter() {
     async deleteCalc(id) {
       await query('DELETE FROM calculations WHERE id = $1', [id]);
     },
+
+    // -----------------------------------------------------------------------
+    // User-data methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all user_data rows for a user.
+     *
+     * @param {string|number} userId
+     * @returns {Promise<Array>}
+     */
+    async listUserData(userId) {
+      const result = await query(
+        'SELECT id, species, product, yield, source FROM user_data WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    },
+
+    /**
+     * Insert a new user_data row.
+     *
+     * @param {string|number} userId
+     * @param {{ species, product, yield, source }} fields
+     * @returns {Promise<{id: string|number}>}
+     */
+    async createUserData(userId, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      const result = await query(
+        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [userId, species, product, yieldVal, source]
+      );
+      return result.rows[0];
+    },
+
+    /**
+     * Find a single user_data row by id. Returns at minimum {id, user_id}.
+     *
+     * @param {string|number} id
+     * @returns {Promise<{id: string|number, user_id: string|number}|null>}
+     */
+    async findUserDataById(id) {
+      const result = await query(
+        'SELECT id, user_id FROM user_data WHERE id = $1',
+        [id]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    /**
+     * Update a user_data row using SQL COALESCE for partial updates.
+     * The caller (handler) passes null for fields to keep unchanged.
+     * Ownership must be verified by the caller before this.
+     *
+     * @param {string|number} id
+     * @param {{ species, product, yield, source }} fields  (null = keep current)
+     * @returns {Promise<void>}
+     */
+    async updateUserData(id, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      await query(
+        `UPDATE user_data
+         SET species = COALESCE($1, species),
+             product = COALESCE($2, product),
+             yield   = COALESCE($3, yield),
+             source  = COALESCE($4, source)
+         WHERE id = $5`,
+        [species, product, yieldVal, source, id]
+      );
+    },
+
+    /**
+     * Delete a user_data row by id.
+     * Ownership must be verified by the caller before this.
+     *
+     * @param {string|number} id
+     * @returns {Promise<void>}
+     */
+    async deleteUserData(id) {
+      await query('DELETE FROM user_data WHERE id = $1', [id]);
+    },
+
+    /**
+     * Upsert one user_data row: update yield+source if (userId, species, product)
+     * already exists; otherwise insert.
+     *
+     * @param {string|number} userId
+     * @param {{ species, product, yield, source }} fields
+     * @returns {Promise<{inserted: boolean}>}
+     */
+    async upsertUserDataRow(userId, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      const existing = await query(
+        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
+        [userId, species, product]
+      );
+
+      if (existing.rows[0]) {
+        await query(
+          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
+          [yieldVal, source, existing.rows[0].id, userId]
+        );
+        return { inserted: false };
+      } else {
+        await query(
+          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
+          [userId, species, product, yieldVal, source]
+        );
+        return { inserted: true };
+      }
+    },
+
+    // -----------------------------------------------------------------------
+    // Export methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all user_data rows for export.
+     *
+     * @param {string|number} userId
+     * @returns {Promise<Array>}
+     */
+    async listUserDataForExport(userId) {
+      const result = await query(
+        'SELECT * FROM user_data WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    },
+
+    /**
+     * List all calculations for export, ordered by date DESC.
+     *
+     * @param {string|number} userId
+     * @returns {Promise<Array>}
+     */
+    async listCalcsForExport(userId) {
+      const result = await query(
+        'SELECT * FROM calculations WHERE user_id = $1 ORDER BY date DESC',
+        [userId]
+      );
+      return result.rows;
+    },
   };
 }

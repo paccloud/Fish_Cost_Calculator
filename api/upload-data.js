@@ -1,9 +1,20 @@
+/**
+ * POST /api/upload-data — upload a CSV or XLSX file of yield data.
+ *
+ * File parsing (formidable multipart, ExcelJS byte parsing) is adapter-side.
+ * The importRows helpers in api/_lib/importRows.js parse the buffer and
+ * normalise rows; the shared handleUploadData handler owns the upsert logic.
+ *
+ * @module api/upload-data
+ */
+
 import formidable from 'formidable';
 import { promises as fs } from 'fs';
-import { query } from './_lib/db.js';
+import { makeNeonAdapter } from './_lib/neonDb.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
 import { assertAllowedImportFile, normalizeYieldRows, parseImportRows } from './_lib/importRows.js';
+import { handleUploadData } from '../shared/handlers/index.js';
 
 // Disable default body parser for multipart form data
 export const config = {
@@ -28,11 +39,11 @@ async function handler(req, res) {
   let uploadedFilePath;
 
   try {
-    // Parse multipart form
-    const [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
+    // Parse multipart form (adapter-side — formidable delivers a temp file)
+    const [, files] = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, parsedFiles) => {
         if (err) reject(err);
-        resolve([fields, files]);
+        else resolve([fields, parsedFiles]);
       });
     });
 
@@ -42,47 +53,16 @@ async function handler(req, res) {
     }
     uploadedFilePath = file.filepath;
 
+    // Adapter-side: parse the file into normalised rows
     const extension = assertAllowedImportFile(file);
     const buffer = await fs.readFile(file.filepath);
     const data = await parseImportRows(buffer, extension);
     const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-    let inserted = 0;
-    let updated = 0;
-
-    for (const row of rows) {
-      const existing = await query(
-        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
-        [userId, row.species, row.product]
-      );
-
-      if (existing.rows?.[0]) {
-        await query(
-          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
-          [row.yield, row.source, existing.rows[0].id, userId]
-        );
-        updated++;
-      } else {
-        await query(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-          [userId, row.species, row.product, row.yield, row.source]
-        );
-        inserted++;
-      }
-    }
-
-    const parts = [];
-    if (inserted > 0) parts.push(`${inserted} added`);
-    if (updated > 0) parts.push(`${updated} updated`);
-    if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
-
-    return res.status(200).json({
-      message: parts.length ? parts.join(', ') : 'No valid records found',
-      inserted,
-      updated,
-      skipped: skippedRows.length,
-      skippedRows,
-    });
+    // Hand off to the handler core for the upsert logic
+    const db = makeNeonAdapter();
+    const { status, body } = await handleUploadData({ userId, rows, skippedRows }, db);
+    return res.status(status).json(body);
   } catch (err) {
     console.error('Upload error:', err);
     const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;

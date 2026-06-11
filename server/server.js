@@ -67,13 +67,6 @@ app.use((err, req, res, next) => {
 app.use('/api', apiRateLimit);
 app.use(express.json());
 
-const CSV_FORMULA_PREFIX = /^[=+\-@]/;
-const sanitizeCsvValue = (value) => {
-  const stringValue = value === null || value === undefined ? '' : String(value);
-  const escaped = stringValue.replace(/"/g, '""');
-  return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
-};
-
 // Database Setup
 const db = new sqlite3.Database('./fish_app.db', (err) => {
     if (err) console.error(err.message);
@@ -216,6 +209,10 @@ const upload = multer({
 
 const uploadSingle = upload.single('file');
 
+// Upload Data — delegates to shared handler core.
+// Multer (adapter-side) parses the multipart file and delivers a buffer;
+// importRows helpers parse the buffer into normalised rows; the core
+// handleUploadData handler owns the upsert logic.
 app.post('/api/upload-data', authenticate, (req, res) => {
     uploadSingle(req, res, async (err) => {
         if (err) {
@@ -239,168 +236,80 @@ app.post('/api/upload-data', authenticate, (req, res) => {
             const data = await parseImportRows(buffer, extension);
             const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-            let inserted = 0;
-            let updated = 0;
-
-            await Promise.all(rows.map((row) => new Promise((resolve, reject) => {
-                db.get(
-                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
-                    [req.user.id, row.species, row.product],
-                    (selectErr, existing) => {
-                        if (selectErr) return reject(selectErr);
-                        if (existing) {
-                            return db.run(
-                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
-                                [row.yield, row.source, existing.id, req.user.id],
-                                (updateErr) => {
-                                    if (updateErr) return reject(updateErr);
-                                    updated++;
-                                    return resolve();
-                                }
-                            );
-                        }
-
-                        return db.run(
-                            'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-                            [req.user.id, row.species, row.product, row.yield, row.source],
-                            (insertErr) => {
-                                if (insertErr) return reject(insertErr);
-                                inserted++;
-                                return resolve();
-                            }
-                        );
-                    }
-                );
-            })));
-
-            const parts = [];
-            if (inserted > 0) parts.push(`${inserted} added`);
-            if (updated > 0) parts.push(`${updated} updated`);
-            if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
-            res.json({
-                message: parts.length ? parts.join(', ') : 'No valid records found',
-                inserted,
-                updated,
-                skipped: skippedRows.length,
-                skippedRows,
-            });
+            const { handleUploadData } = await import('../shared/handlers/index.js');
+            const dbAdapter = makeSqliteAdapter(db);
+            const { status, body } = await handleUploadData(
+                { userId: req.user.id, rows, skippedRows },
+                dbAdapter
+            );
+            return res.status(status).json(body);
         } catch (e) {
             const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
-            res.status(status).json({ error: e.message || 'Failed to process file. Ensure it is a valid spreadsheet.' });
+            res.status(status).json({ error: e.message || 'Failed to process file' });
         }
     });
 });
 
-// Get User Custom Data
-app.get('/api/user-data', authenticate, (req, res) => {
-    db.all('SELECT id, species, product, yield, source FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// User Data — all four CRUD routes delegate to shared handler core.
+// Ownership enforcement and error sanitization live in the handler core.
+
+// GET /api/user-data — list all user-data entries
+app.get('/api/user-data', authenticate, async (req, res) => {
+    const { handleListUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListUserData({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
 });
 
-// Add Single User Data Entry
-app.post('/api/user-data', authenticate, (req, res) => {
-    const { species, product, yield: yieldVal, source } = req.body;
-    if (!species || !product || yieldVal === undefined) {
-        return res.status(400).json({ error: 'Species, product, and yield are required' });
-    }
-    
-    db.run(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-        [req.user.id, species, product, yieldVal, source || 'User Input'],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
-        }
+// POST /api/user-data — create a new entry
+app.post('/api/user-data', authenticate, async (req, res) => {
+    const { handleCreateUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleCreateUserData(
+        { userId: req.user.id, ...req.body },
+        dbAdapter
     );
+    return res.status(status).json(body);
 });
 
-// Update User Data Entry
-app.put('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-    const { species, product, yield: yieldVal, source } = req.body;
-    
-    // Verify ownership
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        
-        db.run(
-            'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
-            [species || row.species, product || row.product, yieldVal !== undefined ? yieldVal : row.yield, source || row.source, id, req.user.id],
-            function(err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: 'Updated successfully' });
-            }
-        );
-    });
+// PUT /api/user-data/:id — update an entry (id from route param — production contract)
+app.put('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleUpdateUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleUpdateUserData(
+        { userId: req.user.id, id: req.params.id, ...req.body },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-// Delete User Data Entry
-app.delete('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-
-    // Verify ownership before delete
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-
-        db.run('DELETE FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Deleted successfully' });
-        });
-    });
+// DELETE /api/user-data/:id — delete an entry (id from route param — production contract)
+app.delete('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleDeleteUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleDeleteUserData(
+        { userId: req.user.id, id: req.params.id },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-// Unified export endpoint — matches production api/export.js contract
-// GET /api/export?type=calcs  — export saved calculations
-// GET /api/export?type=data   — export custom yield data
-app.get('/api/export', authenticate, (req, res) => {
-    const exportType = req.query.type || 'calcs';
-
-    if (exportType === 'data') {
-        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            const csvHeader = 'Species,Product,Yield (%),Source\n';
-            const csvRows = rows.map(row => {
-                const values = [
-                    sanitizeCsvValue(row.species),
-                    sanitizeCsvValue(row.product),
-                    sanitizeCsvValue(row.yield),
-                    sanitizeCsvValue(row.source || '')
-                ];
-                return `"${values.join('","')}"`;
-            }).join('\n');
-
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename=user_data.csv');
-            res.send(csvHeader + csvRows);
-        });
-    } else {
-        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
-            const csvRows = rows.map(row => {
-                const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
-                const values = [
-                    date,
-                    sanitizeCsvValue(row.species),
-                    sanitizeCsvValue(row.product),
-                    sanitizeCsvValue(row.cost),
-                    sanitizeCsvValue(row.yield),
-                    sanitizeCsvValue(row.result)
-                ];
-                return `"${values.join('","')}"`;
-            }).join('\n');
-
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename=calculations.csv');
-            res.send(csvHeader + csvRows);
-        });
+// Export — delegates to shared handler core.
+// GET /api/export?type=calcs  — export saved calculations as CSV
+// GET /api/export?type=data   — export custom yield data as CSV
+app.get('/api/export', authenticate, async (req, res) => {
+    const { handleExport } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const result = await handleExport(
+        { userId: req.user.id, exportType: req.query.type },
+        dbAdapter
+    );
+    if (result.contentType) {
+        res.setHeader('Content-Type', result.contentType);
+        res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+        return res.status(result.status).send(result.body);
     }
+    return res.status(result.status).json(result.body);
 });
 
 // Get all visible contributors (public)

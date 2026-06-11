@@ -10,3 +10,11 @@
 export { handleRegister } from './register.js';
 export { handleLogin } from './login.js';
 export { handleListSavedCalcs, handleSaveCalc, handleDeleteCalc } from './savedCalcs.js';
+export {
+  handleListUserData,
+  handleCreateUserData,
+  handleUpdateUserData,
+  handleDeleteUserData,
+} from './userData.js';
+export { handleUploadData } from './uploadData.js';
+export { handleExport, sanitizeCsvValue } from './export.js';
