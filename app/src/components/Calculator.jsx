@@ -4,8 +4,8 @@ import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Cloc
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
-import { getAuthHeaders } from '../lib/authHeaders';
 import { calculate as calcEngine } from '../lib/calcEngine';
+import { apiClient } from '../lib/apiClient';
 
 // Process FISH_DATA_V3 into the format expected by the calculator
 // (same shape as the API response: numeric yield, array range, from/to strings)
@@ -232,6 +232,7 @@ const Calculator = () => {
     const params = new URLSearchParams(window.location.search);
     const urlSpecies = params.get('species');
     if (urlSpecies) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSpecies(urlSpecies);
       if (params.get('from')) setFromState(params.get('from'));
       if (params.get('to')) setToState(params.get('to'));
@@ -443,6 +444,7 @@ const Calculator = () => {
   // Update yield when conversion is selected
   useEffect(() => {
     if (currentConversion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYieldPercent(String(currentConversion.yield));
       setYieldRange(currentConversion.range);
       setUseRangeMin(false);
@@ -453,6 +455,7 @@ const Calculator = () => {
   // Apply range min/max
   useEffect(() => {
     if (yieldRange && useRangeMin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYieldPercent(String(yieldRange[0]));
     } else if (yieldRange && useRangeMax) {
       setYieldPercent(String(yieldRange[1]));
@@ -1154,15 +1157,7 @@ const Calculator = () => {
                       <button
                         onClick={async () => {
                           try {
-                            const headers = await getAuthHeaders(user);
-                            const response = await fetch(apiUrl('/api/export?type=calcs'), {
-                              headers
-                            });
-                            if (!response.ok) {
-                              const message = await response.text();
-                              throw new Error(message || `Export failed with status ${response.status}`);
-                            }
-                            const blob = await response.blob();
+                            const blob = await apiClient.exportCalcs();
                             const url = window.URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;

@@ -56,7 +56,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('/{*splat}', cors(corsOptions));
 
 app.use((err, req, res, next) => {
   if (err && err.message === 'Not allowed by CORS') {
@@ -354,57 +354,54 @@ app.delete('/api/user-data/:id', authenticate, (req, res) => {
     });
 });
 
-// Export Calculations as CSV
-app.get('/api/export-calcs', authenticate, (req, res) => {
-    db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
+// Unified export endpoint — matches production api/export.js contract
+// GET /api/export?type=calcs  — export saved calculations
+// GET /api/export?type=data   — export custom yield data
+app.get('/api/export', authenticate, (req, res) => {
+    const exportType = req.query.type || 'calcs';
 
-        // Create CSV content
-        const headers = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
-        const csvRows = rows.map(row => {
-            const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
-            const values = [
-                date,
-                sanitizeCsvValue(row.species),
-                sanitizeCsvValue(row.product),
-                sanitizeCsvValue(row.cost),
-                sanitizeCsvValue(row.yield),
-                sanitizeCsvValue(row.result)
-            ];
-            return `"${values.join('","')}"`;
-        }).join('\n');
+    if (exportType === 'data') {
+        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
 
-        const csv = headers + csvRows;
+            const csvHeader = 'Species,Product,Yield (%),Source\n';
+            const csvRows = rows.map(row => {
+                const values = [
+                    sanitizeCsvValue(row.species),
+                    sanitizeCsvValue(row.product),
+                    sanitizeCsvValue(row.yield),
+                    sanitizeCsvValue(row.source || '')
+                ];
+                return `"${values.join('","')}"`;
+            }).join('\n');
 
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="calculations.csv"');
-        res.send(csv);
-    });
-});
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=user_data.csv');
+            res.send(csvHeader + csvRows);
+        });
+    } else {
+        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
 
-// Export User Data as CSV
-app.get('/api/export-user-data', authenticate, (req, res) => {
-    db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
+            const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
+            const csvRows = rows.map(row => {
+                const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
+                const values = [
+                    date,
+                    sanitizeCsvValue(row.species),
+                    sanitizeCsvValue(row.product),
+                    sanitizeCsvValue(row.cost),
+                    sanitizeCsvValue(row.yield),
+                    sanitizeCsvValue(row.result)
+                ];
+                return `"${values.join('","')}"`;
+            }).join('\n');
 
-        // Create CSV content
-        const headers = 'Species,Product,Yield (%),Source\n';
-        const csvRows = rows.map(row => {
-            const values = [
-                sanitizeCsvValue(row.species),
-                sanitizeCsvValue(row.product),
-                sanitizeCsvValue(row.yield),
-                sanitizeCsvValue(row.source || '')
-            ];
-            return `"${values.join('","')}"`;
-        }).join('\n');
-
-        const csv = headers + csvRows;
-
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="custom-yield-data.csv"');
-        res.send(csv);
-    });
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename=calculations.csv');
+            res.send(csvHeader + csvRows);
+        });
+    }
 });
 
 // Get all visible contributors (public)
