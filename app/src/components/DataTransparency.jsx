@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { BookOpen, ExternalLink, FileText, AlertCircle, Database, Users, Award } from 'lucide-react';
 import { DATA_SOURCE, ACRONYMS, UNCERTAIN_DATA } from '../data/fish_data_v3';
-import { apiUrl } from '../config/api';
+import { apiClient } from '../lib/apiClient';
 
 const DataTransparency = () => {
     const [contributors, setContributors] = useState([]);
 
     useEffect(() => {
-        fetch(apiUrl('/api/contributors'))
-            .then(res => res.json())
+        apiClient.contributors()
             .then(data => setContributors(data))
             .catch(err => console.error('Failed to load contributors:', err));
     }, []);

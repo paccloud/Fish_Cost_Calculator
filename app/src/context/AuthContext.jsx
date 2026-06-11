@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiUrl } from '../config/api';
 import { stackClientApp } from '../config/neonAuth';
+import { apiClient } from '../lib/apiClient';
 
 const AuthContext = createContext(null);
 
@@ -133,19 +133,11 @@ export const AuthProvider = ({ children }) => {
   // Traditional username/password login
   const login = async (username, password) => {
     try {
-      const res = await fetch(apiUrl('/api/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setToken(data.token);
-        localStorage.setItem('token', data.token);
-        setUser({ username: data.username, authProvider: 'password' });
-        return true;
-      }
-      return false;
+      const data = await apiClient.login(username, password);
+      setToken(data.token);
+      localStorage.setItem('token', data.token);
+      setUser({ username: data.username, authProvider: 'password' });
+      return true;
     } catch (e) {
       console.error(e);
       return false;
@@ -155,13 +147,8 @@ export const AuthProvider = ({ children }) => {
   // Traditional username/password registration
   const register = async (username, password) => {
     try {
-      const res = await fetch(apiUrl('/api/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      if (res.ok) return true;
-      return false;
+      await apiClient.register(username, password);
+      return true;
     } catch {
       return false;
     }
