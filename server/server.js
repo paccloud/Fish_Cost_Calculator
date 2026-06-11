@@ -5,9 +5,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
-const ExcelJS = require('exceljs');
-const fs = require('fs');
-const path = require('path');
+const rateLimit = require('express-rate-limit');
+const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
 const crypto = require('crypto');
 
 const app = express();
@@ -27,6 +26,13 @@ const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS 
 const SECRET_KEY = process.env.JWT_SECRET || (process.env.NODE_ENV === 'development'
   ? crypto.randomBytes(32).toString('hex')
   : null);
+const apiRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
+});
 
 if (!SECRET_KEY) {
   throw new Error('JWT_SECRET is required to start the server');
@@ -58,6 +64,7 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+app.use('/api', apiRateLimit);
 app.use(express.json());
 
 const CSV_FORMULA_PREFIX = /^[=+\-@]/;
@@ -191,39 +198,24 @@ app.get('/api/saved-calcs', authenticate, (req, res) => {
     });
 });
 
-// Upload Data (Excel/CSV)
+// Upload Data (XLSX/CSV)
 const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
-const allowedExtensions = ['.xlsx', '.csv'];
-const allowedMimeTypes = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/csv',
-    'application/csv'
-];
 
 const upload = multer({
-    dest: 'uploads/',
+    storage: multer.memoryStorage(),
     limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
     fileFilter: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase();
-        if (allowedExtensions.includes(ext) && allowedMimeTypes.includes(file.mimetype)) {
-            return cb(null, true);
+        try {
+            assertAllowedImportFile(file);
+            cb(null, true);
+        } catch (error) {
+            error.code = 'INVALID_FILE_TYPE';
+            cb(error);
         }
-        const error = new Error('Invalid file type');
-        error.code = 'INVALID_FILE_TYPE';
-        return cb(error);
-    }
+    },
 });
 
 const uploadSingle = upload.single('file');
-const cleanupUpload = (filePath) => {
-    if (filePath) {
-        fs.unlink(filePath, (err) => {
-            if (err) {
-                console.error('Failed to cleanup upload', err);
-            }
-        });
-    }
-};
 
 app.post('/api/upload-data', authenticate, (req, res) => {
     uploadSingle(req, res, async (err) => {
@@ -240,68 +232,62 @@ app.post('/api/upload-data', authenticate, (req, res) => {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
         try {
-            const workbook = new ExcelJS.Workbook();
-            const ext = path.extname(req.file.originalname).toLowerCase();
-            if (ext === '.csv') {
-                await workbook.csv.readFile(req.file.path);
-            } else {
-                await workbook.xlsx.readFile(req.file.path);
+            const extension = assertAllowedImportFile(req.file);
+            const buffer = req.file.buffer;
+            if (!Buffer.isBuffer(buffer)) {
+                return res.status(400).json({ error: 'Invalid upload payload' });
             }
-            const worksheet = workbook.worksheets[0];
-            if (!worksheet) throw new Error('No worksheet found');
-            const headers = [];
-            worksheet.getRow(1).eachCell((cell, colNumber) => {
-                headers[colNumber] = cell.value != null ? String(cell.value) : `Column${colNumber}`;
-            });
-            const data = [];
-            worksheet.eachRow((row, rowNumber) => {
-                if (rowNumber === 1) return;
-                const obj = {};
-                row.eachCell((cell, colNumber) => {
-                    if (headers[colNumber]) obj[headers[colNumber]] = cell.value;
-                });
-                if (Object.keys(obj).length > 0) data.push(obj);
-            });
+            const data = await parseImportRows(buffer, extension);
+            const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-            const parseYield = (val) => {
-                if (val === undefined || val === null) return NaN;
-                if (typeof val === 'number') return val;
-                const str = String(val).trim();
-                if (!str) return NaN;
-                const cleaned = str.replace(/%/g, '').replace(/,/g, '');
-                const num = Number(cleaned);
-                return Number.isFinite(num) ? num : NaN;
-            };
-            
-            let count = 0;
-            db.serialize(() => {
-                const stmt = db.prepare('INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)');
-                data.forEach(row => {
-                    // Heuristic mapping - adjust based on user Excel structure ("Common name", "% Yield")
-                    const species = row['Common name'] || row['Species'] || row['Name'];
-                    const yieldVal = row['% Yield'] || row['Yield'];
-                    const product = row['Product'] || 'General';
-                    
-                    if (species && yieldVal) {
-                        let finalYield = parseYield(yieldVal);
-                        if (!Number.isFinite(finalYield)) return;
-                        // Convert decimal to percentage if needed (e.g. 0.42 → 42)
-                        if (finalYield > 0 && finalYield < 1) {
-                            finalYield = finalYield * 100;
+            let inserted = 0;
+            let updated = 0;
+
+            await Promise.all(rows.map((row) => new Promise((resolve, reject) => {
+                db.get(
+                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+                    [req.user.id, row.species, row.product],
+                    (selectErr, existing) => {
+                        if (selectErr) return reject(selectErr);
+                        if (existing) {
+                            return db.run(
+                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
+                                [row.yield, row.source, existing.id, req.user.id],
+                                (updateErr) => {
+                                    if (updateErr) return reject(updateErr);
+                                    updated++;
+                                    return resolve();
+                                }
+                            );
                         }
-                        
-                        stmt.run(req.user.id, species, product, finalYield, req.file.originalname);
-                        count++;
-                    }
-                });
-                stmt.finalize();
-            });
 
-            res.json({ message: `Imported ${count} records` });
+                        return db.run(
+                            'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                            [req.user.id, row.species, row.product, row.yield, row.source],
+                            (insertErr) => {
+                                if (insertErr) return reject(insertErr);
+                                inserted++;
+                                return resolve();
+                            }
+                        );
+                    }
+                );
+            })));
+
+            const parts = [];
+            if (inserted > 0) parts.push(`${inserted} added`);
+            if (updated > 0) parts.push(`${updated} updated`);
+            if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
+            res.json({
+                message: parts.length ? parts.join(', ') : 'No valid records found',
+                inserted,
+                updated,
+                skipped: skippedRows.length,
+                skippedRows,
+            });
         } catch (e) {
-            res.status(400).json({ error: 'Failed to process file. Ensure it is a valid spreadsheet.' });
-        } finally {
-            cleanupUpload(req.file && req.file.path);
+            const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
+            res.status(status).json({ error: e.message || 'Failed to process file. Ensure it is a valid spreadsheet.' });
         }
     });
 });
@@ -438,14 +424,17 @@ app.get('/api/contributors', (req, res) => {
     });
 });
 
-// Get current user's contributor profile
-app.get('/api/contributor/me', authenticate, (req, res) => {
+const getCurrentContributorProfile = (req, res) => {
     db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Profile not found' });
         res.json(row);
     });
-});
+};
+
+// Get current user's contributor profile
+app.get('/api/contributor', authenticate, getCurrentContributorProfile);
+app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
 
 // Create or update contributor profile
 app.post('/api/contributor', authenticate, (req, res) => {
