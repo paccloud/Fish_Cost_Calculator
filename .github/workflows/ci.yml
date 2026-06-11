@@ -29,6 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install shared handler-core dependencies
+        run: npm ci
+        working-directory: shared
+
       - name: Lint
         run: npm run lint
 
