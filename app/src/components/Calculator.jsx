@@ -6,6 +6,7 @@ import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 import { calculate as calcEngine } from '../lib/calcEngine';
 import { apiClient } from '../lib/apiClient';
+import { mergeFishData } from '../lib/fishDataMerge';
 
 // Process FISH_DATA_V3 into the format expected by the calculator
 // (same shape as the API response: numeric yield, array range, from/to strings)
@@ -245,47 +246,13 @@ const Calculator = () => {
     }
   }, []);
 
-  // Custom yields from DataContext (replaces API user-data fetch)
-  const customData = useMemo(() => {
-    const mapped = {};
-    customYields.forEach(item => {
-      if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-      mapped[item.species].conversions[`Custom: ${item.product}`] = {
-        yield: parseFloat(item.yield),
-        from: 'Custom',
-        to: item.product
-      };
-    });
-    return mapped;
-  }, [customYields]);
-
-  // Merge Data - combine API fish data with user custom data and local custom species
-  const combinedData = useMemo(() => {
-    const merged = { ...fishData };
-    // Merge user-uploaded custom data
-    Object.keys(customData).forEach(sp => {
-      if (!merged[sp]) {
-        merged[sp] = customData[sp];
-      } else {
-        merged[sp] = { 
-          ...merged[sp], 
-          conversions: { ...merged[sp].conversions, ...customData[sp].conversions }
-        };
-      }
-    });
-    // Merge local custom species (from localStorage)
-    Object.keys(localCustomSpecies).forEach(sp => {
-      if (!merged[sp]) {
-        merged[sp] = localCustomSpecies[sp];
-      } else {
-        merged[sp] = { 
-          ...merged[sp], 
-          conversions: { ...merged[sp].conversions, ...localCustomSpecies[sp].conversions }
-        };
-      }
-    });
-    return merged;
-  }, [fishData, customData, localCustomSpecies]);
+  // Merge Data - combine static fish data, user custom yields, and local custom species.
+  // Precedence (lowest → highest): static < customYields < localCustomSpecies.
+  // All precedence rules owned by fishDataMerge.
+  const combinedData = useMemo(
+    () => mergeFishData(fishData, customYields, localCustomSpecies),
+    [fishData, customYields, localCustomSpecies]
+  );
 
   const speciesList = Object.keys(combinedData).sort();
   
