@@ -185,7 +185,7 @@ app.post('/api/save-calc', authenticate, (req, res) => {
         [req.user.id, name, species, product, cost, yieldPercent, result, date], 
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID, message: 'Saved successfully' });
+            res.status(201).json({ id: this.lastID, message: 'Calculation saved successfully' });
         }
     );
 });

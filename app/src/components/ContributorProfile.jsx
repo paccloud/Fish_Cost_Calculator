@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
-import { stackClientApp } from '../config/neonAuth';
+import { getAuthHeaders } from '../lib/authHeaders';
 
 const createEmptyFormData = () => ({
   display_name: '',
@@ -23,39 +23,6 @@ const ContributorProfile = () => {
     show_on_page: true
   });
 
-  /**
-   * Get authentication headers for API requests.
-   * Handles both password-based (JWT) and OAuth (Stack Auth) authentication.
-   */
-  const getAuthHeaders = useCallback(async () => {
-    const headers = { 'Content-Type': 'application/json' };
-
-    // For OAuth users, get Stack Auth access token
-    if (user?.authProvider === 'oauth') {
-      try {
-        const stackUser = await stackClientApp.getUser();
-        if (stackUser) {
-          const accessToken = await stackUser.getAuthJson();
-          if (accessToken?.accessToken) {
-            headers['x-stack-access-token'] = accessToken.accessToken;
-            return headers;
-          }
-        }
-      } catch (err) {
-        console.error('Failed to get Stack Auth token:', err);
-      }
-      return headers;
-    }
-
-    // For password-based users, use JWT token from localStorage
-    const token = localStorage.getItem('token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    return headers;
-  }, [user]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -68,7 +35,7 @@ const ContributorProfile = () => {
       if (!user) return;
 
       try {
-        const headers = await getAuthHeaders();
+        const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
         const res = await fetch(apiUrl('/api/contributor'), { headers });
 
         if (res.status === 404) {
@@ -120,13 +87,13 @@ const ContributorProfile = () => {
 
     loadProfile();
     return () => { cancelled = true; };
-  }, [user, getAuthHeaders]);
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
-      const headers = await getAuthHeaders();
+      const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
       const res = await fetch(apiUrl('/api/contributor'), {
         method: 'POST',
         headers,

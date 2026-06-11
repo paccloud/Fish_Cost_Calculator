@@ -3,6 +3,7 @@ import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { getAuthHeaders } from '../lib/authHeaders';
 
 const UploadData = () => {
     const { user } = useAuth();
@@ -25,12 +26,10 @@ const UploadData = () => {
         formData.append('file', file);
 
         try {
-            const token = localStorage.getItem('token');
+            const headers = await getAuthHeaders(user);
             const res = await fetch(apiUrl('/api/upload-data'), {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: formData
             });
             

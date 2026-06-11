@@ -1,4 +1,5 @@
 import { apiUrl } from '../config/api';
+import { getAuthHeaders, hasAuthCredential } from './authHeaders';
 import {
   getAllPendingSync,
   markCalcSynced,
@@ -11,17 +12,23 @@ import {
 
 /**
  * Sync all pending local changes to the server, then pull latest.
- * @param {string} token - JWT auth token
+ * @param {Object} user - Current authenticated user session
  * @returns {Promise<{pushed: number, pulled: number, errors: number, errorDetails: Array}>}
  */
-export async function syncAll(token) {
+export async function syncAll(user) {
   const stats = { pushed: 0, pulled: 0, errors: 0, errorDetails: [] };
-  if (!token) return stats;
+  if (!hasAuthCredential(user)) return stats;
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
+  if (!headers.Authorization && !headers['x-stack-access-token']) {
+    stats.errors++;
+    stats.errorDetails.push({
+      type: 'auth',
+      isAuthError: true,
+      message: 'Missing authentication headers',
+    });
+    return stats;
+  }
 
   // --- Push local changes ---
   const pending = await getAllPendingSync();
@@ -36,10 +43,8 @@ export async function syncAll(token) {
           name: calc.name || '',
           species: calc.species,
           product: calc.product,
-          mode: calc.mode,
           cost: calc.cost,
-          target_weight: calc.target_weight,
-          yield_value: calc.yield,
+          yield: calc.yield,
           result: calc.result,
         }),
       });
@@ -93,7 +98,7 @@ export async function syncAll(token) {
         body: JSON.stringify({
           species: yld.species,
           product: yld.product,
-          yield_percentage: yld.yield,
+          yield: yld.yield,
           source: yld.source || 'User Input',
         }),
       });
