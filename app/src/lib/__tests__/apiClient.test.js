@@ -6,7 +6,7 @@
  * No live network — no imports of browser APIs.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '../apiClient.js';
 
 // ---------------------------------------------------------------------------
