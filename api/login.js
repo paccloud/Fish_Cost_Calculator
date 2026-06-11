@@ -1,57 +1,37 @@
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { query } from './_lib/db.js';
+/**
+ * Vercel serverless adapter for the login endpoint.
+ *
+ * Delegates all business logic to the transport-agnostic handler core
+ * (shared/handlers/login.js) and the Neon data-layer adapter.
+ * This file is responsible only for:
+ *   - CORS wrapping
+ *   - Method guard
+ *   - Mapping the Vercel req/res shape into and out of the handler envelope
+ *   - Providing JWT config from environment variables
+ *
+ * @module api/login
+ */
+
 import { handleCors } from './_lib/cors.js';
+import { handleLogin } from '../shared/handlers/index.js';
+import { makeNeonAdapter } from './_lib/neonDb.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const TOKEN_EXPIRY_SECONDS = Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10) || 86400;
+const TOKEN_EXPIRY_SECONDS =
+  Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '86400', 10) || 86400;
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
-  }
-
-  if (!JWT_SECRET) {
-    console.error('JWT_SECRET is not set for login handler');
-    return res.status(500).json({ error: 'Server misconfigured' });
-  }
-
-  try {
-    // Find user by username
-    const result = await query(
-      'SELECT * FROM users WHERE username = $1',
-      [username]
-    );
-
-    const user = result.rows[0];
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Verify password
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: `${TOKEN_EXPIRY_SECONDS}s` }
-    );
-
-    return res.status(200).json({ token, username: user.username, expiresIn: TOKEN_EXPIRY_SECONDS });
-  } catch (err) {
-    console.error('Login error:', err);
-    return res.status(500).json({ error: 'Server error' });
-  }
+  const db = makeNeonAdapter();
+  const { status, body } = await handleLogin(
+    req.body ?? {},
+    db,
+    { jwtSecret: JWT_SECRET, tokenExpirySeconds: TOKEN_EXPIRY_SECONDS }
+  );
+  return res.status(status).json(body);
 }
 
 export default handleCors(handler);
