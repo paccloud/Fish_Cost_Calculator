@@ -3,7 +3,12 @@ import { promises as fs } from 'fs';
 import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
-import { assertAllowedImportFile, normalizeYieldRows, parseImportRows } from './_lib/importRows.js';
+import {
+  assertAllowedImportFile,
+  normalizeYieldRows,
+  parseImportRows,
+  upsertImportedYieldRows,
+} from './_lib/importRows.js';
 
 // Disable default body parser for multipart form data
 export const config = {
@@ -47,29 +52,7 @@ async function handler(req, res) {
     const data = await parseImportRows(buffer, extension);
     const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-    let inserted = 0;
-    let updated = 0;
-
-    for (const row of rows) {
-      const existing = await query(
-        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
-        [userId, row.species, row.product]
-      );
-
-      if (existing.rows?.[0]) {
-        await query(
-          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
-          [row.yield, row.source, existing.rows[0].id, userId]
-        );
-        updated++;
-      } else {
-        await query(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-          [userId, row.species, row.product, row.yield, row.source]
-        );
-        inserted++;
-      }
-    }
+    const { inserted, updated } = await upsertImportedYieldRows(userId, rows, query);
 
     const parts = [];
     if (inserted > 0) parts.push(`${inserted} added`);
@@ -86,7 +69,10 @@ async function handler(req, res) {
   } catch (err) {
     console.error('Upload error:', err);
     const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;
-    return res.status(status).json({ error: err.message || 'Failed to process file' });
+    const message = status === 400
+      ? err.message
+      : 'Failed to process file. Ensure it is a valid spreadsheet.';
+    return res.status(status).json({ error: message });
   } finally {
     if (uploadedFilePath) await fs.unlink(uploadedFilePath).catch(() => {});
   }

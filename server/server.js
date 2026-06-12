@@ -6,7 +6,12 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
-const { assertAllowedImportFile, normalizeYieldRows, parseImportRows } = require('./importRows');
+const {
+    assertAllowedImportFile,
+    normalizeYieldRows,
+    parseImportRows,
+    upsertImportedYieldRowsSqlite,
+} = require('./importRows');
 const crypto = require('crypto');
 
 const app = express();
@@ -255,39 +260,7 @@ app.post('/api/upload-data', authenticate, (req, res) => {
             const data = await parseImportRows(buffer, extension);
             const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-            let inserted = 0;
-            let updated = 0;
-
-            await Promise.all(rows.map((row) => new Promise((resolve, reject) => {
-                db.get(
-                    'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
-                    [req.user.id, row.species, row.product],
-                    (selectErr, existing) => {
-                        if (selectErr) return reject(selectErr);
-                        if (existing) {
-                            return db.run(
-                                'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
-                                [row.yield, row.source, existing.id, req.user.id],
-                                (updateErr) => {
-                                    if (updateErr) return reject(updateErr);
-                                    updated++;
-                                    return resolve();
-                                }
-                            );
-                        }
-
-                        return db.run(
-                            'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-                            [req.user.id, row.species, row.product, row.yield, row.source],
-                            (insertErr) => {
-                                if (insertErr) return reject(insertErr);
-                                inserted++;
-                                return resolve();
-                            }
-                        );
-                    }
-                );
-            })));
+            const { inserted, updated } = await upsertImportedYieldRowsSqlite(db, req.user.id, rows);
 
             const parts = [];
             if (inserted > 0) parts.push(`${inserted} added`);
@@ -302,7 +275,10 @@ app.post('/api/upload-data', authenticate, (req, res) => {
             });
         } catch (e) {
             const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
-            res.status(status).json({ error: e.message || 'Failed to process file. Ensure it is a valid spreadsheet.' });
+            const message = status === 400
+                ? e.message
+                : 'Failed to process file. Ensure it is a valid spreadsheet.';
+            res.status(status).json({ error: message });
         }
     });
 });
