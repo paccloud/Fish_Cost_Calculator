@@ -145,6 +145,111 @@ function makeSqliteAdapter(db) {
         });
       });
     },
+
+    listPublicCalcs() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT id, species, product, cost, yield, result, date
+           FROM calculations
+           ORDER BY date DESC
+           LIMIT 100`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    async getFishData() {
+      const {
+        DATA_SOURCE,
+        FISH_DATA_V3,
+        PROFILES_DATA,
+      } = await import('../../app/src/data/fish_data_v3.js');
+
+      return {
+        fishData: FISH_DATA_V3,
+        profiles: PROFILES_DATA,
+        source: DATA_SOURCE,
+      };
+    },
+
+    listContributors() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+           FROM contributors c
+           JOIN users u ON c.user_id = u.id
+           LEFT JOIN user_data ud ON c.user_id = ud.user_id
+           WHERE c.show_on_page = 1
+           GROUP BY c.id
+           ORDER BY contribution_count DESC`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    getContributorProfile(userId) {
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT * FROM contributors WHERE user_id = ?',
+          [userId],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+    },
+
+    async saveContributorProfile(userId, profile) {
+      const existing = await new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id FROM contributors WHERE user_id = ?',
+          [userId],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+
+      const showOnPage = profile.show_on_page ? 1 : 0;
+
+      if (existing) {
+        await new Promise((resolve, reject) => {
+          db.run(
+            `UPDATE contributors
+             SET display_name = ?, organization = ?, bio = ?, show_on_page = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = ?`,
+            [profile.display_name, profile.organization, profile.bio, showOnPage, userId],
+            (err) => {
+              if (err) return reject(err);
+              resolve();
+            }
+          );
+        });
+        return { created: false };
+      }
+
+      return new Promise((resolve, reject) => {
+        db.run(
+          `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [userId, profile.display_name, profile.organization, profile.bio, showOnPage],
+          function callback(err) {
+            if (err) return reject(err);
+            resolve({ id: this.lastID, created: true });
+          }
+        );
+      });
+    },
   };
 }
 
