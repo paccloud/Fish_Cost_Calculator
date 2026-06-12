@@ -1,65 +1,65 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { stackClientApp } from '../config/neonAuth';
 import { apiClient } from '../lib/apiClient';
 
 const AuthContext = createContext(null);
+
+const decodeJwtPayload = (token) => {
+  const tokenParts = token.split('.');
+  if (tokenParts.length !== 3) {
+    throw new Error('Invalid JWT format');
+  }
+
+  const base64 = tokenParts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  return JSON.parse(atob(paddedBase64));
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
-  // Check for Stack Auth (Neon Auth) session on mount
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // First check Stack Auth session
-        const stackUser = await stackClientApp.getUser();
-        if (stackUser) {
-          setUser({
-            username: stackUser.displayName || stackUser.primaryEmail,
-            email: stackUser.primaryEmail,
-            avatar: stackUser.profileImageUrl,
-            authProvider: 'oauth',
-            stackAuthId: stackUser.id
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.log('No Stack Auth session:', e.message);
-      }
+    let cancelled = false;
 
-      // Fall back to JWT token
-      if (token) {
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-          localStorage.removeItem('token');
+    const applyAuthState = ({ nextUser, clearToken = false }) => {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        if (clearToken) {
           setToken(null);
-          setUser(null);
-        } else {
-          try {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              localStorage.removeItem('token');
-              setToken(null);
-              setUser(null);
-            } else {
-              setUser({ username: payload.username, authProvider: 'password' });
-            }
-          } catch {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
-          }
         }
-      }
-      setLoading(false);
+        setUser(nextUser);
+        setLoading(false);
+      });
     };
 
-    checkSession();
+    if (!token) {
+      applyAuthState({ nextUser: null });
+      return () => { cancelled = true; };
+    }
+
+    const clearInvalidToken = () => {
+      localStorage.removeItem('token');
+      applyAuthState({ nextUser: null, clearToken: true });
+    };
+
+    try {
+      const payload = decodeJwtPayload(token);
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        clearInvalidToken();
+      } else {
+        applyAuthState({
+          nextUser: { username: payload.username, authProvider: 'password' },
+        });
+      }
+    } catch {
+      clearInvalidToken();
+    }
+
+    return () => { cancelled = true; };
   }, [token]);
 
+  // Auto-expire token
   useEffect(() => {
     if (!token) return;
 
@@ -73,18 +73,8 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
     };
 
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-      return;
-    }
-
     try {
-      const payload = JSON.parse(atob(tokenParts[1]));
+      const payload = decodeJwtPayload(token);
       if (payload.exp) {
         const expiryMs = payload.exp * 1000;
 
@@ -114,7 +104,6 @@ export const AuthProvider = ({ children }) => {
         scheduleExpiry();
       }
     } catch {
-      // If decoding fails, clear invalid token
       localStorage.removeItem('token');
       queueMicrotask(() => {
         setToken(null);
@@ -130,7 +119,6 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
-  // Traditional username/password login
   const login = async (username, password) => {
     try {
       const data = await apiClient.login(username, password);
@@ -144,7 +132,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Traditional username/password registration
   const register = async (username, password) => {
     try {
       await apiClient.register(username, password);
@@ -154,29 +141,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // OAuth sign in (Google, GitHub)
-  const signInWithOAuth = async (provider) => {
-    try {
-      await stackClientApp.signInWithOAuth(provider);
-      return true;
-    } catch (err) {
-      console.error(`${provider} sign-in error:`, err);
-      return false;
-    }
-  };
-
-  // Logout - handles both auth methods
-  const logout = async () => {
-    try {
-      // Sign out from Stack Auth if using OAuth
-      if (user?.authProvider === 'oauth') {
-        await stackClientApp.signOut();
-      }
-    } catch (err) {
-      console.log('Stack Auth signout error:', err);
-    }
-
-    // Clear local state
+  const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');
@@ -189,8 +154,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       login,
       logout,
-      register,
-      signInWithOAuth
+      register
     }}>
       {children}
     </AuthContext.Provider>

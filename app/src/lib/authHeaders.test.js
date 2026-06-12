@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { stackClientApp } from '../config/neonAuth';
 import { getAuthHeaders, hasAuthCredential } from './authHeaders';
-
-vi.mock('../config/neonAuth', () => ({
-  stackClientApp: {
-    getUser: vi.fn(),
-  },
-}));
 
 const installLocalStorage = () => {
   const store = new Map();
@@ -42,49 +35,18 @@ describe('auth headers', () => {
     });
   });
 
-  it('adds a Stack Auth access token for OAuth sessions', async () => {
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({ accessToken: 'stack-token' })),
-    });
-
-    const headers = await getAuthHeaders({ username: 'processor', authProvider: 'oauth' });
-
-    expect(headers).toEqual({
-      'x-stack-access-token': 'stack-token',
-    });
-    expect(headers).not.toHaveProperty('Content-Type');
-  });
-
-  it('preserves base headers and adds a Stack Auth access token for OAuth sessions', async () => {
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({ accessToken: 'stack-token' })),
-    });
-
+  it('preserves base headers when no token is available', async () => {
     const headers = await getAuthHeaders(
-      { username: 'processor', authProvider: 'oauth' },
+      { username: 'processor', authProvider: 'password' },
       { 'Content-Type': 'application/json' }
     );
 
     expect(headers).toEqual({
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
     });
   });
 
-  it('does not fall back to a password token for OAuth sessions', async () => {
-    localStorage.setItem('token', 'stale-jwt-token');
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({})),
-    });
-
-    const headers = await getAuthHeaders({ username: 'processor', authProvider: 'oauth' });
-
-    expect(headers).toEqual({});
-  });
-
-  it('knows whether any auth credential is available', () => {
-    expect(hasAuthCredential({ username: 'oauth-user', authProvider: 'oauth' })).toBe(true);
-
+  it('requires a stored token before treating a user as authenticated for sync', () => {
     expect(hasAuthCredential({ username: 'password-user', authProvider: 'password' })).toBe(false);
     localStorage.setItem('token', 'jwt-token');
     expect(hasAuthCredential({ username: 'password-user', authProvider: 'password' })).toBe(true);

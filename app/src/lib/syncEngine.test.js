@@ -200,13 +200,12 @@ describe('syncAll', () => {
     expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id');
   });
 
-  it('uses shared auth headers so OAuth sessions can sync without a JWT', async () => {
-    const oauthUser = { username: 'oauth-user', authProvider: 'oauth' };
-    const oauthHeaders = {
+  it('uses shared JWT auth headers when syncing records', async () => {
+    const authHeaders = {
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
+      Authorization: 'Bearer jwt-token',
     };
-    getAuthHeaders.mockResolvedValue(oauthHeaders);
+    getAuthHeaders.mockResolvedValue(authHeaders);
     getAllPendingSync.mockResolvedValue({
       calcs: [
         {
@@ -221,14 +220,13 @@ describe('syncAll', () => {
       yields: [],
     });
 
-    await syncAll(oauthUser);
+    await syncAll(passwordUser);
 
-    expect(getAuthHeaders).toHaveBeenCalledWith(oauthUser, { 'Content-Type': 'application/json' });
-    // extraHeaders passed to saveCalcRaw must include the OAuth token
+    expect(getAuthHeaders).toHaveBeenCalledWith(passwordUser, { 'Content-Type': 'application/json' });
     const [, extraHeaders] = apiClient.saveCalcRaw.mock.calls[0];
     expect(extraHeaders).toMatchObject({
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
+      Authorization: 'Bearer jwt-token',
     });
   });
 

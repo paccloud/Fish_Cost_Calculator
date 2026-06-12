@@ -360,14 +360,14 @@ describe('apiClient.getContributorProfile', () => {
     });
   });
 
-  it('uses extraHeaders when provided (OAuth path)', async () => {
+  it('preserves extraHeaders when provided', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: false, status: 404, body: '' }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
 
-    await client.getContributorProfile({ 'x-stack-access-token': 'oauth-tok' });
+    await client.getContributorProfile({ 'X-Request-ID': 'request-1' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth-tok');
+    expect(options.headers['X-Request-ID']).toBe('request-1');
     expect(options.headers.Authorization).toBeUndefined();
   });
 });
@@ -471,14 +471,15 @@ describe('apiClient.saveCalcRaw — request construction', () => {
     expect(res.status).toBe(401);
   });
 
-  it('passes extraHeaders (OAuth token)', async () => {
+  it('passes extraHeaders and injects the stored JWT', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: true, status: 201, body: { id: 1 } }));
-    const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
 
-    await client.saveCalcRaw({}, { 'x-stack-access-token': 'oauth' });
+    await client.saveCalcRaw({}, { 'X-Request-ID': 'request-1' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth');
+    expect(options.headers['X-Request-ID']).toBe('request-1');
+    expect(options.headers.Authorization).toBe(`Bearer ${TOKEN}`);
   });
 });
 
@@ -575,15 +576,15 @@ describe('apiClient.listSavedCalcsRaw — request construction', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('passes extraHeaders (OAuth token)', async () => {
+  it('passes extraHeaders and injects the stored JWT', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: [] }));
-    const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
 
-    await client.listSavedCalcsRaw({ 'x-stack-access-token': 'oauth' });
+    await client.listSavedCalcsRaw({ 'X-Request-ID': 'request-1' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth');
-    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers['X-Request-ID']).toBe('request-1');
+    expect(options.headers.Authorization).toBe(`Bearer ${TOKEN}`);
   });
 });
 
