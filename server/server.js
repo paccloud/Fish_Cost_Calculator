@@ -197,6 +197,22 @@ app.delete('/api/saved-calcs/:id', authenticate, async (req, res) => {
     return res.status(status).json(body);
 });
 
+// Public Calculations — delegates to shared handler core.
+app.get('/api/public-calcs', async (req, res) => {
+    const { handleListPublicCalcs } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListPublicCalcs({}, dbAdapter);
+    return res.status(status).json(body);
+});
+
+// Fish Data — delegates to shared handler core.
+app.get('/api/fish-data', async (req, res) => {
+    const { handleGetFishData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleGetFishData({}, dbAdapter);
+    return res.status(status).json(body);
+});
+
 // Upload Data (XLSX/CSV)
 const MAX_UPLOAD_SIZE_BYTES = 4 * 1024 * 1024; // 4MB
 
@@ -403,29 +419,22 @@ app.get('/api/export', authenticate, (req, res) => {
     }
 });
 
-// Get all visible contributors (public)
-app.get('/api/contributors', (req, res) => {
-    const query = `
-        SELECT c.*, u.username, COUNT(ud.id) as contribution_count
-        FROM contributors c
-        JOIN users u ON c.user_id = u.id
-        LEFT JOIN user_data ud ON c.user_id = ud.user_id
-        WHERE c.show_on_page = 1
-        GROUP BY c.id
-        ORDER BY contribution_count DESC
-    `;
-    db.all(query, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// Get all visible contributors (public) — delegates to shared handler core.
+app.get('/api/contributors', async (req, res) => {
+    const { handleListContributors } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListContributors({}, dbAdapter);
+    return res.status(status).json(body);
 });
 
-const getCurrentContributorProfile = (req, res) => {
-    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Profile not found' });
-        res.json(row);
-    });
+const getCurrentContributorProfile = async (req, res) => {
+    const { handleGetContributorProfile } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleGetContributorProfile(
+        { userId: req.user.id },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 };
 
 // Get current user's contributor profile
@@ -433,39 +442,14 @@ app.get('/api/contributor', authenticate, getCurrentContributorProfile);
 app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
 
 // Create or update contributor profile
-app.post('/api/contributor', authenticate, (req, res) => {
-    const { display_name, organization, bio, show_on_page } = req.body;
-    const now = new Date().toISOString();
-
-    // Check if profile exists
-    db.get('SELECT * FROM contributors WHERE user_id = ?', [req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-
-        if (row) {
-            // Update existing profile
-            db.run(
-                `UPDATE contributors
-                 SET display_name = ?, organization = ?, bio = ?, show_on_page = ?, updated_at = ?
-                 WHERE user_id = ?`,
-                [display_name, organization, bio, show_on_page ? 1 : 0, now, req.user.id],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ message: 'Profile updated successfully' });
-                }
-            );
-        } else {
-            // Create new profile
-            db.run(
-                `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [req.user.id, display_name, organization, bio, show_on_page ? 1 : 0, now, now],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ id: this.lastID, message: 'Profile created successfully' });
-                }
-            );
-        }
-    });
+app.post('/api/contributor', authenticate, async (req, res) => {
+    const { handleSaveContributorProfile } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSaveContributorProfile(
+        { userId: req.user.id, ...req.body },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
 app.listen(PORT, () => {

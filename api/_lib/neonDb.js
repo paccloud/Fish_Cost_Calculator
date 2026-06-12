@@ -114,5 +114,142 @@ export function makeNeonAdapter() {
     async deleteCalc(id) {
       await query('DELETE FROM calculations WHERE id = $1', [id]);
     },
+
+    async listPublicCalcs() {
+      const result = await query(
+        `SELECT id, species, product, cost, yield, result, date
+         FROM calculations
+         ORDER BY date DESC
+         LIMIT 100`
+      );
+      return result.rows;
+    },
+
+    async getFishData() {
+      const speciesResult = await query(`
+        SELECT id, name, scientific_name, category
+        FROM species
+        ORDER BY category, name
+      `);
+
+      const yieldsResult = await query(`
+        SELECT species_id, from_state, to_state, yield_percent, range_min, range_max
+        FROM fish_yields
+        ORDER BY species_id, from_state, to_state
+      `);
+
+      const profilesResult = await query(`
+        SELECT species_id, description, culinary_uses, edible_portions, url
+        FROM species_profiles
+      `);
+
+      const fishData = {};
+      const profiles = {};
+      const speciesMap = {};
+
+      for (const species of speciesResult.rows) {
+        speciesMap[species.id] = species;
+        fishData[species.name] = {
+          scientific_name: species.scientific_name,
+          category: species.category,
+          conversions: {},
+        };
+      }
+
+      for (const yieldRow of yieldsResult.rows) {
+        const species = speciesMap[yieldRow.species_id];
+        if (!species || !fishData[species.name]) continue;
+
+        const fromLabel = yieldRow.from_state !== 'Round'
+          && yieldRow.from_state !== 'Whole'
+          && yieldRow.from_state !== 'Raw Whole'
+          ? `From ${yieldRow.from_state}: `
+          : '';
+        const label = `${fromLabel}${yieldRow.to_state}`;
+
+        fishData[species.name].conversions[label] = {
+          yield: Number.parseFloat(yieldRow.yield_percent),
+          range: yieldRow.range_min && yieldRow.range_max
+            ? [Number.parseFloat(yieldRow.range_min), Number.parseFloat(yieldRow.range_max)]
+            : null,
+          from: yieldRow.from_state,
+          to: yieldRow.to_state,
+        };
+      }
+
+      for (const profile of profilesResult.rows) {
+        const species = speciesMap[profile.species_id];
+        if (!species) continue;
+
+        profiles[species.name] = {
+          description: profile.description,
+          culinary_uses: profile.culinary_uses,
+          edible_portions: profile.edible_portions,
+          url: profile.url,
+        };
+      }
+
+      return {
+        fishData,
+        profiles,
+        source: {
+          title: 'Recoveries and Yields from Pacific Fish and Shellfish',
+          authors: ['Chuck Crapo', 'Brian Paust', 'Jerry Babbitt'],
+          publisher: 'Alaska Sea Grant College Program',
+          publication: 'Marine Advisory Bulletin No. 37',
+          year: 2004,
+        },
+      };
+    },
+
+    async listContributors() {
+      const result = await query(
+        `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+         FROM contributors c
+         JOIN users u ON c.user_id = u.id
+         LEFT JOIN user_data ud ON c.user_id = ud.user_id
+         WHERE c.show_on_page = true
+         GROUP BY c.id, u.username
+         ORDER BY contribution_count DESC`
+      );
+      return result.rows;
+    },
+
+    async getContributorProfile(userId) {
+      const result = await query(
+        'SELECT * FROM contributors WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    async saveContributorProfile(userId, profile) {
+      const existing = await query(
+        'SELECT id FROM contributors WHERE user_id = $1',
+        [userId]
+      );
+
+      if (existing.rows[0]) {
+        await query(
+          `UPDATE contributors
+           SET display_name = $1,
+               organization = $2,
+               bio = $3,
+               show_on_page = $4,
+               updated_at = NOW()
+           WHERE user_id = $5`,
+          [profile.display_name, profile.organization, profile.bio, profile.show_on_page, userId]
+        );
+        return { created: false };
+      }
+
+      const result = await query(
+        `INSERT INTO contributors (user_id, display_name, organization, bio, show_on_page, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         RETURNING id`,
+        [userId, profile.display_name, profile.organization, profile.bio, profile.show_on_page]
+      );
+      return { id: result.rows[0].id, created: true };
+    },
   };
 }

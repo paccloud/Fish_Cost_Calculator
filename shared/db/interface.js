@@ -52,6 +52,23 @@
  * @property {function(string|number): Promise<void>} deleteCalc
  *   Delete the calculation with the given id.
  *   The caller (handler) is responsible for ownership checks before calling this.
+ *
+ * @property {function(): Promise<DbCalc[]>} listPublicCalcs
+ *   Return public calculation rows for the unauthenticated community feed.
+ *   Must omit user_id and other private user fields.
+ *
+ * @property {function(): Promise<Object>} getFishData
+ *   Return the fish-data payload consumed by the frontend:
+ *   {fishData, profiles, source}.
+ *
+ * @property {function(): Promise<Array>} listContributors
+ *   Return visible contributor profiles plus contribution_count.
+ *
+ * @property {function(string|number): Promise<Object|null>} getContributorProfile
+ *   Return the authenticated user's contributor profile, or null if none exists.
+ *
+ * @property {function(string|number, Object): Promise<{id?: string|number, created: boolean}>} saveContributorProfile
+ *   Create or update the authenticated user's contributor profile.
  */
 
 /**
