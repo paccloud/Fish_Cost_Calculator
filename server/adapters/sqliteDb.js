@@ -145,6 +145,208 @@ function makeSqliteAdapter(db) {
         });
       });
     },
+
+    // -----------------------------------------------------------------------
+    // User-data methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all user_data rows for a user.
+     *
+     * @param {number|string} userId
+     * @returns {Promise<Array>}
+     */
+    listUserData(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT id, species, product, yield, source FROM user_data WHERE user_id = ?',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    /**
+     * Insert a new user_data row.
+     *
+     * @param {number|string} userId
+     * @param {{ species, product, yield, source }} fields
+     * @returns {Promise<{id: number|string}>}
+     */
+    createUserData(userId, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      return new Promise((resolve, reject) => {
+        db.run(
+          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+          [userId, species, product, yieldVal, source],
+          function callback(err) {
+            if (err) return reject(err);
+            resolve({ id: this.lastID });
+          }
+        );
+      });
+    },
+
+    /**
+     * Find a single user_data row by id. Returns at minimum {id, user_id}.
+     *
+     * @param {number|string} id
+     * @returns {Promise<{id: number, user_id: number}|null>}
+     */
+    findUserDataById(id) {
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id, user_id FROM user_data WHERE id = ?',
+          [id],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+    },
+
+    /**
+     * Update a user_data row using explicit JS-level fallback for partial updates.
+     * The caller (handler) passes null for fields to keep unchanged; this
+     * implementation mirrors the production COALESCE behaviour by fetching the
+     * existing row first and applying field-level fallback.
+     *
+     * Ownership must be verified by the caller before this.
+     *
+     * @param {number|string} id
+     * @param {{ species, product, yield, source }} fields  (null = keep current)
+     * @returns {Promise<void>}
+     */
+    updateUserData(id, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      return new Promise((resolve, reject) => {
+        // Fetch existing row to apply COALESCE-equivalent fallback
+        db.get('SELECT * FROM user_data WHERE id = ?', [id], (getErr, row) => {
+          if (getErr) return reject(getErr);
+          if (!row) return reject(new Error('Row not found'));
+
+          db.run(
+            `UPDATE user_data
+             SET species = ?, product = ?, yield = ?, source = ?
+             WHERE id = ?`,
+            [
+              species !== null ? species : row.species,
+              product !== null ? product : row.product,
+              yieldVal !== null ? yieldVal : row.yield,
+              source !== null ? source : row.source,
+              id,
+            ],
+            (err) => {
+              if (err) return reject(err);
+              resolve();
+            }
+          );
+        });
+      });
+    },
+
+    /**
+     * Delete a user_data row by id.
+     * Ownership must be verified by the caller before this.
+     *
+     * @param {number|string} id
+     * @returns {Promise<void>}
+     */
+    deleteUserData(id) {
+      return new Promise((resolve, reject) => {
+        db.run('DELETE FROM user_data WHERE id = ?', [id], (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    },
+
+    /**
+     * Upsert one user_data row: update yield+source if (userId, species, product)
+     * already exists; otherwise insert.
+     *
+     * @param {number|string} userId
+     * @param {{ species, product, yield, source }} fields
+     * @returns {Promise<{inserted: boolean}>}
+     */
+    upsertUserDataRow(userId, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+          [userId, species, product],
+          (selectErr, existing) => {
+            if (selectErr) return reject(selectErr);
+
+            if (existing) {
+              db.run(
+                'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
+                [yieldVal, source, existing.id, userId],
+                (updateErr) => {
+                  if (updateErr) return reject(updateErr);
+                  resolve({ inserted: false });
+                }
+              );
+            } else {
+              db.run(
+                'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                [userId, species, product, yieldVal, source],
+                (insertErr) => {
+                  if (insertErr) return reject(insertErr);
+                  resolve({ inserted: true });
+                }
+              );
+            }
+          }
+        );
+      });
+    },
+
+    // -----------------------------------------------------------------------
+    // Export methods
+    // -----------------------------------------------------------------------
+
+    /**
+     * List all user_data rows for export.
+     *
+     * @param {number|string} userId
+     * @returns {Promise<Array>}
+     */
+    listUserDataForExport(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT * FROM user_data WHERE user_id = ?',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    /**
+     * List all calculations for export, ordered by date DESC.
+     *
+     * @param {number|string} userId
+     * @returns {Promise<Array>}
+     */
+    listCalcsForExport(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
   };
 }
 
