@@ -141,7 +141,7 @@ export async function mergeSyncedYields(serverYields) {
       local.push({
         species: sy.species,
         product: sy.product,
-        yield: sy.yield_percentage,
+        yield: sy.yield,
         source: sy.source || 'User Input',
         serverId: sy.id,
         id: crypto.randomUUID(),

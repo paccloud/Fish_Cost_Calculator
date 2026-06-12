@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { apiUrl } from '../config/api';
+import { getAuthHeaders } from '../lib/authHeaders';
+import { apiClient } from '../lib/apiClient';
 
 const createEmptyFormData = () => ({
   display_name: '',
@@ -22,17 +23,6 @@ const ContributorProfile = () => {
     show_on_page: true
   });
 
-  const getAuthHeaders = useCallback(() => {
-    const headers = { 'Content-Type': 'application/json' };
-
-    const token = localStorage.getItem('token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    return headers;
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -45,39 +35,15 @@ const ContributorProfile = () => {
       if (!user) return;
 
       try {
-        const headers = await getAuthHeaders();
-        const res = await fetch(apiUrl('/api/contributor'), { headers });
+        const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
+        const data = await apiClient.getContributorProfile(headers);
 
-        if (res.status === 404) {
-          // No profile yet, that's okay
+        // null means 404 — no profile yet, that's okay
+        if (data === null) {
           if (!cancelled) setFormData(emptyForm);
           return;
         }
 
-        if (!res.ok) {
-          const rawError = await res.text().catch(() => '');
-          let message = `Unable to load your profile (HTTP ${res.status}). Please try again.`;
-
-          if (rawError) {
-            try {
-              const errorData = JSON.parse(rawError);
-              message = errorData?.error || errorData?.message || message;
-            } catch {
-              const trimmed = rawError.trim();
-              if (trimmed && trimmed.length <= 200 && !trimmed.includes('<')) {
-                message = trimmed;
-              }
-            }
-          }
-
-          if (!cancelled) {
-            setFormData(emptyForm);
-            setStatus({ type: 'error', message });
-          }
-          return;
-        }
-
-        const data = await res.json();
         if (!cancelled && data) {
           setFormData({
             display_name: data.display_name || '',
@@ -90,39 +56,30 @@ const ContributorProfile = () => {
         console.error('Failed to load profile:', err);
         if (!cancelled) {
           setFormData(emptyForm);
-          setStatus({ type: 'error', message: 'Unable to load your profile. Please try again.' });
+          const message = err?.message || 'Unable to load your profile. Please try again.';
+          setStatus({ type: 'error', message });
         }
       }
     };
 
     loadProfile();
     return () => { cancelled = true; };
-  }, [user, getAuthHeaders]);
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(apiUrl('/api/contributor'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(formData)
-      });
-
-      if (res.ok) {
-        setStatus({ type: 'success', message: 'Profile saved successfully!' });
-        setTimeout(() => navigate('/manage-data'), 2000);
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        setStatus({
-          type: 'error',
-          message: errorData.error || 'Failed to save profile.'
-        });
-      }
+      const extraHeaders = await getAuthHeaders(user);
+      await apiClient.saveContributorProfile(formData, extraHeaders);
+      setStatus({ type: 'success', message: 'Profile saved successfully!' });
+      setTimeout(() => navigate('/manage-data'), 2000);
     } catch (error) {
       console.error('Save profile error:', error);
-      setStatus({ type: 'error', message: 'Error saving profile.' });
+      setStatus({
+        type: 'error',
+        message: error?.message || 'Error saving profile.',
+      });
     }
   };
 

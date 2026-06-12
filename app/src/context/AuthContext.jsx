@@ -1,7 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiUrl } from '../config/api';
+import { apiClient } from '../lib/apiClient';
 
 const AuthContext = createContext(null);
+
+const decodeJwtPayload = (token) => {
+  const tokenParts = token.split('.');
+  if (tokenParts.length !== 3) {
+    throw new Error('Invalid JWT format');
+  }
+
+  const base64 = tokenParts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  return JSON.parse(atob(paddedBase64));
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,26 +21,19 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (token) {
-      const tokenParts = token.split('.');
-      if (tokenParts.length !== 3) {
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
-      } else {
-        try {
-          const payload = JSON.parse(atob(tokenParts[1]));
-          if (payload.exp && payload.exp * 1000 < Date.now()) {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
-          } else {
-            setUser({ username: payload.username, authProvider: 'password' });
-          }
-        } catch {
+      try {
+        const payload = decodeJwtPayload(token);
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
           localStorage.removeItem('token');
           setToken(null);
           setUser(null);
+        } else {
+          setUser({ username: payload.username, authProvider: 'password' });
         }
+      } catch {
+        localStorage.removeItem('token');
+        setToken(null);
+        setUser(null);
       }
     }
     setLoading(false);
@@ -49,18 +53,8 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
     };
 
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-      return;
-    }
-
     try {
-      const payload = JSON.parse(atob(tokenParts[1]));
+      const payload = decodeJwtPayload(token);
       if (payload.exp) {
         const expiryMs = payload.exp * 1000;
 
@@ -107,19 +101,11 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      const res = await fetch(apiUrl('/api/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setToken(data.token);
-        localStorage.setItem('token', data.token);
-        setUser({ username: data.username, authProvider: 'password' });
-        return true;
-      }
-      return false;
+      const data = await apiClient.login(username, password);
+      setToken(data.token);
+      localStorage.setItem('token', data.token);
+      setUser({ username: data.username, authProvider: 'password' });
+      return true;
     } catch (e) {
       console.error(e);
       return false;
@@ -128,13 +114,8 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (username, password) => {
     try {
-      const res = await fetch(apiUrl('/api/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      if (res.ok) return true;
-      return false;
+      await apiClient.register(username, password);
+      return true;
     } catch {
       return false;
     }

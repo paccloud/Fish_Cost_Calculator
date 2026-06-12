@@ -6,6 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Local Catch is a fish yield calculator for the seafood industry. It calculates the true cost of fish products after accounting for processing yields, helping fishers and processors determine prices for finished products.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `paccloud/Fish_Cost_Calculator`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default Matt Pocock engineering-skill triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses a single-context domain-doc layout. See `docs/agents/domain.md`.
+
 ## Commands
 
 ### Development
@@ -62,7 +76,7 @@ The project has **two separate backend implementations** that serve different en
   - `/` (Home), `/calculator`, `/login`, `/upload`, `/about`, `/submit-request`
   - `/data-sources`, `/manage-data`, `/profile`, `/roadmap`
   - `/handler/*` (Stack Auth handler routes)
-- Fish yield data in `src/data/fish_data_v3.js` — 60+ species with conversion yields from MAB-37 research publication
+- Fish yield data in `src/data/fish_data_v3.js` — 89 species with conversion yields from MAB-37 research publication
 
 ### Data Flow
 1. Fish yield data is static in `fish_data_v3.js` (from MAB-37 PDF research document)

@@ -100,7 +100,7 @@ const SubmitRequest = () => {
         email: "",
         priority: "medium",
       });
-    } catch (error) {
+    } catch {
       setSubmitStatus("error");
     } finally {
       setIsSubmitting(false);
@@ -113,8 +113,6 @@ const SubmitRequest = () => {
       setErrors((prev) => ({ ...prev, [field]: null }));
     }
   };
-
-  const selectedType = REQUEST_TYPES.find((t) => t.id === formData.type);
 
   return (
     <div className="max-w-4xl mx-auto px-4">

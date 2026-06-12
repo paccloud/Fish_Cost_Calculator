@@ -3,7 +3,9 @@ import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, Plus, X, Clock, TrendingDown, ChevronDown, ChevronUp, Share2, Link2, Copy, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { apiUrl } from '../config/api';
+import { calculate as calcEngine } from '../lib/calcEngine';
+import { apiClient } from '../lib/apiClient';
+import { mergeFishData } from '../lib/fishDataMerge';
 
 // Process FISH_DATA_V3 into the format expected by the calculator
 // (same shape as the API response: numeric yield, array range, from/to strings)
@@ -138,7 +140,7 @@ const TextWithTooltips = ({ text }) => {
 
 const Calculator = () => {
   const { user } = useAuth();
-  const { savedCalcs, customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, removeCalc, addYield: contextAddYield, dataLoaded, updateCustomSpecies } = useData();
+  const { customYields, customSpecies: dataContextCustomSpecies, saveCalc: contextSaveCalc, addYield: contextAddYield, updateCustomSpecies } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -148,8 +150,8 @@ const Calculator = () => {
   const [yieldPercent, setYieldPercent] = useState('');
   const [yieldRange, setYieldRange] = useState(null);
   const [processingCost, setProcessingCost] = useState('');
-  const [coldStorage, setColdStorage] = useState('');
-  const [shipping, setShipping] = useState('');
+  const [coldStorage] = useState('');
+  const [shipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
   const [result, setResult] = useState(null);
   const [saveStatus, setSaveStatus] = useState('');
@@ -215,8 +217,7 @@ const Calculator = () => {
 
   // Load public calculations for all users (including guests)
   useEffect(() => {
-    fetch(apiUrl('/api/public-calcs'))
-      .then(res => res.json())
+    apiClient.publicCalcs()
       .then(data => {
         if (Array.isArray(data)) {
           setPublicHistory(data);
@@ -230,6 +231,7 @@ const Calculator = () => {
     const params = new URLSearchParams(window.location.search);
     const urlSpecies = params.get('species');
     if (urlSpecies) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSpecies(urlSpecies);
       if (params.get('from')) setFromState(params.get('from'));
       if (params.get('to')) setToState(params.get('to'));
@@ -242,47 +244,13 @@ const Calculator = () => {
     }
   }, []);
 
-  // Custom yields from DataContext (replaces API user-data fetch)
-  const customData = useMemo(() => {
-    const mapped = {};
-    customYields.forEach(item => {
-      if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-      mapped[item.species].conversions[`Custom: ${item.product}`] = {
-        yield: parseFloat(item.yield),
-        from: 'Custom',
-        to: item.product
-      };
-    });
-    return mapped;
-  }, [customYields]);
-
-  // Merge Data - combine API fish data with user custom data and local custom species
-  const combinedData = useMemo(() => {
-    const merged = { ...fishData };
-    // Merge user-uploaded custom data
-    Object.keys(customData).forEach(sp => {
-      if (!merged[sp]) {
-        merged[sp] = customData[sp];
-      } else {
-        merged[sp] = { 
-          ...merged[sp], 
-          conversions: { ...merged[sp].conversions, ...customData[sp].conversions }
-        };
-      }
-    });
-    // Merge local custom species (from localStorage)
-    Object.keys(localCustomSpecies).forEach(sp => {
-      if (!merged[sp]) {
-        merged[sp] = localCustomSpecies[sp];
-      } else {
-        merged[sp] = { 
-          ...merged[sp], 
-          conversions: { ...merged[sp].conversions, ...localCustomSpecies[sp].conversions }
-        };
-      }
-    });
-    return merged;
-  }, [fishData, customData, localCustomSpecies]);
+  // Merge Data - combine static fish data, user custom yields, and local custom species.
+  // Precedence (lowest → highest): static < customYields < localCustomSpecies.
+  // All precedence rules owned by fishDataMerge.
+  const combinedData = useMemo(
+    () => mergeFishData(fishData, customYields, localCustomSpecies),
+    [fishData, customYields, localCustomSpecies]
+  );
 
   const speciesList = Object.keys(combinedData).sort();
   
@@ -441,6 +409,7 @@ const Calculator = () => {
   // Update yield when conversion is selected
   useEffect(() => {
     if (currentConversion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYieldPercent(String(currentConversion.yield));
       setYieldRange(currentConversion.range);
       setUseRangeMin(false);
@@ -451,6 +420,7 @@ const Calculator = () => {
   // Apply range min/max
   useEffect(() => {
     if (yieldRange && useRangeMin) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYieldPercent(String(yieldRange[0]));
     } else if (yieldRange && useRangeMax) {
       setYieldPercent(String(yieldRange[1]));
@@ -460,68 +430,23 @@ const Calculator = () => {
   }, [useRangeMin, useRangeMax, yieldRange, currentConversion]);
 
   const calculate = () => {
-    const y = (parseFloat(yieldPercent) || 100) / 100;
-
-    if (mode === 'weight') {
-      const target = parseFloat(targetWeight) || 0;
-      if (y > 0) {
-        setResult(target / y);
-      } else {
-        setResult(0);
-      }
-      setSaveStatus('');
-      setAppliedDiscount(0);
-      return;
-    }
-
-    const c = parseFloat(cost) || 0;
-    const proc = parseFloat(processingCost) || 0;
-    const cold = parseFloat(coldStorage) || 0;
-    const ship = parseFloat(shipping) || 0;
-
-    let baseRes = c / y;
-    
-    if (weightType === 'incoming') {
-      baseRes += proc / y;
-    } else {
-      baseRes += proc;
-    }
-
-    baseRes += cold + ship;
-
-    // Add time-based costs if enabled
-    if (showTimeTracking) {
-      let totalTimeCost = 0;
-      processingSteps.forEach(step => {
-        const time = parseFloat(step.timeMinutes) || 0;
-        const laborRate = parseFloat(step.laborCostPerHour) || 0;
-        // Convert minutes to hours and calculate cost
-        totalTimeCost += (time / 60) * laborRate;
-      });
-      // Add time cost per pound (assuming time is per unit processed)
-      baseRes += totalTimeCost;
-    }
-
-    // Apply economy of scale discount if enabled
-    let discount = 0;
-    if (showEconomyOfScale && quantity) {
-      const qty = parseFloat(quantity) || 0;
-      // Find the highest applicable discount
-      const sortedBreaks = [...priceBreaks].sort((a, b) => b.minQty - a.minQty);
-      for (const pb of sortedBreaks) {
-        if (qty >= pb.minQty) {
-          discount = pb.discount;
-          break;
-        }
-      }
-    }
-    setAppliedDiscount(discount);
-    
-    if (discount > 0) {
-      baseRes = baseRes * (1 - discount / 100);
-    }
-
-    setResult(baseRes);
+    const { result: calcResult, appliedDiscount: calcDiscount } = calcEngine({
+      mode,
+      yieldPercent,
+      targetWeight,
+      cost,
+      processingCost,
+      weightType,
+      coldStorage,
+      shipping,
+      showTimeTracking,
+      processingSteps,
+      showEconomyOfScale,
+      quantity,
+      priceBreaks,
+    });
+    setResult(calcResult);
+    setAppliedDiscount(calcDiscount);
     setSaveStatus('');
   };
 
@@ -541,7 +466,7 @@ const Calculator = () => {
         date: new Date().toISOString()
       });
       setSaveStatus('Saved to History!');
-    } catch (e) {
+    } catch {
       setSaveStatus('Error saving.');
     }
   };
@@ -1196,15 +1121,8 @@ const Calculator = () => {
                     {user && (
                       <button
                         onClick={async () => {
-                          const token = localStorage.getItem('token');
                           try {
-                            const response = await fetch(apiUrl('/api/export?type=calcs'), {
-                              headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (!response.ok) {
-                              throw new Error(`Export failed with HTTP ${response.status}`);
-                            }
-                            const blob = await response.blob();
+                            const blob = await apiClient.exportCalcs();
                             const url = window.URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
@@ -1213,8 +1131,10 @@ const Calculator = () => {
                             a.click();
                             window.URL.revokeObjectURL(url);
                             document.body.removeChild(a);
+                            setSaveStatus('Export downloaded.');
                           } catch (error) {
                             console.error('Export failed:', error);
+                            setSaveStatus('Export failed.');
                           }
                         }}
                         className="flex items-center gap-2 text-text-secondary hover:text-navy dark:hover:text-text-primary transition text-sm"

@@ -31,7 +31,7 @@ Find a CSF near you: [finder.localcatch.org](https://finder.localcatch.org/)
 
 ### Key Features
 
-- **60+ Species Database** - Comprehensive yield data from salmon to sharks, rockfish to shellfish
+- **89 Species Database** - Comprehensive yield data from salmon to sharks, rockfish to shellfish
 - **From → To Conversions** - Calculate yields between any processing states (Round, D/H-On, Fillets, etc.)
 - **Cost Calculator** - Factor in processing costs, cold storage, and shipping
 - **Weight Calculator** - Determine how much input weight you need for a target output
@@ -101,7 +101,7 @@ Fish_Cost_Calculator/
 │   │   ├── context/
 │   │   │   └── AuthContext.jsx   # Authentication state
 │   │   ├── data/
-│   │   │   └── fish_data_v3.js   # 60+ species yield database
+│   │   │   └── fish_data_v3.js   # 89 species yield database
 │   │   ├── App.jsx               # Main app with routing
 │   │   └── main.jsx              # Entry point
 │   └── package.json
@@ -111,9 +111,7 @@ Fish_Cost_Calculator/
 │   ├── fish_app.db              # SQLite database
 │   └── package.json
 │
-├── data/                         # Legacy data files
-├── datasets/                     # Additional datasets
-└── MAB-37PDF-*.pdf              # Source PDF document
+└── research/                     # Source research materials (MAB-37 PDF, extraction scripts)
 ```
 
 ## 🔧 Technology Stack
@@ -136,8 +134,8 @@ Fish_Cost_Calculator/
 | SQLite 3   | Database         |
 | JWT        | Authentication   |
 | bcrypt     | Password hashing |
-| Multer     | File uploads     |
-| xlsx       | Excel parsing    |
+| formidable | File uploads     |
+| ExcelJS    | Excel parsing    |
 
 ## 📊 Database Schema
 
@@ -174,6 +172,19 @@ user_data (
     yield REAL,
     source TEXT
 )
+
+-- Contributor profiles (opt-in public listing)
+contributors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE,
+    display_name TEXT,
+    organization TEXT,
+    bio TEXT,
+    show_on_page INTEGER DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+)
 ```
 
 ## 🌐 API Endpoints
@@ -201,6 +212,21 @@ user_data (
 | PUT    | `/api/user-data/:id` | Update yield entry           |
 | DELETE | `/api/user-data/:id` | Delete yield entry           |
 | POST   | `/api/upload-data`   | Upload Excel/CSV file        |
+
+### Export (Auth Required)
+
+| Method | Endpoint                   | Description                          |
+| ------ | -------------------------- | ------------------------------------ |
+| GET    | `/api/export?type=calcs`   | Export saved calculations as CSV     |
+| GET    | `/api/export?type=data`    | Export custom yield data as CSV      |
+
+### Public (No Auth)
+
+| Method | Endpoint               | Description                             |
+| ------ | ---------------------- | --------------------------------------- |
+| GET    | `/api/public-calcs`    | Recent calculations (last 100, no auth) |
+| GET    | `/api/contributors`    | Opt-in contributor profiles             |
+| GET    | `/api/fish-data`       | Full static species yield dataset       |
 
 ## 📖 Data Sources
 

@@ -24,6 +24,14 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Context files intentionally co-export a Provider component and a
+      // companion hook (e.g. useAuth, useData, useTheme). Fast-refresh
+      // handles this correctly; we whitelist the known hook names here so
+      // the rule does not fire on those files.
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowExportNames: ['useAuth', 'useData', 'useTheme'] },
+      ],
     },
   },
 ])

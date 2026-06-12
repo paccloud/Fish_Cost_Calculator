@@ -12,19 +12,19 @@ function isStandalone() {
 
 const InstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [showBanner, setShowBanner] = useState(false);
-  const [isIos, setIsIos] = useState(false);
+  // Determine iOS state once at mount via lazy initializers to avoid
+  // setState calls inside an effect body.
+  const [isIos] = useState(
+    () => !isStandalone() && !localStorage.getItem('installPromptDismissed') && isIosSafari()
+  );
+  const [showBanner, setShowBanner] = useState(
+    () => !isStandalone() && !localStorage.getItem('installPromptDismissed') && isIosSafari()
+  );
 
   useEffect(() => {
     if (isStandalone()) return;
     if (localStorage.getItem('installPromptDismissed')) return;
-
-    // iOS Safari: no beforeinstallprompt, show manual instructions
-    if (isIosSafari()) {
-      setIsIos(true);
-      setShowBanner(true);
-      return;
-    }
+    if (isIosSafari()) return; // already handled via lazy initializer
 
     // Chrome/Edge/Android: listen for native install prompt
     const handler = (e) => {

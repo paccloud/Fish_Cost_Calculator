@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-test-build:
+    name: Lint · Test · Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install shared handler-core dependencies
+        run: npm ci
+        working-directory: shared
+
+      - name: Install root API dependencies
+        run: npm ci
+        working-directory: .
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

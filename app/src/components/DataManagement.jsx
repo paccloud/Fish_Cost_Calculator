@@ -37,7 +37,7 @@ const DataManagement = () => {
                 setStatus({ type: 'success', message: 'Added successfully!' });
             }
             resetForm();
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Operation failed.' });
         }
     };
@@ -59,7 +59,7 @@ const DataManagement = () => {
         try {
             await removeYield(id);
             setStatus({ type: 'success', message: 'Deleted successfully!' });
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Failed to delete.' });
         }
     };

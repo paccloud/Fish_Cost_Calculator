@@ -1,4 +1,5 @@
-import { apiUrl } from '../config/api';
+import { getAuthHeaders, hasAuthCredential } from './authHeaders';
+import { apiClient } from './apiClient';
 import {
   getAllPendingSync,
   markCalcSynced,
@@ -11,17 +12,23 @@ import {
 
 /**
  * Sync all pending local changes to the server, then pull latest.
- * @param {string} token - JWT auth token
+ * @param {Object} user - Current authenticated user session
  * @returns {Promise<{pushed: number, pulled: number, errors: number, errorDetails: Array}>}
  */
-export async function syncAll(token) {
+export async function syncAll(user) {
   const stats = { pushed: 0, pulled: 0, errors: 0, errorDetails: [] };
-  if (!token) return stats;
+  if (!hasAuthCredential(user)) return stats;
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
+  if (!headers.Authorization) {
+    stats.errors++;
+    stats.errorDetails.push({
+      type: 'auth',
+      isAuthError: true,
+      message: 'Missing authentication headers',
+    });
+    return stats;
+  }
 
   // --- Push local changes ---
   const pending = await getAllPendingSync();
@@ -29,20 +36,14 @@ export async function syncAll(token) {
   // Push new/updated calcs
   for (const calc of pending.calcs.filter((c) => c.syncStatus === 'local')) {
     try {
-      const res = await fetch(apiUrl('/api/save-calc'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: calc.name || '',
-          species: calc.species,
-          product: calc.product,
-          mode: calc.mode,
-          cost: calc.cost,
-          target_weight: calc.target_weight,
-          yield_value: calc.yield,
-          result: calc.result,
-        }),
-      });
+      const res = await apiClient.saveCalcRaw({
+        name: calc.name || '',
+        species: calc.species,
+        product: calc.product,
+        cost: calc.cost,
+        yield: calc.yield,
+        result: calc.result,
+      }, headers);
       if (res.ok) {
         const data = await res.json();
         await markCalcSynced(calc.id, data.id);
@@ -62,10 +63,7 @@ export async function syncAll(token) {
   for (const calc of pending.calcs.filter((c) => c.syncStatus === 'pending-delete')) {
     try {
       if (calc.serverId) {
-        const res = await fetch(apiUrl(`/api/saved-calcs/${calc.serverId}`), {
-          method: 'DELETE',
-          headers,
-        });
+        const res = await apiClient.deleteCalcRaw(calc.serverId, headers);
         if (res.ok || res.status === 404) {
           await removeCalcSyncedDelete(calc.id);
           stats.pushed++;
@@ -87,16 +85,12 @@ export async function syncAll(token) {
   // Push new/updated yields
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'local')) {
     try {
-      const res = await fetch(apiUrl('/api/user-data'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          species: yld.species,
-          product: yld.product,
-          yield_percentage: yld.yield,
-          source: yld.source || 'User Input',
-        }),
-      });
+      const res = await apiClient.createUserDataRaw({
+        species: yld.species,
+        product: yld.product,
+        yield: yld.yield,
+        source: yld.source || 'User Input',
+      }, headers);
       if (res.ok) {
         const data = await res.json();
         await markYieldSynced(yld.id, data.id);
@@ -116,10 +110,7 @@ export async function syncAll(token) {
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'pending-delete')) {
     try {
       if (yld.serverId) {
-        const res = await fetch(apiUrl(`/api/user-data/${yld.serverId}`), {
-          method: 'DELETE',
-          headers,
-        });
+        const res = await apiClient.deleteUserDataRaw(yld.serverId, headers);
         if (res.ok || res.status === 404) {
           await removeYieldSyncedDelete(yld.id);
           stats.pushed++;
@@ -140,7 +131,7 @@ export async function syncAll(token) {
 
   // --- Pull server data ---
   try {
-    const res = await fetch(apiUrl('/api/saved-calcs'), { headers });
+    const res = await apiClient.listSavedCalcsRaw(headers);
     if (res.ok) {
       const serverCalcs = await res.json();
       if (Array.isArray(serverCalcs)) {
@@ -153,7 +144,7 @@ export async function syncAll(token) {
   }
 
   try {
-    const res = await fetch(apiUrl('/api/user-data'), { headers });
+    const res = await apiClient.listUserDataRaw(headers);
     if (res.ok) {
       const serverYields = await res.json();
       if (Array.isArray(serverYields)) {

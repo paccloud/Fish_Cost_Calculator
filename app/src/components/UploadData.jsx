@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { apiUrl } from '../config/api';
+import { getAuthHeaders } from '../lib/authHeaders';
+import { apiClient } from '../lib/apiClient';
 
 const UploadData = () => {
     const { user } = useAuth();
@@ -25,24 +26,12 @@ const UploadData = () => {
         formData.append('file', file);
 
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(apiUrl('/api/upload-data'), {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
-                body: formData
-            });
-            
-            const data = await res.json();
-            
-            if (res.ok) {
-                setStatus({ type: 'success', message: data.message || 'Upload successful!' });
-            } else {
-                setStatus({ type: 'error', message: data.error || 'Upload failed.' });
-            }
-        } catch (e) {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
+            const extraHeaders = await getAuthHeaders(user);
+            const data = await apiClient.uploadData(formData, extraHeaders);
+            setStatus({ type: 'success', message: data.message || 'Upload successful!' });
+        } catch (err) {
+            const message = err?.message || 'Network error occurred.';
+            setStatus({ type: 'error', message });
         } finally {
             setUploading(false);
         }
