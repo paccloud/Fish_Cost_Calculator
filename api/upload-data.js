@@ -1,14 +1,14 @@
 import formidable from 'formidable';
 import { promises as fs } from 'fs';
-import { query } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 import { handleCors } from './_lib/cors.js';
 import {
   assertAllowedImportFile,
   normalizeYieldRows,
   parseImportRows,
-  upsertImportedYieldRows,
 } from './_lib/importRows.js';
+import { makeNeonAdapter } from './_lib/neonDb.js';
+import { handleUploadUserDataRows } from '../shared/handlers/index.js';
 
 // Disable default body parser for multipart form data
 export const config = {
@@ -52,20 +52,13 @@ async function handler(req, res) {
     const data = await parseImportRows(buffer, extension);
     const { rows, skippedRows } = normalizeYieldRows(data, 'Uploaded File');
 
-    const { inserted, updated } = await upsertImportedYieldRows(userId, rows, query);
-
-    const parts = [];
-    if (inserted > 0) parts.push(`${inserted} added`);
-    if (updated > 0) parts.push(`${updated} updated`);
-    if (skippedRows.length > 0) parts.push(`${skippedRows.length} skipped`);
-
-    return res.status(200).json({
-      message: parts.length ? parts.join(', ') : 'No valid records found',
-      inserted,
-      updated,
-      skipped: skippedRows.length,
+    const { status, body } = await handleUploadUserDataRows({
+      userId,
+      rows,
       skippedRows,
-    });
+    }, makeNeonAdapter());
+
+    return res.status(status).json(body);
   } catch (err) {
     console.error('Upload error:', err);
     const status = /unsupported file|parse csv|no valid/i.test(err.message || '') ? 400 : 500;

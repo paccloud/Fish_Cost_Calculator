@@ -250,6 +250,144 @@ function makeSqliteAdapter(db) {
         );
       });
     },
+
+    listUserData(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT id, species, product, yield, source FROM user_data WHERE user_id = ?',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    createUserData(userId, fields) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+          [userId, fields.species, fields.product, fields.yield, fields.source],
+          function callback(err) {
+            if (err) return reject(err);
+            resolve({ id: this.lastID });
+          }
+        );
+      });
+    },
+
+    findUserDataById(id) {
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id, user_id, species, product, yield, source FROM user_data WHERE id = ?',
+          [id],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+    },
+
+    updateUserData(userId, id, fields) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          `UPDATE user_data
+           SET species = ?, product = ?, yield = ?, source = ?
+           WHERE id = ? AND user_id = ?`,
+          [fields.species, fields.product, fields.yield, fields.source, id, userId],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
+
+    deleteUserData(userId, id) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'DELETE FROM user_data WHERE id = ? AND user_id = ?',
+          [id, userId],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
+
+    async upsertUserDataRows(userId, rows) {
+      const runSql = (sql, params = []) => new Promise((resolve, reject) => {
+        db.run(sql, params, function callback(err) {
+          if (err) return reject(err);
+          resolve(this);
+        });
+      });
+      const getSql = (sql, params = []) => new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+          if (err) return reject(err);
+          resolve(row ?? null);
+        });
+      });
+
+      let inserted = 0;
+      let updated = 0;
+
+      await runSql('BEGIN TRANSACTION');
+
+      try {
+        for (const row of rows) {
+          const existing = await getSql(
+            'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
+            [userId, row.species, row.product]
+          );
+
+          if (existing) {
+            await runSql(
+              'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
+              [row.yield, row.source, existing.id, userId]
+            );
+            updated++;
+          } else {
+            await runSql(
+              'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+              [userId, row.species, row.product, row.yield, row.source]
+            );
+            inserted++;
+          }
+        }
+
+        await runSql('COMMIT');
+        return { inserted, updated };
+      } catch (err) {
+        await runSql('ROLLBACK').catch(() => {});
+        throw err;
+      }
+    },
+
+    listExportUserData(userId) {
+      return new Promise((resolve, reject) => {
+        db.all('SELECT * FROM user_data WHERE user_id = ?', [userId], (err, rows) => {
+          if (err) return reject(err);
+          resolve(rows ?? []);
+        });
+      });
+    },
+
+    listExportCalcs(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
   };
 }
 

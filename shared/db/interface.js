@@ -69,6 +69,30 @@
  *
  * @property {function(string|number, Object): Promise<{id?: string|number, created: boolean}>} saveContributorProfile
  *   Create or update the authenticated user's contributor profile.
+ *
+ * @property {function(string|number): Promise<Array>} listUserData
+ *   Return all custom yield rows owned by the user.
+ *
+ * @property {function(string|number, Object): Promise<{id: string|number}>} createUserData
+ *   Insert one custom yield row for the user.
+ *
+ * @property {function(string|number): Promise<Object|null>} findUserDataById
+ *   Return a custom yield row by id, including user_id for ownership checks.
+ *
+ * @property {function(string|number, string|number, Object): Promise<void>} updateUserData
+ *   Update one owned custom yield row.
+ *
+ * @property {function(string|number, string|number): Promise<void>} deleteUserData
+ *   Delete one owned custom yield row.
+ *
+ * @property {function(string|number, Array): Promise<{inserted: number, updated: number}>} upsertUserDataRows
+ *   Transactionally upsert normalized upload rows for the user.
+ *
+ * @property {function(string|number): Promise<Array>} listExportUserData
+ *   Return custom yield rows for CSV export.
+ *
+ * @property {function(string|number): Promise<Array>} listExportCalcs
+ *   Return saved calculation rows for CSV export.
  */
 
 /**
