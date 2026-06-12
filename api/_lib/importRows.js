@@ -47,7 +47,7 @@ function normalizeCell(value) {
 }
 
 function parseYieldPercent(value) {
-  let text = normalizeCell(value).replace('%', '').replace(/\s+/g, '');
+  let text = normalizeCell(value).replace(/%/g, '').replace(/\s+/g, '');
   if (!text) return NaN;
 
   const commaCount = (text.match(/,/g) || []).length;
