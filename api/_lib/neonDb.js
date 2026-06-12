@@ -251,5 +251,100 @@ export function makeNeonAdapter() {
       );
       return { id: result.rows[0].id, created: true };
     },
+
+    async listUserData(userId) {
+      const result = await query(
+        'SELECT id, species, product, yield, source FROM user_data WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    },
+
+    async createUserData(userId, fields) {
+      const result = await query(
+        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [userId, fields.species, fields.product, fields.yield, fields.source]
+      );
+      return result.rows[0];
+    },
+
+    async findUserDataById(id) {
+      const result = await query(
+        'SELECT id, user_id, species, product, yield, source FROM user_data WHERE id = $1',
+        [id]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    async updateUserData(userId, id, fields) {
+      await query(
+        `UPDATE user_data
+         SET species = $1,
+             product = $2,
+             yield = $3,
+             source = $4
+         WHERE id = $5 AND user_id = $6`,
+        [fields.species, fields.product, fields.yield, fields.source, id, userId]
+      );
+    },
+
+    async deleteUserData(userId, id) {
+      await query(
+        'DELETE FROM user_data WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+    },
+
+    async upsertUserDataRows(userId, rows) {
+      let inserted = 0;
+      let updated = 0;
+
+      await query('BEGIN');
+
+      try {
+        for (const row of rows) {
+          const existing = await query(
+            'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
+            [userId, row.species, row.product]
+          );
+
+          if (existing.rows?.[0]) {
+            await query(
+              'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
+              [row.yield, row.source, existing.rows[0].id, userId]
+            );
+            updated++;
+          } else {
+            await query(
+              'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
+              [userId, row.species, row.product, row.yield, row.source]
+            );
+            inserted++;
+          }
+        }
+
+        await query('COMMIT');
+        return { inserted, updated };
+      } catch (err) {
+        await query('ROLLBACK').catch(() => {});
+        throw err;
+      }
+    },
+
+    async listExportUserData(userId) {
+      const result = await query(
+        'SELECT * FROM user_data WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    },
+
+    async listExportCalcs(userId) {
+      const result = await query(
+        'SELECT * FROM calculations WHERE user_id = $1 ORDER BY date DESC',
+        [userId]
+      );
+      return result.rows;
+    },
   };
 }

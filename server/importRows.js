@@ -144,67 +144,9 @@ function normalizeYieldRows(data, sourceName) {
     return { rows, skippedRows };
 }
 
-function runSql(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function callback(err) {
-            if (err) return reject(err);
-            resolve(this);
-        });
-    });
-}
-
-function getSql(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => {
-            if (err) return reject(err);
-            resolve(row ?? null);
-        });
-    });
-}
-
-async function upsertImportedYieldRowsSqlite(db, userId, rows) {
-    let inserted = 0;
-    let updated = 0;
-
-    await runSql(db, 'BEGIN TRANSACTION');
-
-    try {
-        for (const row of rows) {
-            const existing = await getSql(
-                db,
-                'SELECT id FROM user_data WHERE user_id = ? AND LOWER(species) = LOWER(?) AND LOWER(product) = LOWER(?)',
-                [userId, row.species, row.product]
-            );
-
-            if (existing) {
-                await runSql(
-                    db,
-                    'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
-                    [row.yield, row.source, existing.id, userId]
-                );
-                updated++;
-            } else {
-                await runSql(
-                    db,
-                    'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-                    [userId, row.species, row.product, row.yield, row.source]
-                );
-                inserted++;
-            }
-        }
-
-        await runSql(db, 'COMMIT');
-        return { inserted, updated };
-    } catch (err) {
-        await runSql(db, 'ROLLBACK').catch(() => {});
-        throw err;
-    }
-}
-
 module.exports = {
     assertAllowedImportFile,
     getUploadExtension,
     normalizeYieldRows,
     parseImportRows,
-    upsertImportedYieldRowsSqlite,
 };

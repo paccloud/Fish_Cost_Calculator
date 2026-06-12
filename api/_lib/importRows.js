@@ -145,39 +145,3 @@ export function normalizeYieldRows(data, sourceName) {
 
   return { rows, skippedRows };
 }
-
-export async function upsertImportedYieldRows(userId, rows, runQuery) {
-  let inserted = 0;
-  let updated = 0;
-
-  await runQuery('BEGIN');
-
-  try {
-    for (const row of rows) {
-      const existing = await runQuery(
-        'SELECT id FROM user_data WHERE user_id = $1 AND LOWER(species) = LOWER($2) AND LOWER(product) = LOWER($3) LIMIT 1',
-        [userId, row.species, row.product]
-      );
-
-      if (existing.rows?.[0]) {
-        await runQuery(
-          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
-          [row.yield, row.source, existing.rows[0].id, userId]
-        );
-        updated++;
-      } else {
-        await runQuery(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
-          [userId, row.species, row.product, row.yield, row.source]
-        );
-        inserted++;
-      }
-    }
-
-    await runQuery('COMMIT');
-    return { inserted, updated };
-  } catch (err) {
-    await runQuery('ROLLBACK').catch(() => {});
-    throw err;
-  }
-}
