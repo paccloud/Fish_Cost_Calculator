@@ -20,23 +20,43 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      try {
-        const payload = decodeJwtPayload(token);
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          localStorage.removeItem('token');
+    let cancelled = false;
+
+    const applyAuthState = ({ nextUser, clearToken = false }) => {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        if (clearToken) {
           setToken(null);
-          setUser(null);
-        } else {
-          setUser({ username: payload.username, authProvider: 'password' });
         }
-      } catch {
-        localStorage.removeItem('token');
-        setToken(null);
-        setUser(null);
-      }
+        setUser(nextUser);
+        setLoading(false);
+      });
+    };
+
+    if (!token) {
+      applyAuthState({ nextUser: null });
+      return () => { cancelled = true; };
     }
-    setLoading(false);
+
+    const clearInvalidToken = () => {
+      localStorage.removeItem('token');
+      applyAuthState({ nextUser: null, clearToken: true });
+    };
+
+    try {
+      const payload = decodeJwtPayload(token);
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        clearInvalidToken();
+      } else {
+        applyAuthState({
+          nextUser: { username: payload.username, authProvider: 'password' },
+        });
+      }
+    } catch {
+      clearInvalidToken();
+    }
+
+    return () => { cancelled = true; };
   }, [token]);
 
   // Auto-expire token
