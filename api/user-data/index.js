@@ -8,7 +8,7 @@ async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       const result = await query(
-        'SELECT id, species, product, yield, source FROM user_data WHERE user_id = $1',
+        'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = $1',
         [userId]
       );
 

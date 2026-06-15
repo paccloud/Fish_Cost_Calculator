@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Users, Download, Search, AlertCircle } from 'lucide-react';
 import { apiUrl } from '../config/api';
 
@@ -7,30 +8,36 @@ const CommunityData = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [search, setSearch] = useState('');
+    const [downloadError, setDownloadError] = useState(null);
 
     useEffect(() => {
         fetch(apiUrl('/api/community-data'))
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error('Server error');
+                return res.json();
+            })
             .then(rows => {
                 if (Array.isArray(rows)) {
                     setData(rows);
                 } else {
-                    setError('Failed to load community data.');
+                    setError('Unexpected response from server.');
                 }
             })
-            .catch(() => setError('Network error loading community data.'))
+            .catch(() => setError('Failed to load community data. Please try again.'))
             .finally(() => setLoading(false));
     }, []);
 
     const filtered = data.filter(row =>
-        row.species.toLowerCase().includes(search.toLowerCase()) ||
-        row.product.toLowerCase().includes(search.toLowerCase()) ||
+        (row.species || '').toLowerCase().includes(search.toLowerCase()) ||
+        (row.product || '').toLowerCase().includes(search.toLowerCase()) ||
         (row.contributor || '').toLowerCase().includes(search.toLowerCase())
     );
 
     const handleDownload = async () => {
+        setDownloadError(null);
         try {
             const res = await fetch(apiUrl('/api/export-community-data'));
+            if (!res.ok) throw new Error('Export failed');
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -42,6 +49,7 @@ const CommunityData = () => {
             document.body.removeChild(a);
         } catch (e) {
             console.error('Download failed:', e);
+            setDownloadError('CSV download failed. Please try again.');
         }
     };
 
@@ -57,14 +65,19 @@ const CommunityData = () => {
                         Yield data shared by the Local Catch Network community — {data.length} entries from real fishing operations.
                     </p>
                 </div>
-                <button
-                    onClick={handleDownload}
-                    disabled={data.length === 0}
-                    className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                    <Download size={16} />
-                    Download CSV
-                </button>
+                <div>
+                    <button
+                        onClick={handleDownload}
+                        disabled={data.length === 0}
+                        className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    >
+                        <Download size={16} />
+                        Download CSV
+                    </button>
+                    {downloadError && (
+                        <p className="mt-1 text-xs text-red-500">{downloadError}</p>
+                    )}
+                </div>
             </div>
 
             {/* Search */}
@@ -138,7 +151,9 @@ const CommunityData = () => {
             </div>
 
             <p className="mt-6 text-sm text-text-secondary text-center">
-                Want to contribute? Log in, add your yield data in <strong>My Data</strong>, then click the share icon.
+                Want to contribute?{' '}
+                <Link to="/login" className="text-brand-teal hover:underline">Log in</Link>,
+                add yield data in <strong>My Data</strong>, then toggle the share icon.
             </p>
         </div>
     );

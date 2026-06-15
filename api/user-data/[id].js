@@ -38,6 +38,32 @@ async function handler(req, res) {
     }
   }
 
+  // PATCH /api/user-data/:id — share/unshare with community pool
+  // Body: { is_shared: true|false }
+  if (req.method === 'PATCH') {
+    const { is_shared } = req.body ?? {};
+    if (typeof is_shared !== 'boolean') {
+      return res.status(400).json({ error: 'is_shared (boolean) is required' });
+    }
+    try {
+      const existing = await query(
+        'SELECT id FROM user_data WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'Entry not found or not owned by user' });
+      }
+      await query(
+        'UPDATE user_data SET is_shared = $1 WHERE id = $2 AND user_id = $3',
+        [is_shared, id, userId]
+      );
+      return res.status(200).json({ message: is_shared ? 'Shared with community' : 'Removed from community' });
+    } catch (err) {
+      console.error('[user-data/[id] PATCH] error:', err);
+      return res.status(500).json({ error: 'Failed to update sharing status' });
+    }
+  }
+
   if (req.method === 'DELETE') {
     try {
       // Verify ownership

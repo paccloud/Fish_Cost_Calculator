@@ -129,6 +129,13 @@ db.serialize(() => {
         updated_at TEXT,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
+
+    // Add is_shared column to user_data if not present (idempotent migration).
+    db.run(`ALTER TABLE user_data ADD COLUMN is_shared INTEGER DEFAULT 0`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+            console.warn('[migration] ALTER TABLE user_data:', err.message);
+        }
+    });
 });
 
 // Auth Middleware
@@ -286,7 +293,7 @@ app.post('/api/upload-data', authenticate, (req, res) => {
 
 // Get User Custom Data
 app.get('/api/user-data', authenticate, (req, res) => {
-    db.all('SELECT id, species, product, yield, source FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
+    db.all('SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
     });
@@ -483,6 +490,73 @@ app.post('/api/contributor', authenticate, async (req, res) => {
         dbAdapter
     );
     return res.status(status).json(body);
+});
+
+// Community Data Pool — share/unshare user data entries
+app.post('/api/user-data/:id/share', authenticate, (req, res) => {
+    const { id } = req.params;
+    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
+        db.run('UPDATE user_data SET is_shared = 1 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
+            if (err2) return res.status(500).json({ error: 'Failed to share entry' });
+            res.json({ message: 'Shared with community' });
+        });
+    });
+});
+
+app.post('/api/user-data/:id/unshare', authenticate, (req, res) => {
+    const { id } = req.params;
+    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
+        db.run('UPDATE user_data SET is_shared = 0 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
+            if (err2) return res.status(500).json({ error: 'Failed to unshare entry' });
+            res.json({ message: 'Removed from community' });
+        });
+    });
+});
+
+// Community pool — public read (no auth required)
+app.get('/api/community-data', (req, res) => {
+    const sql = `
+        SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
+               COALESCE(c.display_name, u.username) AS contributor,
+               c.organization
+        FROM user_data ud
+        JOIN users u ON ud.user_id = u.id
+        LEFT JOIN contributors c ON ud.user_id = c.user_id
+        WHERE ud.is_shared = 1
+        ORDER BY ud.species ASC, ud.product ASC
+    `;
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Failed to load community data' });
+        res.json(rows);
+    });
+});
+
+// Export community pool as CSV
+app.get('/api/export-community-data', (req, res) => {
+    const sql = `
+        SELECT ud.species, ud.product, ud.yield, ud.source,
+               COALESCE(c.display_name, u.username) AS contributor,
+               c.organization
+        FROM user_data ud
+        JOIN users u ON ud.user_id = u.id
+        LEFT JOIN contributors c ON ud.user_id = c.user_id
+        WHERE ud.is_shared = 1
+        ORDER BY ud.species ASC
+    `;
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Failed to export community data' });
+        const header = 'Species,Product,Yield (%),Source,Contributor,Organization\n';
+        const body = rows.map(r =>
+            `"${sanitizeCsvValue(r.species)}","${sanitizeCsvValue(r.product)}","${sanitizeCsvValue(r.yield)}","${sanitizeCsvValue(r.source || '')}","${sanitizeCsvValue(r.contributor || '')}","${sanitizeCsvValue(r.organization || '')}"`
+        ).join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="community-yield-data.csv"');
+        res.send(header + body);
+    });
 });
 
 app.listen(PORT, () => {
