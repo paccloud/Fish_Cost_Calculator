@@ -492,6 +492,23 @@ app.post('/api/contributor', authenticate, async (req, res) => {
     return res.status(status).json(body);
 });
 
+// Community Data Pool — PATCH /api/user-data/:id toggles is_shared (matches Vercel API contract)
+app.patch('/api/user-data/:id', authenticate, (req, res) => {
+    const { id } = req.params;
+    const { is_shared } = req.body ?? {};
+    if (typeof is_shared !== 'boolean') {
+        return res.status(400).json({ error: 'is_shared (boolean) is required' });
+    }
+    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
+        db.run('UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?', [is_shared ? 1 : 0, id, req.user.id], function(err2) {
+            if (err2) return res.status(500).json({ error: 'Failed to update sharing status' });
+            res.json({ message: is_shared ? 'Shared with community' : 'Removed from community' });
+        });
+    });
+});
+
 // Community Data Pool — share/unshare user data entries
 app.post('/api/user-data/:id/share', authenticate, (req, res) => {
     const { id } = req.params;
