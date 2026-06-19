@@ -1,9 +1,16 @@
 import { Pool } from '@neondatabase/serverless';
 
-// Create a connection pool for Neon
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+// Pool is created lazily on first query to avoid module-load-time side effects
+// in serverless cold-start environments where DATABASE_URL may not be available
+// during Vercel's function bundling/validation phase.
+let pool = null;
+
+function getPool() {
+  if (!pool) {
+    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  }
+  return pool;
+}
 
 /**
  * Execute a SQL query with parameters
@@ -12,7 +19,7 @@ const pool = new Pool({
  * @returns {Promise<Object>} Query result with rows array
  */
 export async function query(text, params) {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     const result = await client.query(text, params);
     return result;
@@ -21,4 +28,4 @@ export async function query(text, params) {
   }
 }
 
-export default pool;
+export { getPool as default };
