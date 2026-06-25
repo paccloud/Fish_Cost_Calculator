@@ -81,6 +81,12 @@ const sanitizeCsvValue = (value) => {
   return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
 };
 
+const formatCsvDate = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+};
+
 // Database Setup
 const db = new sqlite3.Database('./fish_app.db', (err) => {
     if (err) console.error(err.message);
@@ -457,7 +463,7 @@ app.get('/api/export', authenticate, async (req, res) => {
 
             const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
             const csvRows = rows.map(row => {
-                const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
+                const date = sanitizeCsvValue(formatCsvDate(row.date));
                 const values = [
                     date,
                     sanitizeCsvValue(row.species),
