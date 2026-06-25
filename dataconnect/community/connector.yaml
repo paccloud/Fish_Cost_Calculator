@@ -1,0 +1,6 @@
+connectorId: "community"
+generate:
+  javascriptSdk:
+    outputDir: "./generated/community"
+    package: "@fish-cost-calculator/sql-connect-community-proof"
+    react: true

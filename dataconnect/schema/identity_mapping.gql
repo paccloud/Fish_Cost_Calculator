@@ -1,0 +1,32 @@
+# Issue #66 sandbox schema only. These tables model how a future Firebase Auth
+# migration can map Firebase UIDs to stable app user records without changing
+# the current Neon/Stack Auth/Vercel runtime.
+
+type CanonicalAppUser @table {
+  id: UUID! @default(expr: "uuidV4()")
+  legacyUserId: String @unique @col(dataType: "varchar(120)")
+  primaryEmail: String @col(dataType: "varchar(255)")
+  displayName: String @col(dataType: "varchar(160)")
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type FirebaseAuthIdentity @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser!
+  firebaseUid: String! @unique @col(dataType: "varchar(128)")
+  providerId: String! @col(dataType: "varchar(80)")
+  providerSubject: String @col(dataType: "varchar(255)")
+  emailAtLink: String @col(dataType: "varchar(255)")
+  isPrimary: Boolean! @default(value: true)
+  linkedAt: Timestamp! @default(expr: "request.time")
+}
+
+type IdentityProofSavedCalculation @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser!
+  ownerFirebaseUid: String! @index @col(dataType: "varchar(128)")
+  label: String! @col(dataType: "varchar(160)")
+  speciesSlug: String @col(dataType: "varchar(80)")
+  createdAt: Timestamp! @default(expr: "request.time")
+}

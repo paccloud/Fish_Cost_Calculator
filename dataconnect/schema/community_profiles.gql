@@ -1,0 +1,33 @@
+# Issue #69 sandbox schema only. These tables prove Firebase-owned
+# contributor profiles and anonymous public community reads without rewiring
+# the current Neon/Stack Auth/Vercel runtime.
+
+type ContributorProfile @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser! @unique
+  ownerFirebaseUid: String! @unique @col(dataType: "varchar(128)")
+  legacyContributorId: String @unique @col(dataType: "varchar(120)")
+  legacyOwnerUserId: String @col(dataType: "varchar(120)")
+  displayName: String @col(dataType: "varchar(255)")
+  organization: String @col(dataType: "varchar(255)")
+  bio: String
+  showOnPage: Boolean! @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type CommunityCalculationSnapshot @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser
+  contributorProfile: ContributorProfile
+  legacyCalculationId: String @unique @col(dataType: "varchar(120)")
+  legacyOwnerUserId: String @col(dataType: "varchar(120)")
+  species: String @col(dataType: "varchar(255)")
+  product: String @col(dataType: "varchar(255)")
+  cost: Float @col(dataType: "numeric")
+  yieldPercent: Float
+  result: Float @col(dataType: "numeric")
+  calculatedAt: Timestamp! @default(expr: "request.time")
+  isPublished: Boolean! @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}

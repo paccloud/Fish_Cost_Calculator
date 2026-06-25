@@ -1,0 +1,121 @@
+# Firebase Auth custom-yield proof operations for issue #68.
+# These operations derive access from auth.uid through the canonical identity
+# mapping and never accept a
+# caller-supplied Firebase UID.
+#
+# Auth/network failures must preserve local pending custom yield data in the
+# existing client sync engine until a later runtime migration explicitly changes
+# that behavior. SQL Connect does not replace IndexedDB sync in this proof.
+
+query ListMyCustomYields @auth(level: USER) {
+  customYields(
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
+    orderBy: [{ createdAt: DESC }]
+    limit: 100
+  ) {
+    id
+    legacyUserDataId
+    localYieldId
+    species
+    product
+    yieldPercent
+    source
+    createdAt
+    updatedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+query GetMyCustomYield($customYieldId: UUID!) @auth(level: USER) {
+  customYields(
+    where: {
+      id: { eq: $customYieldId }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
+    limit: 1
+  ) {
+    id
+    legacyUserDataId
+    localYieldId
+    species
+    product
+    yieldPercent
+    source
+    createdAt
+    updatedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+mutation CreateMyCustomYield(
+  $legacyUserDataId: String
+  $localYieldId: String!
+  $species: String!
+  $product: String!
+  $yieldPercent: Float!
+  $source: String
+) @auth(level: USER)
+  @transaction {
+  query
+    @redact
+    @check(
+      expr: "vars.yieldPercent > 0 && vars.yieldPercent <= 100 && response.query.firebaseAuthIdentities.size() == 1 && response.query.customYields.size() == 0",
+      message: "yieldPercent must be greater than 0 and at most 100, Firebase user must map to one canonical app user, and localYieldId must not already exist."
+    ) {
+    firebaseAuthIdentities(
+      where: { firebaseUid: { eq_expr: "auth.uid" } }
+      limit: 2
+    ) {
+      appUser {
+        id
+      }
+    }
+    customYields(
+      where: { localYieldId: { eq: $localYieldId } }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  customYield_insert(data: {
+    appUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.id"
+    ownerFirebaseUid_expr: "auth.uid"
+    legacyUserDataId: $legacyUserDataId
+    localYieldId: $localYieldId
+    species: $species
+    product: $product
+    yieldPercent: $yieldPercent
+    source: $source
+  })
+}
+
+mutation DeleteMyCustomYield($customYieldId: UUID!) @auth(level: USER) {
+  customYield_delete(
+    first: {
+      where: {
+        id: { eq: $customYieldId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+    }
+  )
+}

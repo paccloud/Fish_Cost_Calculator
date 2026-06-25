@@ -1,0 +1,20 @@
+# Issue #67 sandbox schema only. This production-shaped saved calculation table
+# links every row to the canonical app user from issue #66 while deriving
+# Firebase ownership from auth.uid in connector operations.
+
+type SavedCalculation @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser!
+  ownerFirebaseUid: String! @col(dataType: "varchar(128)")
+  legacyCalculationId: String @unique @col(dataType: "varchar(120)")
+  legacyOwnerUserId: String @col(dataType: "varchar(120)")
+  name: String @col(dataType: "varchar(255)")
+  species: String @col(dataType: "varchar(255)")
+  product: String @col(dataType: "varchar(255)")
+  cost: Float @col(dataType: "numeric")
+  yieldPercent: Float
+  result: Float @col(dataType: "numeric")
+  sourcePayload: Any
+  savedAt: Timestamp! @default(expr: "request.time")
+  createdAt: Timestamp! @default(expr: "request.time")
+}

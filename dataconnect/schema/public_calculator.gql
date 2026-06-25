@@ -1,0 +1,26 @@
+# Issue #65 sandbox schema only. Do not wire these tables into the existing
+# Neon/Stack Auth/Vercel runtime until the Firebase migration PRD advances.
+
+type PublicSpecies @table {
+  id: UUID! @default(expr: "uuidV4()")
+  slug: String! @unique @col(dataType: "varchar(80)")
+  displayName: String! @col(dataType: "varchar(160)")
+  scientificName: String @col(dataType: "varchar(160)")
+  category: String @col(dataType: "varchar(80)")
+  sourceLabel: String @col(dataType: "varchar(180)")
+  isPublished: Boolean! @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type PublicYieldConversion @table {
+  id: UUID! @default(expr: "uuidV4()")
+  species: PublicSpecies!
+  fromState: String! @col(dataType: "varchar(80)")
+  toState: String! @col(dataType: "varchar(80)")
+  yieldPercent: Float!
+  minYieldPercent: Float
+  maxYieldPercent: Float
+  sourceLabel: String @col(dataType: "varchar(180)")
+  isPublished: Boolean! @default(value: true)
+  updatedAt: Timestamp! @default(expr: "request.time")
+}

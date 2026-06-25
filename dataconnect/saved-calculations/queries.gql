@@ -1,0 +1,186 @@
+# Saved-calculation proof operations for issue #67.
+# These operations never accept a caller-supplied Firebase UID. Access is
+# derived from auth.uid through the canonical identity mapping.
+
+query ListMySavedCalculations @auth(level: USER) {
+  savedCalculations(
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
+    orderBy: [{ savedAt: DESC }]
+    limit: 50
+  ) {
+    id
+    legacyCalculationId
+    legacyOwnerUserId
+    name
+    species
+    product
+    cost
+    yieldPercent
+    result
+    sourcePayload
+    savedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+query GetMySavedCalculation($calculationId: UUID!) @auth(level: USER) {
+  savedCalculations(
+    where: {
+      id: { eq: $calculationId }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
+    limit: 1
+  ) {
+    id
+    legacyCalculationId
+    legacyOwnerUserId
+    name
+    species
+    product
+    cost
+    yieldPercent
+    result
+    sourcePayload
+    savedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+mutation CreateMySavedCalculation(
+  $name: String
+  $species: String
+  $product: String
+  $cost: Float
+  $yieldPercent: Float
+  $result: Float
+  $sourcePayload: Any
+) @auth(level: USER) @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.firebaseAuthIdentities.size() == 1",
+      message: "Authenticated Firebase user is not linked to one canonical app user."
+    ) {
+    firebaseAuthIdentities(
+      where: { firebaseUid: { eq_expr: "auth.uid" } }
+      limit: 2
+    ) {
+      appUser {
+        id
+      }
+    }
+  }
+  savedCalculation_insert(data: {
+    appUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.id"
+    ownerFirebaseUid_expr: "auth.uid"
+    name: $name
+    species: $species
+    product: $product
+    cost: $cost
+    yieldPercent: $yieldPercent
+    result: $result
+    sourcePayload: $sourcePayload
+  })
+}
+
+mutation ImportMyLegacySavedCalculationProof(
+  $legacyCalculationId: String!
+  $legacySavedAt: Timestamp!
+  $name: String
+  $species: String
+  $product: String
+  $cost: Float
+  $yieldPercent: Float
+  $result: Float
+  $sourcePayload: Any
+) @auth(level: USER) @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.firebaseAuthIdentities.size() == 1 && response.query.savedCalculations.size() == 0",
+      message: "Authenticated Firebase user must map to one canonical app user and legacy calculation must not already be imported."
+    ) {
+    firebaseAuthIdentities(
+      where: { firebaseUid: { eq_expr: "auth.uid" } }
+      limit: 2
+    ) {
+      appUser {
+        id
+        legacyUserId
+      }
+    }
+    savedCalculations(
+      where: { legacyCalculationId: { eq: $legacyCalculationId } }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  savedCalculation_insert(data: {
+    appUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.id"
+    ownerFirebaseUid_expr: "auth.uid"
+    legacyCalculationId: $legacyCalculationId
+    legacyOwnerUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.legacyUserId"
+    savedAt: $legacySavedAt
+    name: $name
+    species: $species
+    product: $product
+    cost: $cost
+    yieldPercent: $yieldPercent
+    result: $result
+    sourcePayload: $sourcePayload
+  })
+}
+
+mutation DeleteMySavedCalculation($calculationId: UUID!)
+  @auth(level: USER)
+  @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.savedCalculations.size() == 1",
+      message: "Saved calculation not found for the authenticated user."
+    ) {
+    savedCalculations(
+      where: {
+        id: { eq: $calculationId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  savedCalculation_delete(
+    first: {
+      where: {
+        id: { eq: $calculationId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+    }
+  )
+}

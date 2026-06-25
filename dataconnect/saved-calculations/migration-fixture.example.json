@@ -1,0 +1,73 @@
+{
+  "description": "Issue #67 proof fixture shape for preserving existing saved calculation ownership and legacy IDs during a future migration.",
+  "canonicalUsers": [
+    {
+      "id": "11111111111111111111111111111111",
+      "legacyUserId": "42",
+      "primaryEmail": "owner-a@example.invalid"
+    },
+    {
+      "id": "22222222222222222222222222222222",
+      "legacyUserId": "99",
+      "primaryEmail": "owner-b@example.invalid"
+    }
+  ],
+  "firebaseAuthIdentities": [
+    {
+      "appUserId": "11111111111111111111111111111111",
+      "firebaseUid": "firebase-proof-user-a",
+      "providerId": "password",
+      "providerSubject": "owner-a@example.invalid"
+    },
+    {
+      "appUserId": "22222222222222222222222222222222",
+      "firebaseUid": "firebase-proof-user-b",
+      "providerId": "password",
+      "providerSubject": "owner-b@example.invalid"
+    }
+  ],
+  "savedCalculations": [
+    {
+      "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "appUserId": "11111111111111111111111111111111",
+      "ownerFirebaseUid": "firebase-proof-user-a",
+      "legacyCalculationId": "1001",
+      "legacyOwnerUserId": "42",
+      "savedAt": "2026-01-15T12:00:00Z",
+      "name": "Halibut trim proof",
+      "species": "Halibut",
+      "product": "Fillet",
+      "cost": 12.5,
+      "yieldPercent": 63.2,
+      "result": 19.78,
+      "sourcePayload": {
+        "legacyTable": "calculations",
+        "legacyColumns": ["id", "user_id", "name", "species", "product", "cost", "yield", "result", "date"]
+      }
+    },
+    {
+      "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "appUserId": "22222222222222222222222222222222",
+      "ownerFirebaseUid": "firebase-proof-user-b",
+      "legacyCalculationId": "1002",
+      "legacyOwnerUserId": "99",
+      "savedAt": "2026-01-16T12:00:00Z",
+      "name": "Salmon trim proof",
+      "species": "Salmon",
+      "product": "Portion",
+      "cost": 9.25,
+      "yieldPercent": 71.4,
+      "result": 12.96,
+      "sourcePayload": {
+        "legacyTable": "calculations",
+        "legacyColumns": ["id", "user_id", "name", "species", "product", "cost", "yield", "result", "date"]
+      }
+    }
+  ],
+  "ownershipProof": {
+    "list": "ListMySavedCalculations filters through the caller's FirebaseAuthIdentity and canonical app user.",
+    "get": "GetMySavedCalculation filters by calculation id and the caller's canonical app user.",
+    "delete": "DeleteMySavedCalculation checks and deletes with the same canonical app user ownership predicate.",
+    "migration": "ImportMyLegacySavedCalculationProof preserves legacyCalculationId, savedAt, and derives legacyOwnerUserId from the authenticated user's CanonicalAppUser."
+  }
+}
