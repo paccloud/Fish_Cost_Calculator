@@ -52,6 +52,46 @@
  * @property {function(string|number): Promise<void>} deleteCalc
  *   Delete the calculation with the given id.
  *   The caller (handler) is responsible for ownership checks before calling this.
+ *
+ * @property {function(string|number): Promise<DbUserData[]>} listUserData
+ *   Return all user_data rows for the given userId.
+ *
+ * @property {function(string|number, {species, product, yield, source}): Promise<{id: string|number}>} createUserData
+ *   Insert a new user_data row and return {id}.
+ *
+ * @property {function(string|number): Promise<DbUserData|null>} findUserDataById
+ *   Return the user_data row for the given id, or null if not found.
+ *   Returns at minimum {id, user_id} for ownership checking.
+ *
+ * @property {function(string|number, {species, product, yield, source}): Promise<void>} updateUserData
+ *   Update a user_data row.  The adapter uses COALESCE so undefined fields keep
+ *   their current value.  Ownership must be verified by the caller before this.
+ *
+ * @property {function(string|number): Promise<void>} deleteUserData
+ *   Delete the user_data row with the given id.
+ *   Ownership must be verified by the caller before this.
+ *
+ * @property {function(string|number, {species, product, yield, source}): Promise<{inserted: boolean}>} upsertUserDataRow
+ *   Upsert one row: if a row with matching (userId, species, product) already
+ *   exists update its yield+source; otherwise insert.
+ *   Returns {inserted: true} for a new row, {inserted: false} for an update.
+ *
+ * @property {function(string|number): Promise<DbUserData[]>} listUserDataForExport
+ *   Return all user_data rows for the given userId (for CSV export).
+ *
+ * @property {function(string|number): Promise<DbCalc[]>} listCalcsForExport
+ *   Return all calculation rows for the given userId ordered by date DESC
+ *   (for CSV export).
+ */
+
+/**
+ * @typedef {Object} DbUserData
+ * @property {number|string} id
+ * @property {number|string} user_id
+ * @property {string}        species
+ * @property {string}        product
+ * @property {number}        yield
+ * @property {string}        [source]
  */
 
 /**
