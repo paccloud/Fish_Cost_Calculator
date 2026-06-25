@@ -244,8 +244,11 @@ app.post('/api/upload-data', authenticate, (req, res) => {
             );
             return res.status(status).json(body);
         } catch (e) {
-            const status = /unsupported file|parse csv|no valid/i.test(e.message || '') ? 400 : 500;
-            res.status(status).json({ error: e.message || 'Failed to process file' });
+            const isValidation = /unsupported file|parse csv|no valid|too many rows/i.test(e.message || '');
+            const status = isValidation ? 400 : 500;
+            // Never echo raw internal messages to the client — only user-safe messages.
+            const safeMessage = isValidation ? (e.message || 'Invalid file') : 'Failed to process file';
+            res.status(status).json({ error: safeMessage });
         }
     });
 });

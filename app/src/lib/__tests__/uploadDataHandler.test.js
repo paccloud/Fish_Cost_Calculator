@@ -145,22 +145,174 @@ describe('handleUploadData — success shape', () => {
 // ===========================================================================
 
 describe('handleUploadData — sanitized failure', () => {
-  it('returns 500 with generic message when upsert throws unexpected error', async () => {
+  // Per-row upsert failures are now isolated (AC3): they count as skipped
+  // rows and the request still returns 200.  The old whole-batch-failure
+  // behaviour caused silent partial imports — that bug is fixed.
+  it('returns 200 and counts failed upsert rows as skipped (not a 500)', async () => {
     const db = makeFakeDb({
       upsertUserDataRow: vi.fn().mockRejectedValue(new Error('deadlock: 23P01')),
     });
     const result = await handleUploadData({ userId: 1, rows: SAMPLE_ROWS }, db);
-    expect(result.status).toBe(500);
-    expect(result.body.error).not.toMatch(/deadlock/i);
-    expect(result.body.error).toBe('Failed to process file');
+    expect(result.status).toBe(200);
+    // deadlock message must not leak to the client
+    expect(JSON.stringify(result.body)).not.toMatch(/deadlock/i);
+    expect(result.body.skipped).toBe(SAMPLE_ROWS.length);
   });
 
-  it('returns 400 when error message indicates a validation/file error', async () => {
+  it('returns 200 and counts per-row validation errors as skipped (not a 400)', async () => {
     const db = makeFakeDb({
       upsertUserDataRow: vi.fn().mockRejectedValue(new Error('Unsupported file type')),
     });
     const result = await handleUploadData({ userId: 1, rows: SAMPLE_ROWS }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.skipped).toBe(SAMPLE_ROWS.length);
+  });
+});
+
+// ===========================================================================
+// handleUploadData — row cap (AC3)
+// ===========================================================================
+
+describe('handleUploadData — row cap', () => {
+  it('returns 400 when rows array exceeds MAX_IMPORT_ROWS', async () => {
+    const db = makeFakeDb();
+    const bigRows = Array.from({ length: 501 }, (_, i) => ({
+      species: `Species ${i}`,
+      product: 'General',
+      yield: 50,
+      source: 'Uploaded File',
+    }));
+    const result = await handleUploadData({ userId: 1, rows: bigRows }, db);
     expect(result.status).toBe(400);
-    expect(result.body.error).toMatch(/unsupported file/i);
+    expect(result.body.error).toMatch(/too many rows/i);
+  });
+
+  it('accepts exactly MAX_IMPORT_ROWS rows without error', async () => {
+    const db = makeFakeDb();
+    const maxRows = Array.from({ length: 500 }, (_, i) => ({
+      species: `Species ${i}`,
+      product: 'General',
+      yield: 50,
+      source: 'Uploaded File',
+    }));
+    const result = await handleUploadData({ userId: 1, rows: maxRows }, db);
+    expect(result.status).toBe(200);
+  });
+});
+
+// ===========================================================================
+// handleUploadData — per-row field validation (AC2 / AC3)
+// ===========================================================================
+
+describe('handleUploadData — per-row field validation', () => {
+  it('skips a row with missing species and reports it', async () => {
+    const db = makeFakeDb();
+    const rows = [
+      { species: '', product: 'General', yield: 50, source: 'Uploaded File' },
+      SAMPLE_ROWS[0],
+    ];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+    // the invalid row increments skipped count
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips a row with non-numeric yield and reports it', async () => {
+    const db = makeFakeDb();
+    const rows = [
+      { species: 'Tuna', product: 'General', yield: 'bad', source: 'Uploaded File' },
+      SAMPLE_ROWS[0],
+    ];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips a row with yield out of 0-100 range and reports it', async () => {
+    const db = makeFakeDb();
+    const rows = [
+      { species: 'Tuna', product: 'General', yield: 150, source: 'Uploaded File' },
+      SAMPLE_ROWS[0],
+    ];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips a row with species longer than 200 chars and reports it', async () => {
+    const db = makeFakeDb();
+    const rows = [
+      { species: 'A'.repeat(201), product: 'General', yield: 50, source: 'Uploaded File' },
+      SAMPLE_ROWS[0],
+    ];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips a row with product longer than 200 chars and reports it', async () => {
+    const db = makeFakeDb();
+    const rows = [
+      { species: 'Tuna', product: 'P'.repeat(201), yield: 50, source: 'Uploaded File' },
+      SAMPLE_ROWS[0],
+    ];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not call upsert for invalid rows', async () => {
+    const upsert = vi.fn().mockResolvedValue({ inserted: true });
+    const db = makeFakeDb({ upsertUserDataRow: upsert });
+    const rows = [
+      { species: '', product: 'General', yield: 50, source: 'Uploaded File' },
+    ];
+    await handleUploadData({ userId: 1, rows }, db);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('accepts yield of exactly 0 (zero-yield edge case)', async () => {
+    const db = makeFakeDb();
+    const rows = [{ species: 'Roe', product: 'Trim', yield: 0, source: 'Uploaded File' }];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+  });
+
+  it('accepts yield of exactly 100', async () => {
+    const db = makeFakeDb();
+    const rows = [{ species: 'Whole Fish', product: 'Round', yield: 100, source: 'Uploaded File' }];
+    const result = await handleUploadData({ userId: 1, rows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(1);
+  });
+});
+
+// ===========================================================================
+// handleUploadData — upsert failure isolation (AC3 partial import protection)
+// ===========================================================================
+
+describe('handleUploadData — upsert failure isolation', () => {
+  it('counts failed upserts in skipped and continues remaining rows', async () => {
+    const upsert = vi.fn()
+      .mockResolvedValueOnce({ inserted: true })
+      .mockRejectedValueOnce(new Error('constraint violation'))
+      .mockResolvedValueOnce({ inserted: true });
+    const db = makeFakeDb({ upsertUserDataRow: upsert });
+    const threeRows = [
+      SAMPLE_ROWS[0],
+      { species: 'Cod', product: 'General', yield: 55, source: 'Uploaded File' },
+      SAMPLE_ROWS[1],
+    ];
+    const result = await handleUploadData({ userId: 1, rows: threeRows }, db);
+    expect(result.status).toBe(200);
+    expect(result.body.inserted).toBe(2);
+    expect(result.body.skipped).toBeGreaterThanOrEqual(1);
+    expect(upsert).toHaveBeenCalledTimes(3);
   });
 });
