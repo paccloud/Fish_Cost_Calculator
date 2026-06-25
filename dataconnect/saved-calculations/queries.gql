@@ -1,10 +1,16 @@
 # Saved-calculation proof operations for issue #67.
-# These operations never accept a caller-supplied Firebase UID. Ownership is
-# derived from auth.uid and checked against the canonical identity mapping.
+# These operations never accept a caller-supplied Firebase UID. Access is
+# derived from auth.uid through the canonical identity mapping.
 
 query ListMySavedCalculations @auth(level: USER) {
   savedCalculations(
-    where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
     orderBy: [{ savedAt: DESC }]
     limit: 50
   ) {
@@ -30,7 +36,11 @@ query GetMySavedCalculation($calculationId: UUID!) @auth(level: USER) {
   savedCalculations(
     where: {
       id: { eq: $calculationId }
-      ownerFirebaseUid: { eq_expr: "auth.uid" }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
     }
     limit: 1
   ) {
@@ -142,7 +152,11 @@ mutation DeleteMySavedCalculation($calculationId: UUID!)
     savedCalculations(
       where: {
         id: { eq: $calculationId }
-        ownerFirebaseUid: { eq_expr: "auth.uid" }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
       }
       limit: 1
     ) {

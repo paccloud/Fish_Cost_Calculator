@@ -1,5 +1,6 @@
 # Firebase Auth custom-yield proof operations for issue #68.
-# These operations derive ownership from auth.uid and never accept a
+# These operations derive access from auth.uid through the canonical identity
+# mapping and never accept a
 # caller-supplied Firebase UID.
 #
 # Auth/network failures must preserve local pending custom yield data in the
@@ -8,7 +9,13 @@
 
 query ListMyCustomYields @auth(level: USER) {
   customYields(
-    where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
     orderBy: [{ createdAt: DESC }]
     limit: 100
   ) {
@@ -32,7 +39,11 @@ query GetMyCustomYield($customYieldId: UUID!) @auth(level: USER) {
   customYields(
     where: {
       id: { eq: $customYieldId }
-      ownerFirebaseUid: { eq_expr: "auth.uid" }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
     }
     limit: 1
   ) {
@@ -92,7 +103,11 @@ mutation DeleteMyCustomYield($customYieldId: UUID!) @auth(level: USER) {
     first: {
       where: {
         id: { eq: $customYieldId }
-        ownerFirebaseUid: { eq_expr: "auth.uid" }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
       }
     }
   )

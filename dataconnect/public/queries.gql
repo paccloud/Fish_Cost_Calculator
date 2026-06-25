@@ -6,7 +6,10 @@ query ListPublicCalculatorYieldPaths
     insecureReason: "Proof-only public read of published calculator yield references; no user or production data is exposed."
   ) {
   publicYieldConversions(
-    where: { isPublished: { eq: true } }
+    where: {
+      isPublished: { eq: true }
+      species: { isPublished: { eq: true } }
+    }
     orderBy: [{ fromState: ASC }, { toState: ASC }]
     limit: 50
   ) {

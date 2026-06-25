@@ -1,6 +1,6 @@
 # Firebase Auth identity-mapping operations for the issue #66 proof sandbox.
-# These operations intentionally derive ownership from auth.uid rather than
-# accepting a caller-supplied Firebase UID.
+# These operations intentionally derive access from auth.uid through the
+# canonical identity mapping rather than accepting a caller-supplied Firebase UID.
 
 query ResolveCurrentCanonicalUser @auth(level: USER) {
   firebaseAuthIdentities(
@@ -41,7 +41,13 @@ query AssertCanonicalUserOwnership($appUserId: UUID!) @auth(level: USER) {
 
 query ListMyIdentityProofSavedCalculations @auth(level: USER) {
   identityProofSavedCalculations(
-    where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
     orderBy: [{ createdAt: DESC }]
     limit: 50
   ) {
@@ -61,7 +67,11 @@ query GetMyIdentityProofSavedCalculation($calculationId: UUID!)
   identityProofSavedCalculations(
     where: {
       id: { eq: $calculationId }
-      ownerFirebaseUid: { eq_expr: "auth.uid" }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
     }
     limit: 1
   ) {

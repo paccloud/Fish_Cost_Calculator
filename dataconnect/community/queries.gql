@@ -1,6 +1,7 @@
 # Contributor/community proof operations for issue #69.
 # Public reads intentionally omit ownerFirebaseUid, canonical app user IDs, and
-# legacy owner IDs. Private operations derive ownership from auth.uid.
+# legacy owner IDs. Private operations derive access from auth.uid through the
+# canonical identity mapping.
 
 query ListPublicContributorProfiles
   @auth(
@@ -88,7 +89,13 @@ query GetPublicCommunityCalculation($calculationId: UUID!)
 
 query GetMyContributorProfile @auth(level: USER) {
   contributorProfiles(
-    where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+    where: {
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
+    }
     limit: 1
   ) {
     id
@@ -112,7 +119,11 @@ query GetMyContributorProfileById($profileId: UUID!) @auth(level: USER) {
   contributorProfiles(
     where: {
       id: { eq: $profileId }
-      ownerFirebaseUid: { eq_expr: "auth.uid" }
+      appUser: {
+        firebaseAuthIdentities_on_appUser: {
+          exist: { firebaseUid: { eq_expr: "auth.uid" } }
+        }
+      }
     }
     limit: 1
   ) {
@@ -156,7 +167,13 @@ mutation CreateMyContributorProfile(
       }
     }
     contributorProfiles(
-      where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+      where: {
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
       limit: 1
     ) {
       id
@@ -185,7 +202,7 @@ mutation UpsertMyContributorProfile(
   query
     @redact
     @check(
-      expr: "response.query.firebaseAuthIdentities.size() == 1 && (response.query.contributorProfiles.size() == 0 || response.query.contributorProfiles[0].ownerFirebaseUid == auth.uid)",
+      expr: "response.query.firebaseAuthIdentities.size() == 1 && (response.query.contributorProfiles.size() == 0 || response.query.contributorProfiles[0].appUser.id == response.query.firebaseAuthIdentities[0].appUser.id)",
       message: "Authenticated Firebase user must map to one canonical app user and can only upsert their own contributor profile."
     ) {
     firebaseAuthIdentities(
@@ -201,7 +218,9 @@ mutation UpsertMyContributorProfile(
       where: { id: { eq: $profileId } }
       limit: 1
     ) {
-      ownerFirebaseUid
+      appUser {
+        id
+      }
     }
   }
   contributorProfile_upsert(data: {
@@ -234,7 +253,11 @@ mutation UpdateMyContributorProfile(
     contributorProfiles(
       where: {
         id: { eq: $profileId }
-        ownerFirebaseUid: { eq_expr: "auth.uid" }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
       }
       limit: 1
     ) {
