@@ -115,19 +115,28 @@ export async function setCustomSpecies(data) {
 
 export async function mergeSyncedCalcs(serverCalcs) {
   const local = await calcsStore.getAll();
-  const localIds = new Set(local.map((c) => c.serverId || c.id));
+  // Stringify all local serverIds for type-safe comparison (server returns ints,
+  // local may store them as numbers or strings depending on how they were saved).
+  // Also track items that are pending-delete so we never resurrect a tombstone.
+  const localServerIds = new Set(local.filter((c) => c.serverId).map((c) => String(c.serverId)));
+  const pendingDeleteIds = new Set(
+    local.filter((c) => c.syncStatus === 'pending-delete' && c.serverId).map((c) => String(c.serverId))
+  );
 
   for (const sc of serverCalcs) {
-    if (!localIds.has(String(sc.id))) {
-      local.push({
-        ...sc,
-        serverId: sc.id,
-        id: crypto.randomUUID(),
-        syncStatus: 'synced',
-        updatedAt: sc.created_at || new Date().toISOString(),
-        createdAt: sc.created_at || new Date().toISOString(),
-      });
-    }
+    const sid = String(sc.id);
+    // Skip if already tracked locally (any syncStatus) — especially pending-delete
+    // tombstones, which must not be resurrected by a pull from the server.
+    if (localServerIds.has(sid) || pendingDeleteIds.has(sid)) continue;
+
+    local.push({
+      ...sc,
+      serverId: sc.id,
+      id: crypto.randomUUID(),
+      syncStatus: 'synced',
+      updatedAt: sc.created_at || new Date().toISOString(),
+      createdAt: sc.created_at || new Date().toISOString(),
+    });
   }
   await set(SAVED_CALCS_KEY, local);
 }

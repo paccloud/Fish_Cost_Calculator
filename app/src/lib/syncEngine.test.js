@@ -5,6 +5,8 @@ import {
   getAllPendingSync,
   markCalcSynced,
   markYieldSynced,
+  removeCalcSyncedDelete,
+  mergeSyncedCalcs,
   mergeSyncedYields,
 } from './localStore';
 
@@ -312,5 +314,102 @@ describe('syncAll', () => {
     await syncAll(passwordUser);
 
     expect(mergeSyncedYields).toHaveBeenCalledWith([yieldRow]);
+  });
+
+  // --- Delete round-trip: issue #24 ---
+
+  it('successful delete clears the tombstone from local store', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'local-calc-id',
+          serverId: 42,
+          syncStatus: 'pending-delete',
+        },
+      ],
+      yields: [],
+    });
+    apiClient.deleteCalcRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: {} }));
+
+    await syncAll(passwordUser);
+
+    expect(apiClient.deleteCalcRaw).toHaveBeenCalledWith(42, AUTH_HEADERS);
+    expect(removeCalcSyncedDelete).toHaveBeenCalledWith('local-calc-id');
+  });
+
+  it('404 on delete is treated as already-deleted and clears the tombstone', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'local-calc-id',
+          serverId: 99,
+          syncStatus: 'pending-delete',
+        },
+      ],
+      yields: [],
+    });
+    apiClient.deleteCalcRaw.mockResolvedValue(fakeResponse({ ok: false, status: 404, body: { error: 'Not found' } }));
+
+    const stats = await syncAll(passwordUser);
+
+    // 404 = already gone from server, tombstone must be cleared, not counted as error
+    expect(removeCalcSyncedDelete).toHaveBeenCalledWith('local-calc-id');
+    expect(stats.errors).toBe(0);
+  });
+
+  it('failed delete (5xx) leaves the tombstone intact for retry', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'local-calc-id',
+          serverId: 55,
+          syncStatus: 'pending-delete',
+        },
+      ],
+      yields: [],
+    });
+    apiClient.deleteCalcRaw.mockResolvedValue(fakeResponse({ ok: false, status: 500, body: { error: 'Server error' } }));
+
+    const stats = await syncAll(passwordUser);
+
+    expect(removeCalcSyncedDelete).not.toHaveBeenCalled();
+    expect(stats.errors).toBe(1);
+    expect(stats.errorDetails[0]).toMatchObject({ type: 'delete-calc', id: 'local-calc-id', status: 500 });
+  });
+
+  it('calc with no serverId (never synced) is immediately removed without an HTTP call', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'local-only-id',
+          serverId: undefined,
+          syncStatus: 'pending-delete',
+        },
+      ],
+      yields: [],
+    });
+
+    const stats = await syncAll(passwordUser);
+
+    expect(apiClient.deleteCalcRaw).not.toHaveBeenCalled();
+    expect(removeCalcSyncedDelete).toHaveBeenCalledWith('local-only-id');
+    expect(stats.pushed).toBe(1);
+    expect(stats.errors).toBe(0);
+  });
+
+  it('pull does not resurrect calcs that were just deleted (mergeSyncedCalcs called with server list)', async () => {
+    getAllPendingSync.mockResolvedValue({ calcs: [], yields: [] });
+    const serverCalcs = [
+      { id: 7, species: 'Pacific Cod', product: 'Round → Skinless Fillets', yield: 42, result: 10.71 },
+    ];
+    apiClient.listSavedCalcsRaw.mockResolvedValue(
+      fakeResponse({ ok: true, status: 200, body: serverCalcs })
+    );
+
+    await syncAll(passwordUser);
+
+    // syncEngine must pass the raw server list to mergeSyncedCalcs which
+    // is responsible for skipping tombstoned items
+    expect(mergeSyncedCalcs).toHaveBeenCalledWith(serverCalcs);
   });
 });
