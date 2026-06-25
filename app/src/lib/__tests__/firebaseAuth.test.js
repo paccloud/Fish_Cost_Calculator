@@ -37,6 +37,7 @@ describe('Firebase ID token verification', () => {
         iat: now,
         exp: now + 3600,
         email: 'fishbuyer@example.com',
+        email_verified: true,
         name: 'Fish Buyer',
         picture: 'https://example.com/avatar.png',
       },
@@ -60,6 +61,7 @@ describe('Firebase ID token verification', () => {
     expect(user).toEqual({
       uid: 'firebase-user-123',
       email: 'fishbuyer@example.com',
+      emailVerified: true,
       name: 'Fish Buyer',
       picture: 'https://example.com/avatar.png',
     });
@@ -83,6 +85,7 @@ describe('Firebase API auth', () => {
       verifyIdToken: vi.fn(async () => ({
         uid: 'firebase-user-123',
         email: 'fishbuyer@example.com',
+        emailVerified: true,
         name: 'Fish Buyer',
         picture: 'https://example.com/avatar.png',
       })),
@@ -97,6 +100,88 @@ describe('Firebase API auth', () => {
     expect(query).toHaveBeenCalledWith(
       'SELECT id, username, email FROM users WHERE firebase_uid = $1',
       ['firebase-user-123']
+    );
+  });
+
+  it('links an existing local user by verified Firebase email', async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 42,
+          username: 'fishbuyer',
+          email: 'fishbuyer@example.com',
+          firebase_uid: null,
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const user = await verifyFirebaseAuthSession({
+      headers: {
+        authorization: 'Bearer firebase-id-token',
+      },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'fishbuyer@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toEqual({
+      id: 42,
+      username: 'fishbuyer',
+      email: 'fishbuyer@example.com',
+      authProvider: 'firebase',
+    });
+    expect(query).toHaveBeenCalledWith(
+      'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
+      ['fishbuyer@example.com']
+    );
+    expect(query).toHaveBeenCalledWith(
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+      ['firebase-user-123', 'https://example.com/avatar.png', 'firebase', 42]
+    );
+  });
+
+  it('does not link an existing local user by unverified Firebase email', async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 43, username: 'firebase_unverified-u', email: null }],
+      });
+
+    const user = await verifyFirebaseAuthSession({
+      headers: {
+        authorization: 'Bearer firebase-id-token',
+      },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'unverified-user-123',
+        email: 'fishbuyer@example.com',
+        emailVerified: false,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toEqual({
+      id: 43,
+      username: 'firebase_unverified-u',
+      email: null,
+      authProvider: 'firebase',
+    });
+    expect(query).not.toHaveBeenCalledWith(
+      'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
+      ['fishbuyer@example.com']
+    );
+    expect(query).toHaveBeenLastCalledWith(
+      expect.stringContaining('INSERT INTO users'),
+      ['firebase_unverified-u', null, 'unverified-user-123', 'https://example.com/avatar.png']
     );
   });
 });

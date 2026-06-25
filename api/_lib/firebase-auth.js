@@ -111,13 +111,18 @@ export async function verifyFirebaseIdToken(token, options = {}) {
   return {
     uid: payload.sub,
     email: payload.email,
+    emailVerified: payload.email_verified === true,
     name: payload.name || payload.email,
     picture: payload.picture,
   };
 }
 
 function usernameFromFirebaseUser(firebaseUser) {
-  return firebaseUser.email || `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
+  if (firebaseUser.emailVerified && firebaseUser.email) {
+    return firebaseUser.email;
+  }
+
+  return `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
 }
 
 export async function getOrCreateFirebaseUser(firebaseUser, query) {
@@ -135,7 +140,7 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       return result.rows[0];
     }
 
-    if (firebaseUser.email) {
+    if (firebaseUser.email && firebaseUser.emailVerified) {
       result = await query(
         'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
         [firebaseUser.email]
@@ -164,7 +169,7 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
        RETURNING id, username, email`,
       [
         usernameFromFirebaseUser(firebaseUser),
-        firebaseUser.email || null,
+        firebaseUser.emailVerified ? firebaseUser.email : null,
         firebaseUser.uid,
         firebaseUser.picture || null,
       ]
