@@ -103,7 +103,7 @@ db.serialize(() => {
         firebase_uid TEXT UNIQUE,
         email TEXT,
         avatar_url TEXT,
-        auth_provider TEXT DEFAULT 'password'
+        auth_provider TEXT DEFAULT 'firebase'
     )`);
     
     db.run(`CREATE TABLE IF NOT EXISTS calculations (
@@ -151,7 +151,7 @@ db.serialize(() => {
         'ALTER TABLE users ADD COLUMN firebase_uid TEXT',
         'ALTER TABLE users ADD COLUMN email TEXT',
         'ALTER TABLE users ADD COLUMN avatar_url TEXT',
-        "ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'password'",
+        "ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'firebase'",
     ].forEach((statement) => {
         db.run(statement, (err) => {
             if (err && !/duplicate column/i.test(err.message)) {
