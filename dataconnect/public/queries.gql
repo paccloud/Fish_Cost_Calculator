@@ -1,0 +1,59 @@
+# Public calculator/community read operations for the issue #65 sandbox proof.
+
+query ListPublicCalculatorYieldPaths
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only public read of published calculator yield references; no user or production data is exposed."
+  ) {
+  publicYieldConversions(
+    where: { isPublished: { eq: true } }
+    orderBy: [{ fromState: ASC }, { toState: ASC }]
+    limit: 50
+  ) {
+    id
+    fromState
+    toState
+    yieldPercent
+    minYieldPercent
+    maxYieldPercent
+    sourceLabel
+    species {
+      slug
+      displayName
+      scientificName
+      category
+      sourceLabel
+      isPublished
+    }
+  }
+}
+
+query GetPublicSpeciesYieldPaths($slug: String!)
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only public read filtered by published species slug; no user or production data is exposed."
+  ) {
+  publicYieldConversions(
+    where: {
+      isPublished: { eq: true }
+      species: { slug: { eq: $slug }, isPublished: { eq: true } }
+    }
+    orderBy: [{ fromState: ASC }, { toState: ASC }]
+    limit: 25
+  ) {
+    id
+    fromState
+    toState
+    yieldPercent
+    minYieldPercent
+    maxYieldPercent
+    sourceLabel
+    species {
+      slug
+      displayName
+      scientificName
+      category
+      sourceLabel
+    }
+  }
+}

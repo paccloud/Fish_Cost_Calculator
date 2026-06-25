@@ -1,0 +1,17 @@
+specVersion: "v1"
+serviceId: "fish-cost-calculator-sandbox"
+location: "us-central1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fish_cost_calculator_sandbox"
+      cloudSql:
+        instanceId: "fish-cost-calculator-sandbox"
+        schemaValidation: "COMPATIBLE"
+connectorDirs:
+  - "./public"
+  - "./identity"
+  - "./saved-calculations"
+  - "./custom-yields"
+  - "./community"

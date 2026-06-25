@@ -1,0 +1,6 @@
+connectorId: "custom-yields"
+generate:
+  javascriptSdk:
+    outputDir: "./generated/custom-yields"
+    package: "@fish-cost-calculator/sql-connect-custom-yields-proof"
+    react: true

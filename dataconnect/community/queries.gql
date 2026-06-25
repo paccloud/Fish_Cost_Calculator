@@ -1,0 +1,254 @@
+# Contributor/community proof operations for issue #69.
+# Public reads intentionally omit ownerFirebaseUid, canonical app user IDs, and
+# legacy owner IDs. Private operations derive ownership from auth.uid.
+
+query ListPublicContributorProfiles
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only public read of contributor profiles explicitly opted into public display; no owner Firebase UID or canonical user ID is exposed."
+  ) {
+  contributorProfiles(
+    where: { showOnPage: { eq: true } }
+    orderBy: [{ contributionCount: DESC }, { displayName: ASC }]
+    limit: 50
+  ) {
+    id
+    legacyContributorId
+    displayName
+    organization
+    bio
+    contributionCount
+  }
+}
+
+query GetPublicContributorProfile($profileId: UUID!)
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only public read of one contributor profile, filtered to rows explicitly opted into public display."
+  ) {
+  contributorProfiles(
+    where: {
+      id: { eq: $profileId }
+      showOnPage: { eq: true }
+    }
+    limit: 1
+  ) {
+    id
+    legacyContributorId
+    displayName
+    organization
+    bio
+    contributionCount
+  }
+}
+
+query ListPublicCommunityCalculations
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only anonymous read of published community calculation snapshots with private owner fields omitted."
+  ) {
+  communityCalculationSnapshots(
+    where: { isPublished: { eq: true } }
+    orderBy: [{ calculatedAt: DESC }]
+    limit: 100
+  ) {
+    id
+    legacyCalculationId
+    species
+    product
+    cost
+    yieldPercent
+    result
+    calculatedAt
+  }
+}
+
+query GetPublicCommunityCalculation($calculationId: UUID!)
+  @auth(
+    level: PUBLIC,
+    insecureReason: "Proof-only anonymous read of one published community calculation snapshot with private owner fields omitted."
+  ) {
+  communityCalculationSnapshots(
+    where: {
+      id: { eq: $calculationId }
+      isPublished: { eq: true }
+    }
+    limit: 1
+  ) {
+    id
+    legacyCalculationId
+    species
+    product
+    cost
+    yieldPercent
+    result
+    calculatedAt
+  }
+}
+
+query GetMyContributorProfile @auth(level: USER) {
+  contributorProfiles(
+    where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+    limit: 1
+  ) {
+    id
+    legacyContributorId
+    legacyOwnerUserId
+    displayName
+    organization
+    bio
+    showOnPage
+    contributionCount
+    createdAt
+    updatedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+query GetMyContributorProfileById($profileId: UUID!) @auth(level: USER) {
+  contributorProfiles(
+    where: {
+      id: { eq: $profileId }
+      ownerFirebaseUid: { eq_expr: "auth.uid" }
+    }
+    limit: 1
+  ) {
+    id
+    legacyContributorId
+    legacyOwnerUserId
+    displayName
+    organization
+    bio
+    showOnPage
+    contributionCount
+    createdAt
+    updatedAt
+    appUser {
+      id
+      legacyUserId
+    }
+  }
+}
+
+mutation CreateMyContributorProfile(
+  $legacyContributorId: String
+  $displayName: String
+  $organization: String
+  $bio: String
+  $showOnPage: Boolean!
+) @auth(level: USER) @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.firebaseAuthIdentities.size() == 1 && response.query.contributorProfiles.size() == 0",
+      message: "Authenticated Firebase user must map to one canonical app user and must not already have a contributor profile."
+    ) {
+    firebaseAuthIdentities(
+      where: { firebaseUid: { eq_expr: "auth.uid" } }
+      limit: 2
+    ) {
+      appUser {
+        id
+        legacyUserId
+      }
+    }
+    contributorProfiles(
+      where: { ownerFirebaseUid: { eq_expr: "auth.uid" } }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  contributorProfile_insert(data: {
+    appUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.id"
+    ownerFirebaseUid_expr: "auth.uid"
+    legacyContributorId: $legacyContributorId
+    legacyOwnerUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.legacyUserId"
+    displayName: $displayName
+    organization: $organization
+    bio: $bio
+    showOnPage: $showOnPage
+  })
+}
+
+mutation UpsertMyContributorProfile(
+  $profileId: UUID!
+  $legacyContributorId: String
+  $displayName: String
+  $organization: String
+  $bio: String
+  $showOnPage: Boolean!
+) @auth(level: USER) @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.firebaseAuthIdentities.size() == 1 && (response.query.contributorProfiles.size() == 0 || response.query.contributorProfiles[0].ownerFirebaseUid == auth.uid)",
+      message: "Authenticated Firebase user must map to one canonical app user and can only upsert their own contributor profile."
+    ) {
+    firebaseAuthIdentities(
+      where: { firebaseUid: { eq_expr: "auth.uid" } }
+      limit: 2
+    ) {
+      appUser {
+        id
+        legacyUserId
+      }
+    }
+    contributorProfiles(
+      where: { id: { eq: $profileId } }
+      limit: 1
+    ) {
+      ownerFirebaseUid
+    }
+  }
+  contributorProfile_upsert(data: {
+    id: $profileId
+    appUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.id"
+    ownerFirebaseUid_expr: "auth.uid"
+    legacyContributorId: $legacyContributorId
+    legacyOwnerUserId_expr: "response.query.firebaseAuthIdentities[0].appUser.legacyUserId"
+    displayName: $displayName
+    organization: $organization
+    bio: $bio
+    showOnPage: $showOnPage
+    updatedAt_expr: "request.time"
+  })
+}
+
+mutation UpdateMyContributorProfile(
+  $profileId: UUID!
+  $displayName: String
+  $organization: String
+  $bio: String
+  $showOnPage: Boolean!
+) @auth(level: USER) @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.contributorProfiles.size() == 1",
+      message: "Contributor profile not found for the authenticated user."
+    ) {
+    contributorProfiles(
+      where: {
+        id: { eq: $profileId }
+        ownerFirebaseUid: { eq_expr: "auth.uid" }
+      }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  contributorProfile_update(
+    id: $profileId
+    data: {
+      displayName: $displayName
+      organization: $organization
+      bio: $bio
+      showOnPage: $showOnPage
+      updatedAt_expr: "request.time"
+    }
+  )
+}

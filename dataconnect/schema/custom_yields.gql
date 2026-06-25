@@ -1,0 +1,21 @@
+# Issue #68 sandbox schema only. These rows prove how user-owned custom yield
+# data can move to SQL Connect while the existing Neon/Stack Auth/Vercel runtime
+# remains unchanged.
+#
+# SQL Connect sync failure handling is intentionally not modeled here: preserving
+# pending local custom yield data remains a client sync-engine responsibility
+# until later runtime migration work.
+
+type CustomYield @table {
+  id: UUID! @default(expr: "uuidV4()")
+  appUser: CanonicalAppUser!
+  ownerFirebaseUid: String! @col(dataType: "varchar(128)")
+  legacyUserDataId: String @col(dataType: "varchar(120)")
+  localYieldId: String @col(dataType: "varchar(120)")
+  species: String! @col(dataType: "varchar(255)")
+  product: String! @col(dataType: "varchar(255)")
+  yieldPercent: Float!
+  source: String @col(dataType: "varchar(255)")
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
