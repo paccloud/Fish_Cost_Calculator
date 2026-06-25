@@ -1,142 +1,24 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { stackClientApp } from '../config/neonAuth';
-import { apiClient } from '../lib/apiClient';
+import React, { createContext, useContext, useState } from 'react';
+import {
+  clearFirebaseSession,
+  loadFirebaseSession,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
+} from '../lib/firebaseRestAuth';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => loadFirebaseSession());
+  const [token, setToken] = useState(null);
+  const [loading] = useState(false);
 
-  // Check for Stack Auth (Neon Auth) session on mount
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // First check Stack Auth session
-        const stackUser = await stackClientApp.getUser();
-        if (stackUser) {
-          setUser({
-            username: stackUser.displayName || stackUser.primaryEmail,
-            email: stackUser.primaryEmail,
-            avatar: stackUser.profileImageUrl,
-            authProvider: 'oauth',
-            stackAuthId: stackUser.id
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.log('No Stack Auth session:', e.message);
-      }
-
-      // Fall back to JWT token
-      if (token) {
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
-        } else {
-          try {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              localStorage.removeItem('token');
-              setToken(null);
-              setUser(null);
-            } else {
-              setUser({ username: payload.username, authProvider: 'password' });
-            }
-          } catch {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
-          }
-        }
-      }
-      setLoading(false);
-    };
-
-    checkSession();
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    const MAX_TIMEOUT = 2147483647;
-    let timeoutId;
-    let cancelled = false;
-
-    const clearToken = () => {
+  const login = async (email, password) => {
+    try {
+      const firebaseUser = await signInWithEmailPassword(email, password);
       localStorage.removeItem('token');
       setToken(null);
-      setUser(null);
-    };
-
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-      return;
-    }
-
-    try {
-      const payload = JSON.parse(atob(tokenParts[1]));
-      if (payload.exp) {
-        const expiryMs = payload.exp * 1000;
-
-        const scheduleExpiry = () => {
-          const msUntilExpiry = expiryMs - Date.now();
-          if (msUntilExpiry <= 0) {
-            localStorage.removeItem('token');
-            queueMicrotask(() => {
-              setToken(null);
-              setUser(null);
-            });
-            return;
-          }
-          timeoutId = setTimeout(() => {
-            if (cancelled) return;
-
-            const remainingMs = expiryMs - Date.now();
-            if (remainingMs > 0) {
-              scheduleExpiry();
-              return;
-            }
-
-            clearToken();
-          }, Math.min(msUntilExpiry, MAX_TIMEOUT));
-        };
-
-        scheduleExpiry();
-      }
-    } catch {
-      // If decoding fails, clear invalid token
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [token]);
-
-  // Traditional username/password login
-  const login = async (username, password) => {
-    try {
-      const data = await apiClient.login(username, password);
-      setToken(data.token);
-      localStorage.setItem('token', data.token);
-      setUser({ username: data.username, authProvider: 'password' });
+      setUser(firebaseUser);
       return true;
     } catch (e) {
       console.error(e);
@@ -144,39 +26,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Traditional username/password registration
-  const register = async (username, password) => {
+  const register = async (email, password) => {
     try {
-      await apiClient.register(username, password);
+      const firebaseUser = await signUpWithEmailPassword(email, password);
+      localStorage.removeItem('token');
+      setToken(null);
+      setUser(firebaseUser);
       return true;
-    } catch {
+    } catch (e) {
+      console.error(e);
       return false;
     }
   };
 
-  // OAuth sign in (Google, GitHub)
-  const signInWithOAuth = async (provider) => {
-    try {
-      await stackClientApp.signInWithOAuth(provider);
-      return true;
-    } catch (err) {
-      console.error(`${provider} sign-in error:`, err);
-      return false;
-    }
-  };
-
-  // Logout - handles both auth methods
   const logout = async () => {
-    try {
-      // Sign out from Stack Auth if using OAuth
-      if (user?.authProvider === 'oauth') {
-        await stackClientApp.signOut();
-      }
-    } catch (err) {
-      console.log('Stack Auth signout error:', err);
-    }
-
-    // Clear local state
+    clearFirebaseSession();
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');
@@ -189,8 +53,7 @@ export const AuthProvider = ({ children }) => {
       loading,
       login,
       logout,
-      register,
-      signInWithOAuth
+      register
     }}>
       {children}
     </AuthContext.Provider>

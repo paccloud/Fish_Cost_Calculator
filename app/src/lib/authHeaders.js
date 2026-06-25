@@ -1,18 +1,14 @@
-import { stackClientApp } from '../config/neonAuth';
-
 export async function getAuthHeaders(user, baseHeaders = {}) {
   const headers = { ...baseHeaders };
 
-  if (user?.authProvider === 'oauth') {
+  if (user?.authProvider === 'firebase' && typeof user.getIdToken === 'function') {
     try {
-      const stackUser = await stackClientApp.getUser();
-      const authJson = stackUser ? await stackUser.getAuthJson() : null;
-      if (authJson?.accessToken) {
-        headers['x-stack-access-token'] = authJson.accessToken;
-        return headers;
+      const idToken = await user.getIdToken();
+      if (idToken) {
+        headers.Authorization = `Bearer ${idToken}`;
       }
     } catch (err) {
-      console.error('Failed to get Stack Auth token:', err);
+      console.error('Failed to get Firebase ID token:', err);
     }
 
     return headers;
@@ -28,6 +24,6 @@ export async function getAuthHeaders(user, baseHeaders = {}) {
 
 export function hasAuthCredential(user) {
   if (!user) return false;
-  if (user.authProvider === 'oauth') return true;
+  if (user.authProvider === 'firebase') return typeof user.getIdToken === 'function';
   return Boolean(localStorage.getItem('token'));
 }

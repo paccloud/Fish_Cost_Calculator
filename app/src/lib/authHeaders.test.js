@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { stackClientApp } from '../config/neonAuth';
 import { getAuthHeaders, hasAuthCredential } from './authHeaders';
-
-vi.mock('../config/neonAuth', () => ({
-  stackClientApp: {
-    getUser: vi.fn(),
-  },
-}));
 
 const installLocalStorage = () => {
   const store = new Map();
@@ -42,48 +35,39 @@ describe('auth headers', () => {
     });
   });
 
-  it('adds a Stack Auth access token for OAuth sessions', async () => {
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({ accessToken: 'stack-token' })),
-    });
-
-    const headers = await getAuthHeaders({ username: 'processor', authProvider: 'oauth' });
-
-    expect(headers).toEqual({
-      'x-stack-access-token': 'stack-token',
-    });
-    expect(headers).not.toHaveProperty('Content-Type');
-  });
-
-  it('preserves base headers and adds a Stack Auth access token for OAuth sessions', async () => {
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({ accessToken: 'stack-token' })),
-    });
+  it('adds a Firebase ID token as a bearer token for Firebase sessions', async () => {
+    const getIdToken = vi.fn(async () => 'firebase-id-token');
 
     const headers = await getAuthHeaders(
-      { username: 'processor', authProvider: 'oauth' },
+      { username: 'processor', authProvider: 'firebase', getIdToken },
       { 'Content-Type': 'application/json' }
     );
 
     expect(headers).toEqual({
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
+      Authorization: 'Bearer firebase-id-token',
     });
+    expect(getIdToken).toHaveBeenCalledTimes(1);
   });
 
-  it('does not fall back to a password token for OAuth sessions', async () => {
+  it('does not fall back to a password token for Firebase sessions when ID token lookup fails', async () => {
     localStorage.setItem('token', 'stale-jwt-token');
-    stackClientApp.getUser.mockResolvedValue({
-      getAuthJson: vi.fn(async () => ({})),
-    });
 
-    const headers = await getAuthHeaders({ username: 'processor', authProvider: 'oauth' });
+    const headers = await getAuthHeaders({
+      username: 'processor',
+      authProvider: 'firebase',
+      getIdToken: vi.fn(async () => null),
+    });
 
     expect(headers).toEqual({});
   });
 
   it('knows whether any auth credential is available', () => {
-    expect(hasAuthCredential({ username: 'oauth-user', authProvider: 'oauth' })).toBe(true);
+    expect(hasAuthCredential({
+      username: 'firebase-user',
+      authProvider: 'firebase',
+      getIdToken: vi.fn(),
+    })).toBe(true);
 
     expect(hasAuthCredential({ username: 'password-user', authProvider: 'password' })).toBe(false);
     localStorage.setItem('token', 'jwt-token');

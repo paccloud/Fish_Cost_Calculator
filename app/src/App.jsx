@@ -1,6 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, NavLink, useLocation } from 'react-router-dom';
-import { StackProvider, StackTheme, StackHandler } from "@stackframe/react";
+import { BrowserRouter as Router, Routes, Route, Link, NavLink } from 'react-router-dom';
 import { Analytics } from "@vercel/analytics/react";
 import Calculator from './components/Calculator';
 
@@ -14,7 +13,6 @@ const CommunityData = lazy(() => import('./components/CommunityData'));
 import { Fish, UserCircle, Menu, X, Database, BookOpen, Sun, Moon, Users, Upload } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useTheme } from './context/ThemeContext';
-import { stackClientApp } from './config/neonAuth';
 
 const NavBar = () => {
     const { user, logout } = useAuth();
@@ -161,11 +159,6 @@ const NavBar = () => {
     );
 };
 
-function StackHandlerRoutes() {
-    const location = useLocation();
-    return <StackHandler app={stackClientApp} location={location.pathname} fullPage />;
-}
-
 function AppContent() {
     return (
         <div className="min-h-screen bg-surface text-text-primary font-sans selection:bg-brand-terracotta/20 selection:text-brand-terracotta">
@@ -176,7 +169,6 @@ function AppContent() {
                     <div className="flex items-center justify-center py-20 text-text-muted text-sm">Loading…</div>
                 }>
                     <Routes>
-                        <Route path="/handler/*" element={<StackHandlerRoutes />} />
                         <Route path="/" element={<Calculator />} />
                         <Route path="/login" element={<Login />} />
                         <Route path="/upload" element={<UploadData />} />
@@ -213,15 +205,11 @@ function App() {
                 <div className="text-text-muted text-sm">Loading…</div>
             </div>
         }>
-            <StackProvider app={stackClientApp}>
-                <StackTheme>
-                    <Router>
-                        <AuthProvider>
-                            <AppContent />
-                        </AuthProvider>
-                    </Router>
-                </StackTheme>
-            </StackProvider>
+            <Router>
+                <AuthProvider>
+                    <AppContent />
+                </AuthProvider>
+            </Router>
         </Suspense>
     );
 }

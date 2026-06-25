@@ -360,15 +360,14 @@ describe('apiClient.getContributorProfile', () => {
     });
   });
 
-  it('uses extraHeaders when provided (OAuth path)', async () => {
+  it('uses extraHeaders when provided (Firebase path)', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: false, status: 404, body: '' }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
 
-    await client.getContributorProfile({ 'x-stack-access-token': 'oauth-tok' });
+    await client.getContributorProfile({ Authorization: 'Bearer firebase-id-token' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth-tok');
-    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
   });
 });
 
@@ -471,14 +470,14 @@ describe('apiClient.saveCalcRaw — request construction', () => {
     expect(res.status).toBe(401);
   });
 
-  it('passes extraHeaders (OAuth token)', async () => {
+  it('passes extraHeaders (Firebase token)', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: true, status: 201, body: { id: 1 } }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
 
-    await client.saveCalcRaw({}, { 'x-stack-access-token': 'oauth' });
+    await client.saveCalcRaw({}, { Authorization: 'Bearer firebase-id-token' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth');
+    expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
   });
 });
 
@@ -575,15 +574,14 @@ describe('apiClient.listSavedCalcsRaw — request construction', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('passes extraHeaders (OAuth token)', async () => {
+  it('passes extraHeaders (Firebase token)', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: [] }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });
 
-    await client.listSavedCalcsRaw({ 'x-stack-access-token': 'oauth' });
+    await client.listSavedCalcsRaw({ Authorization: 'Bearer firebase-id-token' });
 
     const [, options] = fetchStub.mock.calls[0];
-    expect(options.headers['x-stack-access-token']).toBe('oauth');
-    expect(options.headers.Authorization).toBeUndefined();
+    expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
   });
 });
 

@@ -21,11 +21,10 @@ The following files have been secured by replacing real credentials with placeho
 
 The following credentials were previously committed to the repository and **MUST be rotated immediately**:
 
-### Stack Auth (Neon Auth)
-- **Project ID**: [REDACTED - rotate immediately]
-- **Publishable Client Key**: [REDACTED - rotate immediately]
+### Previous Auth Provider Credentials
+- **Project ID / Client Keys**: [REDACTED - rotate immediately]
 - **Secret Server Key**: [REDACTED - rotate immediately]
-- **Action Required**: Regenerate keys in Stack Auth dashboard at https://app.stack-auth.com
+- **Action Required**: Revoke the retired Stack Auth credentials if they still exist, and configure Firebase Auth credentials for the active deployment.
 
 ### Neon Database
 - **Database URL**: [REDACTED - reset password immediately]
@@ -35,9 +34,9 @@ The following credentials were previously committed to the repository and **MUST
 
 ## Immediate Action Items
 
-1. **Rotate Stack Auth Credentials**
-   - Go to Stack Auth dashboard
-   - Generate new project keys
+1. **Revoke Retired Auth Credentials**
+   - Revoke any retired Stack Auth project keys
+   - Configure Firebase Auth for the active project
    - Update `app/.env.development.local` and `app/.env.production.local`
    - Update Vercel environment variables
 

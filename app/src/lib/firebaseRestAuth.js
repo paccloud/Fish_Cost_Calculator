@@ -1,0 +1,169 @@
+export const FIREBASE_AUTH_SESSION_KEY = 'firebaseAuthSession';
+
+const ID_TOKEN_REFRESH_MARGIN_MS = 60_000;
+const IDENTITY_TOOLKIT_BASE_URL = 'https://identitytoolkit.googleapis.com/v1';
+const SECURE_TOKEN_BASE_URL = 'https://securetoken.googleapis.com/v1';
+
+function defaultNow() {
+  return Date.now();
+}
+
+function getConfiguredApiKey(apiKey) {
+  const configuredApiKey = apiKey || import.meta.env.VITE_FIREBASE_API_KEY;
+  if (!configuredApiKey) {
+    throw new Error('VITE_FIREBASE_API_KEY is required for Firebase authentication');
+  }
+  return configuredApiKey;
+}
+
+async function parseFirebaseResponse(response, fallbackMessage) {
+  const body = await response.json().catch(() => ({}));
+  if (response.ok) {
+    return body;
+  }
+
+  const message = body?.error?.message || fallbackMessage;
+  throw new Error(message);
+}
+
+async function postFirebaseJson(url, body, fetchFn) {
+  if (typeof fetchFn !== 'function') {
+    throw new Error('fetch is required for Firebase authentication');
+  }
+
+  const response = await fetchFn(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  return parseFirebaseResponse(response, 'Firebase authentication failed');
+}
+
+function normalizeAuthResponse(response, now) {
+  const expiresAt = response.expiresAt !== undefined
+    ? Number(response.expiresAt)
+    : now() + Number.parseInt(response.expiresIn || response.expires_in || '3600', 10) * 1000;
+
+  return {
+    idToken: response.idToken || response.id_token,
+    refreshToken: response.refreshToken || response.refresh_token,
+    localId: response.localId || response.local_id || response.user_id,
+    email: response.email || null,
+    displayName: response.displayName || response.display_name || response.email || null,
+    expiresAt,
+  };
+}
+
+function shouldRefresh(session, now) {
+  return Number(session.expiresAt || 0) <= now + ID_TOKEN_REFRESH_MARGIN_MS;
+}
+
+function persistSession(session, storage = globalThis.localStorage) {
+  if (!storage) return;
+  storage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify(session));
+}
+
+function clearPersistedSession(storage = globalThis.localStorage) {
+  if (!storage) return;
+  storage.removeItem(FIREBASE_AUTH_SESSION_KEY);
+}
+
+async function refreshFirebaseSession(session, options) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  const refreshed = await postFirebaseJson(
+    `${SECURE_TOKEN_BASE_URL}/token?key=${encodeURIComponent(apiKey)}`,
+    {
+      grant_type: 'refresh_token',
+      refresh_token: session.refreshToken,
+    },
+    fetchFn
+  );
+
+  return normalizeAuthResponse({
+    idToken: refreshed.id_token || refreshed.idToken || session.idToken,
+    refreshToken: refreshed.refresh_token || refreshed.refreshToken || session.refreshToken,
+    localId: refreshed.user_id || refreshed.localId || session.localId,
+    email: refreshed.email || session.email,
+    displayName: refreshed.displayName || session.displayName,
+    expiresIn: refreshed.expires_in || refreshed.expiresIn,
+  }, options.now || defaultNow);
+}
+
+export function createFirebaseSession(response, options = {}) {
+  let session = normalizeAuthResponse(response, options.now || defaultNow);
+  persistSession(session, options.storage);
+
+  return {
+    uid: session.localId,
+    username: session.displayName || session.email,
+    email: session.email,
+    authProvider: 'firebase',
+    getIdToken: async () => {
+      const now = (options.now || defaultNow)();
+      if (shouldRefresh(session, now)) {
+        session = await refreshFirebaseSession(session, options);
+        persistSession(session, options.storage);
+      }
+      return session.idToken;
+    },
+  };
+}
+
+export function loadFirebaseSession(options = {}) {
+  const storage = options.storage || globalThis.localStorage;
+  if (!storage) return null;
+
+  try {
+    const raw = storage.getItem(FIREBASE_AUTH_SESSION_KEY);
+    if (!raw) return null;
+
+    const session = JSON.parse(raw);
+    if (!session?.refreshToken || !session?.localId) {
+      clearPersistedSession(storage);
+      return null;
+    }
+
+    return createFirebaseSession(session, { ...options, storage });
+  } catch {
+    clearPersistedSession(storage);
+    return null;
+  }
+}
+
+export function clearFirebaseSession(options = {}) {
+  clearPersistedSession(options.storage);
+}
+
+export async function signInWithEmailPassword(email, password, options = {}) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  const response = await postFirebaseJson(
+    `${IDENTITY_TOOLKIT_BASE_URL}/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
+    {
+      email,
+      password,
+      returnSecureToken: true,
+    },
+    fetchFn
+  );
+
+  return createFirebaseSession(response, options);
+}
+
+export async function signUpWithEmailPassword(email, password, options = {}) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  const response = await postFirebaseJson(
+    `${IDENTITY_TOOLKIT_BASE_URL}/accounts:signUp?key=${encodeURIComponent(apiKey)}`,
+    {
+      email,
+      password,
+      returnSecureToken: true,
+    },
+    fetchFn
+  );
+
+  return createFirebaseSession(response, options);
+}

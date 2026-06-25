@@ -1,50 +1,49 @@
-import jwt from 'jsonwebtoken';
-import { verifyNeonAuthSession, getOrCreateLocalUser } from './neon-auth.js';
+import { verifyFirebaseAuthSession } from './firebase-auth.js';
 import { query } from './db.js';
 
-export function verifyToken(req) {
+const JWT_SECRET = process.env.JWT_SECRET;
+
+/**
+ * Verify JWT token from Authorization header
+ * @param {Object} req - Request object
+ * @returns {Object|null} Decoded token payload or null if invalid
+ */
+export async function verifyToken(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) return null;
+  if (!JWT_SECRET) {
+    return null;
+  }
 
   const token = authHeader.split(' ')[1];
   try {
-    return jwt.verify(token, secret);
+    const { default: jwt } = await import('jsonwebtoken');
+    return jwt.verify(token, JWT_SECRET);
   } catch (err) {
     return null;
   }
 }
 
 /**
- * Verify user from either JWT token or Neon Auth session
- * Tries JWT first (faster), then falls back to Neon Auth
+ * Verify user from Firebase or a legacy JWT token.
+ * Firebase is checked first because Firebase ID tokens and legacy JWTs both
+ * use the Authorization bearer-token slot during the migration window.
  * @param {Object} req - Request object
  * @returns {Object|null} User object or null if not authenticated
  */
 export async function verifyUser(req) {
-  // First try JWT token (existing password auth)
-  const jwtUser = verifyToken(req);
-  if (jwtUser) {
-    return { ...jwtUser, authProvider: 'password' };
+  const firebaseUser = await verifyFirebaseAuthSession(req, { query });
+  if (firebaseUser) {
+    return firebaseUser;
   }
 
-  // Fall back to Neon Auth session (OAuth)
-  const neonUser = await verifyNeonAuthSession(req);
-  if (neonUser) {
-    // Get or create local user record for database operations
-    const localUser = await getOrCreateLocalUser(neonUser, query);
-    if (localUser) {
-      return {
-        id: localUser.id,
-        username: localUser.username,
-        email: localUser.email,
-        authProvider: 'oauth',
-      };
-    }
+  // First try JWT token (existing password auth)
+  const jwtUser = await verifyToken(req);
+  if (jwtUser) {
+    return { ...jwtUser, authProvider: 'password' };
   }
 
   return null;
@@ -52,7 +51,7 @@ export async function verifyUser(req) {
 
 /**
  * Higher-order function to require authentication for a handler
- * Supports both JWT tokens (password auth) and Neon Auth sessions (OAuth)
+ * Supports Firebase ID tokens and legacy JWT tokens during migration.
  * @param {Function} handler - The route handler function
  * @returns {Function} Wrapped handler that requires auth
  */

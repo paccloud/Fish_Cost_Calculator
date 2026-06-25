@@ -97,10 +97,13 @@ Before deploying, add these environment variables in Vercel:
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `DATABASE_URL` | Your Neon connection string | From Step 1.1 |
-| `JWT_SECRET` | Your generated secret | From Step 2 (required; API fails fast if missing) |
-| `VITE_STACK_PROJECT_ID` | Stack Auth project ID | Required for frontend OAuth |
-| `VITE_STACK_PUBLISHABLE_CLIENT_KEY` | Stack Auth publishable client key | Required for frontend OAuth |
-| `STACK_SECRET_SERVER_KEY` | Stack Auth server secret key | Required for backend OAuth session verification |
+| `JWT_SECRET` | Your generated secret | Required only while the legacy JWT login endpoint remains enabled |
+| `FIREBASE_PROJECT_ID` | Firebase project ID | Required for backend Firebase ID token verification |
+| `VITE_FIREBASE_API_KEY` | Firebase web API key | Required for frontend email/password auth |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID | Must match `FIREBASE_PROJECT_ID` |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain | Usually `<project>.firebaseapp.com` |
+| `VITE_FIREBASE_APP_ID` | Firebase web app ID | From Firebase web app settings |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID | From Firebase web app settings |
 | `ALLOWED_ORIGINS` | Comma-separated allowlist (e.g. `https://your-app.vercel.app,http://localhost:5173`) | Required for CORS |
 | `CORS_ALLOW_CREDENTIALS` | `true` or `false` | Only enable when you need cookies across origins |
 | `JWT_EXPIRES_IN_SECONDS` | Optional, default `86400` | JWT lifetime (same value should be used locally) |
@@ -110,7 +113,23 @@ Before deploying, add these environment variables in Vercel:
 2. Add each variable for "Production" environment
 3. Optionally add for "Preview" environments too
 
-### 4.3 Deploy
+### 4.3 Apply Neon Auth Columns
+
+Before enabling the Firebase-authenticated frontend against an existing Neon
+database, run the auth column migration from `scripts/neon-schema.sql`:
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
+ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+```
+
+New databases created from `scripts/neon-schema.sql` already include these
+columns.
+
+### 4.4 Deploy
 
 Click "Deploy" and Vercel will:
 - Install dependencies (root + app)
@@ -119,24 +138,19 @@ Click "Deploy" and Vercel will:
 
 ---
 
-## Step 5: Configure Stack Auth Trusted Domains
+## Step 5: Configure Firebase Auth
 
-After deploying to Vercel, register the deployed domain in Stack Auth so OAuth
-redirects can complete.
+After deploying to Vercel, make sure Firebase Auth is configured for the same
+project used by `FIREBASE_PROJECT_ID`.
 
-### 5.1 Add Domains to Stack Auth
+### 5.1 Enable Email/Password Auth
 
-1. Log in to https://app.stack-auth.com
-2. Select the project matching `VITE_STACK_PROJECT_ID`.
-3. Open Project Settings -> Domains or Trusted Domains.
-4. Add each domain where users will sign in:
-   - Production Vercel URL, for example `https://your-app.vercel.app`
-   - Custom production domain, if configured
-   - Preview deployment URLs, or a preview wildcard if your Stack Auth project supports it
-5. Save the domain settings.
-
-The callback route in this app is `/handler/*`, but Stack Auth needs the domain
-root in Trusted Domains, not the full callback path.
+1. Open the Firebase console.
+2. Select the project matching `FIREBASE_PROJECT_ID`.
+3. Go to Authentication -> Sign-in method.
+4. Enable Email/Password.
+5. Add the production and preview web domains under Authentication -> Settings
+   -> Authorized domains.
 
 ### 5.2 Clean Up Vercel Integrations
 
@@ -144,9 +158,9 @@ root in Trusted Domains, not the full callback path.
 2. Remove the Clerk integration if it is present and unused. This repository
    does not import Clerk.
 3. Remove stale duplicate Neon integrations after confirming the active Neon
-   integration owns the current database and Stack Auth configuration.
+   integration owns the current database.
 4. Confirm the remaining integration and environment variables match the
-   intended Stack Auth and Neon projects.
+   intended Firebase and Neon projects.
 
 See `AUTH_ARCHITECTURE.md` for the current auth architecture and migration
 options.
@@ -249,19 +263,12 @@ This will:
 - Verify `ALLOWED_ORIGINS` includes your current origin
 - Test with public endpoints first (`/api/contributors`)
 
-### "REDIRECT_URL_NOT_WHITELISTED" error on deployed domain
+### Firebase login works but protected API calls return 401
 
-- The deployed domain has not been added to Stack Auth's Trusted Domains list
-- Go to https://app.stack-auth.com -> Project Settings -> Domains or Trusted Domains
-- Add the Vercel URL or custom domain where users are signing in
-- Save the setting and test OAuth again
-
-### OAuth login fails but password login works
-
-- Confirm Stack Auth Trusted Domains includes the deployed domain
-- Verify `VITE_STACK_PROJECT_ID` and `VITE_STACK_PUBLISHABLE_CLIENT_KEY` are set in Vercel
-- Verify `STACK_SECRET_SERVER_KEY` is set for backend session verification
-- Check Vercel integrations and remove unused Clerk or stale duplicate Neon integrations
+- Confirm `FIREBASE_PROJECT_ID` matches `VITE_FIREBASE_PROJECT_ID`.
+- Confirm the deployed domain is authorized in Firebase Auth settings.
+- Confirm the frontend is sending `Authorization: Bearer <firebase_id_token>`.
+- Redeploy after changing any Firebase environment variables.
 
 ### Cold starts are slow
 

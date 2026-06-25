@@ -10,10 +10,12 @@ Development: http://localhost:3000
 
 ## Authentication
 
-Most endpoints require JWT authentication. Include the token in the Authorization header:
+Most protected endpoints require authentication. During the Firebase migration,
+the API accepts either a Firebase Auth ID token or the legacy password-login JWT
+in the Authorization header:
 
 ```
-Authorization: Bearer <your_jwt_token>
+Authorization: Bearer <firebase_id_token_or_legacy_jwt>
 ```
 
 ---

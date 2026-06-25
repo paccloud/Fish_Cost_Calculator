@@ -20,7 +20,7 @@ export async function syncAll(user) {
   if (!hasAuthCredential(user)) return stats;
 
   const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
-  if (!headers.Authorization && !headers['x-stack-access-token']) {
+  if (!headers.Authorization) {
     stats.errors++;
     stats.errorDetails.push({
       type: 'auth',

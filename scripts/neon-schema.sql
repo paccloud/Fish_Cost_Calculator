@@ -5,13 +5,12 @@
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) UNIQUE NOT NULL,
-    password TEXT,  -- NULL for OAuth-only users
+    password TEXT,  -- NULL for Firebase-only users
     role VARCHAR(50) DEFAULT 'user',
-    -- Neon Auth integration fields
-    neon_auth_id TEXT UNIQUE,
+    firebase_uid TEXT UNIQUE,
     email TEXT,
     avatar_url TEXT,
-    auth_provider VARCHAR(50) DEFAULT 'password'  -- 'password', 'google', 'github'
+    auth_provider VARCHAR(50) DEFAULT 'firebase'
 );
 
 -- Calculations table (saved calculation history)
@@ -56,9 +55,9 @@ CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 
 -- Migration for existing databases (run if upgrading)
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS neon_auth_id TEXT UNIQUE;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'password';
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
 -- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
 -- ALTER TABLE user_data ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT FALSE;

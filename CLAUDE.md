@@ -57,25 +57,24 @@ cp app/.env.example app/.env.development
 
 The project has **two separate backend implementations** that serve different environments:
 
-1. **`server/server.js`** — Local development Express server with SQLite (`fish_app.db`). Single-file, JWT auth with bcrypt. Used when running `node server.js`.
+1. **`server/server.js`** — Local development Express server with SQLite (`fish_app.db`). Single-file local API that accepts Firebase ID tokens and legacy JWTs during migration. Used when running `node server.js`.
 
 2. **`api/`** — Vercel serverless functions for production. Each file is a separate endpoint. Uses Neon PostgreSQL via `@neondatabase/serverless`. Shared helpers in `api/_lib/`:
    - `db.js` — Neon connection pool
-   - `auth.js` — Dual auth: JWT tokens (password) + Neon Auth/Stack Auth sessions (OAuth), with `requireAuth()` HOF
+   - `auth.js` — Firebase ID token auth plus legacy JWT compatibility, with `requireAuth()` HOF
    - `cors.js` — Origin allowlist from `ALLOWED_ORIGINS` env var, with `handleCors()` HOF
-   - `neon-auth.js` — Stack Auth session verification + local user auto-creation
+   - `firebase-auth.js` — Firebase ID token verification + local user auto-creation
 
 **Important:** Changes to API logic must be applied to both `server/server.js` (local) and the corresponding `api/*.js` file (production) to stay in sync.
 
 ### Frontend (`app/`)
 - **React 19 + Vite 7** with Tailwind CSS 3
 - Entry: `src/main.jsx` → `src/App.jsx`
-- Auth: Stack Auth (OAuth) via `@stackframe/react` wrapping the entire app, plus custom JWT-based password auth via `src/context/AuthContext.jsx`
+- Auth: Firebase Auth email/password via `src/context/AuthContext.jsx`, with Firebase ID tokens sent to protected API routes
 - API base URL configured in `src/config/api.js` — uses `VITE_API_URL` in dev (localhost:3000), empty string in prod (same-origin)
 - Routes defined in `App.jsx`:
   - `/` (Home), `/calculator`, `/login`, `/upload`, `/about`, `/submit-request`
   - `/data-sources`, `/manage-data`, `/profile`, `/roadmap`
-  - `/handler/*` (Stack Auth handler routes)
 - Fish yield data in `src/data/fish_data_v3.js` — 89 species with conversion yields from MAB-37 research publication
 
 ### Data Flow
@@ -104,14 +103,14 @@ User Data: `GET/POST/PUT/DELETE /api/user-data`, `POST /api/upload-data` (Excel/
 Public: `GET /api/public-calcs`, `GET /api/contributors`, `GET /api/fish-data`
 Export: `GET /api/export`
 
-All endpoints except register/login/public require JWT Bearer token or Stack Auth session.
+All protected endpoints require `Authorization: Bearer <firebase_id_token>`; legacy JWTs are accepted only during the migration window.
 
 ## Deployment
 
 Deployed on **Vercel** with Neon PostgreSQL. See `DEPLOYMENT.md` for full guide.
 - `vercel.json` configures build, output dir (`app/dist`), and API rewrites
 - Frontend env vars use `VITE_` prefix (bundled into client, not secret)
-- Server env vars: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `STACK_SECRET_SERVER_KEY`
+- Server env vars: `DATABASE_URL`, `FIREBASE_PROJECT_ID`, `ALLOWED_ORIGINS`; `JWT_SECRET` only for legacy JWT login compatibility
 - **No quotes in `.env` files** — Vite includes them literally. See `docs/ENVIRONMENT_VARIABLES.md`
 
 ## Git Workflow

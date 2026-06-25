@@ -42,12 +42,11 @@ const apiRateLimit = rateLimit({
     handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
 });
 
-if (!SECRET_KEY) {
-  throw new Error('JWT_SECRET is required to start the server');
-}
-
 if (!process.env.JWT_SECRET) {
-  console.warn('JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist sessions.');
+  const warning = SECRET_KEY
+    ? 'JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist legacy JWT sessions.'
+    : 'JWT_SECRET not set; legacy JWT login is disabled. Firebase Auth remains available.';
+  console.warn(warning);
 }
 
 // Middleware
@@ -94,7 +93,11 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         password TEXT,
-        role TEXT DEFAULT 'user'
+        role TEXT DEFAULT 'user',
+        firebase_uid TEXT UNIQUE,
+        email TEXT,
+        avatar_url TEXT,
+        auth_provider TEXT DEFAULT 'password'
     )`);
     
     db.run(`CREATE TABLE IF NOT EXISTS calculations (
@@ -138,19 +141,56 @@ db.serialize(() => {
             console.warn('[migration] ALTER TABLE user_data:', err.message);
         }
     });
+    [
+        'ALTER TABLE users ADD COLUMN firebase_uid TEXT',
+        'ALTER TABLE users ADD COLUMN email TEXT',
+        'ALTER TABLE users ADD COLUMN avatar_url TEXT',
+        "ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'password'",
+    ].forEach((statement) => {
+        db.run(statement, (err) => {
+            if (err && !/duplicate column/i.test(err.message)) {
+                console.error(`Failed to apply users auth migration: ${err.message}`);
+            }
+        });
+    });
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)');
+});
+
+const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
+    const sql = text.replace(/\$\d+/g, '?');
+    db.all(sql, params, (err, rows) => {
+        if (err) return reject(err);
+        return resolve({ rows });
+    });
 });
 
 // Auth Middleware
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.sendStatus(401);
+
+    try {
+        const { verifyFirebaseAuthSession } = await import('../api/_lib/firebase-auth.js');
+        const firebaseUser = await verifyFirebaseAuthSession(req, { query: sqliteQuery });
+        if (firebaseUser) {
+            req.user = firebaseUser;
+            return next();
+        }
+    } catch (err) {
+        console.error('Firebase auth verification failed:', err.message || err);
+    }
+
+    if (!SECRET_KEY) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+    }
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
         if (err) {
             const status = err.name === 'TokenExpiredError' ? 401 : 403;
             return res.status(status).json({ error: 'Invalid or expired token' });
         }
+
         req.user = user;
         next();
     });

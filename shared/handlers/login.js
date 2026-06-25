@@ -18,7 +18,6 @@
  */
 
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 
 /**
  * @typedef {Object} LoginRequest
@@ -81,6 +80,7 @@ export async function handleLogin(input, db, config) {
       return { status: 401, body: { error: 'Invalid credentials' } };
     }
 
+    const { default: jwt } = await import('jsonwebtoken');
     const token = jwt.sign(
       { id: user.id, username: user.username },
       jwtSecret,

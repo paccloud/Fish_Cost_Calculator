@@ -8,14 +8,14 @@ When setting environment variables in `.env` files, **do NOT use quotes** around
 
 ### ❌ Wrong (with quotes)
 ```bash
-VITE_STACK_PROJECT_ID='a55799cf-aec1-4699-94ce-fb42094552d9'
-VITE_STACK_PUBLISHABLE_CLIENT_KEY='pck_cn8y47v9g8029134473btakf840y8feyar4jnkmjq2268'
+VITE_FIREBASE_PROJECT_ID='local-catch-prod'
+VITE_FIREBASE_API_KEY='AIza...'
 ```
 
 ### ✅ Correct (without quotes)
 ```bash
-VITE_STACK_PROJECT_ID=a55799cf-aec1-4699-94ce-fb42094552d9
-VITE_STACK_PUBLISHABLE_CLIENT_KEY=pck_cn8y47v9g8029134473btakf840y8feyar4jnkmjq2268
+VITE_FIREBASE_PROJECT_ID=local-catch-prod
+VITE_FIREBASE_API_KEY=AIza...
 ```
 
 ## Vercel Environment Variables
@@ -31,8 +31,12 @@ printf 'your-value-here' | vercel env add VARIABLE_NAME production
 
 ### Frontend (Vite) - Client-side
 These are bundled into the client code and exposed to the browser:
-- `VITE_STACK_PROJECT_ID` - Stack Auth project ID
-- `VITE_STACK_PUBLISHABLE_CLIENT_KEY` - Stack Auth public key
+- `VITE_FIREBASE_API_KEY` - Firebase web app API key (public browser config)
+- `VITE_FIREBASE_AUTH_DOMAIN` - Firebase Auth domain (for example, `your-project.firebaseapp.com`)
+- `VITE_FIREBASE_PROJECT_ID` - Firebase project ID
+- `VITE_FIREBASE_APP_ID` - Firebase web app ID
+- `VITE_FIREBASE_MESSAGING_SENDER_ID` - Firebase sender ID
+- `VITE_FIREBASE_STORAGE_BUCKET` - Optional Firebase storage bucket
 - `VITE_API_URL` - API base URL (empty for production, http://localhost:3000 for dev)
 - `VITE_GEMINI_API_KEY` - **Required**; Gemini API key used for Gemini integration and **bundled into client code (exposed to the browser)** (e.g. `AIza...`)
 - `VITE_OCR_ENDPOINT` - **Optional**; custom OCR backend endpoint URL (default: use the app's built-in OCR flow/config if unset; e.g. `http://localhost:3000/api/ocr`)
@@ -41,9 +45,8 @@ These are bundled into the client code and exposed to the browser:
 
 These are only accessible on the server:
 
-- `STACK_PROJECT_ID` - Stack Auth project ID (server-side)
-- `STACK_SECRET_SERVER_KEY` - Stack Auth secret key (**NEVER expose to client**)
-- `JWT_SECRET` - Secret for signing JWT tokens (required; API/server will fail fast if missing)
+- `FIREBASE_PROJECT_ID` - Firebase project ID used to verify Firebase Auth ID tokens
+- `JWT_SECRET` - Secret for signing legacy JWT tokens (required only while `/api/login` remains enabled)
 - `JWT_EXPIRES_IN_SECONDS` - Optional; JWT lifetime in seconds (default 86400 / 24h)
 - `ALLOWED_ORIGINS` - Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`)
 - `CORS_ALLOW_CREDENTIALS` - Set to `true` only if you need to send cookies with cross-origin requests
@@ -61,19 +64,13 @@ Mitigations / security guidance:
 
 ## Common Issues
 
-### "Invalid project ID" Error
-If you see an error like "Invalid project ID: ... Project IDs must be UUIDs", this usually means:
+### Firebase Authentication 401 Errors
+If protected endpoints return 401 after Firebase sign-in, check:
 1. The environment variable has quotes around it
-2. The environment variable wasn't set correctly in Vercel
+2. `FIREBASE_PROJECT_ID` on the backend matches `VITE_FIREBASE_PROJECT_ID`
 3. The build needs to be redeployed after fixing the variables
 
 **Solution**: Remove quotes from all environment variables and redeploy.
-
-### Authentication 401 Errors
-If you get 401 Unauthorized errors when logged in with OAuth:
-1. Check that `VITE_STACK_PROJECT_ID` and `VITE_STACK_PUBLISHABLE_CLIENT_KEY` are set in Vercel
-2. Verify they don't have quotes around them
-3. Redeploy the application
 
 ## Local Development Setup
 
@@ -85,8 +82,11 @@ If you get 401 Unauthorized errors when logged in with OAuth:
 2. Fill in your values **without quotes**:
    ```bash
    VITE_API_URL=http://localhost:3000
-   VITE_STACK_PROJECT_ID=your-project-id-here
-   VITE_STACK_PUBLISHABLE_CLIENT_KEY=your-key-here
+   VITE_FIREBASE_API_KEY=your-firebase-web-api-key
+   VITE_FIREBASE_PROJECT_ID=your-firebase-project-id
+   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+   VITE_FIREBASE_APP_ID=your-firebase-web-app-id
+   VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
    DATABASE_URL=your-connection-string-here
    ```
 
