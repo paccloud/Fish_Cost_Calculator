@@ -10,7 +10,7 @@ query ListPublicContributorProfiles
   ) {
   contributorProfiles(
     where: { showOnPage: { eq: true } }
-    orderBy: [{ contributionCount: DESC }, { displayName: ASC }]
+    orderBy: [{ displayName: ASC }]
     limit: 50
   ) {
     id
@@ -18,7 +18,6 @@ query ListPublicContributorProfiles
     displayName
     organization
     bio
-    contributionCount
   }
 }
 
@@ -39,7 +38,6 @@ query GetPublicContributorProfile($profileId: UUID!)
     displayName
     organization
     bio
-    contributionCount
   }
 }
 
@@ -105,7 +103,6 @@ query GetMyContributorProfile @auth(level: USER) {
     organization
     bio
     showOnPage
-    contributionCount
     createdAt
     updatedAt
     appUser {
@@ -134,7 +131,6 @@ query GetMyContributorProfileById($profileId: UUID!) @auth(level: USER) {
     organization
     bio
     showOnPage
-    contributionCount
     createdAt
     updatedAt
     appUser {
@@ -202,7 +198,7 @@ mutation UpsertMyContributorProfile(
   query
     @redact
     @check(
-      expr: "response.query.firebaseAuthIdentities.size() == 1 && (response.query.contributorProfiles.size() == 0 || response.query.contributorProfiles[0].appUser.id == response.query.firebaseAuthIdentities[0].appUser.id)",
+      expr: "response.query.firebaseAuthIdentities.size() == 1 && (response.query.targetContributorProfiles.size() == 0 || response.query.targetContributorProfiles[0].appUser.id == response.query.firebaseAuthIdentities[0].appUser.id) && (response.query.currentContributorProfiles.size() == 0 || response.query.currentContributorProfiles[0].id == vars.profileId)",
       message: "Authenticated Firebase user must map to one canonical app user and can only upsert their own contributor profile."
     ) {
     firebaseAuthIdentities(
@@ -214,13 +210,25 @@ mutation UpsertMyContributorProfile(
         legacyUserId
       }
     }
-    contributorProfiles(
+    targetContributorProfiles: contributorProfiles(
       where: { id: { eq: $profileId } }
       limit: 1
     ) {
       appUser {
         id
       }
+    }
+    currentContributorProfiles: contributorProfiles(
+      where: {
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+      limit: 1
+    ) {
+      id
     }
   }
   contributorProfile_upsert(data: {
@@ -265,13 +273,59 @@ mutation UpdateMyContributorProfile(
     }
   }
   contributorProfile_update(
-    id: $profileId
+    first: {
+      where: {
+        id: { eq: $profileId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+    }
     data: {
       displayName: $displayName
       organization: $organization
       bio: $bio
       showOnPage: $showOnPage
       updatedAt_expr: "request.time"
+    }
+  )
+}
+
+mutation DeleteMyContributorProfile($profileId: UUID!)
+  @auth(level: USER)
+  @transaction {
+  query
+    @redact
+    @check(
+      expr: "response.query.contributorProfiles.size() == 1",
+      message: "Contributor profile not found for the authenticated user."
+    ) {
+    contributorProfiles(
+      where: {
+        id: { eq: $profileId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
+      limit: 1
+    ) {
+      id
+    }
+  }
+  contributorProfile_delete(
+    first: {
+      where: {
+        id: { eq: $profileId }
+        appUser: {
+          firebaseAuthIdentities_on_appUser: {
+            exist: { firebaseUid: { eq_expr: "auth.uid" } }
+          }
+        }
+      }
     }
   )
 }

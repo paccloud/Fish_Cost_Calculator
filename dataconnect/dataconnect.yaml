@@ -8,7 +8,7 @@ schema:
       database: "fish_cost_calculator_sandbox"
       cloudSql:
         instanceId: "fish-cost-calculator-sandbox"
-        schemaValidation: "COMPATIBLE"
+        schemaValidation: "STRICT"
 connectorDirs:
   - "./public"
   - "./identity"

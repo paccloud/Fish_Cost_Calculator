@@ -1,6 +1,6 @@
 # Public calculator/community read operations for the issue #65 sandbox proof.
 
-query ListPublicCalculatorYieldPaths
+query ListPublicCalculatorYieldPaths($limit: Int = 250, $offset: Int = 0)
   @auth(
     level: PUBLIC,
     insecureReason: "Proof-only public read of published calculator yield references; no user or production data is exposed."
@@ -11,7 +11,8 @@ query ListPublicCalculatorYieldPaths
       species: { isPublished: { eq: true } }
     }
     orderBy: [{ fromState: ASC }, { toState: ASC }]
-    limit: 50
+    offset: $offset
+    limit: $limit
   ) {
     id
     fromState
@@ -26,7 +27,6 @@ query ListPublicCalculatorYieldPaths
       scientificName
       category
       sourceLabel
-      isPublished
     }
   }
 }

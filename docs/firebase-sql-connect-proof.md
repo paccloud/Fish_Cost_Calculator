@@ -87,7 +87,9 @@ Firebase dependencies are approved.
 ## Public Read Operations
 
 `ListPublicCalculatorYieldPaths` lists published yield conversions with species
-metadata for calculator/community browsing.
+metadata for calculator/community browsing. It accepts `$limit` and `$offset`
+arguments so a seeded proof can page through the full calculator dataset instead
+of truncating after one fixed result window.
 
 `GetPublicSpeciesYieldPaths` lists published conversions for one published
 species slug.
@@ -128,7 +130,8 @@ linked to the caller's Firebase UID.
 `ListMyIdentityProofSavedCalculations` and
 `GetMyIdentityProofSavedCalculation` prove ownership filters on user-owned rows.
 They reject unauthenticated callers through `@auth(level: USER)` before SQL runs
-and only return rows with `ownerFirebaseUid == auth.uid`.
+and only return rows whose canonical app user is linked to `auth.uid` through
+`FirebaseAuthIdentity`.
 
 `CreateMyIdentityProofSavedCalculation` is a transactional proof mutation. It
 checks that the signed-in Firebase UID maps to exactly one canonical app user,
@@ -174,19 +177,21 @@ future migrated saved-calculation path more directly.
 
 Saved-calculation operations live in
 `dataconnect/saved-calculations/queries.gql` and are all authenticated with
-`@auth(level: USER)`. They derive ownership from `auth.uid`, never from a
-caller-supplied Firebase UID.
+`@auth(level: USER)`. They derive access from `auth.uid` through
+`FirebaseAuthIdentity`, never from a caller-supplied Firebase UID.
 
-- `ListMySavedCalculations` lists only rows whose `ownerFirebaseUid` matches
-  `auth.uid`, newest first.
-- `GetMySavedCalculation` filters by both calculation ID and `auth.uid`.
+- `ListMySavedCalculations` lists only rows owned by the caller's canonical app
+  user, newest first.
+- `GetMySavedCalculation` filters by calculation ID and the caller's canonical
+  app user.
 - `CreateMySavedCalculation` resolves the caller's canonical app user through
   `FirebaseAuthIdentity.firebaseUid == auth.uid`, then writes a row with the
   derived `appUserId` and server-derived `ownerFirebaseUid`.
 - `ImportMyLegacySavedCalculationProof` adds migration-shape fields such as
-  `legacyCalculationId` and `legacyOwnerUserId`.
-- `DeleteMySavedCalculation` checks ownership in the same transaction before
-  deleting.
+  `legacyCalculationId`, `legacyOwnerUserId`, and `legacySavedAt`; it rejects
+  duplicate `legacyCalculationId` imports.
+- `DeleteMySavedCalculation` checks and deletes with the same canonical app user
+  ownership predicate.
 
 `dataconnect/saved-calculations/migration-fixture.example.json` documents the
 sample no-production-data shape for moving legacy saved calculation rows into
@@ -201,9 +206,11 @@ Issue #68 adds `CustomYield` proof rows under
 The custom-yield proof mirrors the current app's user-owned custom yield data:
 
 - `CreateMyCustomYield` derives the canonical app user and owner Firebase UID
-  from the authenticated caller.
+  from the authenticated caller, requires a stable `localYieldId`, rejects
+  duplicate local IDs, and rejects `yieldPercent` values outside `0 < value <=
+  100`.
 - `ListMyCustomYields` and `GetMyCustomYield` filter by
-  `ownerFirebaseUid == auth.uid`.
+  the caller's canonical app user.
 - `DeleteMyCustomYield` uses an ownership-constrained delete filter.
 - `legacyUserDataId` and `localYieldId` preserve migration and local-sync
   reconciliation hooks.
@@ -227,6 +234,7 @@ Private contributor profile operations are authenticated with
 - `CreateMyContributorProfile`
 - `UpsertMyContributorProfile`
 - `UpdateMyContributorProfile`
+- `DeleteMyContributorProfile`
 
 Public community operations are authenticated with `@auth(level: PUBLIC)` and
 only expose intentionally public fields:
@@ -237,10 +245,11 @@ only expose intentionally public fields:
 - `GetPublicCommunityCalculation`
 
 Public contributor reads filter to `showOnPage == true`. Public community
-calculation reads filter to `isPublished == true` and omit `ownerFirebaseUid`,
-canonical app user IDs, and legacy owner IDs. `contributionCount` is represented
-as a public ordering/display field and is not user-editable through the profile
-mutations.
+calculation reads filter to `isPublished == true` and omit Firebase UIDs,
+canonical app user IDs, and legacy owner IDs. The proof does not keep a stored
+contribution counter on contributor profiles; a production migration should
+derive contribution counts from published community snapshots or maintain them
+transactionally in a later runtime issue.
 
 ## Combined Validation
 
@@ -255,3 +264,16 @@ firebase --config dataconnect/firebase.proof.json \
 The validation intentionally uses a `demo-` project and local emulator state.
 Generated SDK output and emulator caches are ignored by `dataconnect/.gitignore`
 and should not be committed for this proof.
+
+For operation-level smoke validation, start the same emulator and execute:
+
+- `ListPublicCalculatorYieldPaths` with `$limit` and `$offset` to confirm public
+  pagination and published-species filtering.
+- `ResolveCurrentCanonicalUser` with a seeded Firebase Auth token to confirm
+  identity mapping.
+- The same protected operation without Firebase Auth to confirm `@auth(level:
+  USER)` rejection.
+
+Those requests are intentionally documented as proof steps, not wired into the
+production app, because adding Firebase runtime dependencies still requires a
+separate approved migration issue.

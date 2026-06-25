@@ -11,7 +11,7 @@ type CustomYield @table {
   appUser: CanonicalAppUser!
   ownerFirebaseUid: String! @col(dataType: "varchar(128)")
   legacyUserDataId: String @col(dataType: "varchar(120)")
-  localYieldId: String @col(dataType: "varchar(120)")
+  localYieldId: String! @unique @col(dataType: "varchar(120)")
   species: String! @col(dataType: "varchar(255)")
   product: String! @col(dataType: "varchar(255)")
   yieldPercent: Float!

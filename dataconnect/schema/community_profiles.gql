@@ -12,7 +12,6 @@ type ContributorProfile @table {
   organization: String @col(dataType: "varchar(255)")
   bio: String
   showOnPage: Boolean! @default(value: true)
-  contributionCount: Int! @default(value: 0)
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
 }
@@ -21,14 +20,13 @@ type CommunityCalculationSnapshot @table {
   id: UUID! @default(expr: "uuidV4()")
   appUser: CanonicalAppUser
   contributorProfile: ContributorProfile
-  ownerFirebaseUid: String @col(dataType: "varchar(128)")
   legacyCalculationId: String @unique @col(dataType: "varchar(120)")
   legacyOwnerUserId: String @col(dataType: "varchar(120)")
   species: String @col(dataType: "varchar(255)")
   product: String @col(dataType: "varchar(255)")
-  cost: Float
+  cost: Float @col(dataType: "numeric")
   yieldPercent: Float
-  result: Float
+  result: Float @col(dataType: "numeric")
   calculatedAt: Timestamp! @default(expr: "request.time")
   isPublished: Boolean! @default(value: true)
   createdAt: Timestamp! @default(expr: "request.time")

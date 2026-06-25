@@ -65,17 +65,18 @@ query GetMyCustomYield($customYieldId: UUID!) @auth(level: USER) {
 
 mutation CreateMyCustomYield(
   $legacyUserDataId: String
-  $localYieldId: String
+  $localYieldId: String!
   $species: String!
   $product: String!
   $yieldPercent: Float!
   $source: String
-) @auth(level: USER) @transaction {
+) @auth(level: USER)
+  @transaction {
   query
     @redact
     @check(
-      expr: "response.query.firebaseAuthIdentities.size() == 1",
-      message: "Authenticated Firebase user is not linked to one canonical app user."
+      expr: "vars.yieldPercent > 0 && vars.yieldPercent <= 100 && response.query.firebaseAuthIdentities.size() == 1 && response.query.customYields.size() == 0",
+      message: "yieldPercent must be greater than 0 and at most 100, Firebase user must map to one canonical app user, and localYieldId must not already exist."
     ) {
     firebaseAuthIdentities(
       where: { firebaseUid: { eq_expr: "auth.uid" } }
@@ -84,6 +85,12 @@ mutation CreateMyCustomYield(
       appUser {
         id
       }
+    }
+    customYields(
+      where: { localYieldId: { eq: $localYieldId } }
+      limit: 1
+    ) {
+      id
     }
   }
   customYield_insert(data: {

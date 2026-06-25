@@ -33,6 +33,7 @@
       "ownerFirebaseUid": "firebase-proof-user-a",
       "legacyCalculationId": "1001",
       "legacyOwnerUserId": "42",
+      "savedAt": "2026-01-15T12:00:00Z",
       "name": "Halibut trim proof",
       "species": "Halibut",
       "product": "Fillet",
@@ -50,6 +51,7 @@
       "ownerFirebaseUid": "firebase-proof-user-b",
       "legacyCalculationId": "1002",
       "legacyOwnerUserId": "99",
+      "savedAt": "2026-01-16T12:00:00Z",
       "name": "Salmon trim proof",
       "species": "Salmon",
       "product": "Portion",
@@ -63,9 +65,9 @@
     }
   ],
   "ownershipProof": {
-    "list": "ListMySavedCalculations filters ownerFirebaseUid with auth.uid.",
-    "get": "GetMySavedCalculation filters both id and ownerFirebaseUid with auth.uid.",
-    "delete": "DeleteMySavedCalculation first checks id plus ownerFirebaseUid with auth.uid, then deletes in the same transaction.",
-    "migration": "ImportMyLegacySavedCalculationProof preserves legacyCalculationId and derives legacyOwnerUserId from the authenticated user's CanonicalAppUser."
+    "list": "ListMySavedCalculations filters through the caller's FirebaseAuthIdentity and canonical app user.",
+    "get": "GetMySavedCalculation filters by calculation id and the caller's canonical app user.",
+    "delete": "DeleteMySavedCalculation checks and deletes with the same canonical app user ownership predicate.",
+    "migration": "ImportMyLegacySavedCalculationProof preserves legacyCalculationId, savedAt, and derives legacyOwnerUserId from the authenticated user's CanonicalAppUser."
   }
 }

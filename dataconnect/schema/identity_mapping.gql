@@ -25,7 +25,7 @@ type FirebaseAuthIdentity @table {
 type IdentityProofSavedCalculation @table {
   id: UUID! @default(expr: "uuidV4()")
   appUser: CanonicalAppUser!
-  ownerFirebaseUid: String! @col(dataType: "varchar(128)")
+  ownerFirebaseUid: String! @index @col(dataType: "varchar(128)")
   label: String! @col(dataType: "varchar(160)")
   speciesSlug: String @col(dataType: "varchar(80)")
   createdAt: Timestamp! @default(expr: "request.time")
