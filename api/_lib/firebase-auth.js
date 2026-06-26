@@ -7,6 +7,7 @@ const FIREBASE_PROJECT_ID =
 
 const FIREBASE_CERTS_URL =
   'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+const FIREBASE_CERTS_FETCH_TIMEOUT_MS = 5000;
 
 let cachedCerts = null;
 let cachedCertsExpiresAt = 0;
@@ -25,6 +26,20 @@ function maxAgeMs(cacheControl) {
   return match ? Number.parseInt(match[1], 10) * 1000 : 60 * 60 * 1000;
 }
 
+async function fetchWithTimeout(fetchFn, url, timeoutMs) {
+  if (typeof AbortController !== 'function') {
+    return fetchFn(url);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchFn(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchFirebaseCerts(fetchFn = globalThis.fetch) {
   if (cachedCerts && cachedCertsExpiresAt > Date.now()) {
     return cachedCerts;
@@ -34,15 +49,26 @@ async function fetchFirebaseCerts(fetchFn = globalThis.fetch) {
     throw new Error('fetch is required to verify Firebase ID tokens');
   }
 
-  const response = await fetchFn(FIREBASE_CERTS_URL);
-  if (!response.ok) {
-    throw new Error('Unable to fetch Firebase public keys');
-  }
+  try {
+    const response = await fetchWithTimeout(
+      fetchFn,
+      FIREBASE_CERTS_URL,
+      FIREBASE_CERTS_FETCH_TIMEOUT_MS
+    );
+    if (!response.ok) {
+      throw new Error('Unable to fetch Firebase public keys');
+    }
 
-  const certs = await response.json();
-  cachedCerts = certs;
-  cachedCertsExpiresAt = Date.now() + maxAgeMs(response.headers?.get?.('cache-control'));
-  return certs;
+    const certs = await response.json();
+    cachedCerts = certs;
+    cachedCertsExpiresAt = Date.now() + maxAgeMs(response.headers?.get?.('cache-control'));
+    return certs;
+  } catch (err) {
+    if (cachedCerts) {
+      return cachedCerts;
+    }
+    throw err;
+  }
 }
 
 function decodeBase64UrlJson(value) {
@@ -125,6 +151,21 @@ function usernameFromFirebaseUser(firebaseUser) {
   return `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
 }
 
+async function linkExistingUser(existingUser, firebaseUser, query) {
+  if (existingUser.firebase_uid && existingUser.firebase_uid !== firebaseUser.uid) {
+    return null;
+  }
+
+  if (!existingUser.firebase_uid) {
+    await query(
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+      [firebaseUser.uid, firebaseUser.picture || null, 'firebase', existingUser.id]
+    );
+  }
+
+  return existingUser;
+}
+
 export async function getOrCreateFirebaseUser(firebaseUser, query) {
   if (!firebaseUser?.uid || typeof query !== 'function') {
     return null;
@@ -140,6 +181,10 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       return result.rows[0];
     }
 
+    if (firebaseUser.email && !firebaseUser.emailVerified) {
+      return null;
+    }
+
     if (firebaseUser.email && firebaseUser.emailVerified) {
       result = await query(
         'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
@@ -147,19 +192,16 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       );
 
       if (result.rows.length > 0) {
-        const existingUser = result.rows[0];
-        if (existingUser.firebase_uid && existingUser.firebase_uid !== firebaseUser.uid) {
-          return null;
-        }
+        return linkExistingUser(result.rows[0], firebaseUser, query);
+      }
 
-        if (!existingUser.firebase_uid) {
-          await query(
-            'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
-            [firebaseUser.uid, firebaseUser.picture || null, 'firebase', existingUser.id]
-          );
-        }
+      result = await query(
+        'SELECT id, username, email, firebase_uid FROM users WHERE username = $1',
+        [firebaseUser.email]
+      );
 
-        return existingUser;
+      if (result.rows.length > 0) {
+        return linkExistingUser(result.rows[0], firebaseUser, query);
       }
     }
 

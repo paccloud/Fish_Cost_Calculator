@@ -92,7 +92,7 @@ If protected endpoints return 401 after Firebase sign-in, check:
 
 3. Never commit `.env`, `.env.development`, or `.env.production` files - they're gitignored for security.
 
-4. For the local Express server (`server/server.js`), create `server/.env` (or `.env.local`) with `JWT_SECRET` and `ALLOWED_ORIGINS` that match your dev URLs. See `server/.env.example` for defaults.
+4. For the local Express server (`server/server.js`), create `server/.env` (or `.env.local`) with `FIREBASE_PROJECT_ID`, `JWT_SECRET`, and `ALLOWED_ORIGINS` that match your dev URLs. See `server/.env.example` for defaults.
 
 ## Production Deployment
 

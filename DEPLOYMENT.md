@@ -155,8 +155,8 @@ project used by `FIREBASE_PROJECT_ID`.
 ### 5.2 Clean Up Vercel Integrations
 
 1. Open the Vercel project settings.
-2. Remove the Clerk integration if it is present and unused. This repository
-   does not import Clerk.
+2. Remove any retired Stack Auth integration, keys, or related Vercel secrets
+   that are still present from the previous auth flow.
 3. Remove stale duplicate Neon integrations after confirming the active Neon
    integration owns the current database.
 4. Confirm the remaining integration and environment variables match the

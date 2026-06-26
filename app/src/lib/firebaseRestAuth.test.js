@@ -71,6 +71,7 @@ describe('Firebase REST auth', () => {
       email: 'fishbuyer@example.com',
       authProvider: 'firebase',
     });
+    expect(JSON.parse(localStorage.getItem(FIREBASE_AUTH_SESSION_KEY))).not.toHaveProperty('refreshToken');
     await expect(user.getIdToken()).resolves.toBe('firebase-id-token');
   });
 
@@ -144,6 +145,33 @@ describe('Firebase REST auth', () => {
       grant_type: 'refresh_token',
       refresh_token: 'old-refresh-token',
     });
+  });
+
+  it('clears persisted auth and reports auth failure when refresh fails', async () => {
+    const fetch = vi.fn(async () => fakeResponse({
+      ok: false,
+      status: 400,
+      body: { error: { message: 'TOKEN_EXPIRED' } },
+    }));
+    const onAuthFailure = vi.fn();
+
+    const user = createFirebaseSession({
+      idToken: 'expired-id-token',
+      refreshToken: 'old-refresh-token',
+      localId: 'firebase-user-123',
+      email: 'fishbuyer@example.com',
+      expiresIn: '1',
+    }, {
+      apiKey: 'firebase-api-key',
+      fetch,
+      now: () => 1_700_000_000_000,
+      onAuthFailure,
+    });
+
+    expect(localStorage.getItem(FIREBASE_AUTH_SESSION_KEY)).not.toBeNull();
+    await expect(user.getIdToken()).rejects.toThrow('TOKEN_EXPIRED');
+    expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
+    expect(onAuthFailure).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it('loads a persisted Firebase session from localStorage', async () => {

@@ -69,6 +69,10 @@ async function extractErrorMessage(res) {
   return `Request failed with status ${res.status}`;
 }
 
+function hasAuthorizationHeader(headers) {
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'authorization');
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -113,7 +117,7 @@ export function createApiClient(options = {}) {
     const url = `${baseUrl}${path}`;
     const headers = { ...(init.headers ?? {}) };
     // Only inject the fallback auth header when caller hasn't already set one.
-    if (!headers.Authorization) {
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) {
         headers.Authorization = auth;
@@ -142,7 +146,7 @@ export function createApiClient(options = {}) {
   async function rawRequest(path, init = {}) {
     const url = `${baseUrl}${path}`;
     const headers = { ...(init.headers ?? {}) };
-    if (!headers.Authorization) {
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) {
         headers.Authorization = auth;
@@ -162,8 +166,11 @@ export function createApiClient(options = {}) {
    *
    * @returns {Promise<Blob>}
    */
-  async function exportCalcs() {
-    const res = await request('/api/export?type=calcs', { method: 'GET' });
+  async function exportCalcs(extraHeaders = {}) {
+    const res = await request('/api/export?type=calcs', {
+      method: 'GET',
+      headers: { ...extraHeaders },
+    });
     return res.blob();
   }
 
@@ -270,7 +277,7 @@ export function createApiClient(options = {}) {
   async function getContributorProfile(extraHeaders = {}) {
     const url = `${baseUrl}/api/contributor`;
     const headers = { ...extraHeaders };
-    if (!headers.Authorization) {
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) headers.Authorization = auth;
     }

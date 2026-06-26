@@ -66,6 +66,53 @@ describe('Firebase ID token verification', () => {
       picture: 'https://example.com/avatar.png',
     });
   });
+
+  it('falls back to the last cached Firebase certs when refresh fails', async () => {
+    vi.resetModules();
+    const { verifyFirebaseIdToken: verifyWithFreshCache } = await import('../../../../api/_lib/firebase-auth.js');
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const token = createRs256Token({
+      kid: 'firebase-fallback-key',
+      privateKey,
+      payload: {
+        iss: 'https://securetoken.google.com/fish-calc-test',
+        aud: 'fish-calc-test',
+        sub: 'firebase-user-123',
+        iat: now,
+        exp: now + 3600,
+        email: 'fishbuyer@example.com',
+        email_verified: true,
+      },
+    });
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          'firebase-fallback-key': publicKey.export({ type: 'spki', format: 'pem' }),
+        }),
+        headers: {
+          get: () => 'public, max-age=0',
+        },
+      })
+      .mockRejectedValueOnce(new Error('cert refresh unavailable'));
+
+    await expect(verifyWithFreshCache(token, {
+      projectId: 'fish-calc-test',
+      fetch,
+    })).resolves.toMatchObject({
+      uid: 'firebase-user-123',
+      email: 'fishbuyer@example.com',
+    });
+    await expect(verifyWithFreshCache(token, {
+      projectId: 'fish-calc-test',
+      fetch,
+    })).resolves.toMatchObject({
+      uid: 'firebase-user-123',
+      email: 'fishbuyer@example.com',
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('Firebase API auth', () => {
@@ -147,12 +194,54 @@ describe('Firebase API auth', () => {
     );
   });
 
-  it('does not link an existing local user by unverified Firebase email', async () => {
+  it('links a legacy local user whose username is the verified Firebase email', async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
-        rows: [{ id: 43, username: 'firebase_unverified-u', email: null }],
-      });
+        rows: [{
+          id: 43,
+          username: 'fishbuyer@example.com',
+          email: null,
+          firebase_uid: null,
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const user = await verifyFirebaseAuthSession({
+      headers: {
+        authorization: 'Bearer firebase-id-token',
+      },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'fishbuyer@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toEqual({
+      id: 43,
+      username: 'fishbuyer@example.com',
+      email: null,
+      authProvider: 'firebase',
+    });
+    expect(query).toHaveBeenCalledWith(
+      'SELECT id, username, email, firebase_uid FROM users WHERE username = $1',
+      ['fishbuyer@example.com']
+    );
+    expect(query).toHaveBeenCalledWith(
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+      ['firebase-user-123', 'https://example.com/avatar.png', 'firebase', 43]
+    );
+  });
+
+  it('rejects unverified Firebase email sessions before creating a local user', async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [] });
 
     const user = await verifyFirebaseAuthSession({
       headers: {
@@ -169,19 +258,14 @@ describe('Firebase API auth', () => {
       })),
     });
 
-    expect(user).toEqual({
-      id: 43,
-      username: 'firebase_unverified-u',
-      email: null,
-      authProvider: 'firebase',
-    });
+    expect(user).toBeNull();
     expect(query).not.toHaveBeenCalledWith(
       'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
       ['fishbuyer@example.com']
     );
-    expect(query).toHaveBeenLastCalledWith(
+    expect(query).not.toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO users'),
-      ['firebase_unverified-u', null, 'unverified-user-123', 'https://example.com/avatar.png']
+      expect.anything()
     );
   });
 });

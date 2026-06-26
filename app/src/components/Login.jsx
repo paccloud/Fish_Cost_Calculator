@@ -15,17 +15,26 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    if (isRegister) {
-      const success = await register(email, password);
-      if (success) {
-        navigate('/');
+    try {
+      if (isRegister) {
+        const success = await register(email, password);
+        if (success) {
+          navigate('/');
+        }
       } else {
-        setError('Registration failed. Email may already be in use.');
+        const success = await login(email, password);
+        if (success) {
+          navigate('/');
+        }
       }
-    } else {
-      const success = await login(email, password);
-      if (success) navigate('/');
-      else setError('Invalid credentials.');
+    } catch (err) {
+      if (err?.message) {
+        setError(err.message);
+      } else if (isRegister) {
+        setError('Registration failed. Email may already be in use.');
+      } else {
+        setError('Invalid credentials.');
+      }
     }
   };
 

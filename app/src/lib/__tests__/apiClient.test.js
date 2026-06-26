@@ -96,6 +96,17 @@ describe('apiClient.exportCalcs — Authorization header', () => {
       expect(authHeader).toBe(expectHeader);
     });
   });
+
+  it('uses extraHeaders when provided for Firebase export', async () => {
+    const blob = new Blob([''], { type: 'text/csv' });
+    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: blob }));
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.exportCalcs({ Authorization: 'Bearer firebase-id-token' });
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -369,6 +380,17 @@ describe('apiClient.getContributorProfile', () => {
     const [, options] = fetchStub.mock.calls[0];
     expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
   });
+
+  it('preserves lowercase authorization headers without adding fallback auth', async () => {
+    const fetchStub = stubFetch(fakeResponse({ ok: false, status: 404, body: '' }));
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.getContributorProfile({ authorization: 'Bearer firebase-id-token' });
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(options.headers.authorization).toBe('Bearer firebase-id-token');
+    expect(options.headers.Authorization).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -402,6 +424,22 @@ describe('apiClient.saveContributorProfile — request construction', () => {
       name: 'ApiError',
       status: 400,
     });
+  });
+
+  it('preserves lowercase authorization headers without adding fallback auth', async () => {
+    const fetchStub = stubFetch(
+      fakeResponse({ ok: true, status: 200, body: { ok: true }, headers: { 'content-type': 'application/json' } })
+    );
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.saveContributorProfile(
+      { display_name: 'Alice' },
+      { authorization: 'Bearer firebase-id-token' }
+    );
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(options.headers.authorization).toBe('Bearer firebase-id-token');
+    expect(options.headers.Authorization).toBeUndefined();
   });
 });
 
@@ -478,6 +516,17 @@ describe('apiClient.saveCalcRaw — request construction', () => {
 
     const [, options] = fetchStub.mock.calls[0];
     expect(options.headers.Authorization).toBe('Bearer firebase-id-token');
+  });
+
+  it('preserves lowercase authorization headers without adding fallback auth', async () => {
+    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 201, body: { id: 1 } }));
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.saveCalcRaw({}, { authorization: 'Bearer firebase-id-token' });
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(options.headers.authorization).toBe('Bearer firebase-id-token');
+    expect(options.headers.Authorization).toBeUndefined();
   });
 });
 

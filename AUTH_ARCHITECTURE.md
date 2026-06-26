@@ -9,8 +9,10 @@ existing Neon PostgreSQL `users` table as the app-owned identity map.
 
 - The React login form signs in and registers users through Firebase Auth REST
   endpoints.
-- The frontend stores the Firebase refresh token and current ID token in
-  `localStorage` under `firebaseAuthSession`.
+- The frontend keeps the Firebase refresh token in memory for token refreshes
+  during the active tab session. `localStorage` under `firebaseAuthSession`
+  stores only the sanitized, unexpired session fields needed to resume a recent
+  browser session; it does not persist the raw refresh token.
 - API calls send the Firebase ID token as `Authorization: Bearer <idToken>`.
 - The frontend refreshes expiring Firebase ID tokens before using them for sync
   or protected API calls.
@@ -27,9 +29,11 @@ existing Neon PostgreSQL `users` table as the app-owned identity map.
 
 ### Local User Mapping
 
-Neon PostgreSQL remains the application database. Firebase users are mapped to
-local users by `users.firebase_uid` first, then by email when the existing local
-user is not linked to another Firebase UID.
+Production Vercel functions in `api/` use Neon PostgreSQL as the application
+database. Firebase users are mapped to local users by `users.firebase_uid`
+first, then by verified email when the existing local user is not linked to
+another Firebase UID. Local Express development in `server/` mirrors the same
+mapping against its SQLite `users` table.
 
 Protected routes still receive `req.user` with:
 

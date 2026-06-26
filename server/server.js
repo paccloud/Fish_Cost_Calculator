@@ -173,7 +173,9 @@ const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
 // Auth Middleware
 const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    if (!authHeader?.startsWith('Bearer ')) return res.sendStatus(401);
+
+    const token = authHeader.slice('Bearer '.length).trim();
     if (!token) return res.sendStatus(401);
 
     try {

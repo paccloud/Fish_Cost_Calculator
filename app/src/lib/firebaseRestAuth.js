@@ -61,7 +61,8 @@ function shouldRefresh(session, now) {
 
 function persistSession(session, storage = globalThis.localStorage) {
   if (!storage) return;
-  storage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify(session));
+  const { refreshToken: _refreshToken, ...persistableSession } = session;
+  storage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify(persistableSession));
 }
 
 function clearPersistedSession(storage = globalThis.localStorage) {
@@ -103,8 +104,14 @@ export function createFirebaseSession(response, options = {}) {
     getIdToken: async () => {
       const now = (options.now || defaultNow)();
       if (shouldRefresh(session, now)) {
-        session = await refreshFirebaseSession(session, options);
-        persistSession(session, options.storage);
+        try {
+          session = await refreshFirebaseSession(session, options);
+          persistSession(session, options.storage);
+        } catch (err) {
+          clearPersistedSession(options.storage);
+          options.onAuthFailure?.(err);
+          throw err;
+        }
       }
       return session.idToken;
     },
@@ -120,7 +127,13 @@ export function loadFirebaseSession(options = {}) {
     if (!raw) return null;
 
     const session = JSON.parse(raw);
-    if (!session?.refreshToken || !session?.localId) {
+    if (!session?.idToken || !session?.localId) {
+      clearPersistedSession(storage);
+      return null;
+    }
+
+    const now = (options.now || defaultNow)();
+    if (!session.refreshToken && shouldRefresh(session, now)) {
       clearPersistedSession(storage);
       return null;
     }
