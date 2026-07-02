@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS user_data (
     species VARCHAR(255) NOT NULL,
     product VARCHAR(255) NOT NULL,
     yield DECIMAL(5,2) NOT NULL,
-    source VARCHAR(255)
+    source VARCHAR(255),
+    is_shared BOOLEAN DEFAULT FALSE
 );
 
 -- Contributors table (public profiles)
@@ -60,3 +61,4 @@ CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'password';
 -- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+-- ALTER TABLE user_data ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT FALSE;
