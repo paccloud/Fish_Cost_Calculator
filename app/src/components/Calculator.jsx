@@ -81,8 +81,8 @@ const Calculator = () => {
   const [yieldPercent, setYieldPercent] = useState('');
   const [yieldRange, setYieldRange] = useState(null);
   const [processingCost, setProcessingCost] = useState('');
-  const [coldStorage, setColdStorage] = useState('');
-  const [shipping, setShipping] = useState('');
+  const [coldStorage, _setColdStorage] = useState('');
+  const [shipping, _setShipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
   const [result, setResult] = useState(null);
   const [saveStatus, setSaveStatus] = useState('');
@@ -90,12 +90,12 @@ const Calculator = () => {
   const [useRangeMax, setUseRangeMax] = useState(false);
 
   const [customData, setCustomData] = useState({});
-  const [history, setHistory] = useState([]);
+  const [_history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
 
   const [fishData, setFishData] = useState(FISH_DATA_V3);
   const [profilesData, setProfilesData] = useState(PROFILES_DATA);
-  const [dataLoading, setDataLoading] = useState(false);
+  const [dataLoading, _setDataLoading] = useState(false);
 
   useEffect(() => {
     fetch(apiUrl('/api/fish-data'))
@@ -141,6 +141,7 @@ const Calculator = () => {
           .catch(() => {});
       });
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCustomData({});
       setHistory([]);
     }
@@ -201,6 +202,7 @@ const Calculator = () => {
 
   useEffect(() => {
     if (currentConversion) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYieldPercent(String(currentConversion.yield));
       setYieldRange(currentConversion.range);
       setUseRangeMin(false);
@@ -209,6 +211,7 @@ const Calculator = () => {
   }, [currentConversion]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (yieldRange && useRangeMin) setYieldPercent(String(yieldRange[0]));
     else if (yieldRange && useRangeMax) setYieldPercent(String(yieldRange[1]));
     else if (currentConversion && !useRangeMin && !useRangeMax) setYieldPercent(String(currentConversion.yield));

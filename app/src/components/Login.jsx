@@ -51,7 +51,7 @@ const Login = () => {
     setOauthLoading(provider);
     try {
       await signInWithOAuth(provider);
-    } catch (e) {
+    } catch {
       setError(`Failed to sign in with ${provider}`);
       setOauthLoading(null);
     }

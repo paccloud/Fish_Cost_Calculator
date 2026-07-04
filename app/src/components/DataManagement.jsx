@@ -57,7 +57,7 @@ const DataManagement = () => {
                 const err = await res.json();
                 setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
             }
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Network error occurred.' });
         }
     };
@@ -91,7 +91,7 @@ const DataManagement = () => {
                 const err = await res.json();
                 setStatus({ type: 'error', message: err.error || 'Operation failed.' });
             }
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Network error occurred.' });
         }
     };
@@ -123,7 +123,7 @@ const DataManagement = () => {
             } else {
                 setStatus({ type: 'error', message: 'Failed to delete.' });
             }
-        } catch (e) {
+        } catch {
             setStatus({ type: 'error', message: 'Network error occurred.' });
         }
     };
