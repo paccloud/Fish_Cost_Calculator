@@ -280,6 +280,24 @@ const Calculator = () => {
     }
   };
 
+  const handleExportXlsx = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(apiUrl('/api/export?type=calcs&format=xlsx'), { headers });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'calculations.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      /* silent */
+    }
+  };
+
   const canCalculate = species && toState;
 
   return (
@@ -571,7 +589,13 @@ const Calculator = () => {
                     onClick={handleExport}
                     className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
                   >
-                    <Download size={15} /> Export history
+                    <Download size={15} /> Export CSV
+                  </button>
+                  <button
+                    onClick={handleExportXlsx}
+                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
+                  >
+                    <Download size={15} /> Export Excel
                   </button>
                   {saveStatus && (
                     <span className="text-xs text-text-muted">{saveStatus}</span>

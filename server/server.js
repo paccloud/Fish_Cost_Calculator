@@ -12,6 +12,7 @@ const {
     parseImportRows,
     upsertImportedYieldRowsSqlite,
 } = require('./importRows');
+const ExcelJS = require('exceljs');
 const crypto = require('crypto');
 
 const app = express();
@@ -346,14 +347,39 @@ app.delete('/api/user-data/:id', authenticate, (req, res) => {
 });
 
 // Unified export endpoint — matches production api/export.js contract
-// GET /api/export?type=calcs  — export saved calculations
-// GET /api/export?type=data   — export custom yield data
-app.get('/api/export', authenticate, (req, res) => {
+// GET /api/export?type=calcs           — export saved calculations as CSV
+// GET /api/export?type=data            — export custom yield data as CSV
+// GET /api/export?type=calcs&format=xlsx — export calculations as Excel
+// GET /api/export?type=data&format=xlsx  — export yield data as Excel
+app.get('/api/export', authenticate, async (req, res) => {
     const exportType = req.query.type || 'calcs';
+    const asXlsx = req.query.format === 'xlsx';
 
     if (exportType === 'data') {
-        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
+        db.all('SELECT * FROM user_data WHERE user_id = ?', [req.user.id], async (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
+
+            if (asXlsx) {
+                try {
+                    const wb = new ExcelJS.Workbook();
+                    wb.creator = 'Fish Cost Calculator';
+                    const ws = wb.addWorksheet('Yield Data');
+                    ws.columns = [
+                        { header: 'Species', key: 'species', width: 24 },
+                        { header: 'Product / Conversion', key: 'product', width: 28 },
+                        { header: 'Yield (%)', key: 'yield', width: 14 },
+                        { header: 'Source', key: 'source', width: 24 },
+                    ];
+                    ws.getRow(1).font = { bold: true };
+                    rows.forEach(row => ws.addRow({ species: row.species, product: row.product, yield: row.yield, source: row.source || '' }));
+                    const buf = await wb.xlsx.writeBuffer();
+                    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    res.setHeader('Content-Disposition', 'attachment; filename=yield-data.xlsx');
+                    return res.send(buf);
+                } catch (xlsxErr) {
+                    return res.status(500).json({ error: 'Failed to generate Excel file' });
+                }
+            }
 
             const csvHeader = 'Species,Product,Yield (%),Source\n';
             const csvRows = rows.map(row => {
@@ -371,8 +397,39 @@ app.get('/api/export', authenticate, (req, res) => {
             res.send(csvHeader + csvRows);
         });
     } else {
-        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], (err, rows) => {
+        db.all('SELECT * FROM calculations WHERE user_id = ? ORDER BY date DESC', [req.user.id], async (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
+
+            if (asXlsx) {
+                try {
+                    const wb = new ExcelJS.Workbook();
+                    wb.creator = 'Fish Cost Calculator';
+                    const ws = wb.addWorksheet('Calculations');
+                    ws.columns = [
+                        { header: 'Date', key: 'date', width: 22 },
+                        { header: 'Species', key: 'species', width: 22 },
+                        { header: 'Conversion', key: 'product', width: 24 },
+                        { header: 'Cost ($/lb)', key: 'cost', width: 14 },
+                        { header: 'Yield (%)', key: 'yield', width: 12 },
+                        { header: 'Result ($/lb)', key: 'result', width: 16 },
+                    ];
+                    ws.getRow(1).font = { bold: true };
+                    rows.forEach(row => ws.addRow({
+                        date: new Date(row.date).toLocaleString(),
+                        species: row.species,
+                        product: row.product,
+                        cost: row.cost,
+                        yield: row.yield,
+                        result: row.result,
+                    }));
+                    const buf = await wb.xlsx.writeBuffer();
+                    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    res.setHeader('Content-Disposition', 'attachment; filename=calculations.xlsx');
+                    return res.send(buf);
+                } catch (xlsxErr) {
+                    return res.status(500).json({ error: 'Failed to generate Excel file' });
+                }
+            }
 
             const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
             const csvRows = rows.map(row => {
