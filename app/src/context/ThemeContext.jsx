@@ -25,12 +25,8 @@ function applyTheme(newTheme) {
 }
 
 export const ThemeProvider = ({ children }) => {
-    // Lazy initializer reads localStorage / system pref once at mount —
-    // no setState calls needed inside the effect.
     const [theme, setTheme] = useState(getInitialTheme);
 
-    // Apply DOM class whenever theme changes (external system side-effect only,
-    // no setState call here — satisfies react-hooks/set-state-in-effect).
     useEffect(() => {
         applyTheme(theme);
     }, [theme]);
