@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "cd app && npm run build",
+  "buildCommand": "cd app && npm install && npm run build",
   "outputDirectory": "app/dist",
-  "installCommand": "npm install && cd shared && npm install && cd ../app && npm install",
+  "installCommand": "npm install && cd app && npm install",
   "rewrites": [
     { "source": "/api/save-calc", "destination": "/api/saved-calcs" },
     { "source": "/api/saved-calcs/:id", "destination": "/api/saved-calcs?id=:id" },
