@@ -157,10 +157,15 @@ async function linkExistingUser(existingUser, firebaseUser, query) {
   }
 
   if (!existingUser.firebase_uid) {
-    await query(
-      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+    const updated = await query(
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4 AND firebase_uid IS NULL RETURNING id',
       [firebaseUser.uid, firebaseUser.picture || null, 'firebase', existingUser.id]
     );
+    if (updated.rows.length === 0) {
+      // Another request raced and linked this user first — re-fetch current state
+      const refetch = await query('SELECT id, username, email FROM users WHERE id = $1', [existingUser.id]);
+      return refetch.rows[0] ?? null;
+    }
   }
 
   return existingUser;
@@ -205,17 +210,37 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       }
     }
 
-    result = await query(
-      `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
-       VALUES ($1, $2, $3, $4, 'firebase')
-       RETURNING id, username, email`,
-      [
-        usernameFromFirebaseUser(firebaseUser),
-        firebaseUser.emailVerified ? firebaseUser.email : null,
-        firebaseUser.uid,
-        firebaseUser.picture || null,
-      ]
-    );
+    const insertUsername = usernameFromFirebaseUser(firebaseUser);
+    try {
+      result = await query(
+        `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
+         VALUES ($1, $2, $3, $4, 'firebase')
+         RETURNING id, username, email`,
+        [
+          insertUsername,
+          firebaseUser.emailVerified ? firebaseUser.email : null,
+          firebaseUser.uid,
+          firebaseUser.picture || null,
+        ]
+      );
+    } catch (insertErr) {
+      // Username collision (email already taken as username) — retry with UID-based fallback
+      if (insertErr.code === '23505' && insertUsername !== `firebase_${String(firebaseUser.uid).slice(0, 12)}`) {
+        result = await query(
+          `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
+           VALUES ($1, $2, $3, $4, 'firebase')
+           RETURNING id, username, email`,
+          [
+            `firebase_${String(firebaseUser.uid).slice(0, 12)}`,
+            firebaseUser.emailVerified ? firebaseUser.email : null,
+            firebaseUser.uid,
+            firebaseUser.picture || null,
+          ]
+        );
+      } else {
+        throw insertErr;
+      }
+    }
 
     return result.rows[0];
   } catch (err) {
