@@ -169,6 +169,30 @@ export function createApiClient(options = {}) {
   }
 
   /**
+   * Export the authenticated user's saved calculations as an Excel Blob.
+   *
+   * GET /api/export?type=calcs&format=xlsx
+   *
+   * @returns {Promise<Blob>}
+   */
+  async function exportCalcsXlsx() {
+    const res = await request('/api/export?type=calcs&format=xlsx', { method: 'GET' });
+    return res.blob();
+  }
+
+  /**
+   * Export the authenticated user's custom yield data as an Excel Blob.
+   *
+   * GET /api/export?type=data&format=xlsx
+   *
+   * @returns {Promise<Blob>}
+   */
+  async function exportUserDataXlsx() {
+    const res = await request('/api/export?type=data&format=xlsx', { method: 'GET' });
+    return res.blob();
+  }
+
+  /**
    * Authenticate with username + password.
    *
    * POST /api/login
@@ -388,6 +412,8 @@ export function createApiClient(options = {}) {
 
   return {
     exportCalcs,
+    exportCalcsXlsx,
+    exportUserDataXlsx,
     login,
     register,
     publicCalcs,
