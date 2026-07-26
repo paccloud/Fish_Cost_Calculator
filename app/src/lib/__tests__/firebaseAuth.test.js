@@ -161,7 +161,7 @@ describe('Firebase API auth', () => {
           firebase_uid: null,
         }],
       })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [{ id: 42 }] }); // UPDATE … RETURNING id succeeds
 
     const user = await verifyFirebaseAuthSession({
       headers: {
@@ -189,7 +189,7 @@ describe('Firebase API auth', () => {
       ['fishbuyer@example.com']
     );
     expect(query).toHaveBeenCalledWith(
-      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4 AND firebase_uid IS NULL RETURNING id',
       ['firebase-user-123', 'https://example.com/avatar.png', 'firebase', 42]
     );
   });
@@ -206,7 +206,7 @@ describe('Firebase API auth', () => {
           firebase_uid: null,
         }],
       })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [{ id: 43 }] }); // UPDATE … RETURNING id succeeds
 
     const user = await verifyFirebaseAuthSession({
       headers: {
@@ -234,7 +234,7 @@ describe('Firebase API auth', () => {
       ['fishbuyer@example.com']
     );
     expect(query).toHaveBeenCalledWith(
-      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4',
+      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4 AND firebase_uid IS NULL RETURNING id',
       ['firebase-user-123', 'https://example.com/avatar.png', 'firebase', 43]
     );
   });
