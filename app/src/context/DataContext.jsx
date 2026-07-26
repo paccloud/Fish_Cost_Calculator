@@ -149,6 +149,13 @@ export function DataProvider({ children }) {
     debouncedSync();
   }, [debouncedSync]);
 
+  // Updates React state only — no IndexedDB write, no sync. Use for server-side
+  // fields (like is_shared) that are patched directly via API and must not be
+  // re-queued by the sync engine.
+  const updateYieldLocalOnly = useCallback((id, updates) => {
+    setCustomYields((prev) => prev.map((y) => (y.id === id ? { ...y, ...updates } : y)));
+  }, []);
+
   const updateCustomSpecies = useCallback(async (data) => {
     await setSpeciesLocal(data);
     setCustomSpeciesState(data);
@@ -166,6 +173,7 @@ export function DataProvider({ children }) {
     removeCalc,
     addYield,
     updateYield,
+    updateYieldLocalOnly,
     removeYield,
     updateCustomSpecies,
   };
