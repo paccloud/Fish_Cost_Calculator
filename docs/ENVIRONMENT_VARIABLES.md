@@ -66,11 +66,11 @@ Mitigations / security guidance:
 
 ### Firebase Authentication 401 Errors
 If protected endpoints return 401 after Firebase sign-in, check:
-1. The environment variable has quotes around it
-2. `FIREBASE_PROJECT_ID` on the backend matches `VITE_FIREBASE_PROJECT_ID`
-3. The build needs to be redeployed after fixing the variables
+1. `FIREBASE_PROJECT_ID` on the backend matches `VITE_FIREBASE_PROJECT_ID` — a mismatch causes every token verification to fail.
+2. Your Firebase credentials have not expired or been revoked.
+3. Any variable change requires a full redeploy to take effect.
 
-**Solution**: Remove quotes from all environment variables and redeploy.
+**Note**: Some deployment providers preserve literal quotes in variable values. If that applies to your host, remove the surrounding quotes from your Firebase environment variables and redeploy.
 
 ## Local Development Setup
 

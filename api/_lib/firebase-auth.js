@@ -143,12 +143,16 @@ export async function verifyFirebaseIdToken(token, options = {}) {
   };
 }
 
+function uidFallbackUsername(firebaseUser) {
+  return `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
+}
+
 function usernameFromFirebaseUser(firebaseUser) {
   if (firebaseUser.emailVerified && firebaseUser.email) {
     return firebaseUser.email;
   }
 
-  return `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
+  return uidFallbackUsername(firebaseUser);
 }
 
 async function linkExistingUser(existingUser, firebaseUser, query) {
@@ -162,9 +166,11 @@ async function linkExistingUser(existingUser, firebaseUser, query) {
       [firebaseUser.uid, firebaseUser.picture || null, 'firebase', existingUser.id]
     );
     if (updated.rows.length === 0) {
-      // Another request raced and linked this user first — re-fetch current state
-      const refetch = await query('SELECT id, username, email FROM users WHERE id = $1', [existingUser.id]);
-      return refetch.rows[0] ?? null;
+      // Another request raced and linked this user first — re-fetch and verify the winner was us
+      const refetch = await query('SELECT id, username, email, firebase_uid FROM users WHERE id = $1', [existingUser.id]);
+      const refetched = refetch.rows[0];
+      if (!refetched || refetched.firebase_uid !== firebaseUser.uid) return null;
+      return refetched;
     }
   }
 
@@ -225,13 +231,13 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       );
     } catch (insertErr) {
       // Username collision (email already taken as username) — retry with UID-based fallback
-      if (insertErr.code === '23505' && insertUsername !== `firebase_${String(firebaseUser.uid).slice(0, 12)}`) {
+      if (insertErr.code === '23505' && insertUsername !== uidFallbackUsername(firebaseUser)) {
         result = await query(
           `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
            VALUES ($1, $2, $3, $4, 'firebase')
            RETURNING id, username, email`,
           [
-            `firebase_${String(firebaseUser.uid).slice(0, 12)}`,
+            uidFallbackUsername(firebaseUser),
             firebaseUser.emailVerified ? firebaseUser.email : null,
             firebaseUser.uid,
             firebaseUser.picture || null,

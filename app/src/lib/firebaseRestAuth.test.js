@@ -104,16 +104,7 @@ describe('Firebase REST auth', () => {
   });
 
   it('refreshes an expired Firebase ID token before returning it', async () => {
-    const store = new Map();
-    Object.defineProperty(globalThis, 'localStorage', {
-      value: {
-        getItem: vi.fn((key) => store.get(key) || null),
-        setItem: vi.fn((key, value) => store.set(key, String(value))),
-        removeItem: vi.fn((key) => store.delete(key)),
-        clear: vi.fn(() => store.clear()),
-      },
-      configurable: true,
-    });
+    const store = installLocalStorage();
 
     const fetch = vi.fn(async () => fakeResponse({
       body: {
