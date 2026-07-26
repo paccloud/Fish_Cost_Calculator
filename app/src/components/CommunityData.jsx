@@ -36,7 +36,7 @@ const CommunityData = () => {
     const handleDownload = async () => {
         setDownloadError(null);
         try {
-            const res = await fetch(apiUrl('/api/export-community-data'));
+            const res = await fetch(apiUrl('/api/community-data?format=csv'));
             if (!res.ok) throw new Error('Export failed');
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
