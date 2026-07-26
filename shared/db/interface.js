@@ -69,6 +69,28 @@
  *
  * @property {function(string|number, Object): Promise<{id?: string|number, created: boolean}>} saveContributorProfile
  *   Create or update the authenticated user's contributor profile.
+ *
+ * @property {function(string|number): Promise<Array>} listUserData
+ *   Return all user-data entries for the given userId.
+ *   Each row has {id, species, product, yield, source, is_shared}.
+ *
+ * @property {function(string|number, Object): Promise<{id: string|number}>} createUserDataEntry
+ *   Insert a new user-data entry (userId, {species, product, yield, source}).
+ *   Returns {id} of the inserted row.
+ *
+ * @property {function(string|number, string|number): Promise<Object|null>} findUserDataEntryById
+ *   Return the user-data entry with the given id owned by userId, or null.
+ *   Used for ownership checking before update/delete/share operations.
+ *
+ * @property {function(string|number, string|number, Object): Promise<void>} updateUserDataEntry
+ *   Update fields on the user-data entry (id, userId, {species, product, yield, source}).
+ *   Only updates fields that are not undefined (COALESCE semantics).
+ *
+ * @property {function(string|number, string|number): Promise<void>} deleteUserDataEntry
+ *   Delete the user-data entry with the given id owned by userId.
+ *
+ * @property {function(string|number, string|number, boolean): Promise<void>} setUserDataSharing
+ *   Set the is_shared flag on the user-data entry (id, userId, isShared).
  */
 
 /**

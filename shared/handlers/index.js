@@ -17,3 +17,10 @@ export {
   handleListPublicCalcs,
   handleSaveContributorProfile,
 } from './publicEndpoints.js';
+export {
+  handleListUserData,
+  handleCreateUserData,
+  handleUpdateUserData,
+  handleDeleteUserData,
+  handleSetUserDataSharing,
+} from './userData.js';

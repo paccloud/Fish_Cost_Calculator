@@ -291,66 +291,33 @@ app.post('/api/upload-data', authenticate, (req, res) => {
     });
 });
 
-// Get User Custom Data
-app.get('/api/user-data', authenticate, (req, res) => {
-    db.all('SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// User data CRUD — delegates to shared handler core
+app.get('/api/user-data', authenticate, async (req, res) => {
+    const { handleListUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListUserData({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
 });
 
-// Add Single User Data Entry
-app.post('/api/user-data', authenticate, (req, res) => {
-    const { species, product, yield: yieldVal, source } = req.body;
-    if (!species || !product || yieldVal === undefined) {
-        return res.status(400).json({ error: 'Species, product, and yield are required' });
-    }
-    
-    db.run(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-        [req.user.id, species, product, yieldVal, source || 'User Input'],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
-        }
-    );
+app.post('/api/user-data', authenticate, async (req, res) => {
+    const { handleCreateUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleCreateUserData({ userId: req.user.id, ...req.body }, dbAdapter);
+    return res.status(status).json(body);
 });
 
-// Update User Data Entry
-app.put('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-    const { species, product, yield: yieldVal, source } = req.body;
-    
-    // Verify ownership
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        
-        db.run(
-            'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
-            [species || row.species, product || row.product, yieldVal !== undefined ? yieldVal : row.yield, source || row.source, id, req.user.id],
-            function(err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: 'Updated successfully' });
-            }
-        );
-    });
+app.put('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleUpdateUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleUpdateUserData({ userId: req.user.id, id: req.params.id, ...req.body }, dbAdapter);
+    return res.status(status).json(body);
 });
 
-// Delete User Data Entry
-app.delete('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-
-    // Verify ownership before delete
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-
-        db.run('DELETE FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Deleted successfully' });
-        });
-    });
+app.delete('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleDeleteUserData } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleDeleteUserData({ userId: req.user.id, id: req.params.id }, dbAdapter);
+    return res.status(status).json(body);
 });
 
 // Unified export endpoint — matches production api/export.js contract
@@ -492,46 +459,35 @@ app.post('/api/contributor', authenticate, async (req, res) => {
     return res.status(status).json(body);
 });
 
-// Community Data Pool — PATCH /api/user-data/:id toggles is_shared (matches Vercel API contract)
-app.patch('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-    const { is_shared } = req.body ?? {};
-    if (typeof is_shared !== 'boolean') {
-        return res.status(400).json({ error: 'is_shared (boolean) is required' });
-    }
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?', [is_shared ? 1 : 0, id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to update sharing status' });
-            res.json({ message: is_shared ? 'Shared with community' : 'Removed from community' });
-        });
-    });
+// Community Data Pool — sharing via handler core
+app.patch('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: (req.body ?? {}).is_shared },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-// Community Data Pool — share/unshare user data entries
-app.post('/api/user-data/:id/share', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = 1 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to share entry' });
-            res.json({ message: 'Shared with community' });
-        });
-    });
+app.post('/api/user-data/:id/share', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: true },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-app.post('/api/user-data/:id/unshare', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = 0 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to unshare entry' });
-            res.json({ message: 'Removed from community' });
-        });
-    });
+app.post('/api/user-data/:id/unshare', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await import('../shared/handlers/index.js');
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: false },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
 // Community pool — public read (no auth required)

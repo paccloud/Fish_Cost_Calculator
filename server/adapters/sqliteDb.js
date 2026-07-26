@@ -250,6 +250,94 @@ function makeSqliteAdapter(db) {
         );
       });
     },
+
+    listUserData(userId) {
+      return new Promise((resolve, reject) => {
+        db.all(
+          'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?',
+          [userId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    createUserDataEntry(userId, fields) {
+      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+      return new Promise((resolve, reject) => {
+        db.run(
+          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+          [userId, species, product, yieldVal, source],
+          function callback(err) {
+            if (err) return reject(err);
+            resolve({ id: this.lastID });
+          }
+        );
+      });
+    },
+
+    findUserDataEntryById(id, userId) {
+      return new Promise((resolve, reject) => {
+        db.get(
+          'SELECT id FROM user_data WHERE id = ? AND user_id = ?',
+          [id, userId],
+          (err, row) => {
+            if (err) return reject(err);
+            resolve(row ?? null);
+          }
+        );
+      });
+    },
+
+    async updateUserDataEntry(id, userId, fields) {
+      const existing = await this.findUserDataEntryById(id, userId);
+      const { species, product, yield: yieldVal, source } = fields;
+      return new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
+          [
+            species ?? existing?.species,
+            product ?? existing?.product,
+            yieldVal !== undefined ? yieldVal : existing?.yield,
+            source ?? existing?.source,
+            id,
+            userId,
+          ],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
+
+    deleteUserDataEntry(id, userId) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'DELETE FROM user_data WHERE id = ? AND user_id = ?',
+          [id, userId],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
+
+    setUserDataSharing(id, userId, isShared) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?',
+          [isShared ? 1 : 0, id, userId],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
   };
 }
 
