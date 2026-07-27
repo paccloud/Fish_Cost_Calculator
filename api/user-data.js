@@ -16,6 +16,9 @@ async function handler(req, res) {
 
   // POST /api/user-data?id=:id&action=share|unshare — toggle community sharing
   if (req.method === 'POST' && id && action) {
+    if (action !== 'share' && action !== 'unshare') {
+      return res.status(400).json({ error: 'action must be "share" or "unshare"' });
+    }
     const { status, body } = await handleSetUserDataSharing(
       { userId, id, isShared: action === 'share' },
       db
@@ -41,8 +44,9 @@ async function handler(req, res) {
 
   // POST /api/user-data — create new entry
   if (req.method === 'POST' && !id) {
+    const { species, product, yield: yieldVal, source } = req.body ?? {};
     const { status, body } = await handleCreateUserData(
-      { userId, ...req.body },
+      { userId, species, product, yield: yieldVal, source },
       db
     );
     return res.status(status).json(body);
@@ -50,8 +54,9 @@ async function handler(req, res) {
 
   // PUT /api/user-data?id=:id — update entry
   if (req.method === 'PUT' && id) {
+    const { species, product, yield: yieldVal, source } = req.body ?? {};
     const { status, body } = await handleUpdateUserData(
-      { userId, id, ...req.body },
+      { userId, id, species, product, yield: yieldVal, source },
       db
     );
     return res.status(status).json(body);

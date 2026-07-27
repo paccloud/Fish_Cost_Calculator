@@ -271,7 +271,7 @@ export function makeNeonAdapter() {
 
     async findUserDataEntryById(id, userId) {
       const result = await query(
-        'SELECT id FROM user_data WHERE id = $1 AND user_id = $2',
+        'SELECT id, species, product, yield, source FROM user_data WHERE id = $1 AND user_id = $2',
         [id, userId]
       );
       return result.rows[0] ?? null;

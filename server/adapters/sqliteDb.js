@@ -281,7 +281,7 @@ function makeSqliteAdapter(db) {
     findUserDataEntryById(id, userId) {
       return new Promise((resolve, reject) => {
         db.get(
-          'SELECT id FROM user_data WHERE id = ? AND user_id = ?',
+          'SELECT id, species, product, yield, source FROM user_data WHERE id = ? AND user_id = ?',
           [id, userId],
           (err, row) => {
             if (err) return reject(err);
