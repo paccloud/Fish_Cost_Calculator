@@ -22,9 +22,9 @@ async function sendXlsx(res, filename, columns, rows) {
   sheet.columns = columns.map(col => ({ header: col.header, key: col.key, width: col.width || 18 }));
   rows.forEach(row => sheet.addRow(row));
   sheet.getRow(1).font = { bold: true };
+  const buffer = await workbook.xlsx.writeBuffer();
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-  const buffer = await workbook.xlsx.writeBuffer();
   return res.status(200).send(Buffer.from(buffer));
 }
 
@@ -41,6 +41,10 @@ async function handler(req, res) {
   const userId = req.user.id;
   const exportType = req.query?.type || 'calcs';
   const format = req.query?.format || 'csv';
+
+  if (format !== 'csv' && format !== 'xlsx') {
+    return res.status(400).json({ error: 'format must be "csv" or "xlsx"' });
+  }
 
   try {
     if (exportType === 'data') {
