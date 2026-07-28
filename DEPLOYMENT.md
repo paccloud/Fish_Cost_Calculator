@@ -97,7 +97,7 @@ Before deploying, add these environment variables in Vercel:
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `DATABASE_URL` | Your Neon connection string | From Step 1.1 |
-| `JWT_SECRET` | Your generated secret | Required only while the legacy JWT login endpoint remains enabled |
+| `JWT_SECRET` | Your generated secret | Required while either the legacy JWT login endpoint or legacy JWT bearer-token validation remains enabled; used for both issuing and validating legacy tokens — remove only after both paths are disabled |
 | `FIREBASE_PROJECT_ID` | Firebase project ID | Required for backend Firebase ID token verification |
 | `VITE_FIREBASE_API_KEY` | Firebase web API key | Required for frontend email/password auth |
 | `VITE_FIREBASE_PROJECT_ID` | Firebase project ID | Must match `FIREBASE_PROJECT_ID` |
@@ -119,14 +119,26 @@ Before enabling the Firebase-authenticated frontend against an existing Neon
 database, run the auth column migration from `scripts/neon-schema.sql` in
 order:
 
-**Step 1 — Add columns:**
+**Step 1 — Add columns and firebase_uid uniqueness:**
 
 ```sql
-ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
+-- Add columns (safe to rerun; IF NOT EXISTS is a no-op for existing columns).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
 ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+
+-- Add UNIQUE constraint on firebase_uid separately so the constraint is
+-- created even when the column already existed without it.  Safe to rerun.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_firebase_uid_unique' AND conrelid = 'users'::regclass
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_firebase_uid_unique UNIQUE (firebase_uid);
+  END IF;
+END $$;
 ```
 
 **Step 2 — Identify duplicate emails** (must complete before Step 3):
@@ -140,15 +152,27 @@ GROUP BY email
 HAVING COUNT(*) > 1;
 ```
 
-Resolve each duplicate row by merging or nulling the conflicting `email`
-values before continuing. Firebase linking queries by verified email, so
-all non-null emails in the table must be unique.
+Before resolving duplicates:
+1. **Export a backup**: `pg_dump -t users <connection-string> > users_backup.sql`
+2. **Map each duplicate to its canonical account** — determine which row owns the Firebase identity (check `firebase_uid` or oldest `id`) and which rows are stale.
+3. For each duplicate group, reassign any calculations/data rows to the canonical user ID, then either delete or null the `email` on the stale row(s).
+4. **Validate**: rerun the Step 2 query and confirm zero duplicate non-null emails before continuing.
+
+Firebase identity linking queries by verified email, so all non-null emails in the table must be unique.
 
 **Step 3 — Enforce email uniqueness:**
 
 ```sql
 -- Run only after Step 2 confirms zero duplicate non-null emails.
-ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+-- Safe to rerun: the DO block skips if the constraint already exists.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_email_unique' AND conrelid = 'users'::regclass
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+  END IF;
+END $$;
 ```
 
 New databases created from `scripts/neon-schema.sql` already include these
