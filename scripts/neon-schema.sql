@@ -54,12 +54,18 @@ CREATE INDEX IF NOT EXISTS idx_calculations_user_id ON calculations(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 
--- Migration for existing databases (run if upgrading)
+-- Migration for existing databases (run in order if upgrading)
+-- Step 1: Add auth columns
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
 -- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
 -- ALTER TABLE user_data ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT FALSE;
--- Email uniqueness (add after deduplicating any rows with duplicate or NULL emails):
+--
+-- Step 2: Identify and resolve duplicate non-null emails before Step 3.
+-- SELECT email, COUNT(*) AS cnt FROM users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1;
+-- (Merge or null conflicting rows until the query above returns zero rows.)
+--
+-- Step 3: Enforce email uniqueness (run only after Step 2 returns zero rows)
 -- ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);

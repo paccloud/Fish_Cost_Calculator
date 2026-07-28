@@ -116,7 +116,10 @@ Before deploying, add these environment variables in Vercel:
 ### 4.3 Apply Neon Auth Columns
 
 Before enabling the Firebase-authenticated frontend against an existing Neon
-database, run the auth column migration from `scripts/neon-schema.sql`:
+database, run the auth column migration from `scripts/neon-schema.sql` in
+order:
+
+**Step 1 — Add columns:**
 
 ```sql
 ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
@@ -126,8 +129,30 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'fi
 ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
 ```
 
+**Step 2 — Identify duplicate emails** (must complete before Step 3):
+
+```sql
+-- Review any duplicate non-null email values that would block the UNIQUE constraint.
+SELECT email, COUNT(*) AS cnt
+FROM users
+WHERE email IS NOT NULL
+GROUP BY email
+HAVING COUNT(*) > 1;
+```
+
+Resolve each duplicate row by merging or nulling the conflicting `email`
+values before continuing. Firebase linking queries by verified email, so
+all non-null emails in the table must be unique.
+
+**Step 3 — Enforce email uniqueness:**
+
+```sql
+-- Run only after Step 2 confirms zero duplicate non-null emails.
+ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+```
+
 New databases created from `scripts/neon-schema.sql` already include these
-columns.
+columns and the `UNIQUE` constraint.
 
 ### 4.4 Deploy
 
