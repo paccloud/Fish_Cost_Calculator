@@ -1,4 +1,6 @@
 require('dotenv').config();
+// Cached ESM import — server.js is CJS so static import isn't available
+const handlersModulePromise = import('../shared/handlers/index.js');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
@@ -162,7 +164,7 @@ const authenticate = (req, res, next) => {
 // Node's module registry on subsequent requests.
 const { makeSqliteAdapter } = require('./adapters/sqliteDb');
 app.post('/api/register', async (req, res) => {
-    const { handleRegister } = await import('../shared/handlers/index.js');
+    const { handleRegister } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleRegister(req.body ?? {}, dbAdapter);
     return res.status(status).json(body);
@@ -170,7 +172,7 @@ app.post('/api/register', async (req, res) => {
 
 // Login — delegates to shared handler core (shared/handlers/login.js).
 app.post('/api/login', async (req, res) => {
-    const { handleLogin } = await import('../shared/handlers/index.js');
+    const { handleLogin } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleLogin(
         req.body ?? {},
@@ -182,7 +184,7 @@ app.post('/api/login', async (req, res) => {
 
 // Save Calculation — delegates to shared handler core.
 app.post('/api/save-calc', authenticate, async (req, res) => {
-    const { handleSaveCalc } = await import('../shared/handlers/index.js');
+    const { handleSaveCalc } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleSaveCalc(
         { userId: req.user.id, ...req.body },
@@ -193,7 +195,7 @@ app.post('/api/save-calc', authenticate, async (req, res) => {
 
 // List Calculations — delegates to shared handler core.
 app.get('/api/saved-calcs', authenticate, async (req, res) => {
-    const { handleListSavedCalcs } = await import('../shared/handlers/index.js');
+    const { handleListSavedCalcs } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleListSavedCalcs({ userId: req.user.id }, dbAdapter);
     return res.status(status).json(body);
@@ -201,7 +203,7 @@ app.get('/api/saved-calcs', authenticate, async (req, res) => {
 
 // Delete Calculation — delegates to shared handler core.
 app.delete('/api/saved-calcs/:id', authenticate, async (req, res) => {
-    const { handleDeleteCalc } = await import('../shared/handlers/index.js');
+    const { handleDeleteCalc } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleDeleteCalc(
         { userId: req.user.id, id: req.params.id },
@@ -212,7 +214,7 @@ app.delete('/api/saved-calcs/:id', authenticate, async (req, res) => {
 
 // Public Calculations — delegates to shared handler core.
 app.get('/api/public-calcs', async (req, res) => {
-    const { handleListPublicCalcs } = await import('../shared/handlers/index.js');
+    const { handleListPublicCalcs } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleListPublicCalcs({}, dbAdapter);
     return res.status(status).json(body);
@@ -220,7 +222,7 @@ app.get('/api/public-calcs', async (req, res) => {
 
 // Fish Data — delegates to shared handler core.
 app.get('/api/fish-data', async (req, res) => {
-    const { handleGetFishData } = await import('../shared/handlers/index.js');
+    const { handleGetFishData } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleGetFishData({}, dbAdapter);
     return res.status(status).json(body);
@@ -291,66 +293,41 @@ app.post('/api/upload-data', authenticate, (req, res) => {
     });
 });
 
-// Get User Custom Data
-app.get('/api/user-data', authenticate, (req, res) => {
-    db.all('SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?', [req.user.id], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
+// User data CRUD — delegates to shared handler core
+app.get('/api/user-data', authenticate, async (req, res) => {
+    const { handleListUserData } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleListUserData({ userId: req.user.id }, dbAdapter);
+    return res.status(status).json(body);
 });
 
-// Add Single User Data Entry
-app.post('/api/user-data', authenticate, (req, res) => {
-    const { species, product, yield: yieldVal, source } = req.body;
-    if (!species || !product || yieldVal === undefined) {
-        return res.status(400).json({ error: 'Species, product, and yield are required' });
-    }
-    
-    db.run(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-        [req.user.id, species, product, yieldVal, source || 'User Input'],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID, message: 'Added successfully' });
-        }
+app.post('/api/user-data', authenticate, async (req, res) => {
+    const { handleCreateUserData } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { status, body } = await handleCreateUserData(
+        { userId: req.user.id, species, product, yield: yieldVal, source },
+        dbAdapter
     );
+    return res.status(status).json(body);
 });
 
-// Update User Data Entry
-app.put('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-    const { species, product, yield: yieldVal, source } = req.body;
-    
-    // Verify ownership
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        
-        db.run(
-            'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
-            [species || row.species, product || row.product, yieldVal !== undefined ? yieldVal : row.yield, source || row.source, id, req.user.id],
-            function(err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ message: 'Updated successfully' });
-            }
-        );
-    });
+app.put('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleUpdateUserData } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { status, body } = await handleUpdateUserData(
+        { userId: req.user.id, id: req.params.id, species, product, yield: yieldVal, source },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-// Delete User Data Entry
-app.delete('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-
-    // Verify ownership before delete
-    db.get('SELECT * FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-
-        db.run('DELETE FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Deleted successfully' });
-        });
-    });
+app.delete('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleDeleteUserData } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleDeleteUserData({ userId: req.user.id, id: req.params.id }, dbAdapter);
+    return res.status(status).json(body);
 });
 
 // Unified export endpoint — matches production api/export.js contract
@@ -461,14 +438,14 @@ app.get('/api/export', authenticate, async (req, res) => {
 
 // Get all visible contributors (public) — delegates to shared handler core.
 app.get('/api/contributors', async (req, res) => {
-    const { handleListContributors } = await import('../shared/handlers/index.js');
+    const { handleListContributors } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleListContributors({}, dbAdapter);
     return res.status(status).json(body);
 });
 
 const getCurrentContributorProfile = async (req, res) => {
-    const { handleGetContributorProfile } = await import('../shared/handlers/index.js');
+    const { handleGetContributorProfile } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleGetContributorProfile(
         { userId: req.user.id },
@@ -483,7 +460,7 @@ app.get('/api/contributor/me', authenticate, getCurrentContributorProfile);
 
 // Create or update contributor profile
 app.post('/api/contributor', authenticate, async (req, res) => {
-    const { handleSaveContributorProfile } = await import('../shared/handlers/index.js');
+    const { handleSaveContributorProfile } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleSaveContributorProfile(
         { userId: req.user.id, ...req.body },
@@ -492,46 +469,35 @@ app.post('/api/contributor', authenticate, async (req, res) => {
     return res.status(status).json(body);
 });
 
-// Community Data Pool — PATCH /api/user-data/:id toggles is_shared (matches Vercel API contract)
-app.patch('/api/user-data/:id', authenticate, (req, res) => {
-    const { id } = req.params;
-    const { is_shared } = req.body ?? {};
-    if (typeof is_shared !== 'boolean') {
-        return res.status(400).json({ error: 'is_shared (boolean) is required' });
-    }
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?', [is_shared ? 1 : 0, id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to update sharing status' });
-            res.json({ message: is_shared ? 'Shared with community' : 'Removed from community' });
-        });
-    });
+// Community Data Pool — sharing via handler core
+app.patch('/api/user-data/:id', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: (req.body ?? {}).is_shared },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-// Community Data Pool — share/unshare user data entries
-app.post('/api/user-data/:id/share', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = 1 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to share entry' });
-            res.json({ message: 'Shared with community' });
-        });
-    });
+app.post('/api/user-data/:id/share', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: true },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
-app.post('/api/user-data/:id/unshare', authenticate, (req, res) => {
-    const { id } = req.params;
-    db.get('SELECT id FROM user_data WHERE id = ? AND user_id = ?', [id, req.user.id], (err, row) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        if (!row) return res.status(404).json({ error: 'Entry not found or not owned by user' });
-        db.run('UPDATE user_data SET is_shared = 0 WHERE id = ? AND user_id = ?', [id, req.user.id], function(err2) {
-            if (err2) return res.status(500).json({ error: 'Failed to unshare entry' });
-            res.json({ message: 'Removed from community' });
-        });
-    });
+app.post('/api/user-data/:id/unshare', authenticate, async (req, res) => {
+    const { handleSetUserDataSharing } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body } = await handleSetUserDataSharing(
+        { userId: req.user.id, id: req.params.id, isShared: false },
+        dbAdapter
+    );
+    return res.status(status).json(body);
 });
 
 // Community pool — public read (no auth required)

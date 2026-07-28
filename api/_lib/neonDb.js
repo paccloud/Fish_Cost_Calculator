@@ -251,5 +251,57 @@ export function makeNeonAdapter() {
       );
       return { id: result.rows[0].id, created: true };
     },
+
+    async listUserData(userId) {
+      const result = await query(
+        'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows;
+    },
+
+    async createUserDataEntry(userId, fields) {
+      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+      const result = await query(
+        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [userId, species, product, yieldVal, source]
+      );
+      return result.rows[0];
+    },
+
+    async findUserDataEntryById(id, userId) {
+      const result = await query(
+        'SELECT id, species, product, yield, source FROM user_data WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    async updateUserDataEntry(id, userId, fields) {
+      const { species, product, yield: yieldVal, source } = fields;
+      await query(
+        `UPDATE user_data
+         SET species = COALESCE($1, species),
+             product = COALESCE($2, product),
+             yield   = COALESCE($3, yield),
+             source  = COALESCE($4, source)
+         WHERE id = $5 AND user_id = $6`,
+        [species, product, yieldVal, source, id, userId]
+      );
+    },
+
+    async deleteUserDataEntry(id, userId) {
+      await query(
+        'DELETE FROM user_data WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+    },
+
+    async setUserDataSharing(id, userId, isShared) {
+      await query(
+        'UPDATE user_data SET is_shared = $1 WHERE id = $2 AND user_id = $3',
+        [isShared, id, userId]
+      );
+    },
   };
 }
