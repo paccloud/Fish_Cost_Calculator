@@ -113,6 +113,123 @@ describe('Firebase ID token verification', () => {
     });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('returns null for a token with a tampered signature', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const { privateKey: otherKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const validToken = createRs256Token({
+      kid: 'firebase-test-key',
+      privateKey,
+      payload: {
+        iss: 'https://securetoken.google.com/fish-calc-test',
+        aud: 'fish-calc-test',
+        sub: 'firebase-user-123',
+        iat: now,
+        exp: now + 3600,
+      },
+    });
+    // Replace the signature with one signed by a different key
+    const tamperedToken = createRs256Token({
+      kid: 'firebase-test-key',
+      privateKey: otherKey,
+      payload: {
+        iss: 'https://securetoken.google.com/fish-calc-test',
+        aud: 'fish-calc-test',
+        sub: 'firebase-user-123',
+        iat: now,
+        exp: now + 3600,
+      },
+    }).split('.').slice(0, 2).join('.') + '.' + validToken.split('.')[2];
+
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+      }),
+      headers: { get: () => 'public, max-age=3600' },
+    }));
+
+    await expect(verifyFirebaseIdToken(tamperedToken, { projectId: 'fish-calc-test', fetch })).resolves.toBeNull();
+  });
+
+  it('returns null for a token with a wrong issuer', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const token = createRs256Token({
+      kid: 'firebase-test-key',
+      privateKey,
+      payload: {
+        iss: 'https://securetoken.google.com/wrong-project',
+        aud: 'fish-calc-test',
+        sub: 'firebase-user-123',
+        iat: now,
+        exp: now + 3600,
+      },
+    });
+
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+      }),
+      headers: { get: () => 'public, max-age=3600' },
+    }));
+
+    await expect(verifyFirebaseIdToken(token, { projectId: 'fish-calc-test', fetch })).resolves.toBeNull();
+  });
+
+  it('returns null for a token with a wrong audience', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const token = createRs256Token({
+      kid: 'firebase-test-key',
+      privateKey,
+      payload: {
+        iss: 'https://securetoken.google.com/fish-calc-test',
+        aud: 'wrong-project',
+        sub: 'firebase-user-123',
+        iat: now,
+        exp: now + 3600,
+      },
+    });
+
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+      }),
+      headers: { get: () => 'public, max-age=3600' },
+    }));
+
+    await expect(verifyFirebaseIdToken(token, { projectId: 'fish-calc-test', fetch })).resolves.toBeNull();
+  });
+
+  it('returns null for an expired token (beyond clock-skew tolerance)', async () => {
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const token = createRs256Token({
+      kid: 'firebase-test-key',
+      privateKey,
+      payload: {
+        iss: 'https://securetoken.google.com/fish-calc-test',
+        aud: 'fish-calc-test',
+        sub: 'firebase-user-123',
+        iat: now - 7200,
+        exp: now - 3600,
+      },
+    });
+
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+      }),
+      headers: { get: () => 'public, max-age=3600' },
+    }));
+
+    await expect(verifyFirebaseIdToken(token, { projectId: 'fish-calc-test', fetch })).resolves.toBeNull();
+  });
 });
 
 describe('Firebase API auth', () => {
@@ -265,6 +382,74 @@ describe('Firebase API auth', () => {
       expect.stringContaining('INSERT INTO users'),
       expect.anything()
     );
+  });
+
+  it('recovers from a concurrent sign-in race (23505 on firebase_uid) by re-selecting the winner row', async () => {
+    const existingUser = { id: 77, username: 'fishbuyer@example.com', email: 'fishbuyer@example.com' };
+    const uidConflict = Object.assign(new Error('duplicate key'), { code: '23505' });
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })        // firebase_uid lookup: not found
+      .mockResolvedValueOnce({ rows: [] })        // email lookup: not found
+      .mockRejectedValueOnce(uidConflict)          // INSERT: concurrent race → 23505
+      .mockResolvedValueOnce({ rows: [existingUser] }); // re-select by firebase_uid: winner found
+
+    const user = await verifyFirebaseAuthSession({
+      headers: { authorization: 'Bearer firebase-id-token' },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'fishbuyer@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toEqual({
+      id: 77,
+      username: 'fishbuyer@example.com',
+      email: 'fishbuyer@example.com',
+      authProvider: 'firebase',
+    });
+    // Verify the re-select query was issued after the 23505 error
+    expect(query).toHaveBeenCalledWith(
+      'SELECT id, username, email FROM users WHERE firebase_uid = $1',
+      ['firebase-user-123']
+    );
+  });
+
+  it('retries with a UID-based username when INSERT fails 23505 due to an email-username collision', async () => {
+    const fallbackUser = { id: 88, username: 'firebase_firebase-us', email: 'fishbuyer@example.com' };
+    const usernameConflict = Object.assign(new Error('duplicate key'), { code: '23505' });
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [] })         // firebase_uid lookup: not found
+      .mockResolvedValueOnce({ rows: [] })         // email lookup: not found
+      .mockRejectedValueOnce(usernameConflict)      // INSERT with email username: 23505
+      .mockResolvedValueOnce({ rows: [] })         // re-select by firebase_uid: not a race
+      .mockResolvedValueOnce({ rows: [fallbackUser] }); // INSERT with UID-based username: success
+
+    const user = await verifyFirebaseAuthSession({
+      headers: { authorization: 'Bearer firebase-id-token' },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'fishbuyer@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toEqual({
+      id: 88,
+      username: 'firebase_firebase-us',
+      email: 'fishbuyer@example.com',
+      authProvider: 'firebase',
+    });
+    // Both INSERT calls should have been made
+    expect(query).toHaveBeenCalledTimes(5);
   });
 });
 
