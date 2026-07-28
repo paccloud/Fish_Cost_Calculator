@@ -152,7 +152,13 @@ project used by `FIREBASE_PROJECT_ID`.
 5. Add the production and preview web domains under Authentication -> Settings
    -> Authorized domains.
 
-### 5.2 Clean Up Vercel Integrations
+### 5.2 Enable Google Sign-In
+
+1. In Authentication -> Sign-in method, enable Google.
+2. Set a support email for the OAuth consent screen.
+3. The authorized domains configured in 5.1 also cover Google redirect URIs.
+
+### 5.3 Clean Up Vercel Integrations
 
 1. Open the Vercel project settings.
 2. Remove any retired Stack Auth integration, keys, or related Vercel secrets

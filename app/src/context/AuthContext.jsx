@@ -29,7 +29,10 @@ function decodeBase64UrlJson(value) {
       base64 += '='.repeat(4 - padding);
     }
 
-    return JSON.parse(globalThis.atob(base64));
+    const binary = globalThis.atob(base64);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes);
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -121,6 +124,7 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     });
     const idToken = await firebaseUser.getIdToken();
     await authApi.sendEmailVerification(idToken);
+    authApi.clearFirebaseSession();
     return { verificationSent: true };
   };
 

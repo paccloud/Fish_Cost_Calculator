@@ -130,7 +130,7 @@ const Login = () => {
 
             <button
               type="button"
-              onClick={loginWithGoogle}
+              onClick={() => loginWithGoogle().catch((err) => setError(err?.message || 'Google sign-in failed. Please try again.'))}
               className="w-full flex items-center justify-center gap-2 border border-text-secondary/30 rounded px-4 py-2 text-sm text-text-primary hover:bg-surface-alt transition"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">

@@ -86,15 +86,18 @@ function verifyRs256({ signingInput, signature, cert }) {
   return verifier.verify(cert, Buffer.from(signature, 'base64url'));
 }
 
+const CLOCK_SKEW_SECONDS = 60;
+
 function tokenPayloadIsValid(payload, projectId, nowSeconds) {
   return (
     payload?.iss === `https://securetoken.google.com/${projectId}` &&
     payload?.aud === projectId &&
     typeof payload?.sub === 'string' &&
     payload.sub.length > 0 &&
-    (!payload.exp || payload.exp > nowSeconds) &&
-    (!payload.nbf || payload.nbf <= nowSeconds) &&
-    (!payload.iat || payload.iat <= nowSeconds)
+    typeof payload.exp === 'number' &&
+    payload.exp > nowSeconds - CLOCK_SKEW_SECONDS &&
+    (!payload.nbf || payload.nbf <= nowSeconds + CLOCK_SKEW_SECONDS) &&
+    (!payload.iat || payload.iat <= nowSeconds + CLOCK_SKEW_SECONDS)
   );
 }
 
@@ -225,19 +228,31 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
         ]
       );
     } catch (insertErr) {
-      // Username collision (email already taken as username) — retry with UID-based fallback
-      if (insertErr.code === '23505' && insertUsername !== uidFallbackUsername(firebaseUser)) {
-        result = await query(
-          `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
-           VALUES ($1, $2, $3, $4, 'firebase')
-           RETURNING id, username, email`,
-          [
-            uidFallbackUsername(firebaseUser),
-            firebaseUser.emailVerified ? firebaseUser.email : null,
-            firebaseUser.uid,
-            firebaseUser.picture || null,
-          ]
+      if (insertErr.code === '23505') {
+        // Re-select on firebase_uid conflict first (concurrent sign-in race)
+        const existing = await query(
+          'SELECT id, username, email FROM users WHERE firebase_uid = $1',
+          [firebaseUser.uid]
         );
+        if (existing.rows.length > 0) {
+          return existing.rows[0];
+        }
+        // Username collision (email taken as username) — retry with UID-based fallback
+        if (insertUsername !== uidFallbackUsername(firebaseUser)) {
+          result = await query(
+            `INSERT INTO users (username, email, firebase_uid, avatar_url, auth_provider)
+             VALUES ($1, $2, $3, $4, 'firebase')
+             RETURNING id, username, email`,
+            [
+              uidFallbackUsername(firebaseUser),
+              firebaseUser.emailVerified ? firebaseUser.email : null,
+              firebaseUser.uid,
+              firebaseUser.picture || null,
+            ]
+          );
+        } else {
+          throw insertErr;
+        }
       } else {
         throw insertErr;
       }

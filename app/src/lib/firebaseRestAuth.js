@@ -16,13 +16,23 @@ function getConfiguredApiKey(apiKey) {
   return configuredApiKey;
 }
 
+const FIREBASE_ERROR_MESSAGES = {
+  EMAIL_EXISTS: 'An account with this email already exists.',
+  INVALID_LOGIN_CREDENTIALS: 'Invalid email or password.',
+  INVALID_EMAIL: 'Invalid email address.',
+  WEAK_PASSWORD: 'Password must be at least 6 characters.',
+  USER_DISABLED: 'This account has been disabled.',
+  TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts. Please try again later.',
+};
+
 async function parseFirebaseResponse(response, fallbackMessage) {
   const body = await response.json().catch(() => ({}));
   if (response.ok) {
     return body;
   }
 
-  const message = body?.error?.message || fallbackMessage;
+  const rawCode = body?.error?.message || '';
+  const message = FIREBASE_ERROR_MESSAGES[rawCode] || rawCode || fallbackMessage;
   throw new Error(message);
 }
 
@@ -65,6 +75,7 @@ function normalizeAuthResponse(response, now) {
     localId: response.localId || response.local_id || response.user_id,
     email: response.email || null,
     displayName: response.displayName || response.display_name || response.email || null,
+    emailVerified: response.emailVerified ?? response.email_verified ?? false,
     expiresAt,
   };
 }
@@ -110,22 +121,33 @@ export function createFirebaseSession(response, options = {}) {
   let session = normalizeAuthResponse(response, options.now || defaultNow);
   persistSession(session, options.storage);
 
+  let pendingRefresh = null;
+
   return {
     uid: session.localId,
     username: session.displayName || session.email,
     email: session.email,
+    emailVerified: session.emailVerified,
     authProvider: 'firebase',
     getIdToken: async () => {
       const now = (options.now || defaultNow)();
       if (shouldRefresh(session, now)) {
-        try {
-          session = await refreshFirebaseSession(session, options);
-          persistSession(session, options.storage);
-        } catch (err) {
-          clearPersistedSession(options.storage);
-          options.onAuthFailure?.(err);
-          throw err;
+        if (!pendingRefresh) {
+          pendingRefresh = refreshFirebaseSession(session, options)
+            .then((refreshed) => {
+              session = refreshed;
+              persistSession(session, options.storage);
+            })
+            .catch((err) => {
+              clearPersistedSession(options.storage);
+              options.onAuthFailure?.(err);
+              throw err;
+            })
+            .finally(() => {
+              pendingRefresh = null;
+            });
         }
+        await pendingRefresh;
       }
       return session.idToken;
     },

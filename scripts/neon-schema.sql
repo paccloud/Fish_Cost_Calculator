@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     password TEXT,  -- NULL for Firebase-only users
     role VARCHAR(50) DEFAULT 'user',
     firebase_uid TEXT UNIQUE,
-    email TEXT,
+    email TEXT UNIQUE,
     avatar_url TEXT,
     auth_provider VARCHAR(50) DEFAULT 'firebase'
 );
@@ -61,3 +61,5 @@ CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
 -- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
 -- ALTER TABLE user_data ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT FALSE;
+-- Email uniqueness (add after deduplicating any rows with duplicate or NULL emails):
+-- ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
