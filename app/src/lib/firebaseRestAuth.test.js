@@ -132,7 +132,12 @@ describe('Firebase REST auth', () => {
     expect(fetch.mock.calls[0][0]).toBe(
       'https://securetoken.googleapis.com/v1/token?key=firebase-api-key'
     );
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+    // Token refresh must use form-encoded body (Firebase securetoken endpoint requirement)
+    expect(fetch.mock.calls[0][1].headers).toMatchObject({
+      'Content-Type': 'application/x-www-form-urlencoded',
+    });
+    const refreshParams = Object.fromEntries(new URLSearchParams(fetch.mock.calls[0][1].body));
+    expect(refreshParams).toEqual({
       grant_type: 'refresh_token',
       refresh_token: 'old-refresh-token',
     });

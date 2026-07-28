@@ -206,14 +206,9 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
         return linkExistingUser(result.rows[0], firebaseUser, query);
       }
 
-      result = await query(
-        'SELECT id, username, email, firebase_uid FROM users WHERE username = $1',
-        [firebaseUser.email]
-      );
-
-      if (result.rows.length > 0) {
-        return linkExistingUser(result.rows[0], firebaseUser, query);
-      }
+      // Intentionally skip matching by username here: legacy accounts could have
+      // arbitrary email-shaped usernames they don't own, and auto-linking would
+      // expose another user's data to whoever verifies that address in Firebase.
     }
 
     const insertUsername = usernameFromFirebaseUser(firebaseUser);

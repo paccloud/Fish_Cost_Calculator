@@ -194,19 +194,16 @@ describe('Firebase API auth', () => {
     );
   });
 
-  it('links a legacy local user whose username is the verified Firebase email', async () => {
+  it('creates a new account when a verified Firebase email matches only a legacy username (not the email column)', async () => {
+    // Previously, this path linked the Firebase account to the legacy row. That is
+    // unsafe: a legacy user may have chosen an email-shaped username they don't own,
+    // so auto-linking would expose their data to whoever verifies that address in
+    // Firebase. The safe behaviour is to create a fresh Firebase account instead.
+    const newRow = { id: 99, username: 'fishbuyer@example.com', email: 'fishbuyer@example.com' };
     const query = vi.fn()
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({
-        rows: [{
-          id: 43,
-          username: 'fishbuyer@example.com',
-          email: null,
-          firebase_uid: null,
-        }],
-      })
-      .mockResolvedValueOnce({ rows: [{ id: 43 }] }); // UPDATE … RETURNING id succeeds
+      .mockResolvedValueOnce({ rows: [] })   // firebase_uid lookup: not found
+      .mockResolvedValueOnce({ rows: [] })   // email column lookup: not found
+      .mockResolvedValueOnce({ rows: [newRow] }); // INSERT new user
 
     const user = await verifyFirebaseAuthSession({
       headers: {
@@ -224,18 +221,19 @@ describe('Firebase API auth', () => {
     });
 
     expect(user).toEqual({
-      id: 43,
+      id: 99,
       username: 'fishbuyer@example.com',
-      email: null,
+      email: 'fishbuyer@example.com',
       authProvider: 'firebase',
     });
-    expect(query).toHaveBeenCalledWith(
+    // The username-match query must NOT be issued to prevent the account takeover vector
+    expect(query).not.toHaveBeenCalledWith(
       'SELECT id, username, email, firebase_uid FROM users WHERE username = $1',
       ['fishbuyer@example.com']
     );
     expect(query).toHaveBeenCalledWith(
-      'UPDATE users SET firebase_uid = $1, avatar_url = $2, auth_provider = $3 WHERE id = $4 AND firebase_uid IS NULL RETURNING id',
-      ['firebase-user-123', 'https://example.com/avatar.png', 'firebase', 43]
+      expect.stringContaining('INSERT INTO users'),
+      expect.arrayContaining(['firebase-user-123'])
     );
   });
 

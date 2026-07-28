@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState } from 'react';
 import {
   clearFirebaseSession,
+  createGoogleAuthUri,
   loadFirebaseSession,
+  sendEmailVerification,
   signInWithEmailPassword,
+  signInWithGoogleCallback,
   signUpWithEmailPassword,
 } from '../lib/firebaseRestAuth';
 
@@ -10,8 +13,11 @@ const AuthContext = createContext(null);
 
 const defaultAuthApi = {
   clearFirebaseSession,
+  createGoogleAuthUri,
   loadFirebaseSession,
+  sendEmailVerification,
   signInWithEmailPassword,
+  signInWithGoogleCallback,
   signUpWithEmailPassword,
 };
 
@@ -83,13 +89,29 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     setToken(null);
   };
 
-  const login = async (email, password) => {
-    const firebaseUser = await authApi.signInWithEmailPassword(email, password, {
-      onAuthFailure: handleAuthFailure,
-    });
-    globalThis.localStorage?.removeItem('token');
-    setToken(null);
-    setUser(firebaseUser);
+  const login = async (identifier, password) => {
+    const isEmail = identifier.includes('@');
+    if (isEmail) {
+      const firebaseUser = await authApi.signInWithEmailPassword(identifier, password, {
+        onAuthFailure: handleAuthFailure,
+      });
+      globalThis.localStorage?.removeItem('token');
+      setToken(null);
+      setUser(firebaseUser);
+    } else {
+      const response = await globalThis.fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: identifier, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Invalid credentials.');
+      }
+      globalThis.localStorage?.setItem('token', data.token);
+      setToken(data.token);
+      setUser({ username: data.username, authProvider: 'password' });
+    }
     return true;
   };
 
@@ -97,10 +119,30 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     const firebaseUser = await authApi.signUpWithEmailPassword(email, password, {
       onAuthFailure: handleAuthFailure,
     });
+    const idToken = await firebaseUser.getIdToken();
+    await authApi.sendEmailVerification(idToken);
+    return { verificationSent: true };
+  };
+
+  const loginWithGoogle = async () => {
+    const continueUri = `${globalThis.location?.origin || ''}/login`;
+    const { authUri, sessionId } = await authApi.createGoogleAuthUri(continueUri);
+    globalThis.sessionStorage?.setItem('firebase_google_session_id', sessionId);
+    globalThis.location.href = authUri;
+  };
+
+  const completeGoogleSignIn = async () => {
+    const sessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
+    if (!sessionId) return null;
+    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
+    const requestUri = globalThis.location?.href;
+    const firebaseUser = await authApi.signInWithGoogleCallback(requestUri, sessionId, {
+      onAuthFailure: handleAuthFailure,
+    });
     globalThis.localStorage?.removeItem('token');
     setToken(null);
     setUser(firebaseUser);
-    return true;
+    return firebaseUser;
   };
 
   const logout = async () => {
@@ -117,7 +159,9 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       loading,
       login,
       logout,
-      register
+      register,
+      loginWithGoogle,
+      completeGoogleSignIn,
     }}>
       {children}
     </AuthContext.Provider>

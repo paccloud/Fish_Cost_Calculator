@@ -40,6 +40,20 @@ async function postFirebaseJson(url, body, fetchFn) {
   return parseFirebaseResponse(response, 'Firebase authentication failed');
 }
 
+async function postFirebaseForm(url, params, fetchFn) {
+  if (typeof fetchFn !== 'function') {
+    throw new Error('fetch is required for Firebase authentication');
+  }
+
+  const response = await fetchFn(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params).toString(),
+  });
+
+  return parseFirebaseResponse(response, 'Firebase token refresh failed');
+}
+
 function normalizeAuthResponse(response, now) {
   const expiresAt = response.expiresAt !== undefined
     ? Number(response.expiresAt)
@@ -73,7 +87,7 @@ function clearPersistedSession(storage = globalThis.localStorage) {
 async function refreshFirebaseSession(session, options) {
   const apiKey = getConfiguredApiKey(options.apiKey);
   const fetchFn = options.fetch || globalThis.fetch;
-  const refreshed = await postFirebaseJson(
+  const refreshed = await postFirebaseForm(
     `${SECURE_TOKEN_BASE_URL}/token?key=${encodeURIComponent(apiKey)}`,
     {
       grant_type: 'refresh_token',
@@ -178,5 +192,42 @@ export async function signUpWithEmailPassword(email, password, options = {}) {
     fetchFn
   );
 
+  return createFirebaseSession(response, options);
+}
+
+export async function sendEmailVerification(idToken, options = {}) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  await postFirebaseJson(
+    `${IDENTITY_TOOLKIT_BASE_URL}/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`,
+    { requestType: 'VERIFY_EMAIL', idToken },
+    fetchFn
+  );
+}
+
+export async function createGoogleAuthUri(continueUri, options = {}) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  const response = await postFirebaseJson(
+    `${IDENTITY_TOOLKIT_BASE_URL}/accounts:createAuthUri?key=${encodeURIComponent(apiKey)}`,
+    { providerId: 'google.com', continueUri },
+    fetchFn
+  );
+  return { authUri: response.authUri, sessionId: response.sessionId };
+}
+
+export async function signInWithGoogleCallback(requestUri, sessionId, options = {}) {
+  const apiKey = getConfiguredApiKey(options.apiKey);
+  const fetchFn = options.fetch || globalThis.fetch;
+  const response = await postFirebaseJson(
+    `${IDENTITY_TOOLKIT_BASE_URL}/accounts:signInWithIdp?key=${encodeURIComponent(apiKey)}`,
+    {
+      requestUri,
+      sessionId,
+      returnIdpCredential: true,
+      returnSecureToken: true,
+    },
+    fetchFn
+  );
   return createFirebaseSession(response, options);
 }
