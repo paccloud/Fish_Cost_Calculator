@@ -129,8 +129,8 @@ describe('Firebase ID token verification', () => {
         exp: now + 3600,
       },
     });
-    // Replace the signature with one signed by a different key
-    const tamperedToken = createRs256Token({
+    // Retain validToken's header+payload; replace only the signature with one from otherKey
+    const otherSignedToken = createRs256Token({
       kid: 'firebase-test-key',
       privateKey: otherKey,
       payload: {
@@ -140,7 +140,8 @@ describe('Firebase ID token verification', () => {
         iat: now,
         exp: now + 3600,
       },
-    }).split('.').slice(0, 2).join('.') + '.' + validToken.split('.')[2];
+    });
+    const tamperedToken = validToken.split('.').slice(0, 2).join('.') + '.' + otherSignedToken.split('.')[2];
 
     const fetch = vi.fn(async () => ({
       ok: true,
