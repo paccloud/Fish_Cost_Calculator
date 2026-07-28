@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { apiUrl } from '../config/api';
 import {
   clearFirebaseSession,
   createGoogleAuthUri,
@@ -102,15 +103,16 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       setToken(null);
       setUser(firebaseUser);
     } else {
-      const response = await globalThis.fetch('/api/login', {
+      const response = await globalThis.fetch(apiUrl('/api/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: identifier, password }),
       });
-      const data = await response.json();
       if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Invalid credentials.');
       }
+      const data = await response.json();
       globalThis.localStorage?.setItem('token', data.token);
       setToken(data.token);
       setUser({ username: data.username, authProvider: 'password' });
