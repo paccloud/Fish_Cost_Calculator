@@ -132,6 +132,12 @@ export function createFirebaseSession(response, options = {}) {
     getIdToken: async () => {
       const now = (options.now || defaultNow)();
       if (shouldRefresh(session, now)) {
+        if (!session.refreshToken) {
+          clearPersistedSession(options.storage);
+          const err = new Error('Session expired. Please sign in again.');
+          options.onAuthFailure?.(err);
+          throw err;
+        }
         if (!pendingRefresh) {
           pendingRefresh = refreshFirebaseSession(session, options)
             .then((refreshed) => {

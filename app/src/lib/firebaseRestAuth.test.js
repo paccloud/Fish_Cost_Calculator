@@ -193,17 +193,13 @@ describe('Firebase REST auth', () => {
     await expect(user.getIdToken()).resolves.toBe('stored-id-token');
   });
 
-  it('clears persisted session and throws when a reloaded session needs refresh but has no refresh token', async () => {
+  it('clears persisted session and throws locally when a reloaded session needs refresh but has no refresh token', async () => {
     const store = installLocalStorage();
 
     let currentTime = 1_700_000_000_000;
     const now = () => currentTime;
-
-    const fetch = vi.fn(async () => fakeResponse({
-      ok: false,
-      status: 400,
-      body: { error: { message: 'INVALID_REFRESH_TOKEN' } },
-    }));
+    const fetch = vi.fn();
+    const onAuthFailure = vi.fn();
 
     store.set(FIREBASE_AUTH_SESSION_KEY, JSON.stringify({
       idToken: 'stored-id-token',
@@ -213,15 +209,17 @@ describe('Firebase REST auth', () => {
       expiresAt: 1_700_003_600_000,
     }));
 
-    const user = loadFirebaseSession({ apiKey: 'firebase-api-key', fetch, now });
+    const user = loadFirebaseSession({ apiKey: 'firebase-api-key', fetch, now, onAuthFailure });
     expect(user).not.toBeNull();
     await expect(user.getIdToken()).resolves.toBe('stored-id-token');
     expect(localStorage.getItem(FIREBASE_AUTH_SESSION_KEY)).not.toBeNull();
 
-    // Fast-forward into the 60-second refresh margin so getIdToken triggers a refresh
+    // Fast-forward into the 60-second refresh margin so getIdToken triggers a refresh check
     currentTime = 1_700_003_570_000;
 
-    await expect(user.getIdToken()).rejects.toThrow('INVALID_REFRESH_TOKEN');
+    await expect(user.getIdToken()).rejects.toThrow('Session expired');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onAuthFailure).toHaveBeenCalledWith(expect.any(Error));
     expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
   });
 });
