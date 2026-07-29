@@ -55,17 +55,44 @@ CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 
 -- Migration for existing databases (run in order if upgrading)
--- Step 1: Add auth columns
--- ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE;
+-- New databases created from this script already include all columns and constraints.
+--
+-- Step 1: Add auth columns and firebase_uid uniqueness
+-- (Safe to rerun; IF NOT EXISTS and the DO block skip already-applied changes.)
+--
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
 -- ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
 -- ALTER TABLE user_data ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT FALSE;
 --
+-- Add UNIQUE constraint on firebase_uid as a named constraint (safe to rerun):
+-- DO $$ BEGIN
+--   IF NOT EXISTS (
+--     SELECT 1 FROM pg_constraint
+--     WHERE conname = 'users_firebase_uid_unique' AND conrelid = 'users'::regclass
+--   ) THEN
+--     ALTER TABLE users ADD CONSTRAINT users_firebase_uid_unique UNIQUE (firebase_uid);
+--   END IF;
+-- END $$;
+--
 -- Step 2: Identify and resolve duplicate non-null emails before Step 3.
+-- 1. Export a backup first: pg_dump -t users <connection-string> > users_backup.sql
+-- 2. Review duplicates:
 -- SELECT email, COUNT(*) AS cnt FROM users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1;
--- (Merge or null conflicting rows until the query above returns zero rows.)
+-- 3. For each duplicate group, determine the canonical account (check firebase_uid or oldest id),
+--    reassign any calculations/data rows to the canonical user_id, then delete or null the
+--    email on stale rows.
+-- 4. Rerun the query above and confirm zero rows before continuing.
 --
 -- Step 3: Enforce email uniqueness (run only after Step 2 returns zero rows)
--- ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+-- Safe to rerun: the DO block skips if the constraint already exists.
+-- DO $$ BEGIN
+--   IF NOT EXISTS (
+--     SELECT 1 FROM pg_constraint
+--     WHERE conname = 'users_email_unique' AND conrelid = 'users'::regclass
+--   ) THEN
+--     ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+--   END IF;
+-- END $$;
