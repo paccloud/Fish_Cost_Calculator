@@ -62,6 +62,29 @@ describe('AuthProvider session rehydration', () => {
     });
   });
 
+  it('passes onAuthFailure to loadFirebaseSession for rehydrated sessions', () => {
+    let capturedOptions;
+    const fakeUser = { uid: 'u1', username: 'fishbuyer', authProvider: 'firebase' };
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession: vi.fn(),
+        loadFirebaseSession: vi.fn((options) => {
+          capturedOptions = options;
+          return fakeUser;
+        }),
+        signInWithEmailPassword: vi.fn(),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    expect(authState.user).toBe(fakeUser);
+    expect(typeof capturedOptions?.onAuthFailure).toBe('function');
+  });
+
   it('propagates Firebase register errors to the caller', async () => {
     const authState = renderAuthState({
       authApi: {

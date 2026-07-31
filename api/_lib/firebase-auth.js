@@ -201,7 +201,7 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
 
     if (firebaseUser.email && firebaseUser.emailVerified) {
       result = await query(
-        'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
+        'SELECT id, username, email, firebase_uid FROM users WHERE LOWER(email) = LOWER($1)',
         [firebaseUser.email]
       );
 

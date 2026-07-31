@@ -73,8 +73,8 @@ function loadLegacyJwtSession(storage = globalThis.localStorage) {
   };
 }
 
-function loadInitialAuthSession(authApi = defaultAuthApi) {
-  const firebaseUser = authApi.loadFirebaseSession();
+function loadInitialAuthSession(authApi = defaultAuthApi, options = {}) {
+  const firebaseUser = authApi.loadFirebaseSession(options);
   if (firebaseUser) {
     return { user: firebaseUser, token: null };
   }
@@ -83,7 +83,15 @@ function loadInitialAuthSession(authApi = defaultAuthApi) {
 }
 
 export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
-  const [initialSession] = useState(() => loadInitialAuthSession(authApi));
+  // Use a ref so the session closure (created in useState initializer) can call the
+  // real auth-failure handler even though setUser isn't available at creation time.
+  const onAuthFailureRef = React.useRef(null);
+
+  const [initialSession] = useState(() =>
+    loadInitialAuthSession(authApi, {
+      onAuthFailure: (err) => onAuthFailureRef.current?.(err),
+    })
+  );
   const [user, setUser] = useState(initialSession.user);
   const [token, setToken] = useState(initialSession.token);
   const [loading] = useState(false);
@@ -92,6 +100,9 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     setUser(null);
     setToken(null);
   };
+
+  // Wire the real handler on every render so getIdToken failures clear the UI state.
+  onAuthFailureRef.current = handleAuthFailure;
 
   const login = async (identifier, password) => {
     const isEmail = identifier.includes('@');
