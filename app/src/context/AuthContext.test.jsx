@@ -62,17 +62,18 @@ describe('AuthProvider session rehydration', () => {
     });
   });
 
-  it('passes onAuthFailure to loadFirebaseSession for rehydrated sessions', () => {
-    let capturedOptions;
-    const fakeUser = { uid: 'u1', username: 'fishbuyer', authProvider: 'firebase' };
+  it('rehydrates Firebase sessions and exposes the user in context', () => {
+    // onAuthFailure is now wired post-mount via user.setOnAuthFailure() in useLayoutEffect
+    // (not passed through loadFirebaseSession options at init time). This SSR-only test
+    // verifies the session loads correctly; the setOnAuthFailure wiring is covered by
+    // DOM-environment integration tests.
+    const setOnAuthFailure = vi.fn();
+    const fakeUser = { uid: 'u1', username: 'fishbuyer', authProvider: 'firebase', setOnAuthFailure };
 
     const authState = renderAuthState({
       authApi: {
         clearFirebaseSession: vi.fn(),
-        loadFirebaseSession: vi.fn((options) => {
-          capturedOptions = options;
-          return fakeUser;
-        }),
+        loadFirebaseSession: vi.fn(() => fakeUser),
         signInWithEmailPassword: vi.fn(),
         signUpWithEmailPassword: vi.fn(),
         sendEmailVerification: vi.fn(),
@@ -82,7 +83,6 @@ describe('AuthProvider session rehydration', () => {
     });
 
     expect(authState.user).toBe(fakeUser);
-    expect(typeof capturedOptions?.onAuthFailure).toBe('function');
   });
 
   it('propagates Firebase register errors to the caller', async () => {

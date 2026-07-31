@@ -122,6 +122,7 @@ export function createFirebaseSession(response, options = {}) {
   persistSession(session, options.storage);
 
   let pendingRefresh = null;
+  let onAuthFailureHandler = options.onAuthFailure || null;
 
   return {
     uid: session.localId,
@@ -129,13 +130,14 @@ export function createFirebaseSession(response, options = {}) {
     email: session.email,
     emailVerified: session.emailVerified,
     authProvider: 'firebase',
+    setOnAuthFailure: (fn) => { onAuthFailureHandler = fn; },
     getIdToken: async () => {
       const now = (options.now || defaultNow)();
       if (shouldRefresh(session, now)) {
         if (!session.refreshToken) {
           clearPersistedSession(options.storage);
           const err = new Error('Session expired. Please sign in again.');
-          options.onAuthFailure?.(err);
+          onAuthFailureHandler?.(err);
           throw err;
         }
         if (!pendingRefresh) {
@@ -146,7 +148,7 @@ export function createFirebaseSession(response, options = {}) {
             })
             .catch((err) => {
               clearPersistedSession(options.storage);
-              options.onAuthFailure?.(err);
+              onAuthFailureHandler?.(err);
               throw err;
             })
             .finally(() => {

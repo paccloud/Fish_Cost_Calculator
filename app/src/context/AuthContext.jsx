@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useCallback, useLayoutEffect } from 'react';
 import { apiUrl } from '../config/api';
 import {
   clearFirebaseSession,
@@ -83,26 +83,24 @@ function loadInitialAuthSession(authApi = defaultAuthApi, options = {}) {
 }
 
 export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
-  // Use a ref so the session closure (created in useState initializer) can call the
-  // real auth-failure handler even though setUser isn't available at creation time.
-  const onAuthFailureRef = React.useRef(null);
-
   const [initialSession] = useState(() =>
-    loadInitialAuthSession(authApi, {
-      onAuthFailure: (err) => onAuthFailureRef.current?.(err),
-    })
+    loadInitialAuthSession(authApi, {})
   );
   const [user, setUser] = useState(initialSession.user);
   const [token, setToken] = useState(initialSession.token);
   const [loading] = useState(false);
 
-  const handleAuthFailure = () => {
+  const handleAuthFailure = useCallback(() => {
     setUser(null);
     setToken(null);
-  };
+  }, []);
 
-  // Wire the real handler on every render so getIdToken failures clear the UI state.
-  onAuthFailureRef.current = handleAuthFailure;
+  // Wire the handler after mount so the initial Firebase session calls handleAuthFailure
+  // when getIdToken() fails (e.g. token refresh error). user?.setOnAuthFailure is exposed
+  // by createFirebaseSession specifically for this post-mount wiring.
+  useLayoutEffect(() => {
+    user?.setOnAuthFailure?.(handleAuthFailure);
+  }, [user, handleAuthFailure]);
 
   const login = async (identifier, password) => {
     const isEmail = identifier.includes('@');
