@@ -23,6 +23,8 @@ const FIREBASE_ERROR_MESSAGES = {
   WEAK_PASSWORD: 'Password must be at least 6 characters.',
   USER_DISABLED: 'This account has been disabled.',
   TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts. Please try again later.',
+  TOKEN_EXPIRED: 'Session expired. Please sign in again.',
+  USER_NOT_FOUND: 'Invalid email or password.',
 };
 
 async function parseFirebaseResponse(response, fallbackMessage) {
@@ -32,7 +34,7 @@ async function parseFirebaseResponse(response, fallbackMessage) {
   }
 
   const rawCode = body?.error?.message || '';
-  const message = FIREBASE_ERROR_MESSAGES[rawCode] || rawCode || fallbackMessage;
+  const message = FIREBASE_ERROR_MESSAGES[rawCode] || fallbackMessage;
   throw new Error(message);
 }
 

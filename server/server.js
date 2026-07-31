@@ -83,7 +83,14 @@ const sanitizeCsvValue = (value) => {
 
 const formatCsvDate = (value) => {
   if (value === null || value === undefined || value === '') return '';
-  const date = new Date(value);
+  // SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" without a timezone marker.
+  // Node.js parses bare datetime strings as local time; append UTC suffix so the
+  // export always reflects the stored UTC value regardless of server timezone.
+  const normalized =
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value)
+      ? value.replace(' ', 'T') + 'Z'
+      : value;
+  const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? '' : date.toISOString();
 };
 

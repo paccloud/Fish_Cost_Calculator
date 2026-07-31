@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useLayoutEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useLayoutEffect, useEffect } from 'react';
 import { apiUrl } from '../config/api';
 import {
   clearFirebaseSession,
@@ -101,6 +101,29 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   useLayoutEffect(() => {
     user?.setOnAuthFailure?.(handleAuthFailure);
   }, [user, handleAuthFailure]);
+
+  // Schedule expiry cleanup for rehydrated legacy JWT sessions. Without this,
+  // a token that expires while the tab is open keeps the UI showing the user
+  // as logged in while all protected requests return 401.
+  useEffect(() => {
+    if (!token) return;
+    const [, encodedPayload] = token.split('.');
+    const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
+    if (!payload?.exp) return;
+    const expiresInMs = payload.exp * 1000 - Date.now();
+    if (expiresInMs <= 0) {
+      globalThis.localStorage?.removeItem('token');
+      setUser(null);
+      setToken(null);
+      return;
+    }
+    const timerId = setTimeout(() => {
+      globalThis.localStorage?.removeItem('token');
+      setUser(null);
+      setToken(null);
+    }, expiresInMs);
+    return () => clearTimeout(timerId);
+  }, [token]);
 
   const login = async (identifier, password) => {
     const isEmail = identifier.includes('@');

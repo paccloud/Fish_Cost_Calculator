@@ -165,7 +165,7 @@ describe('Firebase REST auth', () => {
     });
 
     expect(localStorage.getItem(FIREBASE_AUTH_SESSION_KEY)).not.toBeNull();
-    await expect(user.getIdToken()).rejects.toThrow('TOKEN_EXPIRED');
+    await expect(user.getIdToken()).rejects.toThrow('Session expired. Please sign in again.');
     expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
     expect(onAuthFailure).toHaveBeenCalledWith(expect.any(Error));
   });
