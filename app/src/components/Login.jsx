@@ -45,12 +45,12 @@ const Login = () => {
         }
       }
     } catch (err) {
-      if (err?.message) {
-        setError(err.message);
-      } else if (isRegister) {
-        setError('Registration failed. Email may already be in use.');
+      if (isRegister) {
+        // Surface the specific message for registration (password strength, etc.)
+        setError(err?.message || 'Registration failed. Please try again.');
       } else {
-        setError('Invalid credentials.');
+        // Always show a generic message for sign-in to prevent email enumeration
+        setError('Invalid email or password.');
       }
     }
   };

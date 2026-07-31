@@ -132,12 +132,16 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   };
 
   const register = async (email, password) => {
+    // storage: null prevents persisting the unverified session to localStorage.
+    // Without this, a page reload during the verification-pending state would
+    // rehydrate the session and present the user as signed in while the backend
+    // rejects all protected requests (emailVerified is still false).
     const firebaseUser = await authApi.signUpWithEmailPassword(email, password, {
       onAuthFailure: handleAuthFailure,
+      storage: null,
     });
     const idToken = await firebaseUser.getIdToken();
     await authApi.sendEmailVerification(idToken);
-    authApi.clearFirebaseSession();
     return { verificationSent: true };
   };
 

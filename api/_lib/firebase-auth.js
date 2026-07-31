@@ -65,6 +65,9 @@ async function fetchFirebaseCerts(fetchFn = globalThis.fetch) {
     return certs;
   } catch (err) {
     if (cachedCerts) {
+      // Serve stale certs and back off for 30 s to avoid hammering Google's endpoint
+      // on sustained outages (otherwise every request re-triggers the 5 s timeout).
+      cachedCertsExpiresAt = Date.now() + 30_000;
       return cachedCerts;
     }
     throw err;
