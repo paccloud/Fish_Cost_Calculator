@@ -303,7 +303,7 @@ describe('Firebase API auth', () => {
       authProvider: 'firebase',
     });
     expect(query).toHaveBeenCalledWith(
-      'SELECT id, username, email, firebase_uid FROM users WHERE LOWER(email) = LOWER($1)',
+      'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
       ['fishbuyer@example.com']
     );
     expect(query).toHaveBeenCalledWith(
