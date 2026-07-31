@@ -111,17 +111,14 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
     if (!payload?.exp) return;
     const expiresInMs = payload.exp * 1000 - Date.now();
-    if (expiresInMs <= 0) {
-      globalThis.localStorage?.removeItem('token');
-      setUser(null);
-      setToken(null);
-      return;
-    }
+    // Use Math.max(0, ...) so an already-expired token (race between useState
+    // init and effect run) is handled via setTimeout rather than a direct
+    // setState call, which would trigger cascading renders.
     const timerId = setTimeout(() => {
       globalThis.localStorage?.removeItem('token');
       setUser(null);
       setToken(null);
-    }, expiresInMs);
+    }, Math.max(0, expiresInMs));
     return () => clearTimeout(timerId);
   }, [token]);
 
