@@ -203,6 +203,11 @@ export function loadFirebaseSession(options = {}) {
       return null;
     }
 
+    if (!session.emailVerified) {
+      clearPersistedSession(storage);
+      return null;
+    }
+
     const now = (options.now || defaultNow)();
     if (!session.refreshToken && shouldRefresh(session, now)) {
       clearPersistedSession(storage);

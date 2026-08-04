@@ -215,6 +215,7 @@ describe('Firebase REST auth', () => {
       localId: 'stored-user',
       email: 'stored@example.com',
       displayName: 'Stored User',
+      emailVerified: true,
       expiresAt: 1_700_003_600_000,
     }));
 
@@ -232,6 +233,44 @@ describe('Firebase REST auth', () => {
     await expect(user.getIdToken()).resolves.toBe('stored-id-token');
   });
 
+  it('rejects and clears a persisted session when emailVerified is false', () => {
+    localStorage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify({
+      idToken: 'unverified-id-token',
+      localId: 'unverified-user',
+      email: 'unverified@example.com',
+      displayName: 'Unverified User',
+      emailVerified: false,
+      expiresAt: 1_700_003_600_000,
+    }));
+
+    const user = loadFirebaseSession({
+      apiKey: 'firebase-api-key',
+      now: () => 1_700_000_000_000,
+    });
+
+    expect(user).toBeNull();
+    expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
+  });
+
+  it('rejects and clears a persisted session when emailVerified is missing (pre-migration session)', () => {
+    localStorage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify({
+      idToken: 'old-id-token',
+      localId: 'old-user',
+      email: 'old@example.com',
+      displayName: 'Old User',
+      expiresAt: 1_700_003_600_000,
+      // no emailVerified field — old session format
+    }));
+
+    const user = loadFirebaseSession({
+      apiKey: 'firebase-api-key',
+      now: () => 1_700_000_000_000,
+    });
+
+    expect(user).toBeNull();
+    expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
+  });
+
   it('clears persisted session and throws locally when a reloaded session needs refresh but has no refresh token', async () => {
     const store = installLocalStorage();
 
@@ -245,6 +284,7 @@ describe('Firebase REST auth', () => {
       localId: 'stored-user',
       email: 'stored@example.com',
       displayName: 'Stored User',
+      emailVerified: true,
       expiresAt: 1_700_003_600_000,
     }));
 
