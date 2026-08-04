@@ -187,8 +187,10 @@ export function createFirebaseSession(response, options = {}) {
               }
             })
             .catch((err) => {
-              clearPersistedSession(options.storage);
-              onAuthFailureHandler?.(err);
+              if (_sessionGeneration === createdGeneration) {
+                clearPersistedSession(options.storage);
+                onAuthFailureHandler?.(err);
+              }
               throw err;
             })
             .finally(() => {
