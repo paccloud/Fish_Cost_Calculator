@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useLayoutEffect, useEffect } from 'react';
 import { apiUrl } from '../config/api';
+import { getAuthHeaders as getAuthHeadersFn } from '../lib/authHeaders';
 import {
   clearFirebaseSession,
   createGoogleAuthUri,
@@ -94,6 +95,19 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     setUser(null);
     setToken(null);
   }, []);
+
+  // Bound version of getAuthHeaders that closes over the current user.
+  // Accepts an optional content-type string or a headers object as the first
+  // argument so callers can do getAuthHeaders() or getAuthHeaders('application/json').
+  const getAuthHeaders = useCallback(async (contentTypeOrBase = null) => {
+    let base = {};
+    if (typeof contentTypeOrBase === 'string') {
+      base = { 'Content-Type': contentTypeOrBase };
+    } else if (contentTypeOrBase && typeof contentTypeOrBase === 'object') {
+      base = contentTypeOrBase;
+    }
+    return getAuthHeadersFn(user, base);
+  }, [user]);
 
   // Wire the handler after mount so the initial Firebase session calls handleAuthFailure
   // when getIdToken() fails (e.g. token refresh error). user?.setOnAuthFailure is exposed
@@ -201,6 +215,7 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       register,
       loginWithGoogle,
       completeGoogleSignIn,
+      getAuthHeaders,
     }}>
       {children}
     </AuthContext.Provider>
