@@ -299,6 +299,30 @@ describe('Firebase API auth', () => {
     );
   });
 
+  it('returns the UID-linked user when email sync conflicts with another row (23505)', async () => {
+    const localUser = { id: 42, username: 'fishbuyer@example.com', email: 'old@example.com' };
+    const emailConflict = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [localUser] }) // UID match
+      .mockRejectedValueOnce(emailConflict);         // UPDATE email → conflict
+
+    const user = await verifyFirebaseAuthSession({
+      headers: { authorization: 'Bearer firebase-id-token' },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'taken@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: null,
+      })),
+    });
+
+    // Auth succeeds for the UID owner; email sync is skipped without breaking auth.
+    expect(user).toMatchObject({ id: 42, email: 'old@example.com', authProvider: 'firebase' });
+  });
+
   it('links an existing local user by verified Firebase email', async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [] })

@@ -200,11 +200,21 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       // If the Firebase user has changed their verified email, sync it to the local record.
       // Uses IS DISTINCT FROM so the UPDATE is a no-op when another request already synced.
       if (firebaseUser.emailVerified && firebaseUser.email && localUser.email !== firebaseUser.email) {
-        const updated = await query(
-          'UPDATE users SET email = $1 WHERE id = $2 AND email IS DISTINCT FROM $1 RETURNING id, username, email',
-          [firebaseUser.email, localUser.id]
-        );
-        return updated.rows.length > 0 ? updated.rows[0] : localUser;
+        try {
+          const updated = await query(
+            'UPDATE users SET email = $1 WHERE id = $2 AND email IS DISTINCT FROM $1 RETURNING id, username, email',
+            [firebaseUser.email, localUser.id]
+          );
+          return updated.rows.length > 0 ? updated.rows[0] : localUser;
+        } catch (syncErr) {
+          // Email conflicts with another row's UNIQUE constraint — the new email is
+          // already owned by someone else. Auth still succeeds for this UID; skip
+          // the sync rather than breaking the authenticated session.
+          if (syncErr.code === '23505' || syncErr.code === 'SQLITE_CONSTRAINT') {
+            return localUser;
+          }
+          throw syncErr;
+        }
       }
       return localUser;
     }
