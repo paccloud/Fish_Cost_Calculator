@@ -81,10 +81,17 @@ CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 -- 1. Export a backup first: pg_dump -t users <connection-string> > users_backup.sql
 -- 2. Review duplicates:
 -- SELECT email, COUNT(*) AS cnt FROM users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1;
--- 3. For each duplicate group, determine the canonical account (check firebase_uid or oldest id),
---    reassign any calculations, user_data, and contributors rows to the canonical user_id
---    (contributors.user_id has ON DELETE CASCADE — delete cascades silently, reassign first),
---    then delete or null the email on stale rows.
+-- 3. For each duplicate group, determine the canonical account (check firebase_uid or oldest id):
+--    - Reassign calculations and user_data rows to the canonical user_id.
+--    - For contributors (UNIQUE per user): if only the stale user has a profile, reassign it
+--      (UPDATE contributors SET user_id = <canonical> WHERE user_id = <stale>).
+--      If both users have a contributor profile, merge fields from the stale profile into the
+--      canonical one, then DELETE FROM contributors WHERE user_id = <stale> before deleting the
+--      stale user. Attempting to reassign when the canonical already has a row fails with a
+--      unique-constraint violation — merge and delete first.
+--    - contributors.user_id has ON DELETE CASCADE. Deleting the stale user before removing their
+--      contributor row silently deletes that profile. Handle the contributor row explicitly first.
+--    - Then delete or null the email on stale user rows.
 -- 4. Rerun the query above and confirm zero rows before continuing.
 --
 -- Step 3: Enforce email uniqueness (run only after Step 2 returns zero rows)

@@ -155,7 +155,11 @@ HAVING COUNT(*) > 1;
 Before resolving duplicates:
 1. **Export a backup**: `pg_dump -t users <connection-string> > users_backup.sql`
 2. **Map each duplicate to its canonical account** — determine which row owns the Firebase identity (check `firebase_uid` or oldest `id`) and which rows are stale.
-3. For each duplicate group, reassign any calculations, user_data, **and contributors rows** to the canonical user ID (or delete the stale contributor profile if that user has no contributor record worth keeping), then either delete or null the `email` on the stale row(s). **Note:** `contributors.user_id` has `ON DELETE CASCADE`, so deleting a stale user row will silently delete their contributor profile — reassign first if the data matters.
+3. For each duplicate group:
+   - Reassign `calculations` and `user_data` rows to the canonical user ID.
+   - Handle `contributors` (unique per user) carefully: if **only the stale user** has a contributor profile, reassign it (`UPDATE contributors SET user_id = <canonical_id> WHERE user_id = <stale_id>`). If **both users** have contributor profiles, choose the canonical profile, merge any non-null fields from the stale profile into it, then delete the stale contributor row (`DELETE FROM contributors WHERE user_id = <stale_id>`) before deleting the stale user.
+   - Delete or null the `email` on the stale user row, or delete the stale user outright.
+   - **Note:** `contributors.user_id` is `UNIQUE`. Attempting to reassign the stale contributor row when the canonical user already has one will fail with a unique-constraint violation — merge and delete first. `ON DELETE CASCADE` means deleting a stale user silently deletes their contributor profile; always handle the contributor row explicitly before deleting the user.
 4. **Validate**: rerun the Step 2 query and confirm zero duplicate non-null emails before continuing.
 
 Firebase identity linking queries by verified email, so all non-null emails in the table must be unique.
