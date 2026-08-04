@@ -426,7 +426,8 @@ describe('Firebase API auth', () => {
   });
 
   it('retries with a UID-based username when INSERT fails 23505 due to an email-username collision', async () => {
-    const fallbackUser = { id: 88, username: 'firebase_firebase-us', email: 'fishbuyer@example.com' };
+    // Full UID is used to avoid collisions between UIDs sharing a prefix
+    const fallbackUser = { id: 88, username: 'firebase_firebase-user-123', email: 'fishbuyer@example.com' };
     const usernameConflict = Object.assign(new Error('duplicate key'), { code: '23505' });
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [] })         // firebase_uid lookup: not found
@@ -450,7 +451,7 @@ describe('Firebase API auth', () => {
 
     expect(user).toEqual({
       id: 88,
-      username: 'firebase_firebase-us',
+      username: 'firebase_firebase-user-123',
       email: 'fishbuyer@example.com',
       authProvider: 'firebase',
     });

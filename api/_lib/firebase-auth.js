@@ -150,7 +150,8 @@ export async function verifyFirebaseIdToken(token, options = {}) {
 }
 
 function uidFallbackUsername(firebaseUser) {
-  return `firebase_${String(firebaseUser.uid).slice(0, 12)}`;
+  // Use the full UID to eliminate any collision risk between UIDs sharing a prefix.
+  return `firebase_${String(firebaseUser.uid)}`;
 }
 
 function usernameFromFirebaseUser(firebaseUser) {
