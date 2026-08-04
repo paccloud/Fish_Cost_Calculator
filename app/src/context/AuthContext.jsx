@@ -143,37 +143,65 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     return () => clearTimeout(timerId);
   }, [token]);
 
+  // Firebase error codes that should NOT fall back to legacy login:
+  // the user definitely exists in Firebase but is blocked or rate-limited.
+  const FIREBASE_NO_LEGACY_FALLBACK = new Set(['USER_DISABLED', 'TOO_MANY_ATTEMPTS_TRY_LATER']);
+
   const login = async (identifier, password) => {
     const isEmail = identifier.includes('@');
     if (isEmail) {
-      const firebaseUser = await authApi.signInWithEmailPassword(identifier, password, {
-        onAuthFailure: handleAuthFailure,
-      });
-      if (!firebaseUser.emailVerified) {
-        authApi.clearFirebaseSession();
-        throw new Error('Please verify your email before signing in.');
+      let firebaseUser = null;
+      let firebaseErr = null;
+      try {
+        firebaseUser = await authApi.signInWithEmailPassword(identifier, password, {
+          onAuthFailure: handleAuthFailure,
+        });
+      } catch (err) {
+        if (FIREBASE_NO_LEGACY_FALLBACK.has(err.firebaseCode)) throw err;
+        // Firebase doesn't recognize this email. It may be a legacy username
+        // that contains '@'. Try legacy login before surfacing the Firebase error.
+        firebaseErr = err;
       }
-      globalThis.localStorage?.removeItem('token');
-      setToken(null);
-      setUser(firebaseUser);
-    } else {
-      const response = await globalThis.fetch(apiUrl('/api/login'), {
+      if (firebaseUser) {
+        if (!firebaseUser.emailVerified) {
+          authApi.clearFirebaseSession();
+          throw new Error('Please verify your email before signing in.');
+        }
+        globalThis.localStorage?.removeItem('token');
+        setToken(null);
+        setUser(firebaseUser);
+        return true;
+      }
+      // Firebase auth failed — attempt legacy login as a fallback for @-shaped usernames.
+      const legacyRes = await globalThis.fetch(apiUrl('/api/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: identifier, password }),
       });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Invalid credentials.');
-      }
-      const data = await response.json();
-      // Clear any persisted Firebase session so a page reload does not restore
-      // the Firebase account on top of the newly-signed-in legacy user.
+      if (!legacyRes.ok) throw firebaseErr; // both paths failed; surface the Firebase error
+      const legacyData = await legacyRes.json();
       authApi.clearFirebaseSession();
-      globalThis.localStorage?.setItem('token', data.token);
-      setToken(data.token);
-      setUser({ username: data.username, authProvider: 'password' });
+      globalThis.localStorage?.setItem('token', legacyData.token);
+      setToken(legacyData.token);
+      setUser({ username: legacyData.username, authProvider: 'password' });
+      return true;
     }
+    const response = await globalThis.fetch(apiUrl('/api/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: identifier, password }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Invalid credentials.');
+    }
+    const data = await response.json();
+    // Clear any persisted Firebase session so a page reload does not restore
+    // the Firebase account on top of the newly-signed-in legacy user.
+    authApi.clearFirebaseSession();
+    globalThis.localStorage?.setItem('token', data.token);
+    setToken(data.token);
+    setUser({ username: data.username, authProvider: 'password' });
     return true;
   };
 

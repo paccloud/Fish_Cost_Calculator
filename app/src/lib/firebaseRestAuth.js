@@ -39,7 +39,11 @@ async function parseFirebaseResponse(response, fallbackMessage) {
   const rawMessage = body?.error?.message || '';
   const rawCode = rawMessage.split(' :')[0].trim();
   const message = FIREBASE_ERROR_MESSAGES[rawCode] || fallbackMessage;
-  throw new Error(message);
+  const err = new Error(message);
+  // Attach the raw Firebase code so callers can branch on specific failure types
+  // (e.g. USER_NOT_FOUND → fall back to legacy login for @-shaped usernames).
+  if (rawCode) err.firebaseCode = rawCode;
+  throw err;
 }
 
 async function postFirebaseJson(url, body, fetchFn) {

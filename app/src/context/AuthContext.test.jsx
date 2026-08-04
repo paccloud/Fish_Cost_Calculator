@@ -122,4 +122,73 @@ describe('AuthProvider session rehydration', () => {
 
     await expect(authState.register('fishbuyer@example.com', 'short')).rejects.toThrow('WEAK_PASSWORD');
   });
+
+  it('falls back to legacy login when Firebase does not recognize an @-shaped username', async () => {
+    const clearFirebaseSession = vi.fn();
+    const notFoundErr = Object.assign(new Error('Invalid email or password.'), { firebaseCode: 'USER_NOT_FOUND' });
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ token: 'legacy-jwt', username: 'fish@legacy.com' }),
+    }));
+    const storage = createStorage();
+    vi.stubGlobal('fetch', mockFetch);
+    vi.stubGlobal('localStorage', storage);
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession,
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(async () => { throw notFoundErr; }),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    const result = await authState.login('fish@legacy.com', 'pass');
+
+    expect(result).toBe(true);
+    expect(clearFirebaseSession).toHaveBeenCalled();
+    // Verify the legacy JWT was stored — state updates don't propagate in SSR context
+    expect(storage.setItem).toHaveBeenCalledWith('token', 'legacy-jwt');
+  });
+
+  it('does not fall back to legacy login when Firebase returns USER_DISABLED', async () => {
+    const disabledErr = Object.assign(new Error('This account has been disabled.'), { firebaseCode: 'USER_DISABLED' });
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession: vi.fn(),
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(async () => { throw disabledErr; }),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    await expect(authState.login('disabled@example.com', 'pass')).rejects.toThrow('This account has been disabled.');
+  });
+
+  it('re-throws the Firebase error when both Firebase and legacy login fail', async () => {
+    const notFoundErr = Object.assign(new Error('Invalid email or password.'), { firebaseCode: 'INVALID_LOGIN_CREDENTIALS' });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })));
+    vi.stubGlobal('localStorage', createStorage());
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession: vi.fn(),
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(async () => { throw notFoundErr; }),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    await expect(authState.login('buyer@example.com', 'wrongpass')).rejects.toThrow('Invalid email or password.');
+  });
 });
