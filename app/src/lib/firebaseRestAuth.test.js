@@ -131,6 +131,17 @@ describe('Firebase REST auth', () => {
     });
   });
 
+  it('maps WEAK_PASSWORD detail suffix to a friendly message', async () => {
+    const fetch = vi.fn(async () => fakeResponse({
+      ok: false,
+      status: 400,
+      body: { error: { message: 'WEAK_PASSWORD : Password should be at least 6 characters' } },
+    }));
+    await expect(
+      signUpWithEmailPassword('x@example.com', 'abc', { apiKey: 'firebase-api-key', fetch })
+    ).rejects.toThrow('Password must be at least 6 characters.');
+  });
+
   it('refreshes an expired Firebase ID token before returning it', async () => {
     const store = installLocalStorage();
 
@@ -267,7 +278,7 @@ describe('Firebase REST auth', () => {
       'https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=firebase-api-key',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ providerId: 'google.com', continueUri: 'https://example.com/login' }),
+        body: JSON.stringify({ identifier: 'oauth@placeholder.invalid', providerId: 'google.com', continueUri: 'https://example.com/login' }),
       })
     );
     expect(result).toEqual({ authUri: 'https://accounts.google.com/o/oauth2/auth?...', sessionId: 'session-abc' });

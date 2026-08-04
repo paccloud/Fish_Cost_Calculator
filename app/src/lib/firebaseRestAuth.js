@@ -33,7 +33,11 @@ async function parseFirebaseResponse(response, fallbackMessage) {
     return body;
   }
 
-  const rawCode = body?.error?.message || '';
+  // Firebase error messages may include detail after the code, e.g.
+  // "WEAK_PASSWORD : Password should be at least 6 characters" — extract
+  // just the code part so it matches the lookup table.
+  const rawMessage = body?.error?.message || '';
+  const rawCode = rawMessage.split(' :')[0].trim();
   const message = FIREBASE_ERROR_MESSAGES[rawCode] || fallbackMessage;
   throw new Error(message);
 }
@@ -257,9 +261,15 @@ export async function sendEmailVerification(idToken, options = {}) {
 export async function createGoogleAuthUri(continueUri, options = {}) {
   const apiKey = getConfiguredApiKey(options.apiKey);
   const fetchFn = options.fetch || globalThis.fetch;
+  // Firebase accounts:createAuthUri requires an `identifier` field (the user's
+  // email address). When no email is known yet — e.g. a one-click "Sign in
+  // with Google" button — pass a placeholder so the API returns a valid Google
+  // OAuth URI. Firebase uses the identifier only for account-linking lookup;
+  // it does not restrict the resulting OAuth redirect URL.
+  const identifier = options.identifier || 'oauth@placeholder.invalid';
   const response = await postFirebaseJson(
     `${IDENTITY_TOOLKIT_BASE_URL}/accounts:createAuthUri?key=${encodeURIComponent(apiKey)}`,
-    { providerId: 'google.com', continueUri },
+    { identifier, providerId: 'google.com', continueUri },
     fetchFn
   );
   return { authUri: response.authUri, sessionId: response.sessionId };

@@ -49,8 +49,15 @@ const Login = () => {
         // Surface the specific message for registration (password strength, etc.)
         setError(err?.message || 'Registration failed. Please try again.');
       } else {
-        // Always show a generic message for sign-in to prevent email enumeration
-        setError('Invalid email or password.');
+        // Pass through the verification-required error so the user knows to check
+        // their email; use a generic message for all other failures to prevent
+        // email enumeration (this path is reached only after Firebase accepted the password).
+        const msg = err?.message || '';
+        if (msg === 'Please verify your email before signing in.') {
+          setError(msg);
+        } else {
+          setError('Invalid email or password.');
+        }
       }
     }
   };

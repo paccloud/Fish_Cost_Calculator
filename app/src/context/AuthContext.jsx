@@ -167,6 +167,9 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
         throw new Error(data.error || 'Invalid credentials.');
       }
       const data = await response.json();
+      // Clear any persisted Firebase session so a page reload does not restore
+      // the Firebase account on top of the newly-signed-in legacy user.
+      authApi.clearFirebaseSession();
       globalThis.localStorage?.setItem('token', data.token);
       setToken(data.token);
       setUser({ username: data.username, authProvider: 'password' });
