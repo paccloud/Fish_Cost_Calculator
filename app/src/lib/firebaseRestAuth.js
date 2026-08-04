@@ -111,6 +111,12 @@ function shouldRefresh(session, now) {
   return Number(session.expiresAt || 0) <= now + ID_TOKEN_REFRESH_MARGIN_MS;
 }
 
+// Incremented whenever a session is explicitly cleared (sign-out, auth failure).
+// createFirebaseSession() captures the value at creation time; any in-flight
+// token refresh that completes after a clear will find the generation changed
+// and skip writing the stale session back to storage.
+let _sessionGeneration = 0;
+
 function persistSession(session, storage = globalThis.localStorage) {
   if (!storage) return;
   const { refreshToken: _refreshToken, ...persistableSession } = session;
@@ -119,6 +125,7 @@ function persistSession(session, storage = globalThis.localStorage) {
 
 function clearPersistedSession(storage = globalThis.localStorage) {
   if (!storage) return;
+  _sessionGeneration++;
   storage.removeItem(FIREBASE_AUTH_SESSION_KEY);
 }
 
@@ -146,6 +153,8 @@ async function refreshFirebaseSession(session, options) {
 
 export function createFirebaseSession(response, options = {}) {
   let session = normalizeAuthResponse(response, options.now || defaultNow);
+  // Capture generation at creation time so any post-signout refresh is dropped.
+  const createdGeneration = _sessionGeneration;
   persistSession(session, options.storage);
 
   let pendingRefresh = null;
@@ -170,8 +179,12 @@ export function createFirebaseSession(response, options = {}) {
         if (!pendingRefresh) {
           pendingRefresh = refreshFirebaseSession(session, options)
             .then((refreshed) => {
-              session = refreshed;
-              persistSession(session, options.storage);
+              // Skip persistence if the session was cleared (signed out) while
+              // the refresh was in-flight — do not restore a signed-out account.
+              if (_sessionGeneration === createdGeneration) {
+                session = refreshed;
+                persistSession(session, options.storage);
+              }
             })
             .catch((err) => {
               clearPersistedSession(options.storage);

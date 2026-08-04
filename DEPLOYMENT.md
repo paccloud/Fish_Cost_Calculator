@@ -153,7 +153,10 @@ HAVING COUNT(*) > 1;
 ```
 
 Before resolving duplicates:
-1. **Export a backup**: `pg_dump -t users <connection-string> > users_backup.sql`
+1. **Export a backup** (all affected tables — `calculations`, `user_data`, and `contributors` use `ON DELETE CASCADE` and will be rewritten or deleted during cleanup):
+   ```
+   pg_dump -t users -t calculations -t user_data -t contributors <connection-string> > pre_dedup_backup.sql
+   ```
 2. **Map each duplicate to its canonical account** — determine which row owns the Firebase identity (check `firebase_uid` or oldest `id`) and which rows are stale.
 3. For each duplicate group:
    - Reassign `calculations` and `user_data` rows to the canonical user ID.
