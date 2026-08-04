@@ -273,6 +273,32 @@ describe('Firebase API auth', () => {
     );
   });
 
+  it('updates stored email when Firebase user has changed their verified email', async () => {
+    const updatedRow = { id: 42, username: 'fishbuyer@example.com', email: 'new@example.com' };
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ id: 42, username: 'fishbuyer@example.com', email: 'old@example.com' }] }) // UID match
+      .mockResolvedValueOnce({ rows: [updatedRow] }); // UPDATE email RETURNING
+
+    const user = await verifyFirebaseAuthSession({
+      headers: { authorization: 'Bearer firebase-id-token' },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'firebase-user-123',
+        email: 'new@example.com',
+        emailVerified: true,
+        name: 'Fish Buyer',
+        picture: 'https://example.com/avatar.png',
+      })),
+    });
+
+    expect(user).toMatchObject({ id: 42, email: 'new@example.com', authProvider: 'firebase' });
+    expect(query).toHaveBeenCalledWith(
+      'UPDATE users SET email = $1 WHERE id = $2 AND email IS DISTINCT FROM $1 RETURNING id, username, email',
+      ['new@example.com', 42]
+    );
+  });
+
   it('links an existing local user by verified Firebase email', async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [] })

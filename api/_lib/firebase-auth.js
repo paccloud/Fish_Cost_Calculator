@@ -196,7 +196,17 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
     );
 
     if (result.rows.length > 0) {
-      return result.rows[0];
+      const localUser = result.rows[0];
+      // If the Firebase user has changed their verified email, sync it to the local record.
+      // Uses IS DISTINCT FROM so the UPDATE is a no-op when another request already synced.
+      if (firebaseUser.emailVerified && firebaseUser.email && localUser.email !== firebaseUser.email) {
+        const updated = await query(
+          'UPDATE users SET email = $1 WHERE id = $2 AND email IS DISTINCT FROM $1 RETURNING id, username, email',
+          [firebaseUser.email, localUser.id]
+        );
+        return updated.rows.length > 0 ? updated.rows[0] : localUser;
+      }
+      return localUser;
     }
 
     if (firebaseUser.email && !firebaseUser.emailVerified) {
