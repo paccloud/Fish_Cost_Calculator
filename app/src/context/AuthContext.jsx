@@ -119,20 +119,27 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   // Schedule expiry cleanup for rehydrated legacy JWT sessions. Without this,
   // a token that expires while the tab is open keeps the UI showing the user
   // as logged in while all protected requests return 401.
+  // Chunk into MAX_SAFE_TIMEOUT_MS slices to avoid signed-32-bit overflow for
+  // tokens with lifetimes > ~24.9 days (e.g. 30-day JWTs fire setTimeout
+  // almost immediately without chunking).
+  const MAX_SAFE_TIMEOUT_MS = 2 ** 31 - 1;
   useEffect(() => {
     if (!token) return;
     const [, encodedPayload] = token.split('.');
     const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
     if (!payload?.exp) return;
-    const expiresInMs = payload.exp * 1000 - Date.now();
-    // Use Math.max(0, ...) so an already-expired token (race between useState
-    // init and effect run) is handled via setTimeout rather than a direct
-    // setState call, which would trigger cascading renders.
-    const timerId = setTimeout(() => {
-      globalThis.localStorage?.removeItem('token');
-      setUser(null);
-      setToken(null);
-    }, Math.max(0, expiresInMs));
+    let timerId;
+    function scheduleLogout() {
+      const remainingMs = payload.exp * 1000 - Date.now();
+      if (remainingMs <= 0) {
+        globalThis.localStorage?.removeItem('token');
+        setUser(null);
+        setToken(null);
+        return;
+      }
+      timerId = setTimeout(scheduleLogout, Math.min(remainingMs, MAX_SAFE_TIMEOUT_MS));
+    }
+    scheduleLogout();
     return () => clearTimeout(timerId);
   }, [token]);
 
@@ -191,11 +198,13 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   const completeGoogleSignIn = async () => {
     const sessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
     if (!sessionId) return null;
-    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
     const requestUri = globalThis.location?.href;
     const firebaseUser = await authApi.signInWithGoogleCallback(requestUri, sessionId, {
       onAuthFailure: handleAuthFailure,
     });
+    // Remove only after a successful exchange so a transient network failure
+    // doesn't force the user to restart the entire Google sign-in flow.
+    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
     globalThis.localStorage?.removeItem('token');
     setToken(null);
     setUser(firebaseUser);

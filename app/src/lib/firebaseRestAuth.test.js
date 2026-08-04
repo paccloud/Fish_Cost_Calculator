@@ -76,6 +76,33 @@ describe('Firebase REST auth', () => {
     await expect(user.getIdToken()).resolves.toBe('firebase-id-token');
   });
 
+  it('reads emailVerified from the JWT payload when signInWithPassword omits it', async () => {
+    // Firebase signInWithPassword does not return emailVerified in the response
+    // body, so the implementation must decode it from the JWT claims instead.
+    const JWT_WITH_VERIFIED =
+      'eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2lkIn0' +
+      '.eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwic3ViIjoiZmlyZWJhc2UtdXNlci0xMjMiLCJlbWFpbCI6ImZpc2hidXllckBleGFtcGxlLmNvbSJ9' +
+      '.fakesig';
+    const fetch = vi.fn(async () => fakeResponse({
+      body: {
+        idToken: JWT_WITH_VERIFIED,
+        refreshToken: 'firebase-refresh-token',
+        localId: 'firebase-user-123',
+        email: 'fishbuyer@example.com',
+        expiresIn: '3600',
+        // no emailVerified field — as Firebase signInWithPassword actually returns
+      },
+    }));
+
+    const user = await signInWithEmailPassword('fishbuyer@example.com', 'secret', {
+      apiKey: 'firebase-api-key',
+      fetch,
+      now: () => 1_700_000_000_000,
+    });
+
+    expect(user.emailVerified).toBe(true);
+  });
+
   it('registers with Firebase email and password using the sign-up endpoint', async () => {
     const fetch = vi.fn(async () => fakeResponse({
       body: {

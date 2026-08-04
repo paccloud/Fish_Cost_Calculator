@@ -66,18 +66,35 @@ async function postFirebaseForm(url, params, fetchFn) {
   return parseFirebaseResponse(response, 'Firebase token refresh failed');
 }
 
+function decodeJwtClaims(idToken) {
+  try {
+    const parts = (idToken || '').split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padding = base64.length % 4;
+    if (padding) base64 += '='.repeat(4 - padding);
+    return JSON.parse(globalThis.atob(base64));
+  } catch {
+    return null;
+  }
+}
+
 function normalizeAuthResponse(response, now) {
+  const idToken = response.idToken || response.id_token;
+  const jwtClaims = decodeJwtClaims(idToken);
   const expiresAt = response.expiresAt !== undefined
     ? Number(response.expiresAt)
     : now() + Number.parseInt(response.expiresIn || response.expires_in || '3600', 10) * 1000;
 
   return {
-    idToken: response.idToken || response.id_token,
+    idToken,
     refreshToken: response.refreshToken || response.refresh_token,
     localId: response.localId || response.local_id || response.user_id,
     email: response.email || null,
     displayName: response.displayName || response.display_name || response.email || null,
-    emailVerified: response.emailVerified ?? response.email_verified ?? false,
+    // signInWithPassword does not return emailVerified — read it from the JWT
+    // payload instead so that verified users are not incorrectly rejected.
+    emailVerified: response.emailVerified ?? response.email_verified ?? jwtClaims?.email_verified ?? false,
     expiresAt,
   };
 }
