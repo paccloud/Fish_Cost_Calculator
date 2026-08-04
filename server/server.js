@@ -170,7 +170,11 @@ db.serialize(() => {
 });
 
 const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
-    const sql = text.replace(/\$\d+/g, '?');
+    // Convert PostgreSQL $N placeholders to SQLite ?N numbered params.
+    // SQLite ?N syntax allows the same index to appear multiple times and
+    // binds each occurrence from the same element — preserving semantics like
+    // `$1 ... IS DISTINCT FROM $1` with only a single value in params.
+    const sql = text.replace(/\$(\d+)/g, '?$1');
     db.all(sql, params, (err, rows) => {
         if (err) return reject(err);
         return resolve({ rows });

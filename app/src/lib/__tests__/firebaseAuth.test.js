@@ -410,9 +410,8 @@ describe('Firebase API auth', () => {
     );
   });
 
-  it('rejects unverified Firebase email sessions before creating a local user', async () => {
-    const query = vi.fn()
-      .mockResolvedValueOnce({ rows: [] });
+  it('rejects unverified Firebase email sessions without issuing any DB query', async () => {
+    const query = vi.fn();
 
     const user = await verifyFirebaseAuthSession({
       headers: {
@@ -430,14 +429,28 @@ describe('Firebase API auth', () => {
     });
 
     expect(user).toBeNull();
-    expect(query).not.toHaveBeenCalledWith(
-      'SELECT id, username, email, firebase_uid FROM users WHERE email = $1',
-      ['fishbuyer@example.com']
-    );
-    expect(query).not.toHaveBeenCalledWith(
-      expect.stringContaining('INSERT INTO users'),
-      expect.anything()
-    );
+    // Early exit — no DB queries should be issued for an unverified identity.
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rejects a UID-linked user whose emailVerified is false (e.g. after admin revocation)', async () => {
+    const query = vi.fn();
+
+    const user = await verifyFirebaseAuthSession({
+      headers: { authorization: 'Bearer firebase-id-token' },
+    }, {
+      query,
+      verifyIdToken: vi.fn(async () => ({
+        uid: 'existing-uid-123',
+        email: 'revoked@example.com',
+        emailVerified: false,
+        name: 'Revoked User',
+        picture: null,
+      })),
+    });
+
+    expect(user).toBeNull();
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('recovers from a concurrent sign-in race (23505 on firebase_uid) by re-selecting the winner row', async () => {

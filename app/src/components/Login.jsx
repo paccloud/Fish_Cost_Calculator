@@ -17,6 +17,15 @@ const Login = () => {
     const pendingSessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
     if (!pendingSessionId) return;
 
+    // Only exchange when the URL has OAuth callback parameters. Without a `code`
+    // or `state` param the user cancelled or hit Back — clear the stale session
+    // instead of firing a doomed exchange request on every mount.
+    const search = new URLSearchParams(globalThis.location?.search ?? '');
+    if (!search.has('code') && !search.has('state')) {
+      globalThis.sessionStorage?.removeItem('firebase_google_session_id');
+      return;
+    }
+
     completeGoogleSignIn()
       .then((user) => {
         if (user) navigate('/');
@@ -58,7 +67,9 @@ const Login = () => {
         // email enumeration (this path is reached only after Firebase accepted the password).
         const msg = err?.message || '';
         if (msg === 'Please verify your email before signing in.') {
-          setError(msg);
+          // Transition to the verification screen so the user can resend the
+          // link — identical UX to post-registration, just without the welcome copy.
+          setVerificationSent(true);
         } else {
           setError('Invalid email or password.');
         }

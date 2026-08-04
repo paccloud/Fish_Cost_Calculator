@@ -189,6 +189,13 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
     return null;
   }
 
+  // Reject unverified identities up-front — covers Anonymous Auth, phone auth,
+  // unverified email/password, and UID-linked accounts whose verification was
+  // later revoked. Google OAuth always carries emailVerified=true.
+  if (!firebaseUser.emailVerified) {
+    return null;
+  }
+
   try {
     let result = await query(
       'SELECT id, username, email FROM users WHERE firebase_uid = $1',
