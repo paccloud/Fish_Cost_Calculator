@@ -9,6 +9,7 @@ export async function getAuthHeaders(user, baseHeaders = {}) {
       }
     } catch (err) {
       console.error('Failed to get Firebase ID token:', err);
+      throw err;
     }
 
     return headers;

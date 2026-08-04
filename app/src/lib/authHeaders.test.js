@@ -62,6 +62,17 @@ describe('auth headers', () => {
     expect(headers).toEqual({});
   });
 
+  it('propagates the error when getIdToken throws so callers can abort', async () => {
+    const err = new Error('refresh token expired');
+    const getIdToken = vi.fn(async () => { throw err; });
+
+    await expect(getAuthHeaders({
+      username: 'processor',
+      authProvider: 'firebase',
+      getIdToken,
+    })).rejects.toThrow('refresh token expired');
+  });
+
   it('knows whether any auth credential is available', () => {
     expect(hasAuthCredential({
       username: 'firebase-user',
