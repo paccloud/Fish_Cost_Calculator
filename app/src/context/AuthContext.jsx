@@ -142,6 +142,10 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       const firebaseUser = await authApi.signInWithEmailPassword(identifier, password, {
         onAuthFailure: handleAuthFailure,
       });
+      if (!firebaseUser.emailVerified) {
+        authApi.clearFirebaseSession();
+        throw new Error('Please verify your email before signing in.');
+      }
       globalThis.localStorage?.removeItem('token');
       setToken(null);
       setUser(firebaseUser);

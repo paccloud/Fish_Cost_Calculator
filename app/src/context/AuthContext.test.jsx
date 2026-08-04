@@ -85,6 +85,29 @@ describe('AuthProvider session rehydration', () => {
     expect(authState.user).toBe(fakeUser);
   });
 
+  it('rejects email login when firebaseUser.emailVerified is false', async () => {
+    const clearFirebaseSession = vi.fn();
+    const unverifiedUser = { uid: 'u1', email: 'buyer@example.com', emailVerified: false };
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession,
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(async () => unverifiedUser),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    await expect(
+      authState.login('buyer@example.com', 'password123')
+    ).rejects.toThrow('Please verify your email before signing in.');
+
+    expect(clearFirebaseSession).toHaveBeenCalledOnce();
+  });
+
   it('propagates Firebase register errors to the caller', async () => {
     const authState = renderAuthState({
       authApi: {
