@@ -191,4 +191,70 @@ describe('AuthProvider session rehydration', () => {
 
     await expect(authState.login('buyer@example.com', 'wrongpass')).rejects.toThrow('Invalid email or password.');
   });
+
+  it('rejects Google sign-in when emailVerified is false and clears the session', async () => {
+    const clearFirebaseSession = vi.fn();
+    const unverifiedUser = {
+      uid: 'google-uid',
+      username: 'unverified@gmail.com',
+      email: 'unverified@gmail.com',
+      emailVerified: false,
+      authProvider: 'firebase',
+      setOnAuthFailure: vi.fn(),
+      getIdToken: vi.fn(async () => 'google-id-token'),
+    };
+    const storage = createStorage({
+      firebase_google_session_id: 'session-abc',
+    });
+    vi.stubGlobal('sessionStorage', storage);
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession,
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(async () => unverifiedUser),
+      },
+    });
+
+    await expect(authState.completeGoogleSignIn()).rejects.toThrow('Please verify your email before signing in.');
+    expect(clearFirebaseSession).toHaveBeenCalled();
+  });
+
+  it('completes Google sign-in when emailVerified is true', async () => {
+    const clearFirebaseSession = vi.fn();
+    const verifiedUser = {
+      uid: 'google-uid',
+      username: 'verified@gmail.com',
+      email: 'verified@gmail.com',
+      emailVerified: true,
+      authProvider: 'firebase',
+      setOnAuthFailure: vi.fn(),
+      getIdToken: vi.fn(async () => 'google-id-token'),
+    };
+    const storage = createStorage({
+      firebase_google_session_id: 'session-abc',
+    });
+    vi.stubGlobal('sessionStorage', storage);
+    vi.stubGlobal('localStorage', createStorage());
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession,
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(async () => verifiedUser),
+      },
+    });
+
+    const result = await authState.completeGoogleSignIn();
+    expect(result).toBe(verifiedUser);
+    expect(clearFirebaseSession).not.toHaveBeenCalled();
+  });
 });

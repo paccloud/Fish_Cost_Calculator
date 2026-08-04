@@ -233,6 +233,13 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     const firebaseUser = await authApi.signInWithGoogleCallback(requestUri, sessionId, {
       onAuthFailure: handleAuthFailure,
     });
+    // Guard against an unverified Google account (rare but possible with custom
+    // identity providers or certain org policies). clearFirebaseSession drops the
+    // persisted session so a reload doesn't silently admit the user.
+    if (!firebaseUser?.emailVerified) {
+      authApi.clearFirebaseSession();
+      throw new Error('Please verify your email before signing in.');
+    }
     // Remove only after a successful exchange so a transient network failure
     // doesn't force the user to restart the entire Google sign-in flow.
     globalThis.sessionStorage?.removeItem('firebase_google_session_id');
