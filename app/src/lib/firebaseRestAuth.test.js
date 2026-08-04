@@ -271,6 +271,25 @@ describe('Firebase REST auth', () => {
     expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
   });
 
+  it('rejects and clears a persisted session when emailVerified is a truthy non-boolean (string "true")', () => {
+    localStorage.setItem(FIREBASE_AUTH_SESSION_KEY, JSON.stringify({
+      idToken: 'string-verified-id-token',
+      localId: 'string-verified-user',
+      email: 'string-verified@example.com',
+      displayName: 'String Verified User',
+      emailVerified: 'true',
+      expiresAt: 1_700_003_600_000,
+    }));
+
+    const user = loadFirebaseSession({
+      apiKey: 'firebase-api-key',
+      now: () => 1_700_000_000_000,
+    });
+
+    expect(user).toBeNull();
+    expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
+  });
+
   it('clears persisted session and throws locally when a reloaded session needs refresh but has no refresh token', async () => {
     const store = installLocalStorage();
 
