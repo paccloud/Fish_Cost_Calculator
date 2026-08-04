@@ -7,10 +7,11 @@ const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, register, loginWithGoogle, completeGoogleSignIn } = useAuth();
+  const { login, register, resendVerificationEmail, loginWithGoogle, completeGoogleSignIn } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const [verificationSent, setVerificationSent] = useState(false);
+  const [verificationFailed, setVerificationFailed] = useState(false);
 
   useEffect(() => {
     const pendingSessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
@@ -34,6 +35,9 @@ const Login = () => {
       if (isRegister) {
         const result = await register(email, password);
         if (result?.verificationSent) {
+          setVerificationSent(true);
+        } else if (result?.verificationFailed) {
+          setVerificationFailed(true);
           setVerificationSent(true);
         } else if (result === true) {
           navigate('/');
@@ -63,15 +67,39 @@ const Login = () => {
   };
 
   if (verificationSent) {
+    const handleResend = async () => {
+      setError('');
+      try {
+        await resendVerificationEmail(email, password);
+        setVerificationFailed(false);
+        setError('');
+      } catch (err) {
+        setError(err?.message || 'Could not resend verification email. Please try again.');
+      }
+    };
+
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <div className="card w-full max-w-md p-8 text-center space-y-4">
           <h2 className="text-2xl font-bold text-brand-teal">Check your email</h2>
-          <p className="text-text-secondary text-sm">
-            We sent a verification link to <strong>{email}</strong>. Click it to activate your account, then sign in.
-          </p>
+          {verificationFailed ? (
+            <p className="text-red-500 text-sm">
+              Your account was created but we couldn&apos;t send the verification email to <strong>{email}</strong>. Use the button below to try again.
+            </p>
+          ) : (
+            <p className="text-text-secondary text-sm">
+              We sent a verification link to <strong>{email}</strong>. Click it to activate your account, then sign in.
+            </p>
+          )}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
           <button
-            onClick={() => { setVerificationSent(false); setIsRegister(false); }}
+            onClick={handleResend}
+            className="btn-primary w-full"
+          >
+            Resend verification email
+          </button>
+          <button
+            onClick={() => { setVerificationSent(false); setVerificationFailed(false); setIsRegister(false); setError(''); }}
             className="text-brand-terracotta hover:underline text-sm"
           >
             Back to sign in
@@ -153,7 +181,7 @@ const Login = () => {
 
         <div className="mt-5 text-center">
           <button
-            onClick={() => { setIsRegister(!isRegister); setError(''); setVerificationSent(false); }}
+            onClick={() => { setIsRegister(!isRegister); setError(''); setVerificationSent(false); setVerificationFailed(false); }}
             className="text-text-secondary hover:text-brand-terracotta text-sm transition"
           >
             {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}

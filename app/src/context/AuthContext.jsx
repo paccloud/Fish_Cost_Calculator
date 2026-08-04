@@ -215,7 +215,26 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       storage: null,
     });
     const idToken = await firebaseUser.getIdToken();
+    try {
+      await authApi.sendEmailVerification(idToken);
+    } catch {
+      // Verification email failed to send (e.g. transient network error, quota exceeded).
+      // The account was created; surface a flag so the caller can offer a resend button.
+      return { verificationSent: false, verificationFailed: true };
+    }
+    return { verificationSent: true };
+  };
+
+  const resendVerificationEmail = async (email, password) => {
+    // Re-authenticate to get a fresh id token, send the verification email, then
+    // immediately clear the unverified session so the user isn't admitted.
+    const firebaseUser = await authApi.signInWithEmailPassword(email, password, {
+      onAuthFailure: handleAuthFailure,
+      storage: null,
+    });
+    const idToken = await firebaseUser.getIdToken();
     await authApi.sendEmailVerification(idToken);
+    authApi.clearFirebaseSession();
     return { verificationSent: true };
   };
 
@@ -229,6 +248,10 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   const completeGoogleSignIn = async () => {
     const sessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
     if (!sessionId) return null;
+    // Claim the session id before the async exchange so a StrictMode double-invoke
+    // or concurrent call sees no id and returns null immediately, preventing two
+    // simultaneous requests to the Firebase IdP callback endpoint.
+    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
     const requestUri = globalThis.location?.href;
     const firebaseUser = await authApi.signInWithGoogleCallback(requestUri, sessionId, {
       onAuthFailure: handleAuthFailure,
@@ -240,9 +263,6 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       authApi.clearFirebaseSession();
       throw new Error('Please verify your email before signing in.');
     }
-    // Remove only after a successful exchange so a transient network failure
-    // doesn't force the user to restart the entire Google sign-in flow.
-    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
     globalThis.localStorage?.removeItem('token');
     setToken(null);
     setUser(firebaseUser);
@@ -264,6 +284,7 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       login,
       logout,
       register,
+      resendVerificationEmail,
       loginWithGoogle,
       completeGoogleSignIn,
       getAuthHeaders,

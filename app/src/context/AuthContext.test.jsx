@@ -257,4 +257,101 @@ describe('AuthProvider session rehydration', () => {
     expect(result).toBe(verifiedUser);
     expect(clearFirebaseSession).not.toHaveBeenCalled();
   });
+
+  it('completeGoogleSignIn removes sessionId before the API call (StrictMode guard)', async () => {
+    // A second concurrent call must see no sessionId and return null immediately.
+    const verifiedUser = {
+      uid: 'google-uid',
+      email: 'user@gmail.com',
+      emailVerified: true,
+      authProvider: 'firebase',
+      setOnAuthFailure: vi.fn(),
+      getIdToken: vi.fn(async () => 'tok'),
+    };
+    let resolveFirst;
+    const firstCallPromise = new Promise((res) => { resolveFirst = res; });
+    const storage = createStorage({ firebase_google_session_id: 'session-xyz' });
+    vi.stubGlobal('sessionStorage', storage);
+    vi.stubGlobal('localStorage', createStorage());
+
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession: vi.fn(),
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification: vi.fn(),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(async () => {
+          await firstCallPromise;
+          return verifiedUser;
+        }),
+      },
+    });
+
+    const firstCall = authState.completeGoogleSignIn();
+    // Before first call resolves, sessionId must already be gone.
+    expect(storage.getItem('firebase_google_session_id')).toBeNull();
+    // Second call sees no sessionId and bails out immediately.
+    const secondResult = await authState.completeGoogleSignIn();
+    expect(secondResult).toBeNull();
+    // Let the first call finish.
+    resolveFirst();
+    const firstResult = await firstCall;
+    expect(firstResult).toBe(verifiedUser);
+  });
+
+  it('register returns verificationFailed when sendEmailVerification throws', async () => {
+    const fakeUser = {
+      uid: 'u1',
+      email: 'buyer@example.com',
+      emailVerified: false,
+      authProvider: 'firebase',
+      setOnAuthFailure: vi.fn(),
+      getIdToken: vi.fn(async () => 'id-token'),
+    };
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession: vi.fn(),
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(),
+        signUpWithEmailPassword: vi.fn(async () => fakeUser),
+        sendEmailVerification: vi.fn(async () => { throw new Error('quota exceeded'); }),
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    const result = await authState.register('buyer@example.com', 'strongP@ss1');
+    expect(result).toEqual({ verificationSent: false, verificationFailed: true });
+  });
+
+  it('resendVerificationEmail re-authenticates, sends verification, and clears session', async () => {
+    const clearFirebaseSession = vi.fn();
+    const fakeUser = {
+      uid: 'u1',
+      email: 'buyer@example.com',
+      emailVerified: false,
+      authProvider: 'firebase',
+      setOnAuthFailure: vi.fn(),
+      getIdToken: vi.fn(async () => 'fresh-id-token'),
+    };
+    const sendEmailVerification = vi.fn(async () => {});
+    const authState = renderAuthState({
+      authApi: {
+        clearFirebaseSession,
+        loadFirebaseSession: vi.fn(() => null),
+        signInWithEmailPassword: vi.fn(async () => fakeUser),
+        signUpWithEmailPassword: vi.fn(),
+        sendEmailVerification,
+        createGoogleAuthUri: vi.fn(),
+        signInWithGoogleCallback: vi.fn(),
+      },
+    });
+
+    const result = await authState.resendVerificationEmail('buyer@example.com', 'strongP@ss1');
+    expect(result).toEqual({ verificationSent: true });
+    expect(sendEmailVerification).toHaveBeenCalledWith('fresh-id-token');
+    expect(clearFirebaseSession).toHaveBeenCalled();
+  });
 });
