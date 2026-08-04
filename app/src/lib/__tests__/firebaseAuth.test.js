@@ -118,8 +118,9 @@ describe('Firebase ID token verification', () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const { privateKey: otherKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const now = Math.floor(Date.now() / 1000);
+    // Use a unique kid so this test gets its own cert cache slot
     const validToken = createRs256Token({
-      kid: 'firebase-test-key',
+      kid: 'firebase-key-tampered',
       privateKey,
       payload: {
         iss: 'https://securetoken.google.com/fish-calc-test',
@@ -131,7 +132,7 @@ describe('Firebase ID token verification', () => {
     });
     // Retain validToken's header+payload; replace only the signature with one from otherKey
     const otherSignedToken = createRs256Token({
-      kid: 'firebase-test-key',
+      kid: 'firebase-key-tampered',
       privateKey: otherKey,
       payload: {
         iss: 'https://securetoken.google.com/fish-calc-test',
@@ -146,7 +147,7 @@ describe('Firebase ID token verification', () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+        'firebase-key-tampered': publicKey.export({ type: 'spki', format: 'pem' }),
       }),
       headers: { get: () => 'public, max-age=3600' },
     }));
@@ -157,8 +158,10 @@ describe('Firebase ID token verification', () => {
   it('returns null for a token with a wrong issuer', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const now = Math.floor(Date.now() / 1000);
+    // Use a unique kid so this test gets its own cert cache slot and the issuer
+    // check — not a stale-key signature failure — is what rejects the token.
     const token = createRs256Token({
-      kid: 'firebase-test-key',
+      kid: 'firebase-key-wrong-issuer',
       privateKey,
       payload: {
         iss: 'https://securetoken.google.com/wrong-project',
@@ -172,7 +175,7 @@ describe('Firebase ID token verification', () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+        'firebase-key-wrong-issuer': publicKey.export({ type: 'spki', format: 'pem' }),
       }),
       headers: { get: () => 'public, max-age=3600' },
     }));
@@ -183,8 +186,9 @@ describe('Firebase ID token verification', () => {
   it('returns null for a token with a wrong audience', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const now = Math.floor(Date.now() / 1000);
+    // Use a unique kid so the audience check — not a stale-key signature failure — rejects the token.
     const token = createRs256Token({
-      kid: 'firebase-test-key',
+      kid: 'firebase-key-wrong-audience',
       privateKey,
       payload: {
         iss: 'https://securetoken.google.com/fish-calc-test',
@@ -198,7 +202,7 @@ describe('Firebase ID token verification', () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+        'firebase-key-wrong-audience': publicKey.export({ type: 'spki', format: 'pem' }),
       }),
       headers: { get: () => 'public, max-age=3600' },
     }));
@@ -209,8 +213,9 @@ describe('Firebase ID token verification', () => {
   it('returns null for an expired token (beyond clock-skew tolerance)', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const now = Math.floor(Date.now() / 1000);
+    // Use a unique kid so the expiry check — not a stale-key signature failure — rejects the token.
     const token = createRs256Token({
-      kid: 'firebase-test-key',
+      kid: 'firebase-key-expired',
       privateKey,
       payload: {
         iss: 'https://securetoken.google.com/fish-calc-test',
@@ -224,7 +229,7 @@ describe('Firebase ID token verification', () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        'firebase-test-key': publicKey.export({ type: 'spki', format: 'pem' }),
+        'firebase-key-expired': publicKey.export({ type: 'spki', format: 'pem' }),
       }),
       headers: { get: () => 'public, max-age=3600' },
     }));
