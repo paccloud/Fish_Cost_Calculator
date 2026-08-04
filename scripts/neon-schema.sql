@@ -82,8 +82,9 @@ CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 -- 2. Review duplicates:
 -- SELECT email, COUNT(*) AS cnt FROM users WHERE email IS NOT NULL GROUP BY email HAVING COUNT(*) > 1;
 -- 3. For each duplicate group, determine the canonical account (check firebase_uid or oldest id),
---    reassign any calculations/data rows to the canonical user_id, then delete or null the
---    email on stale rows.
+--    reassign any calculations, user_data, and contributors rows to the canonical user_id
+--    (contributors.user_id has ON DELETE CASCADE — delete cascades silently, reassign first),
+--    then delete or null the email on stale rows.
 -- 4. Rerun the query above and confirm zero rows before continuing.
 --
 -- Step 3: Enforce email uniqueness (run only after Step 2 returns zero rows)

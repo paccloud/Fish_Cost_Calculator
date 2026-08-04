@@ -155,7 +155,7 @@ HAVING COUNT(*) > 1;
 Before resolving duplicates:
 1. **Export a backup**: `pg_dump -t users <connection-string> > users_backup.sql`
 2. **Map each duplicate to its canonical account** — determine which row owns the Firebase identity (check `firebase_uid` or oldest `id`) and which rows are stale.
-3. For each duplicate group, reassign any calculations/data rows to the canonical user ID, then either delete or null the `email` on the stale row(s).
+3. For each duplicate group, reassign any calculations, user_data, **and contributors rows** to the canonical user ID (or delete the stale contributor profile if that user has no contributor record worth keeping), then either delete or null the `email` on the stale row(s). **Note:** `contributors.user_id` has `ON DELETE CASCADE`, so deleting a stale user row will silently delete their contributor profile — reassign first if the data matters.
 4. **Validate**: rerun the Step 2 query and confirm zero duplicate non-null emails before continuing.
 
 Firebase identity linking queries by verified email, so all non-null emails in the table must be unique.

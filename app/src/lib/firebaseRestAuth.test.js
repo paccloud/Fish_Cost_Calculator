@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   FIREBASE_AUTH_SESSION_KEY,
   createFirebaseSession,
+  createGoogleAuthUri,
   loadFirebaseSession,
   signInWithEmailPassword,
   signUpWithEmailPassword,
@@ -221,5 +222,27 @@ describe('Firebase REST auth', () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(onAuthFailure).toHaveBeenCalledWith(expect.any(Error));
     expect(localStorage.removeItem).toHaveBeenCalledWith(FIREBASE_AUTH_SESSION_KEY);
+  });
+
+  it('createGoogleAuthUri posts to accounts:createAuthUri and returns authUri + sessionId', async () => {
+    const fetch = vi.fn(async () => fakeResponse({
+      body: {
+        authUri: 'https://accounts.google.com/o/oauth2/auth?...',
+        sessionId: 'session-abc',
+        providerId: 'google.com',
+        registered: false,
+      },
+    }));
+
+    const result = await createGoogleAuthUri('https://example.com/login', { apiKey: 'firebase-api-key', fetch });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=firebase-api-key',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ providerId: 'google.com', continueUri: 'https://example.com/login' }),
+      })
+    );
+    expect(result).toEqual({ authUri: 'https://accounts.google.com/o/oauth2/auth?...', sessionId: 'session-abc' });
   });
 });
