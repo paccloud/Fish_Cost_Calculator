@@ -1,6 +1,6 @@
-# Vercel Deployment Guide with Neon PostgreSQL
+# Vercel Deployment Guide
 
-This guide will help you deploy Local Catch to Vercel with Neon PostgreSQL authentication.
+This guide will help you deploy Local Catch to Vercel with Firebase Auth and Neon PostgreSQL.
 
 ## Prerequisites
 
