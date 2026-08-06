@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -19,15 +19,7 @@ const DataManagement = () => {
         source: 'User Input'
     });
 
-    useEffect(() => {
-        if (user) {
-            loadUserData();
-        } else {
-            setLoading(false);
-        }
-    }, [user]);
-
-    const loadUserData = async () => {
+    const loadUserData = useCallback(async () => {
         try {
             const headers = await getAuthHeaders();
             const res = await fetch(apiUrl('/api/user-data'), { headers });
@@ -40,7 +32,15 @@ const DataManagement = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [getAuthHeaders]);
+
+    useEffect(() => {
+        if (user) {
+            loadUserData();
+        } else {
+            setLoading(false);
+        }
+    }, [user, loadUserData]);
 
     const handleToggleShare = async (item) => {
         const action = item.is_shared ? 'unshare' : 'share';
