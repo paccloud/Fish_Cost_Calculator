@@ -13,6 +13,10 @@ import {
 
 const AuthContext = createContext(null);
 
+// Max value for a signed 32-bit integer — used to chunk long setTimeout calls
+// to avoid overflow for tokens with lifetimes > ~24.9 days.
+const MAX_SAFE_TIMEOUT_MS = 2 ** 31 - 1;
+
 const defaultAuthApi = {
   clearFirebaseSession,
   createGoogleAuthUri,
@@ -119,10 +123,6 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   // Schedule expiry cleanup for rehydrated legacy JWT sessions. Without this,
   // a token that expires while the tab is open keeps the UI showing the user
   // as logged in while all protected requests return 401.
-  // Chunk into MAX_SAFE_TIMEOUT_MS slices to avoid signed-32-bit overflow for
-  // tokens with lifetimes > ~24.9 days (e.g. 30-day JWTs fire setTimeout
-  // almost immediately without chunking).
-  const MAX_SAFE_TIMEOUT_MS = 2 ** 31 - 1;
   useEffect(() => {
     if (!token) return;
     const [, encodedPayload] = token.split('.');
