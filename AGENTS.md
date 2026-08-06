@@ -8,7 +8,7 @@
   - `app/src/data/`: Yield datasets + validators/tests (e.g. `fish_data_v3.js`).
   - `app/public/`: Static assets.
 - `server/`: Local Express API + SQLite (`server/server.js`, `server/fish_app.db`, `server/uploads/`).
-- `api/`: Vercel serverless endpoints; shared helpers live in `api/_lib/` (Neon/Stack Auth).
+- `api/`: Vercel serverless endpoints; shared helpers live in `api/_lib/` (Neon DB/Firebase Auth).
 - `docs/`: `docs/ARCHITECTURE.md`, `docs/API.md`. `scripts/` contains migration/import utilities.
 
 ## Build, Test, and Development Commands

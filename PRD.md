@@ -122,7 +122,7 @@ A restaurant buyer orders 600 lbs of halibut fillets. The system automatically a
 
 #### Functionality
 
-- **Dual Auth:** Username/password OR OAuth (Google/GitHub via Stack Auth)
+- **Firebase Auth:** Email/password sign-in backed by Firebase Auth ID tokens
 - **Guest Access:** Full calculator functionality without login
 - **Logged-In Benefits:**
   - Save calculations to history
@@ -322,7 +322,7 @@ A restaurant buyer orders 600 lbs of halibut fillets. The system automatically a
 - **Runtime:** Node.js 18+
 - **Framework:** Express.js
 - **Database:** PostgreSQL 14+ (Neon serverless)
-- **Auth:** Stack Auth (OAuth) + JWT (password)
+- **Auth:** Firebase Auth ID tokens, mapped to local `users.id`
 - **API:** RESTful JSON endpoints
 
 #### Infrastructure
@@ -334,7 +334,7 @@ A restaurant buyer orders 600 lbs of halibut fillets. The system automatically a
 
 #### Third-Party Services
 
-- **Auth:** Stack Auth (Google/GitHub OAuth)
+- **Auth:** Firebase Auth
 - **Email:** TBD (Resend or SendGrid)
 - **File Storage:** TBD (S3 or Vercel Blob)
 
@@ -399,8 +399,7 @@ A restaurant buyer orders 600 lbs of halibut fillets. The system automatically a
 
 #### Authenticated
 
-- `POST /api/login` - Username/password login → JWT
-- `POST /api/register` - Create account
+- Firebase email/password sign-in happens in the browser through Firebase Auth REST endpoints.
 - `GET /api/user-data` - User's custom species data
 - `POST /api/save-calc` - Save calculation to history
 - `GET /api/saved-calcs` - User's calculation history
@@ -767,7 +766,7 @@ A restaurant buyer orders 600 lbs of halibut fillets. The system automatically a
 ### 10.3 Change Log
 
 - **v2.0 (Jan 2026):** Rebrand to "Value Add Cost Calculator", add Time Tracking, Economy of Scale, Features Roadmap
-- **v1.5 (Dec 2025):** Custom species, OAuth integration, dark mode
+- **v1.5 (Dec 2025):** Custom species, social sign-in experiment, dark mode
 - **v1.0 (Oct 2025):** Initial release with basic calculator
 
 ---

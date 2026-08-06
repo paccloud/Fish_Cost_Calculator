@@ -1,185 +1,279 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { stackClientApp } from '../config/neonAuth';
-import { apiClient } from '../lib/apiClient';
+import React, { createContext, useContext, useState, useCallback, useLayoutEffect, useEffect } from 'react';
+import { apiUrl } from '../config/api';
+import { getAuthHeaders as getAuthHeadersFn } from '../lib/authHeaders';
+import {
+  clearFirebaseSession,
+  createGoogleAuthUri,
+  loadFirebaseSession,
+  sendEmailVerification,
+  signInWithEmailPassword,
+  signInWithGoogleCallback,
+  signUpWithEmailPassword,
+} from '../lib/firebaseRestAuth';
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+const defaultAuthApi = {
+  clearFirebaseSession,
+  createGoogleAuthUri,
+  loadFirebaseSession,
+  sendEmailVerification,
+  signInWithEmailPassword,
+  signInWithGoogleCallback,
+  signUpWithEmailPassword,
+};
 
-  // Check for Stack Auth (Neon Auth) session on mount
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // First check Stack Auth session
-        const stackUser = await stackClientApp.getUser();
-        if (stackUser) {
-          setUser({
-            username: stackUser.displayName || stackUser.primaryEmail,
-            email: stackUser.primaryEmail,
-            avatar: stackUser.profileImageUrl,
-            authProvider: 'oauth',
-            stackAuthId: stackUser.id
-          });
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.log('No Stack Auth session:', e.message);
-      }
-
-      // Fall back to JWT token
-      if (token) {
-        const tokenParts = token.split('.');
-        if (tokenParts.length !== 3) {
-          localStorage.removeItem('token');
-          setToken(null);
-          setUser(null);
-        } else {
-          try {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              localStorage.removeItem('token');
-              setToken(null);
-              setUser(null);
-            } else {
-              setUser({ username: payload.username, authProvider: 'password' });
-            }
-          } catch {
-            localStorage.removeItem('token');
-            setToken(null);
-            setUser(null);
-          }
-        }
-      }
-      setLoading(false);
-    };
-
-    checkSession();
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    const MAX_TIMEOUT = 2147483647;
-    let timeoutId;
-    let cancelled = false;
-
-    const clearToken = () => {
-      localStorage.removeItem('token');
-      setToken(null);
-      setUser(null);
-    };
-
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-      return;
+function decodeBase64UrlJson(value) {
+  try {
+    let base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padding = base64.length % 4;
+    if (padding) {
+      base64 += '='.repeat(4 - padding);
     }
 
-    try {
-      const payload = JSON.parse(atob(tokenParts[1]));
-      if (payload.exp) {
-        const expiryMs = payload.exp * 1000;
+    const binary = globalThis.atob(base64);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes);
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 
-        const scheduleExpiry = () => {
-          const msUntilExpiry = expiryMs - Date.now();
-          if (msUntilExpiry <= 0) {
-            localStorage.removeItem('token');
-            queueMicrotask(() => {
-              setToken(null);
-              setUser(null);
-            });
-            return;
-          }
-          timeoutId = setTimeout(() => {
-            if (cancelled) return;
+function loadLegacyJwtSession(storage = globalThis.localStorage) {
+  if (!storage || typeof storage.getItem !== 'function') {
+    return null;
+  }
 
-            const remainingMs = expiryMs - Date.now();
-            if (remainingMs > 0) {
-              scheduleExpiry();
-              return;
-            }
+  const storedToken = storage.getItem('token');
+  if (!storedToken) {
+    return null;
+  }
 
-            clearToken();
-          }, Math.min(msUntilExpiry, MAX_TIMEOUT));
-        };
+  const [, encodedPayload] = storedToken.split('.');
+  const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
+  if (!payload?.username) {
+    storage.removeItem?.('token');
+    return null;
+  }
 
-        scheduleExpiry();
-      }
-    } catch {
-      // If decoding fails, clear invalid token
-      localStorage.removeItem('token');
-      queueMicrotask(() => {
-        setToken(null);
-        setUser(null);
-      });
-    }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (payload.exp && payload.exp <= nowSeconds) {
+    storage.removeItem?.('token');
+    return null;
+  }
 
-    return () => {
-      cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [token]);
-
-  // Traditional username/password login
-  const login = async (username, password) => {
-    try {
-      const data = await apiClient.login(username, password);
-      setToken(data.token);
-      localStorage.setItem('token', data.token);
-      setUser({ username: data.username, authProvider: 'password' });
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
+  return {
+    token: storedToken,
+    user: {
+      id: payload.id,
+      username: payload.username,
+      email: payload.email || null,
+      authProvider: 'password',
+    },
   };
+}
 
-  // Traditional username/password registration
-  const register = async (username, password) => {
-    try {
-      await apiClient.register(username, password);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+function loadInitialAuthSession(authApi = defaultAuthApi, options = {}) {
+  const firebaseUser = authApi.loadFirebaseSession(options);
+  if (firebaseUser) {
+    return { user: firebaseUser, token: null };
+  }
 
-  // OAuth sign in (Google, GitHub)
-  const signInWithOAuth = async (provider) => {
-    try {
-      await stackClientApp.signInWithOAuth(provider);
-      return true;
-    } catch (err) {
-      console.error(`${provider} sign-in error:`, err);
-      return false;
-    }
-  };
+  return loadLegacyJwtSession() || { user: null, token: null };
+}
 
-  // Logout - handles both auth methods
-  const logout = async () => {
-    try {
-      // Sign out from Stack Auth if using OAuth
-      if (user?.authProvider === 'oauth') {
-        await stackClientApp.signOut();
-      }
-    } catch (err) {
-      console.log('Stack Auth signout error:', err);
-    }
+export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
+  const [initialSession] = useState(() =>
+    loadInitialAuthSession(authApi, {})
+  );
+  const [user, setUser] = useState(initialSession.user);
+  const [token, setToken] = useState(initialSession.token);
+  const [loading] = useState(false);
 
-    // Clear local state
+  const handleAuthFailure = useCallback(() => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
+  }, []);
+
+  // Bound version of getAuthHeaders that closes over the current user.
+  // Accepts an optional content-type string or a headers object as the first
+  // argument so callers can do getAuthHeaders() or getAuthHeaders('application/json').
+  const getAuthHeaders = useCallback(async (contentTypeOrBase = null) => {
+    let base = {};
+    if (typeof contentTypeOrBase === 'string') {
+      base = { 'Content-Type': contentTypeOrBase };
+    } else if (contentTypeOrBase && typeof contentTypeOrBase === 'object') {
+      base = contentTypeOrBase;
+    }
+    return getAuthHeadersFn(user, base);
+  }, [user]);
+
+  // Wire the handler after mount so the initial Firebase session calls handleAuthFailure
+  // when getIdToken() fails (e.g. token refresh error). user?.setOnAuthFailure is exposed
+  // by createFirebaseSession specifically for this post-mount wiring.
+  useLayoutEffect(() => {
+    user?.setOnAuthFailure?.(handleAuthFailure);
+  }, [user, handleAuthFailure]);
+
+  // Schedule expiry cleanup for rehydrated legacy JWT sessions. Without this,
+  // a token that expires while the tab is open keeps the UI showing the user
+  // as logged in while all protected requests return 401.
+  // Chunk into MAX_SAFE_TIMEOUT_MS slices to avoid signed-32-bit overflow for
+  // tokens with lifetimes > ~24.9 days (e.g. 30-day JWTs fire setTimeout
+  // almost immediately without chunking).
+  const MAX_SAFE_TIMEOUT_MS = 2 ** 31 - 1;
+  useEffect(() => {
+    if (!token) return;
+    const [, encodedPayload] = token.split('.');
+    const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
+    if (!payload?.exp) return;
+    let timerId;
+    function scheduleLogout() {
+      const remainingMs = payload.exp * 1000 - Date.now();
+      if (remainingMs <= 0) {
+        globalThis.localStorage?.removeItem('token');
+        setUser(null);
+        setToken(null);
+        return;
+      }
+      timerId = setTimeout(scheduleLogout, Math.min(remainingMs, MAX_SAFE_TIMEOUT_MS));
+    }
+    scheduleLogout();
+    return () => clearTimeout(timerId);
+  }, [token]);
+
+  // Firebase error codes that should NOT fall back to legacy login:
+  // the user definitely exists in Firebase but is blocked or rate-limited.
+  const FIREBASE_NO_LEGACY_FALLBACK = new Set(['USER_DISABLED', 'TOO_MANY_ATTEMPTS_TRY_LATER']);
+
+  const login = async (identifier, password) => {
+    const isEmail = identifier.includes('@');
+    if (isEmail) {
+      let firebaseUser = null;
+      let firebaseErr = null;
+      try {
+        firebaseUser = await authApi.signInWithEmailPassword(identifier, password, {
+          onAuthFailure: handleAuthFailure,
+        });
+      } catch (err) {
+        if (FIREBASE_NO_LEGACY_FALLBACK.has(err.firebaseCode)) throw err;
+        // Firebase doesn't recognize this email. It may be a legacy username
+        // that contains '@'. Try legacy login before surfacing the Firebase error.
+        firebaseErr = err;
+      }
+      if (firebaseUser) {
+        if (!firebaseUser.emailVerified) {
+          authApi.clearFirebaseSession();
+          throw new Error('Please verify your email before signing in.');
+        }
+        globalThis.localStorage?.removeItem('token');
+        setToken(null);
+        setUser(firebaseUser);
+        return true;
+      }
+      // Firebase auth failed — attempt legacy login as a fallback for @-shaped usernames.
+      const legacyRes = await globalThis.fetch(apiUrl('/api/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: identifier, password }),
+      });
+      if (!legacyRes.ok) throw firebaseErr; // both paths failed; surface the Firebase error
+      const legacyData = await legacyRes.json();
+      authApi.clearFirebaseSession();
+      globalThis.localStorage?.setItem('token', legacyData.token);
+      setToken(legacyData.token);
+      setUser({ username: legacyData.username, authProvider: 'password' });
+      return true;
+    }
+    const response = await globalThis.fetch(apiUrl('/api/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: identifier, password }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Invalid credentials.');
+    }
+    const data = await response.json();
+    // Clear any persisted Firebase session so a page reload does not restore
+    // the Firebase account on top of the newly-signed-in legacy user.
+    authApi.clearFirebaseSession();
+    globalThis.localStorage?.setItem('token', data.token);
+    setToken(data.token);
+    setUser({ username: data.username, authProvider: 'password' });
+    return true;
+  };
+
+  const register = async (email, password) => {
+    // storage: null prevents persisting the unverified session to localStorage.
+    // Without this, a page reload during the verification-pending state would
+    // rehydrate the session and present the user as signed in while the backend
+    // rejects all protected requests (emailVerified is still false).
+    const firebaseUser = await authApi.signUpWithEmailPassword(email, password, {
+      onAuthFailure: handleAuthFailure,
+      storage: null,
+    });
+    const idToken = await firebaseUser.getIdToken();
+    try {
+      await authApi.sendEmailVerification(idToken);
+    } catch {
+      // Verification email failed to send (e.g. transient network error, quota exceeded).
+      // The account was created; surface a flag so the caller can offer a resend button.
+      return { verificationSent: false, verificationFailed: true };
+    }
+    return { verificationSent: true };
+  };
+
+  const resendVerificationEmail = async (email, password) => {
+    // Re-authenticate to get a fresh id token, send the verification email, then
+    // immediately clear the unverified session so the user isn't admitted.
+    const firebaseUser = await authApi.signInWithEmailPassword(email, password, {
+      onAuthFailure: handleAuthFailure,
+      storage: null,
+    });
+    const idToken = await firebaseUser.getIdToken();
+    await authApi.sendEmailVerification(idToken);
+    authApi.clearFirebaseSession();
+    return { verificationSent: true };
+  };
+
+  const loginWithGoogle = async () => {
+    const continueUri = `${globalThis.location?.origin || ''}/login`;
+    const { authUri, sessionId } = await authApi.createGoogleAuthUri(continueUri);
+    globalThis.sessionStorage?.setItem('firebase_google_session_id', sessionId);
+    globalThis.location.href = authUri;
+  };
+
+  const completeGoogleSignIn = async () => {
+    const sessionId = globalThis.sessionStorage?.getItem('firebase_google_session_id');
+    if (!sessionId) return null;
+    // Claim the session id before the async exchange so a StrictMode double-invoke
+    // or concurrent call sees no id and returns null immediately, preventing two
+    // simultaneous requests to the Firebase IdP callback endpoint.
+    globalThis.sessionStorage?.removeItem('firebase_google_session_id');
+    const requestUri = globalThis.location?.href;
+    const firebaseUser = await authApi.signInWithGoogleCallback(requestUri, sessionId, {
+      onAuthFailure: handleAuthFailure,
+    });
+    // Guard against an unverified Google account (rare but possible with custom
+    // identity providers or certain org policies). clearFirebaseSession drops the
+    // persisted session so a reload doesn't silently admit the user.
+    if (!firebaseUser?.emailVerified) {
+      authApi.clearFirebaseSession();
+      throw new Error('Please verify your email before signing in.');
+    }
+    globalThis.localStorage?.removeItem('token');
+    setToken(null);
+    setUser(firebaseUser);
+    return firebaseUser;
+  };
+
+  const logout = async () => {
+    authApi.clearFirebaseSession();
+    setUser(null);
+    setToken(null);
+    globalThis.localStorage?.removeItem('token');
   };
 
   return (
@@ -190,7 +284,10 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
-      signInWithOAuth
+      resendVerificationEmail,
+      loginWithGoogle,
+      completeGoogleSignIn,
+      getAuthHeaders,
     }}>
       {children}
     </AuthContext.Provider>

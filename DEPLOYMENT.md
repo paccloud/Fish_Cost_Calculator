@@ -1,6 +1,6 @@
-# Vercel Deployment Guide with Neon PostgreSQL
+# Vercel Deployment Guide
 
-This guide will help you deploy Local Catch to Vercel with Neon PostgreSQL authentication.
+This guide will help you deploy Local Catch to Vercel with Firebase Auth and Neon PostgreSQL.
 
 ## Prerequisites
 
@@ -97,10 +97,13 @@ Before deploying, add these environment variables in Vercel:
 | Variable | Value | Notes |
 |----------|-------|-------|
 | `DATABASE_URL` | Your Neon connection string | From Step 1.1 |
-| `JWT_SECRET` | Your generated secret | From Step 2 (required; API fails fast if missing) |
-| `VITE_STACK_PROJECT_ID` | Stack Auth project ID | Required for frontend OAuth |
-| `VITE_STACK_PUBLISHABLE_CLIENT_KEY` | Stack Auth publishable client key | Required for frontend OAuth |
-| `STACK_SECRET_SERVER_KEY` | Stack Auth server secret key | Required for backend OAuth session verification |
+| `JWT_SECRET` | Your generated secret | Required while either the legacy JWT login endpoint or legacy JWT bearer-token validation remains enabled; used for both issuing and validating legacy tokens — remove only after both paths are disabled |
+| `FIREBASE_PROJECT_ID` | Firebase project ID | Required for backend Firebase ID token verification |
+| `VITE_FIREBASE_API_KEY` | Firebase web API key | Required for frontend email/password auth |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID | Must match `FIREBASE_PROJECT_ID` |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain | Usually `<project>.firebaseapp.com` |
+| `VITE_FIREBASE_APP_ID` | Firebase web app ID | From Firebase web app settings |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID | From Firebase web app settings |
 | `ALLOWED_ORIGINS` | Comma-separated allowlist (e.g. `https://your-app.vercel.app,http://localhost:5173`) | Required for CORS |
 | `CORS_ALLOW_CREDENTIALS` | `true` or `false` | Only enable when you need cookies across origins |
 | `JWT_EXPIRES_IN_SECONDS` | Optional, default `86400` | JWT lifetime (same value should be used locally) |
@@ -110,7 +113,79 @@ Before deploying, add these environment variables in Vercel:
 2. Add each variable for "Production" environment
 3. Optionally add for "Preview" environments too
 
-### 4.3 Deploy
+### 4.3 Apply Neon Auth Columns
+
+Before enabling the Firebase-authenticated frontend against an existing Neon
+database, run the auth column migration from `scripts/neon-schema.sql` in
+order:
+
+**Step 1 — Add columns and firebase_uid uniqueness:**
+
+```sql
+-- Add columns (safe to rerun; IF NOT EXISTS is a no-op for existing columns).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'firebase';
+ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+
+-- Add UNIQUE constraint on firebase_uid separately so the constraint is
+-- created even when the column already existed without it.  Safe to rerun.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_firebase_uid_unique' AND conrelid = 'users'::regclass
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_firebase_uid_unique UNIQUE (firebase_uid);
+  END IF;
+END $$;
+```
+
+**Step 2 — Identify duplicate emails** (must complete before Step 3):
+
+```sql
+-- Review any duplicate non-null email values that would block the UNIQUE constraint.
+SELECT email, COUNT(*) AS cnt
+FROM users
+WHERE email IS NOT NULL
+GROUP BY email
+HAVING COUNT(*) > 1;
+```
+
+Before resolving duplicates:
+1. **Export a backup** (all affected tables — `calculations`, `user_data`, and `contributors` use `ON DELETE CASCADE` and will be rewritten or deleted during cleanup):
+   ```
+   pg_dump -t users -t calculations -t user_data -t contributors <connection-string> > pre_dedup_backup.sql
+   ```
+2. **Map each duplicate to its canonical account** — determine which row owns the Firebase identity (check `firebase_uid` or oldest `id`) and which rows are stale.
+3. For each duplicate group:
+   - Reassign `calculations` and `user_data` rows to the canonical user ID.
+   - Handle `contributors` (unique per user) carefully: if **only the stale user** has a contributor profile, reassign it (`UPDATE contributors SET user_id = <canonical_id> WHERE user_id = <stale_id>`). If **both users** have contributor profiles, choose the canonical profile, merge any non-null fields from the stale profile into it, then delete the stale contributor row (`DELETE FROM contributors WHERE user_id = <stale_id>`) before deleting the stale user.
+   - Delete or null the `email` on the stale user row, or delete the stale user outright.
+   - **Note:** `contributors.user_id` is `UNIQUE`. Attempting to reassign the stale contributor row when the canonical user already has one will fail with a unique-constraint violation — merge and delete first. `ON DELETE CASCADE` means deleting a stale user silently deletes their contributor profile; always handle the contributor row explicitly before deleting the user.
+4. **Validate**: rerun the Step 2 query and confirm zero duplicate non-null emails before continuing.
+
+Firebase identity linking queries by verified email, so all non-null emails in the table must be unique.
+
+**Step 3 — Enforce email uniqueness:**
+
+```sql
+-- Run only after Step 2 confirms zero duplicate non-null emails.
+-- Safe to rerun: the DO block skips if the constraint already exists.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'users_email_unique' AND conrelid = 'users'::regclass
+  ) THEN
+    ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+  END IF;
+END $$;
+```
+
+New databases created from `scripts/neon-schema.sql` already include these
+columns and the `UNIQUE` constraint.
+
+### 4.4 Deploy
 
 Click "Deploy" and Vercel will:
 - Install dependencies (root + app)
@@ -119,34 +194,35 @@ Click "Deploy" and Vercel will:
 
 ---
 
-## Step 5: Configure Stack Auth Trusted Domains
+## Step 5: Configure Firebase Auth
 
-After deploying to Vercel, register the deployed domain in Stack Auth so OAuth
-redirects can complete.
+After deploying to Vercel, make sure Firebase Auth is configured for the same
+project used by `FIREBASE_PROJECT_ID`.
 
-### 5.1 Add Domains to Stack Auth
+### 5.1 Enable Email/Password Auth
 
-1. Log in to https://app.stack-auth.com
-2. Select the project matching `VITE_STACK_PROJECT_ID`.
-3. Open Project Settings -> Domains or Trusted Domains.
-4. Add each domain where users will sign in:
-   - Production Vercel URL, for example `https://your-app.vercel.app`
-   - Custom production domain, if configured
-   - Preview deployment URLs, or a preview wildcard if your Stack Auth project supports it
-5. Save the domain settings.
+1. Open the Firebase console.
+2. Select the project matching `FIREBASE_PROJECT_ID`.
+3. Go to Authentication -> Sign-in method.
+4. Enable Email/Password.
+5. Add the production and preview web domains under Authentication -> Settings
+   -> Authorized domains.
 
-The callback route in this app is `/handler/*`, but Stack Auth needs the domain
-root in Trusted Domains, not the full callback path.
+### 5.2 Enable Google Sign-In
 
-### 5.2 Clean Up Vercel Integrations
+1. In Authentication -> Sign-in method, enable Google.
+2. Set a support email for the OAuth consent screen.
+3. The authorized domains configured in 5.1 also cover Google redirect URIs.
+
+### 5.3 Clean Up Vercel Integrations
 
 1. Open the Vercel project settings.
-2. Remove the Clerk integration if it is present and unused. This repository
-   does not import Clerk.
+2. Remove any retired Stack Auth integration, keys, or related Vercel secrets
+   that are still present from the previous auth flow.
 3. Remove stale duplicate Neon integrations after confirming the active Neon
-   integration owns the current database and Stack Auth configuration.
+   integration owns the current database.
 4. Confirm the remaining integration and environment variables match the
-   intended Stack Auth and Neon projects.
+   intended Firebase and Neon projects.
 
 See `AUTH_ARCHITECTURE.md` for the current auth architecture and migration
 options.
@@ -249,19 +325,12 @@ This will:
 - Verify `ALLOWED_ORIGINS` includes your current origin
 - Test with public endpoints first (`/api/contributors`)
 
-### "REDIRECT_URL_NOT_WHITELISTED" error on deployed domain
+### Firebase login works but protected API calls return 401
 
-- The deployed domain has not been added to Stack Auth's Trusted Domains list
-- Go to https://app.stack-auth.com -> Project Settings -> Domains or Trusted Domains
-- Add the Vercel URL or custom domain where users are signing in
-- Save the setting and test OAuth again
-
-### OAuth login fails but password login works
-
-- Confirm Stack Auth Trusted Domains includes the deployed domain
-- Verify `VITE_STACK_PROJECT_ID` and `VITE_STACK_PUBLISHABLE_CLIENT_KEY` are set in Vercel
-- Verify `STACK_SECRET_SERVER_KEY` is set for backend session verification
-- Check Vercel integrations and remove unused Clerk or stale duplicate Neon integrations
+- Confirm `FIREBASE_PROJECT_ID` matches `VITE_FIREBASE_PROJECT_ID`.
+- Confirm the deployed domain is authorized in Firebase Auth settings.
+- Confirm the frontend is sending `Authorization: Bearer <firebase_id_token>`.
+- Redeploy after changing any Firebase environment variables.
 
 ### Cold starts are slow
 

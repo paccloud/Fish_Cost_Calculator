@@ -69,6 +69,10 @@ async function extractErrorMessage(res) {
   return `Request failed with status ${res.status}`;
 }
 
+function hasAuthorizationHeader(headers) {
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'authorization');
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -102,9 +106,8 @@ export function createApiClient(options = {}) {
    * Core request helper — constructs URL, attaches auth header, normalizes
    * error responses into ApiError instances.
    *
-   * Caller-supplied headers in `init.headers` are merged first; the JWT auth
-   * header is added only if not already present (lets syncEngine pass
-   * pre-built headers that may include x-stack-access-token instead).
+   * Caller-supplied headers in `init.headers` are merged first; the legacy
+   * localStorage auth header is added only if Authorization is not already present.
    *
    * @param {string} path  - e.g. '/api/export?type=calcs'
    * @param {RequestInit} [init]
@@ -113,8 +116,8 @@ export function createApiClient(options = {}) {
   async function request(path, init = {}) {
     const url = `${baseUrl}${path}`;
     const headers = { ...(init.headers ?? {}) };
-    // Only inject the JWT auth header when caller hasn't already set one.
-    if (!headers.Authorization && !headers['x-stack-access-token']) {
+    // Only inject the fallback auth header when caller hasn't already set one.
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) {
         headers.Authorization = auth;
@@ -143,7 +146,7 @@ export function createApiClient(options = {}) {
   async function rawRequest(path, init = {}) {
     const url = `${baseUrl}${path}`;
     const headers = { ...(init.headers ?? {}) };
-    if (!headers.Authorization && !headers['x-stack-access-token']) {
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) {
         headers.Authorization = auth;
@@ -163,8 +166,11 @@ export function createApiClient(options = {}) {
    *
    * @returns {Promise<Blob>}
    */
-  async function exportCalcs() {
-    const res = await request('/api/export?type=calcs', { method: 'GET' });
+  async function exportCalcs(extraHeaders = {}) {
+    const res = await request('/api/export?type=calcs', {
+      method: 'GET',
+      headers: { ...extraHeaders },
+    });
     return res.blob();
   }
 
@@ -264,14 +270,14 @@ export function createApiClient(options = {}) {
    * GET /api/contributor
    *
    * @param {Record<string,string>} [extraHeaders] - Pre-built auth headers
-   *   (e.g. from getAuthHeaders() for OAuth users).
+   *   (e.g. from getAuthHeaders() for Firebase users).
    * @returns {Promise<Object|null>}
    * @throws {ApiError} on non-ok response other than 404
    */
   async function getContributorProfile(extraHeaders = {}) {
     const url = `${baseUrl}/api/contributor`;
     const headers = { ...extraHeaders };
-    if (!headers.Authorization && !headers['x-stack-access-token']) {
+    if (!hasAuthorizationHeader(headers)) {
       const auth = authHeader();
       if (auth) headers.Authorization = auth;
     }

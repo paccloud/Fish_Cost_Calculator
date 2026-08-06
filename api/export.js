@@ -28,6 +28,12 @@ async function sendXlsx(res, filename, columns, rows) {
   return res.status(200).send(Buffer.from(buffer));
 }
 
+const formatCsvDate = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+};
+
 /**
  * Consolidated export endpoint
  * GET /api/export?type=calcs&format=csv|xlsx - Export calculations
@@ -109,7 +115,7 @@ async function handler(req, res) {
 
       const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
       const csvRows = result.rows.map(calc => {
-        const date = sanitizeCsvValue(new Date(calc.date).toLocaleString());
+        const date = sanitizeCsvValue(formatCsvDate(calc.date));
         const values = [
           date,
           sanitizeCsvValue(calc.species),

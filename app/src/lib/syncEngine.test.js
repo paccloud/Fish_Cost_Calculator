@@ -202,13 +202,13 @@ describe('syncAll', () => {
     expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id');
   });
 
-  it('uses shared auth headers so OAuth sessions can sync without a JWT', async () => {
-    const oauthUser = { username: 'oauth-user', authProvider: 'oauth' };
-    const oauthHeaders = {
+  it('uses shared auth headers so Firebase sessions can sync without a legacy JWT', async () => {
+    const firebaseUser = { username: 'firebase-user', authProvider: 'firebase', getIdToken: vi.fn() };
+    const firebaseHeaders = {
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
+      Authorization: 'Bearer firebase-id-token',
     };
-    getAuthHeaders.mockResolvedValue(oauthHeaders);
+    getAuthHeaders.mockResolvedValue(firebaseHeaders);
     getAllPendingSync.mockResolvedValue({
       calcs: [
         {
@@ -223,14 +223,14 @@ describe('syncAll', () => {
       yields: [],
     });
 
-    await syncAll(oauthUser);
+    await syncAll(firebaseUser);
 
-    expect(getAuthHeaders).toHaveBeenCalledWith(oauthUser, { 'Content-Type': 'application/json' });
-    // extraHeaders passed to saveCalcRaw must include the OAuth token
+    expect(getAuthHeaders).toHaveBeenCalledWith(firebaseUser, { 'Content-Type': 'application/json' });
+    // extraHeaders passed to saveCalcRaw must include the Firebase ID token
     const [, extraHeaders] = apiClient.saveCalcRaw.mock.calls[0];
     expect(extraHeaders).toMatchObject({
       'Content-Type': 'application/json',
-      'x-stack-access-token': 'stack-token',
+      Authorization: 'Bearer firebase-id-token',
     });
   });
 

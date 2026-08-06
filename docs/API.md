@@ -4,25 +4,30 @@ This document provides detailed API documentation with example requests and resp
 
 ## Base URL
 
-```
+```text
 Development: http://localhost:3000
 ```
 
 ## Authentication
 
-Most endpoints require JWT authentication. Include the token in the Authorization header:
+Most protected endpoints require authentication. During the Firebase migration,
+the API accepts either a Firebase Auth ID token or the legacy password-login JWT
+in the Authorization header:
 
-```
-Authorization: Bearer <your_jwt_token>
+```http
+Authorization: Bearer <firebase_id_token_or_legacy_jwt>
 ```
 
 ---
 
 ## Authentication Endpoints
 
-### Register New User
+### Register New User (Legacy Password Migration)
 
-Create a new user account.
+Create a legacy password user account. New browser clients should use Firebase
+Auth and send Firebase ID tokens to protected endpoints; this endpoint remains
+only for the temporary password-login compatibility path while `JWT_SECRET` is
+enabled.
 
 **Endpoint:** `POST /api/register`
 
@@ -54,9 +59,10 @@ Create a new user account.
 
 ---
 
-### Login
+### Login (Legacy Password Migration)
 
-Authenticate and receive a JWT token.
+Authenticate a legacy password user and receive a JWT token. New clients should
+use Firebase Auth instead of integrating against this JWT flow.
 
 **Endpoint:** `POST /api/login`
 

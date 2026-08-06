@@ -42,12 +42,11 @@ const apiRateLimit = rateLimit({
     handler: (req, res) => res.status(429).json({ error: 'Too many requests. Please try again later.' }),
 });
 
-if (!SECRET_KEY) {
-  throw new Error('JWT_SECRET is required to start the server');
-}
-
 if (!process.env.JWT_SECRET) {
-  console.warn('JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist sessions.');
+  const warning = SECRET_KEY
+    ? 'JWT_SECRET not set; using ephemeral dev secret. Set JWT_SECRET to persist legacy JWT sessions.'
+    : 'JWT_SECRET not set; legacy JWT login is disabled. Firebase Auth remains available.';
+  console.warn(warning);
 }
 
 // Middleware
@@ -82,6 +81,19 @@ const sanitizeCsvValue = (value) => {
   return CSV_FORMULA_PREFIX.test(escaped.trimStart()) ? `'${escaped}` : escaped;
 };
 
+const formatCsvDate = (value) => {
+  if (value === null || value === undefined || value === '') return '';
+  // SQLite CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" without a timezone marker.
+  // Node.js parses bare datetime strings as local time; append UTC suffix so the
+  // export always reflects the stored UTC value regardless of server timezone.
+  const normalized =
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(value)
+      ? value.replace(' ', 'T') + 'Z'
+      : value;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+};
+
 // Database Setup
 const db = new sqlite3.Database('./fish_app.db', (err) => {
     if (err) console.error(err.message);
@@ -94,7 +106,11 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         password TEXT,
-        role TEXT DEFAULT 'user'
+        role TEXT DEFAULT 'user',
+        firebase_uid TEXT UNIQUE,
+        email TEXT,
+        avatar_url TEXT,
+        auth_provider TEXT DEFAULT 'firebase'
     )`);
     
     db.run(`CREATE TABLE IF NOT EXISTS calculations (
@@ -138,19 +154,62 @@ db.serialize(() => {
             console.warn('[migration] ALTER TABLE user_data:', err.message);
         }
     });
+    [
+        'ALTER TABLE users ADD COLUMN firebase_uid TEXT',
+        'ALTER TABLE users ADD COLUMN email TEXT',
+        'ALTER TABLE users ADD COLUMN avatar_url TEXT',
+        "ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'firebase'",
+    ].forEach((statement) => {
+        db.run(statement, (err) => {
+            if (err && !/duplicate column/i.test(err.message)) {
+                console.error(`Failed to apply users auth migration: ${err.message}`);
+            }
+        });
+    });
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)');
+});
+
+const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
+    // Convert PostgreSQL $N placeholders to SQLite ?N numbered params.
+    // SQLite ?N syntax allows the same index to appear multiple times and
+    // binds each occurrence from the same element — preserving semantics like
+    // `$1 ... IS DISTINCT FROM $1` with only a single value in params.
+    const sql = text.replace(/\$(\d+)/g, '?$1');
+    db.all(sql, params, (err, rows) => {
+        if (err) return reject(err);
+        return resolve({ rows });
+    });
 });
 
 // Auth Middleware
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    if (!authHeader?.startsWith('Bearer ')) return res.sendStatus(401);
+
+    const token = authHeader.slice('Bearer '.length).trim();
     if (!token) return res.sendStatus(401);
+
+    try {
+        const { verifyFirebaseAuthSession } = await import('../api/_lib/firebase-auth.js');
+        const firebaseUser = await verifyFirebaseAuthSession(req, { query: sqliteQuery });
+        if (firebaseUser) {
+            req.user = firebaseUser;
+            return next();
+        }
+    } catch (err) {
+        console.error('Firebase auth verification failed:', err.message || err);
+    }
+
+    if (!SECRET_KEY) {
+        return res.status(403).json({ error: 'Invalid or expired token' });
+    }
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
         if (err) {
             const status = err.name === 'TokenExpiredError' ? 401 : 403;
             return res.status(status).json({ error: 'Invalid or expired token' });
         }
+
         req.user = user;
         next();
     });
@@ -417,7 +476,7 @@ app.get('/api/export', authenticate, async (req, res) => {
 
             const csvHeader = 'Date,Species,Conversion,Cost,Yield (%),Result\n';
             const csvRows = rows.map(row => {
-                const date = sanitizeCsvValue(new Date(row.date).toLocaleString());
+                const date = sanitizeCsvValue(formatCsvDate(row.date));
                 const values = [
                     date,
                     sanitizeCsvValue(row.species),
