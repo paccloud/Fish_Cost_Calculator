@@ -120,3 +120,17 @@ Deployed on **Vercel** with Neon PostgreSQL. See `DEPLOYMENT.md` for full guide.
 - Use conventional commit prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`
 - Present tense, under 70 characters
 - Reference issue numbers when applicable
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as GitHub Issues on `paccloud/Fish_Cost_Calculator` (use `gh` locally, GitHub MCP tools on the web). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage roles with `ready-for-human` mapped to `needs-decision`; all other roles use their default names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
