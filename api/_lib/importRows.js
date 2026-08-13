@@ -160,14 +160,19 @@ export async function upsertImportedYieldRows(userId, rows, runQuery) {
       );
 
       if (existing.rows?.[0]) {
-        await runQuery(
-          'UPDATE user_data SET yield = $1, source = $2 WHERE id = $3 AND user_id = $4',
+        const updateResult = await runQuery(
+          `UPDATE user_data
+              SET yield = $1, source = $2,
+                  revision = revision + 1, updated_at = NOW()
+            WHERE id = $3 AND user_id = $4
+              AND (yield IS DISTINCT FROM $1 OR source IS DISTINCT FROM $2)`,
           [row.yield, row.source, existing.rows[0].id, userId]
         );
-        updated++;
+        if ((updateResult.rowCount ?? 0) > 0) updated++;
       } else {
         await runQuery(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5)',
+          `INSERT INTO user_data (user_id, species, product, yield, source, revision, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 1, NOW(), NOW())`,
           [userId, row.species, row.product, row.yield, row.source]
         );
         inserted++;

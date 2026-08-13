@@ -44,9 +44,9 @@ async function handler(req, res) {
 
   // POST /api/user-data — create new entry
   if (req.method === 'POST' && !id) {
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, client_id: clientId } = req.body ?? {};
     const { status, body } = await handleCreateUserData(
-      { userId, species, product, yield: yieldVal, source },
+      { userId, species, product, yield: yieldVal, source, clientId },
       db
     );
     return res.status(status).json(body);
@@ -54,9 +54,17 @@ async function handler(req, res) {
 
   // PUT /api/user-data?id=:id — update entry
   if (req.method === 'PUT' && id) {
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, expected_revision: rawRevision } = req.body ?? {};
+    let expectedRevision = rawRevision;
+    if (expectedRevision !== undefined) {
+      const rev = Number(expectedRevision);
+      if (!Number.isInteger(rev) || rev < 1) {
+        return res.status(400).json({ error: 'expected_revision must be a positive integer' });
+      }
+      expectedRevision = rev;
+    }
     const { status, body } = await handleUpdateUserData(
-      { userId, id, species, product, yield: yieldVal, source },
+      { userId, id, species, product, yield: yieldVal, source, expectedRevision },
       db
     );
     return res.status(status).json(body);
@@ -64,7 +72,17 @@ async function handler(req, res) {
 
   // DELETE /api/user-data?id=:id — delete entry
   if (req.method === 'DELETE' && id) {
-    const { status, body } = await handleDeleteUserData({ userId, id }, db);
+    // Accept from query string first (DELETE bodies are dropped by some proxies)
+    const rawRevision = req.query.expected_revision ?? (req.body ?? {}).expected_revision;
+    let expectedRevision;
+    if (rawRevision !== undefined) {
+      const rev = Number(rawRevision);
+      if (!Number.isInteger(rev) || rev < 1) {
+        return res.status(400).json({ error: 'expected_revision must be a positive integer' });
+      }
+      expectedRevision = rev;
+    }
+    const { status, body } = await handleDeleteUserData({ userId, id, expectedRevision }, db);
     return res.status(status).json(body);
   }
 

@@ -49,16 +49,27 @@ export async function handleListUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleCreateUserData(input, db) {
-  const { userId, species, product, yield: yieldVal, source = 'User Input' } = input;
+  const { userId, species, product, yield: yieldVal, source = 'User Input', clientId } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
 
   if (!species || !product || yieldVal === undefined) {
     return { status: 400, body: { error: 'Species, product, and yield are required' } };
   }
 
+  const safeClientId = (typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : undefined;
+
   try {
-    const row = await db.createUserDataEntry(userId, { species, product, yield: yieldVal, source });
-    return { status: 201, body: { id: row.id, message: 'Data added successfully' } };
+    const row = await db.createUserDataEntry(userId, { species, product, yield: yieldVal, source, clientId: safeClientId });
+    return {
+      status: 200,
+      body: {
+        id: row.id,
+        revision: row.revision ?? 1,
+        created_at: row.created_at ?? null,
+        updated_at: row.updated_at ?? null,
+        message: 'Data added successfully',
+      },
+    };
   } catch (err) {
     console.error('[user-data create] error:', err.message ?? err);
     return { status: 500, body: { error: 'Failed to add data' } };
@@ -75,16 +86,30 @@ export async function handleCreateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleUpdateUserData(input, db) {
-  const { userId, id, species, product, yield: yieldVal, source } = input;
+  let { userId, id, species, product, yield: yieldVal, source, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
-  try {
-    const existing = await db.findUserDataEntryById(id, userId);
-    if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+  if (expectedRevision !== undefined) {
+    const rev = Number(expectedRevision);
+    if (!Number.isInteger(rev) || rev < 1) {
+      return { status: 400, body: { error: 'expected_revision must be a positive integer' } };
+    }
+    expectedRevision = rev;
+  }
 
-    await db.updateUserDataEntry(id, userId, { species, product, yield: yieldVal, source });
-    return { status: 200, body: { message: 'Updated successfully' } };
+  try {
+    // Revision check is baked into the WHERE clause of the UPDATE — no separate
+    // SELECT-then-UPDATE race.  0 rows updated means either 404 or 409.
+    const { rowCount, row } = await db.updateUserDataEntry(
+      id, userId, { species, product, yield: yieldVal, source }, expectedRevision
+    );
+    if (rowCount === 0) {
+      const existing = await db.findUserDataEntryById(id, userId);
+      if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+      return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
+    }
+    return { status: 200, body: { message: 'Updated successfully', id: row?.id, revision: row?.revision, updated_at: row?.updated_at } };
   } catch (err) {
     console.error('[user-data update] error:', err.message ?? err);
     return { status: 500, body: { error: 'Failed to update data' } };
@@ -101,15 +126,26 @@ export async function handleUpdateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleDeleteUserData(input, db) {
-  const { userId, id } = input;
+  let { userId, id, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
-  try {
-    const existing = await db.findUserDataEntryById(id, userId);
-    if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+  if (expectedRevision !== undefined) {
+    const rev = Number(expectedRevision);
+    if (!Number.isInteger(rev) || rev < 1) {
+      return { status: 400, body: { error: 'expected_revision must be a positive integer' } };
+    }
+    expectedRevision = rev;
+  }
 
-    await db.deleteUserDataEntry(id, userId);
+  try {
+    // Pass expectedRevision into the adapter so the revision check and the
+    // DELETE execute atomically — no separate read-then-delete race.
+    const { rowCount, notFound } = await db.deleteUserDataEntry(id, userId, expectedRevision);
+    if (rowCount === 0) {
+      if (notFound) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+      return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
+    }
     return { status: 200, body: { message: 'Deleted successfully' } };
   } catch (err) {
     console.error('[user-data delete] error:', err.message ?? err);

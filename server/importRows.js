@@ -165,6 +165,10 @@ function getSql(db, sql, params = []) {
 async function upsertImportedYieldRowsSqlite(db, userId, rows) {
     let inserted = 0;
     let updated = 0;
+    // Track DB row IDs already processed in this batch so a second occurrence of
+    // the same (species, product) in the import file inserts a new row rather
+    // than silently overwriting the first match.
+    const processedDbIds = new Set();
 
     await runSql(db, 'BEGIN TRANSACTION');
 
@@ -176,17 +180,23 @@ async function upsertImportedYieldRowsSqlite(db, userId, rows) {
                 [userId, row.species, row.product]
             );
 
-            if (existing) {
-                await runSql(
+            if (existing && !processedDbIds.has(String(existing.id))) {
+                processedDbIds.add(String(existing.id));
+                const updateResult = await runSql(
                     db,
-                    'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
-                    [row.yield, row.source, existing.id, userId]
+                    `UPDATE user_data
+                        SET yield = ?, source = ?,
+                            revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                      WHERE id = ? AND user_id = ?
+                        AND (yield IS NOT ? OR source IS NOT ?)`,
+                    [row.yield, row.source, existing.id, userId, row.yield, row.source]
                 );
-                updated++;
+                if (updateResult.changes > 0) updated++;
             } else {
                 await runSql(
                     db,
-                    'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                    `INSERT INTO user_data (user_id, species, product, yield, source, revision, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
                     [userId, row.species, row.product, row.yield, row.source]
                 );
                 inserted++;

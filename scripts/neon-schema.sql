@@ -38,7 +38,11 @@ CREATE TABLE IF NOT EXISTS user_data (
     product VARCHAR(255) NOT NULL,
     yield DECIMAL(5,2) NOT NULL,
     source VARCHAR(255),
-    is_shared BOOLEAN DEFAULT FALSE
+    is_shared BOOLEAN DEFAULT FALSE,
+    client_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Contributors table (public profiles)
@@ -59,6 +63,9 @@ CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS calculations_user_client_id_unique
     ON calculations (user_id, client_id)
+ WHERE client_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS user_data_user_client_id_unique
+    ON user_data (user_id, client_id)
  WHERE client_id IS NOT NULL;
 
 -- Migration for existing databases (run in order if upgrading)

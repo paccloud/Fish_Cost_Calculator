@@ -25,15 +25,31 @@ import {
 // Fake DbAdapter factory
 // ---------------------------------------------------------------------------
 
-const SAMPLE_ENTRY = { id: 1, species: 'Pink Salmon', product: 'Fillet', yield: 42, source: 'User Input', is_shared: false };
+const SAMPLE_ENTRY = {
+  id: 1,
+  species: 'Pink Salmon',
+  product: 'Fillet',
+  yield: 42,
+  source: 'User Input',
+  is_shared: false,
+  client_id: 'client-uuid-1',
+  revision: 1,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
 
 function makeFakeDb(overrides = {}) {
   return {
     listUserData: vi.fn().mockResolvedValue([SAMPLE_ENTRY]),
-    createUserDataEntry: vi.fn().mockResolvedValue({ id: 99 }),
+    createUserDataEntry: vi.fn().mockResolvedValue({
+      id: 99,
+      revision: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }),
     findUserDataEntryById: vi.fn().mockResolvedValue(SAMPLE_ENTRY),
-    updateUserDataEntry: vi.fn().mockResolvedValue(undefined),
-    deleteUserDataEntry: vi.fn().mockResolvedValue(undefined),
+    updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 1, row: { id: 1, revision: 2, updated_at: '2026-01-01T00:00:01Z' } }),
+    deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 1 }),
     setUserDataSharing: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -93,19 +109,23 @@ describe('handleCreateUserData', () => {
     expect(db.createUserDataEntry).not.toHaveBeenCalled();
   });
 
-  it('returns 201 with id on success', async () => {
+  it('returns 200 with id, revision, and timestamps on success', async () => {
     const db = makeFakeDb();
     const result = await handleCreateUserData(
       { userId: 1, species: 'Salmon', product: 'Fillet', yield: 42 },
       db
     );
-    expect(result.status).toBe(201);
+    expect(result.status).toBe(200);
     expect(result.body.id).toBe(99);
+    expect(result.body.revision).toBe(1);
+    expect(result.body.created_at).toBe('2026-01-01T00:00:00Z');
+    expect(result.body.updated_at).toBe('2026-01-01T00:00:00Z');
     expect(db.createUserDataEntry).toHaveBeenCalledWith(1, {
       species: 'Salmon',
       product: 'Fillet',
       yield: 42,
       source: 'User Input',
+      clientId: undefined,
     });
   });
 
@@ -130,6 +150,52 @@ describe('handleCreateUserData', () => {
 });
 
 // ===========================================================================
+// handleCreateUserData — clientId idempotency
+// ===========================================================================
+
+describe('handleCreateUserData — clientId idempotency', () => {
+  it('passes clientId to createUserDataEntry', async () => {
+    const db = makeFakeDb();
+    await handleCreateUserData(
+      { userId: 1, species: 'Salmon', product: 'Fillet', yield: 42, clientId: 'stable-uuid-123' },
+      db
+    );
+    expect(db.createUserDataEntry).toHaveBeenCalledWith(1, expect.objectContaining({ clientId: 'stable-uuid-123' }));
+  });
+
+  it('returns same id and revision on idempotent retry', async () => {
+    const db = makeFakeDb({
+      createUserDataEntry: vi.fn().mockResolvedValue({ id: 99, revision: 1, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    });
+    const result = await handleCreateUserData(
+      { userId: 1, species: 'Salmon', product: 'Fillet', yield: 42, clientId: 'stable-uuid-123' },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(result.body.id).toBe(99);
+    expect(result.body.revision).toBe(1);
+  });
+
+  it('strips whitespace-only clientId', async () => {
+    const db = makeFakeDb();
+    await handleCreateUserData(
+      { userId: 1, species: 'Salmon', product: 'Fillet', yield: 42, clientId: '   ' },
+      db
+    );
+    expect(db.createUserDataEntry).toHaveBeenCalledWith(1, expect.objectContaining({ clientId: undefined }));
+  });
+
+  it('ignores non-string clientId', async () => {
+    const db = makeFakeDb();
+    await handleCreateUserData(
+      { userId: 1, species: 'Salmon', product: 'Fillet', yield: 42, clientId: 12345 },
+      db
+    );
+    expect(db.createUserDataEntry).toHaveBeenCalledWith(1, expect.objectContaining({ clientId: undefined }));
+  });
+});
+
+// ===========================================================================
 // handleUpdateUserData
 // ===========================================================================
 
@@ -147,7 +213,11 @@ describe('handleUpdateUserData', () => {
   });
 
   it('returns 404 when entry not found or not owned', async () => {
-    const db = makeFakeDb({ findUserDataEntryById: vi.fn().mockResolvedValue(null) });
+    // rowCount=0 from DB + findUserDataEntryById returns null → 404
+    const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
+      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+    });
     const result = await handleUpdateUserData({ userId: 1, id: 99, species: 'Tuna' }, db);
     expect(result.status).toBe(404);
     expect(result.body.error).toMatch(/not found/i);
@@ -157,7 +227,11 @@ describe('handleUpdateUserData', () => {
     const db = makeFakeDb();
     const result = await handleUpdateUserData({ userId: 1, id: 1, species: 'Tuna' }, db);
     expect(result.status).toBe(200);
-    expect(db.updateUserDataEntry).toHaveBeenCalledWith(1, 1, { species: 'Tuna', product: undefined, yield: undefined, source: undefined });
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      undefined
+    );
   });
 
   it('returns 500 when db throws', async () => {
@@ -165,6 +239,54 @@ describe('handleUpdateUserData', () => {
     const result = await handleUpdateUserData({ userId: 1, id: 1, species: 'Tuna' }, db);
     expect(result.status).toBe(500);
     expect(result.body.error).toMatch(/failed to update/i);
+  });
+});
+
+// ===========================================================================
+// handleUpdateUserData — revision guard
+// ===========================================================================
+
+describe('handleUpdateUserData — revision guard', () => {
+  it('returns 409 when DB rejects the update due to revision mismatch', async () => {
+    // The adapter returns rowCount=0 when the revision in WHERE doesn't match.
+    // findUserDataEntryById returns the entry — confirms it exists, so 409.
+    const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Tuna', expectedRevision: 3 },
+      db
+    );
+    expect(result.status).toBe(409);
+    expect(result.body.error).toMatch(/conflict/i);
+  });
+
+  it('proceeds when expectedRevision matches (rowCount=1)', async () => {
+    const db = makeFakeDb();
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Tuna', expectedRevision: 1 },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      1
+    );
+  });
+
+  it('skips revision check when expectedRevision is not provided', async () => {
+    const db = makeFakeDb();
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Tuna' },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      undefined
+    );
   });
 });
 
@@ -186,7 +308,9 @@ describe('handleDeleteUserData', () => {
   });
 
   it('returns 404 when entry not found or not owned', async () => {
-    const db = makeFakeDb({ findUserDataEntryById: vi.fn().mockResolvedValue(null) });
+    const db = makeFakeDb({
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: true }),
+    });
     const result = await handleDeleteUserData({ userId: 1, id: 99 }, db);
     expect(result.status).toBe(404);
     expect(result.body.error).toMatch(/not found/i);
@@ -196,7 +320,7 @@ describe('handleDeleteUserData', () => {
     const db = makeFakeDb();
     const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
     expect(result.status).toBe(200);
-    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, undefined);
   });
 
   it('returns 500 when db throws', async () => {
@@ -204,6 +328,105 @@ describe('handleDeleteUserData', () => {
     const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
     expect(result.status).toBe(500);
     expect(result.body.error).toMatch(/failed to delete/i);
+  });
+});
+
+// ===========================================================================
+// handleDeleteUserData — revision guard (stale-delete)
+// ===========================================================================
+
+describe('handleDeleteUserData — revision guard', () => {
+  it('returns 409 when expectedRevision does not match the current revision', async () => {
+    // Adapter returns notFound=false when the row exists but revision differs.
+    const db = makeFakeDb({
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: false }),
+    });
+    const result = await handleDeleteUserData(
+      { userId: 1, id: 1, expectedRevision: 1 },
+      db
+    );
+    expect(result.status).toBe(409);
+    expect(result.body.error).toMatch(/conflict/i);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, 1);
+  });
+
+  it('proceeds when expectedRevision matches', async () => {
+    const db = makeFakeDb(); // default returns { rowCount: 1 }
+    const result = await handleDeleteUserData(
+      { userId: 1, id: 1, expectedRevision: 3 },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, 3);
+  });
+
+  it('skips revision check when expectedRevision is not provided', async () => {
+    const db = makeFakeDb();
+    const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
+    expect(result.status).toBe(200);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, undefined);
+  });
+});
+
+// ===========================================================================
+// Ownership isolation
+// ===========================================================================
+
+describe('ownership isolation', () => {
+  it('does not let user 2 update user 1 entry', async () => {
+    // The adapter's WHERE user_id = ? prevents cross-user updates; rowCount=0.
+    // The fallback SELECT also returns null, so we get 404.
+    const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
+      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 2, id: 1, species: 'Tuna' },
+      db
+    );
+    expect(result.status).toBe(404);
+  });
+
+  it('does not let user 2 delete user 1 entry', async () => {
+    // Adapter's WHERE user_id = ? clause rejects the delete; notFound=true.
+    const db = makeFakeDb({
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: true }),
+    });
+    const result = await handleDeleteUserData({ userId: 2, id: 1 }, db);
+    expect(result.status).toBe(404);
+  });
+});
+
+// ===========================================================================
+// Revision advancement
+// ===========================================================================
+
+describe('revision advancement', () => {
+  it('calls updateUserDataEntry with expectedRevision baked in', async () => {
+    const db = makeFakeDb();
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Coho Salmon', product: undefined, yield: undefined, source: undefined },
+      2
+    );
+  });
+
+  it('rejects stale update when DB reports 0 rows affected and row still exists', async () => {
+    // updateUserDataEntry returns rowCount=0 (revision mismatch in WHERE clause).
+    // findUserDataEntryById returns the entry — confirms it exists, so 409.
+    const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
+      db
+    );
+    expect(result.status).toBe(409);
   });
 });
 

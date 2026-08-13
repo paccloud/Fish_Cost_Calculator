@@ -587,6 +587,17 @@ describe('apiClient.createUserDataRaw — request construction', () => {
     expect(res.ok).toBe(true);
   });
 
+  it('sends client_id for idempotent retry', async () => {
+    const body = { species: 'Halibut', product: 'Fillet', yield: 45, source: 'User Input', client_id: 'stable-local-uuid' };
+    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: { id: 3, revision: 1 } }));
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.createUserDataRaw(body);
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(JSON.parse(options.body).client_id).toBe('stable-local-uuid');
+  });
+
   it('returns non-ok response without throwing', async () => {
     const fetchStub = stubFetch(fakeResponse({ ok: false, status: 401, body: {} }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => null, fetch: fetchStub });

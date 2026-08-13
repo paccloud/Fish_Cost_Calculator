@@ -300,7 +300,9 @@ function makeSqliteAdapter(db) {
     listUserData(userId) {
       return new Promise((resolve, reject) => {
         db.all(
-          'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?',
+          `SELECT id, species, product, yield, source, is_shared,
+                  client_id, revision, created_at, updated_at
+           FROM user_data WHERE user_id = ?`,
           [userId],
           (err, rows) => {
             if (err) return reject(err);
@@ -311,14 +313,41 @@ function makeSqliteAdapter(db) {
     },
 
     createUserDataEntry(userId, fields) {
-      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+      const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
+
+      if (clientId) {
+        // INSERT OR IGNORE skips silently on (user_id, client_id) conflict;
+        // the subsequent SELECT always returns the winning row.
+        return new Promise((resolve, reject) => {
+          db.run(
+            `INSERT OR IGNORE INTO user_data
+               (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [userId, species, product, yieldVal, source, clientId],
+            (err) => {
+              if (err) return reject(err);
+              db.get(
+                'SELECT id, revision, created_at, updated_at FROM user_data WHERE user_id = ? AND client_id = ?',
+                [userId, clientId],
+                (err2, row) => { if (err2) return reject(err2); resolve(row); }
+              );
+            }
+          );
+        });
+      }
+
       return new Promise((resolve, reject) => {
         db.run(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+          `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
           [userId, species, product, yieldVal, source],
           function callback(err) {
             if (err) return reject(err);
-            resolve({ id: this.lastID });
+            db.get(
+              'SELECT id, revision, created_at, updated_at FROM user_data WHERE id = ?',
+              [this.lastID],
+              (err2, row) => { if (err2) return reject(err2); resolve(row); }
+            );
           }
         );
       });
@@ -327,7 +356,8 @@ function makeSqliteAdapter(db) {
     findUserDataEntryById(id, userId) {
       return new Promise((resolve, reject) => {
         db.get(
-          'SELECT id, species, product, yield, source FROM user_data WHERE id = ? AND user_id = ?',
+          `SELECT id, species, product, yield, source, is_shared, revision, created_at, updated_at
+           FROM user_data WHERE id = ? AND user_id = ?`,
           [id, userId],
           (err, row) => {
             if (err) return reject(err);
@@ -337,36 +367,52 @@ function makeSqliteAdapter(db) {
       });
     },
 
-    async updateUserDataEntry(id, userId, fields) {
-      const existing = await this.findUserDataEntryById(id, userId);
+    updateUserDataEntry(id, userId, fields, expectedRevision) {
       const { species, product, yield: yieldVal, source } = fields;
+      // RETURNING makes the update and the revision read one atomic operation,
+      // so a concurrent update cannot slip a stale revision into the response.
       return new Promise((resolve, reject) => {
-        db.run(
-          'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
-          [
-            species ?? existing?.species,
-            product ?? existing?.product,
-            yieldVal !== undefined ? yieldVal : existing?.yield,
-            source ?? existing?.source,
-            id,
-            userId,
-          ],
-          (err) => {
+        db.get(
+          `UPDATE user_data
+           SET species    = COALESCE(?, species),
+               product    = COALESCE(?, product),
+               yield      = COALESCE(?, yield),
+               source     = COALESCE(?, source),
+               revision   = revision + 1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND user_id = ?
+             AND (? IS NULL OR revision = ?)
+           RETURNING id, revision, updated_at`,
+          [species, product, yieldVal, source, id, userId, expectedRevision ?? null, expectedRevision ?? null],
+          (err, row) => {
             if (err) return reject(err);
-            resolve();
+            if (!row) return resolve({ rowCount: 0, row: null });
+            resolve({ rowCount: 1, row });
           }
         );
       });
     },
 
-    deleteUserDataEntry(id, userId) {
+    deleteUserDataEntry(id, userId, expectedRevision) {
+      // Revision-conditional delete: atomic check-and-delete prevents a stale
+      // client from deleting a yield another device updated since the last read.
       return new Promise((resolve, reject) => {
         db.run(
-          'DELETE FROM user_data WHERE id = ? AND user_id = ?',
-          [id, userId],
-          (err) => {
+          `DELETE FROM user_data WHERE id = ? AND user_id = ?
+             AND (? IS NULL OR revision = ?)`,
+          [id, userId, expectedRevision ?? null, expectedRevision ?? null],
+          function callback(err) {
             if (err) return reject(err);
-            resolve();
+            if (this.changes > 0) return resolve({ rowCount: 1 });
+            // Distinguish not-found from revision-mismatch.
+            db.get(
+              'SELECT id FROM user_data WHERE id = ? AND user_id = ?',
+              [id, userId],
+              (err2, row) => {
+                if (err2) return reject(err2);
+                resolve({ rowCount: 0, notFound: !row });
+              }
+            );
           }
         );
       });
@@ -375,7 +421,7 @@ function makeSqliteAdapter(db) {
     setUserDataSharing(id, userId, isShared) {
       return new Promise((resolve, reject) => {
         db.run(
-          'UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?',
+          'UPDATE user_data SET is_shared = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
           [isShared ? 1 : 0, id, userId],
           (err) => {
             if (err) return reject(err);

@@ -382,15 +382,35 @@ export function createApiClient(options = {}) {
   }
 
   /**
-   * DELETE /api/user-data/:id — remove a synced yield entry.
+   * PUT /api/user-data?id=:serverId — update a synced yield entry.
    * @param {number|string} serverId
+   * @param {{ species, product, yield, source, expected_revision? }} body
    * @param {Record<string,string>} extraHeaders
    * @returns {Promise<Response>}
    */
-  async function deleteUserDataRaw(serverId, extraHeaders = {}) {
+  async function updateUserDataRaw(serverId, body, extraHeaders = {}) {
+    // Use the path-based URL so the local Express server (app.put('/api/user-data/:id'))
+    // and the Vercel serverless handler both receive the id via the same route.
+    return rawRequest(`/api/user-data/${serverId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * DELETE /api/user-data/:id — remove a synced yield entry.
+   * @param {number|string} serverId
+   * @param {number|undefined} expectedRevision
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function deleteUserDataRaw(serverId, expectedRevision, extraHeaders = {}) {
+    const bodyFields = expectedRevision !== undefined ? { expected_revision: expectedRevision } : {};
     return rawRequest(`/api/user-data/${serverId}`, {
       method: 'DELETE',
-      headers: { ...extraHeaders },
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(bodyFields),
     });
   }
 
@@ -432,6 +452,7 @@ export function createApiClient(options = {}) {
     saveCalcRaw,
     deleteCalcRaw,
     createUserDataRaw,
+    updateUserDataRaw,
     deleteUserDataRaw,
     listSavedCalcsRaw,
     listUserDataRaw,

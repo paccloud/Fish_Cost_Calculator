@@ -87,15 +87,53 @@ export async function syncAll(user) {
   // Push new/updated yields
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'local')) {
     try {
-      const res = await apiClient.createUserDataRaw({
-        species: yld.species,
-        product: yld.product,
-        yield: yld.yield,
-        source: yld.source || 'User Input',
-      }, headers);
+      let res;
+      if (yld.serverId) {
+        // Edited synced yield — use PUT so the server applies the field changes.
+        // A POST with the same client_id would return the existing row unchanged.
+        res = await apiClient.updateUserDataRaw(yld.serverId, {
+          species: yld.species,
+          product: yld.product,
+          yield: yld.yield,
+          source: yld.source || 'User Input',
+          expected_revision: yld.serverRevision,
+        }, headers);
+      } else {
+        // New yield — use POST with idempotent client_id.
+        res = await apiClient.createUserDataRaw({
+          species: yld.species,
+          product: yld.product,
+          yield: yld.yield,
+          source: yld.source || 'User Input',
+          client_id: yld.id,
+        }, headers);
+      }
       if (res.ok) {
         const data = await res.json();
-        await markYieldSynced(yld.id, data.id);
+        if (yld.serverId) {
+          // Edited synced yield — PUT already applied the current fields.
+          await markYieldSynced(yld.id, data.id ?? yld.serverId, data.revision);
+        } else {
+          // New yield — the POST may have been an idempotent retry that returned
+          // the original row while the user had already edited the local fields.
+          // A reconciling PUT ensures the server always holds the current values.
+          const putRes = await apiClient.updateUserDataRaw(data.id, {
+            species: yld.species,
+            product: yld.product,
+            yield: yld.yield,
+            source: yld.source || 'User Input',
+            expected_revision: data.revision,
+          }, headers);
+          if (!putRes.ok) {
+            // Reconciling PUT failed — leave yield pending so it is retried.
+            stats.errors++;
+            stats.errorDetails.push({ type: 'push-yield', id: yld.id, status: putRes.status, isAuthError: putRes.status === 401 });
+            if (putRes.status === 401) break;
+            continue;
+          }
+          const finalRevision = (await putRes.json()).revision;
+          await markYieldSynced(yld.id, data.id, finalRevision);
+        }
         stats.pushed++;
       } else {
         stats.errors++;
@@ -112,7 +150,7 @@ export async function syncAll(user) {
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'pending-delete')) {
     try {
       if (yld.serverId) {
-        const res = await apiClient.deleteUserDataRaw(yld.serverId, headers);
+        const res = await apiClient.deleteUserDataRaw(yld.serverId, yld.serverRevision, headers);
         if (res.ok || res.status === 404) {
           await removeYieldSyncedDelete(yld.id);
           stats.pushed++;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { get, set } from 'idb-keyval';
-import { mergeSyncedYields, mergeSyncedCalcs } from './localStore';
+import { mergeSyncedYields, mergeSyncedCalcs, markYieldSynced } from './localStore';
 
 vi.mock('idb-keyval', () => ({
   get: vi.fn(async () => []),
@@ -38,6 +38,17 @@ describe('mergeSyncedYields', () => {
     );
   });
 
+  it('stores serverRevision from pulled yields so revision guards work on update/delete', async () => {
+    await mergeSyncedYields([
+      { id: 5, species: 'Cod', product: 'Fillet', yield: 55, source: 'User Input', revision: 3 },
+    ]);
+
+    const saved = set.mock.calls[0][1];
+    const entry = saved.find((y) => String(y.serverId) === '5');
+    expect(entry).toBeDefined();
+    expect(entry.serverRevision).toBe(3);
+  });
+
   it('does not resurrect a yield that is pending-delete (tombstoned locally)', async () => {
     // Local store has a pending-delete tombstone for server id 12
     get.mockResolvedValue([
@@ -61,6 +72,73 @@ describe('mergeSyncedYields', () => {
     const copies = saved.filter((i) => String(i.serverId) === '12');
     expect(copies).toHaveLength(1);
     expect(copies[0].syncStatus).toBe('pending-delete');
+  });
+
+  it('refreshes serverRevision for an existing synced yield on pull', async () => {
+    get.mockResolvedValue([
+      {
+        id: 'local-uuid',
+        serverId: 7,
+        syncStatus: 'synced',
+        species: 'Cod',
+        product: 'Fillet',
+        yield: 55,
+        serverRevision: 1,
+      },
+    ]);
+
+    await mergeSyncedYields([
+      { id: 7, species: 'Cod', product: 'Fillet', yield: 55, source: 'User Input', revision: 5 },
+    ]);
+
+    const saved = set.mock.calls[0][1];
+    const copies = saved.filter((i) => String(i.serverId) === '7');
+    expect(copies).toHaveLength(1);
+    expect(copies[0].serverRevision).toBe(5);
+    expect(copies[0].syncStatus).toBe('synced');
+  });
+
+  it('does not overwrite a local-edit record during a pull', async () => {
+    get.mockResolvedValue([
+      {
+        id: 'local-uuid',
+        serverId: 7,
+        syncStatus: 'local',
+        species: 'Cod',
+        product: 'Fillet',
+        yield: 60,
+        serverRevision: 1,
+      },
+    ]);
+
+    await mergeSyncedYields([
+      { id: 7, species: 'Cod', product: 'Fillet', yield: 55, source: 'User Input', revision: 1 },
+    ]);
+
+    const saved = set.mock.calls[0][1];
+    const entry = saved.find((i) => String(i.serverId) === '7');
+    expect(entry.syncStatus).toBe('local');
+    expect(entry.yield).toBe(60);
+  });
+});
+
+describe('markYieldSynced', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('stores serverRevision so the sync engine can send it on future update/delete', async () => {
+    get.mockResolvedValue([
+      { id: 'local-uuid', syncStatus: 'local', species: 'Salmon', product: 'Fillet', yield: 60 },
+    ]);
+
+    await markYieldSynced('local-uuid', 99, 2);
+
+    const saved = set.mock.calls[0][1];
+    const entry = saved.find((y) => y.id === 'local-uuid');
+    expect(entry.serverId).toBe(99);
+    expect(entry.serverRevision).toBe(2);
+    expect(entry.syncStatus).toBe('synced');
   });
 });
 

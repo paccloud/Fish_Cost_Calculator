@@ -291,52 +291,96 @@ export function makeNeonAdapter() {
 
     async listUserData(userId) {
       const result = await query(
-        'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = $1',
+        `SELECT id, species, product, yield, source, is_shared,
+                client_id, revision, created_at, updated_at
+         FROM user_data WHERE user_id = $1`,
         [userId]
       );
       return result.rows;
     },
 
     async createUserDataEntry(userId, fields) {
-      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+      const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
+
+      if (clientId) {
+        // Atomic upsert: insert unless (user_id, client_id) already exists, then
+        // return whichever row now owns the pair — safe under concurrent retries.
+        const upsert = await query(
+          `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+           ON CONFLICT (user_id, client_id) WHERE client_id IS NOT NULL
+           DO NOTHING
+           RETURNING id, revision, created_at, updated_at`,
+          [userId, species, product, yieldVal, source, clientId]
+        );
+        if (upsert.rows.length > 0) return upsert.rows[0];
+        // Conflict: fetch the existing row.
+        const existing = await query(
+          'SELECT id, revision, created_at, updated_at FROM user_data WHERE user_id = $1 AND client_id = $2',
+          [userId, clientId]
+        );
+        return existing.rows[0];
+      }
+
       const result = await query(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [userId, species, product, yieldVal, source]
+        `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+         RETURNING id, revision, created_at, updated_at`,
+        [userId, species, product, yieldVal, source, null]
       );
       return result.rows[0];
     },
 
     async findUserDataEntryById(id, userId) {
       const result = await query(
-        'SELECT id, species, product, yield, source FROM user_data WHERE id = $1 AND user_id = $2',
+        `SELECT id, species, product, yield, source, is_shared, revision, created_at, updated_at
+         FROM user_data WHERE id = $1 AND user_id = $2`,
         [id, userId]
       );
       return result.rows[0] ?? null;
     },
 
-    async updateUserDataEntry(id, userId, fields) {
+    async updateUserDataEntry(id, userId, fields, expectedRevision) {
       const { species, product, yield: yieldVal, source } = fields;
-      await query(
+      // Include the revision predicate in the WHERE clause so the check and
+      // increment are atomic — no separate SELECT-then-UPDATE race.
+      const result = await query(
         `UPDATE user_data
-         SET species = COALESCE($1, species),
-             product = COALESCE($2, product),
-             yield   = COALESCE($3, yield),
-             source  = COALESCE($4, source)
-         WHERE id = $5 AND user_id = $6`,
-        [species, product, yieldVal, source, id, userId]
+         SET species  = COALESCE($1, species),
+             product  = COALESCE($2, product),
+             yield    = COALESCE($3, yield),
+             source   = COALESCE($4, source),
+             revision = revision + 1,
+             updated_at = NOW()
+         WHERE id = $5 AND user_id = $6
+           AND ($7::integer IS NULL OR revision = $7)
+         RETURNING id, revision, updated_at`,
+        [species, product, yieldVal, source, id, userId, expectedRevision ?? null]
       );
+      return { rowCount: result.rowCount, row: result.rows[0] ?? null };
     },
 
-    async deleteUserDataEntry(id, userId) {
-      await query(
-        'DELETE FROM user_data WHERE id = $1 AND user_id = $2',
+    async deleteUserDataEntry(id, userId, expectedRevision) {
+      // Revision-conditional delete: atomic check-and-delete prevents a stale
+      // client from deleting a yield another device updated since the last read.
+      const result = await query(
+        `DELETE FROM user_data WHERE id = $1 AND user_id = $2
+           AND ($3::integer IS NULL OR revision = $3)
+         RETURNING id`,
+        [id, userId, expectedRevision ?? null]
+      );
+      if (result.rowCount > 0) return { rowCount: 1 };
+      // Distinguish not-found from revision-mismatch.
+      const check = await query(
+        'SELECT id FROM user_data WHERE id = $1 AND user_id = $2',
         [id, userId]
       );
+      return { rowCount: 0, notFound: check.rowCount === 0 };
     },
 
     async setUserDataSharing(id, userId, isShared) {
       await query(
-        'UPDATE user_data SET is_shared = $1 WHERE id = $2 AND user_id = $3',
+        'UPDATE user_data SET is_shared = $1, revision = revision + 1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
         [isShared, id, userId]
       );
     },

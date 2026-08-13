@@ -224,13 +224,13 @@ class LocalRepository {
     });
   }
 
-  async markYieldSynced(id, serverId) {
+  async markYieldSynced(id, serverId, serverRevision) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
-      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, updatedAt: now() };
+      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, serverRevision, updatedAt: now() };
       await this._set(key, all);
     });
   }
@@ -261,6 +261,7 @@ class LocalRepository {
           id: crypto.randomUUID(),
           scope: this._scope,
           serverId: sy.id,
+          serverRevision: sy.revision,
           syncStatus: 'synced',
           createdAt: ts,
           updatedAt: ts,
