@@ -57,6 +57,16 @@ class LocalRepository {
     this._scope = scope;
     this._get = store.get;
     this._set = store.set;
+    // Per-key promise chains serialize concurrent read-modify-write mutations.
+    this._locks = new Map();
+  }
+
+  // Runs fn exclusively for key: waits for any in-flight mutation on the same key to finish first.
+  _withLock(key, fn) {
+    const chain = (this._locks.get(key) || Promise.resolve()).then(fn);
+    // Store a never-rejecting tail so future callers don't inherit this call's error.
+    this._locks.set(key, chain.then(() => {}, () => {}));
+    return chain;
   }
 
   // ---- Saved Calculations (immutable snapshots) ----
@@ -68,82 +78,97 @@ class LocalRepository {
 
   async addCalc(inputs) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    const record = makeRecord(inputs, this._scope);
-    all.push(record);
-    await this._set(key, all);
-    return record;
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const record = makeRecord(inputs, this._scope);
+      all.push(record);
+      await this._set(key, all);
+      return record;
+    });
   }
 
   // Only display metadata (name) may be changed on a snapshot.
   // Rename is intentionally local-only: the name never reaches the sync queue.
+  // syncStatus is preserved so a rename does not re-queue a synced record.
   // Records arriving on a new device will carry the original name from the server.
   async renameCalc(id, name) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((c) => c.id === id);
-    if (idx === -1) return null;
-    all[idx] = { ...all[idx], name, updatedAt: now() };
-    await this._set(key, all);
-    return all[idx];
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return null;
+      all[idx] = { ...all[idx], name, updatedAt: now() };
+      await this._set(key, all);
+      return all[idx];
+    });
   }
 
   async removeCalc(id) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((c) => c.id === id);
-    if (idx === -1) return;
-    const rec = all[idx];
-    if (rec.syncStatus === 'synced' || rec.serverId) {
-      all[idx] = { ...rec, syncStatus: 'pending-delete', updatedAt: now() };
-    } else {
-      all.splice(idx, 1);
-    }
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return;
+      const rec = all[idx];
+      if (rec.syncStatus === 'synced' || rec.serverId) {
+        all[idx] = { ...rec, syncStatus: 'pending-delete', updatedAt: now() };
+      } else {
+        all.splice(idx, 1);
+      }
+      await this._set(key, all);
+    });
   }
 
   async markCalcSynced(id, serverId) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((c) => c.id === id);
-    if (idx === -1) return;
-    all[idx] = { ...all[idx], syncStatus: 'synced', serverId, updatedAt: now() };
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return;
+      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, updatedAt: now() };
+      await this._set(key, all);
+    });
   }
 
   async removeCalcTombstone(id) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    await this._set(key, all.filter((c) => c.id !== id));
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      await this._set(key, all.filter((c) => c.id !== id));
+    });
   }
 
   async mergeServerCalcs(serverCalcs) {
     const key = idbKey(this._scope, 'calcs');
-    const all = (await this._get(key)) || [];
-    // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set.
-    const trackedIds = new Set(all.filter((c) => c.serverId).map((c) => String(c.serverId)));
-    for (const sc of serverCalcs) {
-      if (trackedIds.has(String(sc.id))) continue;
-      const ts = sc.created_at || now();
-      all.push({
-        id: crypto.randomUUID(),
-        scope: this._scope,
-        serverId: sc.id,
-        syncStatus: 'synced',
-        species: sc.species,
-        product: sc.product,
-        cost: sc.cost,
-        yield: sc.yield,
-        result: sc.result,
-        name: sc.name,
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set.
+      const trackedIds = new Set(all.filter((c) => c.serverId).map((c) => String(c.serverId)));
+      for (const sc of serverCalcs) {
+        if (trackedIds.has(String(sc.id))) continue;
+        const ts = sc.created_at || now();
+        all.push({
+          id: crypto.randomUUID(),
+          scope: this._scope,
+          serverId: sc.id,
+          syncStatus: 'synced',
+          species: sc.species,
+          product: sc.product,
+          cost: sc.cost,
+          yield: sc.yield,
+          result: sc.result,
+          name: sc.name,
+          createdAt: ts,
+          updatedAt: ts,
+        });
+      }
+      await this._set(key, all);
+    });
   }
 
   // ---- Custom Yields (revisioned observations) ----
+  // Note: custom species (fish species definitions) are device-local and stored
+  // outside this repository, in the existing species store layer.
 
   async getYields() {
     const all = (await this._get(idbKey(this._scope, 'yields'))) || [];
@@ -152,83 +177,95 @@ class LocalRepository {
 
   async addYield(data) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    const record = makeRecord(data, this._scope);
-    all.push(record);
-    await this._set(key, all);
-    return record;
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const record = makeRecord(data, this._scope);
+      all.push(record);
+      await this._set(key, all);
+      return record;
+    });
   }
 
   async updateYield(id, data) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((y) => y.id === id);
-    if (idx === -1) return null;
-    const prev = all[idx];
-    all[idx] = {
-      ...prev,
-      ...data,
-      id: prev.id,
-      scope: this._scope,
-      syncStatus: prev.syncStatus === 'synced' ? 'local' : prev.syncStatus,
-      updatedAt: now(),
-    };
-    await this._set(key, all);
-    return all[idx];
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return null;
+      const prev = all[idx];
+      all[idx] = {
+        ...prev,
+        ...data,
+        id: prev.id,
+        scope: this._scope,
+        syncStatus: prev.syncStatus === 'synced' ? 'local' : prev.syncStatus,
+        updatedAt: now(),
+      };
+      await this._set(key, all);
+      return all[idx];
+    });
   }
 
   async removeYield(id) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((y) => y.id === id);
-    if (idx === -1) return;
-    const rec = all[idx];
-    if (rec.syncStatus === 'synced' || rec.serverId) {
-      all[idx] = { ...rec, syncStatus: 'pending-delete', updatedAt: now() };
-    } else {
-      all.splice(idx, 1);
-    }
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      const rec = all[idx];
+      if (rec.syncStatus === 'synced' || rec.serverId) {
+        all[idx] = { ...rec, syncStatus: 'pending-delete', updatedAt: now() };
+      } else {
+        all.splice(idx, 1);
+      }
+      await this._set(key, all);
+    });
   }
 
   async markYieldSynced(id, serverId) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    const idx = all.findIndex((y) => y.id === id);
-    if (idx === -1) return;
-    all[idx] = { ...all[idx], syncStatus: 'synced', serverId, updatedAt: now() };
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, updatedAt: now() };
+      await this._set(key, all);
+    });
   }
 
   async removeYieldTombstone(id) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    await this._set(key, all.filter((y) => y.id !== id));
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      await this._set(key, all.filter((y) => y.id !== id));
+    });
   }
 
   async mergeServerYields(serverYields) {
     const key = idbKey(this._scope, 'yields');
-    const all = (await this._get(key)) || [];
-    // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set,
-    // so a tombstoned yield is never resurrected by a server merge.
-    const trackedIds = new Set(all.filter((y) => y.serverId).map((y) => String(y.serverId)));
-    for (const sy of serverYields) {
-      if (trackedIds.has(String(sy.id))) continue;
-      const ts = now();
-      all.push({
-        species: sy.species,
-        product: sy.product,
-        yield: sy.yield,
-        source: sy.source || 'User Input',
-        id: crypto.randomUUID(),
-        scope: this._scope,
-        serverId: sy.id,
-        syncStatus: 'synced',
-        createdAt: ts,
-        updatedAt: ts,
-      });
-    }
-    await this._set(key, all);
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set,
+      // so a tombstoned yield is never resurrected by a server merge.
+      const trackedIds = new Set(all.filter((y) => y.serverId).map((y) => String(y.serverId)));
+      for (const sy of serverYields) {
+        if (trackedIds.has(String(sy.id))) continue;
+        const ts = now();
+        all.push({
+          species: sy.species,
+          product: sy.product,
+          yield: sy.yield,
+          source: sy.source || 'User Input',
+          id: crypto.randomUUID(),
+          scope: this._scope,
+          serverId: sy.id,
+          syncStatus: 'synced',
+          createdAt: ts,
+          updatedAt: ts,
+        });
+      }
+      await this._set(key, all);
+    });
   }
 
   // ---- Sync queue ----

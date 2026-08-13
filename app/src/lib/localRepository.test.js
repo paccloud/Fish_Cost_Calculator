@@ -304,11 +304,13 @@ describe('transactional queue behavior', () => {
     expect(pending.yields[0].syncStatus).toBe('local');
   });
 
-  it('both record state and queue state are written in one store.set call', async () => {
-    store.set.mockClear();
-    await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
-    // addCalc should call set exactly once (transactional: record + queue in one write)
-    expect(store.set).toHaveBeenCalledTimes(1);
+  it('concurrent mutations to the same collection both persist', async () => {
+    // Start both without awaiting — they overlap in the event loop.
+    const p1 = repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    const p2 = repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 5, yield: 50, result: 10 });
+    await Promise.all([p1, p2]);
+    const calcs = await repo.getCalcs();
+    expect(calcs).toHaveLength(2);
   });
 });
 
