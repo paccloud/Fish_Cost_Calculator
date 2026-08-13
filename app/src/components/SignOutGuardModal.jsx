@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, onCancel }) {
   const parts = [];
@@ -7,10 +7,31 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
   const summary = parts.join(' and ');
   const plural = calcs + yields !== 1;
 
+  const firstButtonRef = useRef(null);
+  const triggerRef = useRef(document.activeElement);
+
+  useEffect(() => {
+    firstButtonRef.current?.focus();
+    const trigger = triggerRef.current;
+    return () => { trigger?.focus(); };
+  }, []);
+
+  function handleKeyDown(e) {
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
-        <h2 className="text-lg font-semibold text-text-primary mb-2">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sign-out-guard-title"
+        className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4"
+      >
+        <h2 id="sign-out-guard-title" className="text-lg font-semibold text-text-primary mb-2">
           Unsynchronized data
         </h2>
         <p className="text-sm text-text-secondary mb-4">
@@ -19,6 +40,7 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
         </p>
         <div className="space-y-2">
           <button
+            ref={firstButtonRef}
             onClick={onKeep}
             className="w-full text-sm font-medium px-4 py-2.5 rounded-lg bg-brand-teal text-white hover:bg-brand-teal/90 transition-colors"
           >
