@@ -38,8 +38,11 @@ async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // Map snake_case client_id from the JSON body to the camelCase clientId
+    // expected by the transport-agnostic handler.
+    const { client_id: clientId, ...rest } = req.body ?? {};
     const { status, body } = await handleSaveCalc(
-      { userId: req.user.id, ...req.body },
+      { userId: req.user.id, clientId, ...rest },
       db
     );
     return res.status(status).json(body);

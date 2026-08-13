@@ -29,7 +29,11 @@ function makeFakeDb(overrides = {}) {
     findUserByUsername: vi.fn().mockResolvedValue(null),
     createUser: vi.fn(),
     listSavedCalcs: vi.fn().mockResolvedValue([]),
-    saveCalc: vi.fn().mockResolvedValue({ id: 1 }),
+    saveCalc: vi.fn().mockResolvedValue({
+      id: 1,
+      created_at: '2026-06-11T00:00:00.000Z',
+      updated_at: '2026-06-11T00:00:00.000Z',
+    }),
     findCalcById: vi.fn().mockResolvedValue(null),
     deleteCalc: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -46,6 +50,10 @@ const SAMPLE_CALC = {
   yield: 42,
   result: '{"costPerLb":5.95}',
   date: '2026-06-11T00:00:00.000Z',
+  client_id: 'stable-uuid-abc',
+  is_private: true,
+  created_at: '2026-06-11T00:00:00.000Z',
+  updated_at: '2026-06-11T00:00:00.000Z',
 };
 
 // ===========================================================================
@@ -128,21 +136,27 @@ describe('handleSaveCalc — auth requirement', () => {
 });
 
 describe('handleSaveCalc — success shape', () => {
-  it('returns 201 with id and message on success', async () => {
+  it('returns 200 with id, created_at, updated_at and message on success', async () => {
     const db = makeFakeDb({
-      saveCalc: vi.fn().mockResolvedValue({ id: 99 }),
+      saveCalc: vi.fn().mockResolvedValue({
+        id: 99,
+        created_at: '2026-06-11T00:00:00.000Z',
+        updated_at: '2026-06-11T00:00:00.000Z',
+      }),
     });
     const result = await handleSaveCalc(
       { userId: 1, name: 'My Calc', species: 'Halibut', product: 'Fillet', cost: 3, yield: 55, result: '{}' },
       db
     );
-    expect(result.status).toBe(201);
+    expect(result.status).toBe(200);
     expect(result.body.id).toBe(99);
+    expect(result.body.created_at).toBe('2026-06-11T00:00:00.000Z');
+    expect(result.body.updated_at).toBe('2026-06-11T00:00:00.000Z');
     expect(result.body.message).toBe('Calculation saved successfully');
   });
 
   it('passes all fields to saveCalc', async () => {
-    const db = makeFakeDb({ saveCalc: vi.fn().mockResolvedValue({ id: 1 }) });
+    const db = makeFakeDb();
     const input = {
       userId: 5,
       name: 'Halibut Fillet',
@@ -161,13 +175,58 @@ describe('handleSaveCalc — success shape', () => {
   });
 
   it('does not pass a date in the fields — db generates the timestamp', async () => {
-    const db = makeFakeDb({ saveCalc: vi.fn().mockResolvedValue({ id: 1 }) });
+    const db = makeFakeDb();
     await handleSaveCalc(
       { userId: 1, name: 'X', species: 'Cod', product: 'Fillet', cost: 1, yield: 40, result: '{}' },
       db
     );
     const [, calledFields] = db.saveCalc.mock.calls[0];
     expect(calledFields.date).toBeUndefined();
+  });
+});
+
+describe('handleSaveCalc — clientId idempotency', () => {
+  it('passes clientId to saveCalc when provided', async () => {
+    const db = makeFakeDb();
+    await handleSaveCalc(
+      { userId: 1, clientId: 'my-stable-uuid', name: 'X', species: 'Cod', product: 'Fillet', cost: 1, yield: 40, result: '{}' },
+      db
+    );
+    const [, calledFields] = db.saveCalc.mock.calls[0];
+    expect(calledFields.clientId).toBe('my-stable-uuid');
+  });
+
+  it('returns same id and timestamps when db returns existing row (idempotent retry)', async () => {
+    const existing = { id: 42, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' };
+    const db = makeFakeDb({ saveCalc: vi.fn().mockResolvedValue(existing) });
+    const result = await handleSaveCalc(
+      { userId: 1, clientId: 'my-stable-uuid', name: 'X', species: 'Cod', product: 'Fillet', cost: 1, yield: 40, result: '{}' },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(result.body.id).toBe(42);
+    expect(result.body.created_at).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.body.updated_at).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('strips whitespace-only clientId and passes undefined to saveCalc', async () => {
+    const db = makeFakeDb();
+    await handleSaveCalc(
+      { userId: 1, clientId: '   ', name: 'X', species: 'Cod', product: 'Fillet', cost: 1, yield: 40, result: '{}' },
+      db
+    );
+    const [, calledFields] = db.saveCalc.mock.calls[0];
+    expect(calledFields.clientId).toBeUndefined();
+  });
+
+  it('ignores non-string clientId', async () => {
+    const db = makeFakeDb();
+    await handleSaveCalc(
+      { userId: 1, clientId: 12345, name: 'X', species: 'Cod', product: 'Fillet', cost: 1, yield: 40, result: '{}' },
+      db
+    );
+    const [, calledFields] = db.saveCalc.mock.calls[0];
+    expect(calledFields.clientId).toBeUndefined();
   });
 });
 

@@ -339,13 +339,15 @@ export function createApiClient(options = {}) {
   // (401 to break the loop, 404 as an acceptable delete outcome).
 
   /**
-   * POST /api/save-calc — push one local calculation to the server.
-   * @param {{ name, species, product, cost, yield, result }} body
+   * POST /api/saved-calcs — push one local calculation to the server.
+   * Idempotent when body.client_id is provided: the server returns the existing
+   * row unchanged instead of creating a duplicate on retry.
+   * @param {{ name, species, product, cost, yield, result, client_id?: string }} body
    * @param {Record<string,string>} extraHeaders
    * @returns {Promise<Response>}
    */
   async function saveCalcRaw(body, extraHeaders = {}) {
-    return rawRequest('/api/save-calc', {
+    return rawRequest('/api/saved-calcs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...extraHeaders },
       body: JSON.stringify(body),
