@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, onCancel }) {
   const parts = [];
   if (calcs > 0) parts.push(`${calcs} saved calc${calcs !== 1 ? 's' : ''}`);
@@ -7,17 +9,31 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
   const summary = parts.join(' and ');
   const plural = calcs + yields !== 1;
 
-  const firstButtonRef = useRef(null);
+  const dialogRef = useRef(null);
   const triggerRef = useRef(document.activeElement);
 
   useEffect(() => {
-    firstButtonRef.current?.focus();
+    const dialog = dialogRef.current;
+    const focusable = dialog ? Array.from(dialog.querySelectorAll(FOCUSABLE)) : [];
+    focusable[0]?.focus();
     const trigger = triggerRef.current;
     return () => { trigger?.focus(); };
   }, []);
 
   function handleKeyDown(e) {
-    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); return; }
+    if (e.key !== 'Tab') return;
+    const focusable = dialogRef.current
+      ? Array.from(dialogRef.current.querySelectorAll(FOCUSABLE))
+      : [];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
   }
 
   return (
@@ -26,6 +42,7 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
       onKeyDown={handleKeyDown}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sign-out-guard-title"
@@ -40,7 +57,6 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
         </p>
         <div className="space-y-2">
           <button
-            ref={firstButtonRef}
             onClick={onKeep}
             className="w-full text-sm font-medium px-4 py-2.5 rounded-lg bg-brand-teal text-white hover:bg-brand-teal/90 transition-colors"
           >
