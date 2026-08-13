@@ -52,12 +52,13 @@ function createSyncedStore(storageKey) {
     }
   };
 
-  const markSynced = async (id, serverId) => {
+  const markSynced = async (id, serverId, serverRevision) => {
     const items = await getAll();
     const item = items.find((i) => i.id === id);
     if (item) {
       item.syncStatus = 'synced';
       if (serverId) item.serverId = serverId;
+      if (serverRevision != null) item.serverRevision = serverRevision;
       await set(storageKey, items);
     }
   };
@@ -153,6 +154,7 @@ export async function mergeSyncedYields(serverYields) {
         yield: sy.yield,
         source: sy.source || 'User Input',
         serverId: sy.id,
+        serverRevision: sy.revision ?? null,
         id: crypto.randomUUID(),
         syncStatus: 'synced',
         updatedAt: new Date().toISOString(),
