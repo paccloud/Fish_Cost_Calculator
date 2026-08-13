@@ -12,13 +12,14 @@ const ContributorProfile = lazy(() => import('./components/ContributorProfile'))
 const CommunityData = lazy(() => import('./components/CommunityData'));
 import { Fish, UserCircle, Menu, X, Database, BookOpen, Sun, Moon, Users, Upload } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { DataProvider } from './context/DataContext';
+import { DataProvider, useData } from './context/DataContext';
 import { useTheme } from './context/ThemeContext';
 import SyncStatusBadge from './components/SyncStatusBadge';
 import SyncDetailsPanel from './components/SyncDetailsPanel';
 
 const NavBar = () => {
-    const { user, logout } = useAuth();
+    const { user } = useAuth();
+    const { signOut } = useData();
     const { theme, toggleTheme } = useTheme();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
     const [syncPanelOpen, setSyncPanelOpen] = React.useState(false);
@@ -88,7 +89,7 @@ const NavBar = () => {
                             <div className="hidden md:flex items-center gap-3">
                                 <span className="text-white/60 text-xs">{user.username}</span>
                                 <button
-                                    onClick={logout}
+                                    onClick={signOut}
                                     className="text-white/70 hover:text-white text-xs border border-white/25 px-2.5 py-1 rounded transition-colors"
                                 >
                                     Sign out
@@ -149,7 +150,7 @@ const NavBar = () => {
                                 <div className="flex items-center justify-between px-3 py-2">
                                     <span className="text-white/60 text-sm">{user.username}</span>
                                     <button
-                                        onClick={() => { logout(); setMobileMenuOpen(false); }}
+                                        onClick={() => { signOut(); setMobileMenuOpen(false); }}
                                         className="text-white/70 hover:text-white text-sm"
                                     >
                                         Sign out

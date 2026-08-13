@@ -6,11 +6,12 @@ import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
+import SignOutGuardModal from '../components/SignOutGuardModal';
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -24,9 +25,27 @@ export function DataProvider({ children }) {
   const [guestAdoptionCounts, setGuestAdoptionCounts] = useState(null);
   const [adoptionLoading, setAdoptionLoading] = useState(false);
   const prevUserRef = useRef(user);
+  // null | { calcs: number, yields: number } — non-null while sign-out guard is shown
+  const [signOutGuardState, setSignOutGuardState] = useState(null);
 
   // Derive scope and repository from the current user.
   const uid = user?.uid ?? null;
+  const prevUidRef = useRef(uid);
+
+  // When uid changes (sign-out or account switch), clear React state immediately so
+  // the previous account's records are never visible under the new identity.
+  useEffect(() => {
+    if (prevUidRef.current === uid) return;
+    prevUidRef.current = uid;
+    setSavedCalcs([]);
+    setCustomYields([]);
+    setSyncStatus('idle');
+    setSyncError(null);
+    setPendingCount(0);
+    setDataLoaded(false);
+    clearTimeout(syncTimeoutRef.current);
+  }, [uid]);
+
   const scope = useMemo(
     () => (uid ? accountScope(uid) : guestScope()),
     [uid]
@@ -132,6 +151,40 @@ export function DataProvider({ children }) {
     setGuestAdoptionCounts(null);
   }, []);
 
+  // ---- Sign-out guard ----
+
+  // Intercept sign-out: clear synced cache, and if there is unsynchronized work
+  // show a modal offering keep/discard/cancel before calling auth logout.
+  const signOut = useCallback(async () => {
+    if (!uid) { await logout(); return; }
+    const { calcs, yields } = await repo.getPendingSync();
+    if (calcs.length === 0 && yields.length === 0) {
+      await repo.clearSyncedCache();
+      await logout();
+    } else {
+      setSignOutGuardState({ calcs: calcs.length, yields: yields.length });
+    }
+  }, [uid, repo, logout]);
+
+  const handleSignOutKeep = useCallback(async () => {
+    // Keep pending mutations in account scope; only discard synced cache.
+    await repo.clearSyncedCache();
+    setSignOutGuardState(null);
+    await logout();
+  }, [repo, logout]);
+
+  const handleSignOutDiscard = useCallback(async () => {
+    // Discard unsynchronized mutations then clear synced cache before signing out.
+    await repo.discardUnsynchronized();
+    await repo.clearSyncedCache();
+    setSignOutGuardState(null);
+    await logout();
+  }, [repo, logout]);
+
+  const handleSignOutCancel = useCallback(() => {
+    setSignOutGuardState(null);
+  }, []);
+
   // Debounced sync: immediately show 'pending', then fire after 2 s idle.
   const debouncedSync = useCallback(() => {
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
@@ -233,6 +286,7 @@ export function DataProvider({ children }) {
     removeYield,
     updateCustomSpecies,
     retrySync,
+    signOut,
   };
 
   return (
@@ -245,6 +299,15 @@ export function DataProvider({ children }) {
           loading={adoptionLoading}
           onConfirm={handleAdoptionConfirm}
           onDecline={handleAdoptionDecline}
+        />
+      )}
+      {signOutGuardState && (
+        <SignOutGuardModal
+          calcs={signOutGuardState.calcs}
+          yields={signOutGuardState.yields}
+          onKeep={handleSignOutKeep}
+          onDiscard={handleSignOutDiscard}
+          onCancel={handleSignOutCancel}
         />
       )}
     </DataContext.Provider>
