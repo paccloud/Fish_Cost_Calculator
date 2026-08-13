@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseServer, onKeepBoth }) {
+export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseServer, onKeepBoth, onDismissDelete }) {
   if (!conflicts || conflicts.length === 0) return null;
 
   const editConflicts = conflicts.filter((c) => c.syncStatus === 'conflicted');
@@ -27,7 +27,7 @@ export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseSe
             />
           ))}
           {deleteConflicts.map((c) => (
-            <DeleteConflictItem key={c.id} conflict={c} />
+            <DeleteConflictItem key={c.id} conflict={c} onDismiss={() => onDismissDelete(c.id)} />
           ))}
         </div>
       </div>
@@ -38,6 +38,7 @@ export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseSe
 function EditConflictItem({ conflict, onUseLocal, onUseServer, onKeepBoth }) {
   const local = conflict.conflictLocal;
   const server = conflict.conflictServer;
+  const serverReady = server != null;
 
   return (
     <div className="border border-border rounded-lg p-4">
@@ -57,13 +58,15 @@ function EditConflictItem({ conflict, onUseLocal, onUseServer, onKeepBoth }) {
         </button>
         <button
           onClick={onUseServer}
-          className="w-full text-sm font-medium px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:bg-surface/80 transition-colors"
+          disabled={!serverReady}
+          className="w-full text-sm font-medium px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:bg-surface/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Use server — accept server version
         </button>
         <button
           onClick={onKeepBoth}
-          className="w-full text-sm font-medium px-4 py-2 rounded-lg text-text-muted hover:text-text-primary transition-colors"
+          disabled={!serverReady}
+          className="w-full text-sm font-medium px-4 py-2 rounded-lg text-text-muted hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Keep both — save as a separate entry
         </button>
@@ -72,19 +75,25 @@ function EditConflictItem({ conflict, onUseLocal, onUseServer, onKeepBoth }) {
   );
 }
 
-function DeleteConflictItem({ conflict }) {
+function DeleteConflictItem({ conflict, onDismiss }) {
   const server = conflict.conflictServer;
   return (
     <div className="border border-amber-300 dark:border-amber-700 rounded-lg p-4 bg-amber-50 dark:bg-amber-900/20">
       <div className="text-xs font-medium text-amber-800 dark:text-amber-300 uppercase tracking-wide mb-2">
         Delete conflict — held for review
       </div>
-      <p className="text-sm text-text-secondary">
+      <p className="text-sm text-text-secondary mb-3">
         <span className="font-medium">{conflict.species} — {conflict.product}</span>: you deleted
         this yield, but the server has a newer version
         {server ? ` (${server.yield}%)` : ''}.
-        {' '}No data has been deleted or restored automatically. Contact support or re-add manually if needed.
+        {' '}No data has been deleted or restored automatically.
       </p>
+      <button
+        onClick={onDismiss}
+        className="w-full text-sm font-medium px-4 py-2 rounded-lg border border-amber-400 dark:border-amber-600 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+      >
+        Dismiss — remove local tombstone, keep server version
+      </button>
     </div>
   );
 }

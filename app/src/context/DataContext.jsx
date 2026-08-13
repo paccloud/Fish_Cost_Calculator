@@ -51,6 +51,7 @@ export function DataProvider({ children }) {
     syncGenRef.current += 1;
     setSavedCalcs([]);
     setCustomYields([]);
+    setConflictedYields([]);
     setSyncStatus('idle');
     setSyncError(null);
     setPendingCount(0);
@@ -278,8 +279,26 @@ export function DataProvider({ children }) {
 
   const handleConflictUseServer = useCallback(async (id) => {
     await repo.resolveYieldConflict(id, 'use-server');
-    await reloadFromRepo();
-  }, [repo, reloadFromRepo]);
+    const [calcs, yields, conflicts] = await Promise.all([
+      repo.getCalcs(),
+      repo.getYields(),
+      repo.getConflictedYields(),
+    ]);
+    setSavedCalcs(calcs);
+    setCustomYields(yields);
+    setConflictedYields(conflicts);
+    const count = await coordinator.pendingCount();
+    setPendingCount(count);
+    // Clear conflict status once all conflicts are resolved.
+    if (conflicts.length === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
+  }, [repo, coordinator]);
+
+  const handleDeleteConflictDismiss = useCallback(async (id) => {
+    await repo.dismissYieldDeleteConflict(id);
+    const conflicts = await repo.getConflictedYields();
+    setConflictedYields(conflicts);
+    if (conflicts.length === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
+  }, [repo]);
 
   const handleConflictKeepBoth = useCallback(async (id) => {
     await repo.resolveYieldConflict(id, 'keep-both');
@@ -398,6 +417,7 @@ export function DataProvider({ children }) {
           onUseLocal={handleConflictUseLocal}
           onUseServer={handleConflictUseServer}
           onKeepBoth={handleConflictKeepBoth}
+          onDismissDelete={handleDeleteConflictDismiss}
         />
       )}
     </DataContext.Provider>

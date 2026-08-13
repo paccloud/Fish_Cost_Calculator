@@ -239,6 +239,8 @@ class LocalRepository {
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
       const rec = all[idx];
+      // Skip if a concurrent sync already resolved this record (parallel 409 race).
+      if (rec.syncStatus === 'synced') return;
       all[idx] = {
         ...rec,
         syncStatus: 'conflicted',
@@ -314,6 +316,7 @@ class LocalRepository {
           product: server?.product ?? rec.product,
           yield: server?.yield ?? rec.yield,
           source: server?.source ?? rec.source,
+          is_shared: server?.is_shared ?? rec.is_shared,
           serverRevision: server?.serverRevision ?? rec.serverRevision,
           syncStatus: 'synced',
           conflictLocal: undefined,
@@ -344,6 +347,7 @@ class LocalRepository {
           product: server?.product ?? rec.product,
           yield: server?.yield ?? rec.yield,
           source: server?.source ?? rec.source,
+          is_shared: server?.is_shared ?? rec.is_shared,
           serverRevision: server?.serverRevision ?? rec.serverRevision,
           syncStatus: 'synced',
           conflictLocal: undefined,
@@ -356,6 +360,20 @@ class LocalRepository {
       }
 
       return null;
+    });
+  }
+
+  // Dismiss a 'conflict-delete' record — removes the local tombstone.
+  // The server retains its newer version; the record will re-appear on next pull.
+  async dismissYieldDeleteConflict(id) {
+    const key = idbKey(this._scope, 'yields');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      if (all[idx].syncStatus !== 'conflict-delete') return;
+      all.splice(idx, 1);
+      await this._set(key, all);
     });
   }
 
@@ -425,6 +443,7 @@ class LocalRepository {
               product: sy.product,
               yield: sy.yield,
               source: sy.source || 'User Input',
+              is_shared: sy.is_shared ?? false,
             },
           };
         }
