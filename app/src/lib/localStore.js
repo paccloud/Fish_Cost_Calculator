@@ -144,10 +144,21 @@ export async function mergeSyncedCalcs(serverCalcs) {
 
 export async function mergeSyncedYields(serverYields) {
   const local = await yieldsStore.getAll();
-  const localServerIds = new Set(local.filter((y) => y.serverId).map((y) => String(y.serverId)));
 
   for (const sy of serverYields) {
-    if (!localServerIds.has(String(sy.id))) {
+    const existing = local.find((y) => String(y.serverId) === String(sy.id));
+    if (existing?.syncStatus === 'synced') {
+      // Refresh fields and revision for synced records so future update/delete
+      // sends the correct expected_revision. Leave pending-delete and local-edit
+      // records alone — they represent in-flight changes and must not be clobbered.
+      Object.assign(existing, {
+        species: sy.species,
+        product: sy.product,
+        yield: sy.yield,
+        source: sy.source || 'User Input',
+        serverRevision: sy.revision ?? null,
+      });
+    } else if (!existing) {
       local.push({
         species: sy.species,
         product: sy.product,
@@ -160,6 +171,7 @@ export async function mergeSyncedYields(serverYields) {
         updatedAt: new Date().toISOString(),
       });
     }
+    // else: pending-delete tombstone or local edit — leave unchanged
   }
   await set(CUSTOM_YIELDS_KEY, local);
 }

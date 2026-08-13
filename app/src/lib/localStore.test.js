@@ -73,6 +73,53 @@ describe('mergeSyncedYields', () => {
     expect(copies).toHaveLength(1);
     expect(copies[0].syncStatus).toBe('pending-delete');
   });
+
+  it('refreshes serverRevision for an existing synced yield on pull', async () => {
+    get.mockResolvedValue([
+      {
+        id: 'local-uuid',
+        serverId: 7,
+        syncStatus: 'synced',
+        species: 'Cod',
+        product: 'Fillet',
+        yield: 55,
+        serverRevision: 1,
+      },
+    ]);
+
+    await mergeSyncedYields([
+      { id: 7, species: 'Cod', product: 'Fillet', yield: 55, source: 'User Input', revision: 5 },
+    ]);
+
+    const saved = set.mock.calls[0][1];
+    const copies = saved.filter((i) => String(i.serverId) === '7');
+    expect(copies).toHaveLength(1);
+    expect(copies[0].serverRevision).toBe(5);
+    expect(copies[0].syncStatus).toBe('synced');
+  });
+
+  it('does not overwrite a local-edit record during a pull', async () => {
+    get.mockResolvedValue([
+      {
+        id: 'local-uuid',
+        serverId: 7,
+        syncStatus: 'local',
+        species: 'Cod',
+        product: 'Fillet',
+        yield: 60,
+        serverRevision: 1,
+      },
+    ]);
+
+    await mergeSyncedYields([
+      { id: 7, species: 'Cod', product: 'Fillet', yield: 55, source: 'User Input', revision: 1 },
+    ]);
+
+    const saved = set.mock.calls[0][1];
+    const entry = saved.find((i) => String(i.serverId) === '7');
+    expect(entry.syncStatus).toBe('local');
+    expect(entry.yield).toBe(60);
+  });
 });
 
 describe('markYieldSynced', () => {

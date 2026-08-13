@@ -165,6 +165,10 @@ function getSql(db, sql, params = []) {
 async function upsertImportedYieldRowsSqlite(db, userId, rows) {
     let inserted = 0;
     let updated = 0;
+    // Track DB row IDs already processed in this batch so a second occurrence of
+    // the same (species, product) in the import file inserts a new row rather
+    // than silently overwriting the first match.
+    const processedDbIds = new Set();
 
     await runSql(db, 'BEGIN TRANSACTION');
 
@@ -176,7 +180,8 @@ async function upsertImportedYieldRowsSqlite(db, userId, rows) {
                 [userId, row.species, row.product]
             );
 
-            if (existing) {
+            if (existing && !processedDbIds.has(String(existing.id))) {
+                processedDbIds.add(String(existing.id));
                 const updateResult = await runSql(
                     db,
                     `UPDATE user_data

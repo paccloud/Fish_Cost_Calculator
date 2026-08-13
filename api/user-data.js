@@ -73,7 +73,15 @@ async function handler(req, res) {
   // DELETE /api/user-data?id=:id — delete entry
   if (req.method === 'DELETE' && id) {
     // Accept from query string first (DELETE bodies are dropped by some proxies)
-    const expectedRevision = req.query.expected_revision ?? (req.body ?? {}).expected_revision;
+    const rawRevision = req.query.expected_revision ?? (req.body ?? {}).expected_revision;
+    let expectedRevision;
+    if (rawRevision !== undefined) {
+      const rev = Number(rawRevision);
+      if (!Number.isInteger(rev) || rev < 1) {
+        return res.status(400).json({ error: 'expected_revision must be a positive integer' });
+      }
+      expectedRevision = rev;
+    }
     const { status, body } = await handleDeleteUserData({ userId, id, expectedRevision }, db);
     return res.status(status).json(body);
   }

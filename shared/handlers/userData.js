@@ -86,9 +86,17 @@ export async function handleCreateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleUpdateUserData(input, db) {
-  const { userId, id, species, product, yield: yieldVal, source, expectedRevision } = input;
+  let { userId, id, species, product, yield: yieldVal, source, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
+
+  if (expectedRevision !== undefined) {
+    const rev = Number(expectedRevision);
+    if (!Number.isInteger(rev) || rev < 1) {
+      return { status: 400, body: { error: 'expected_revision must be a positive integer' } };
+    }
+    expectedRevision = rev;
+  }
 
   try {
     // Revision check is baked into the WHERE clause of the UPDATE — no separate
@@ -118,9 +126,17 @@ export async function handleUpdateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleDeleteUserData(input, db) {
-  const { userId, id, expectedRevision } = input;
+  let { userId, id, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
+
+  if (expectedRevision !== undefined) {
+    const rev = Number(expectedRevision);
+    if (!Number.isInteger(rev) || rev < 1) {
+      return { status: 400, body: { error: 'expected_revision must be a positive integer' } };
+    }
+    expectedRevision = rev;
+  }
 
   try {
     // Pass expectedRevision into the adapter so the revision check and the
