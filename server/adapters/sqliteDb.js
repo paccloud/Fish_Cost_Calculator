@@ -421,7 +421,7 @@ function makeSqliteAdapter(db) {
     setUserDataSharing(id, userId, isShared) {
       return new Promise((resolve, reject) => {
         db.run(
-          'UPDATE user_data SET is_shared = ? WHERE id = ? AND user_id = ?',
+          'UPDATE user_data SET is_shared = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?',
           [isShared ? 1 : 0, id, userId],
           (err) => {
             if (err) return reject(err);

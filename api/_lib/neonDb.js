@@ -380,7 +380,7 @@ export function makeNeonAdapter() {
 
     async setUserDataSharing(id, userId, isShared) {
       await query(
-        'UPDATE user_data SET is_shared = $1 WHERE id = $2 AND user_id = $3',
+        'UPDATE user_data SET is_shared = $1, revision = revision + 1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
         [isShared, id, userId]
       );
     },

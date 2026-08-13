@@ -432,7 +432,8 @@ app.put('/api/user-data/:id', authenticate, async (req, res) => {
 app.delete('/api/user-data/:id', authenticate, async (req, res) => {
     const { handleDeleteUserData } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
-    const { expected_revision: expectedRevision } = req.body ?? {};
+    // Accept from query string first (DELETE bodies are dropped by some proxies)
+    const expectedRevision = req.query.expected_revision ?? (req.body ?? {}).expected_revision;
     const { status, body } = await handleDeleteUserData({ userId: req.user.id, id: req.params.id, expectedRevision }, dbAdapter);
     return res.status(status).json(body);
 });

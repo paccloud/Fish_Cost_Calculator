@@ -124,7 +124,14 @@ export async function syncAll(user) {
             source: yld.source || 'User Input',
             expected_revision: data.revision,
           }, headers);
-          const finalRevision = putRes.ok ? (await putRes.json()).revision : data.revision;
+          if (!putRes.ok) {
+            // Reconciling PUT failed — leave yield pending so it is retried.
+            stats.errors++;
+            stats.errorDetails.push({ type: 'push-yield', id: yld.id, status: putRes.status, isAuthError: putRes.status === 401 });
+            if (putRes.status === 401) break;
+            continue;
+          }
+          const finalRevision = (await putRes.json()).revision;
           await markYieldSynced(yld.id, data.id, finalRevision);
         }
         stats.pushed++;

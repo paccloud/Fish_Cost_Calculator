@@ -177,15 +177,16 @@ async function upsertImportedYieldRowsSqlite(db, userId, rows) {
             );
 
             if (existing) {
-                await runSql(
+                const updateResult = await runSql(
                     db,
                     `UPDATE user_data
                         SET yield = ?, source = ?,
                             revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                      WHERE id = ? AND user_id = ?`,
-                    [row.yield, row.source, existing.id, userId]
+                      WHERE id = ? AND user_id = ?
+                        AND (yield IS NOT ? OR source IS NOT ?)`,
+                    [row.yield, row.source, existing.id, userId, row.yield, row.source]
                 );
-                updated++;
+                if (updateResult.changes > 0) updated++;
             } else {
                 await runSql(
                     db,

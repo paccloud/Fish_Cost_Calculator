@@ -54,7 +54,15 @@ async function handler(req, res) {
 
   // PUT /api/user-data?id=:id — update entry
   if (req.method === 'PUT' && id) {
-    const { species, product, yield: yieldVal, source, expected_revision: expectedRevision } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, expected_revision: rawRevision } = req.body ?? {};
+    let expectedRevision = rawRevision;
+    if (expectedRevision !== undefined) {
+      const rev = Number(expectedRevision);
+      if (!Number.isInteger(rev) || rev < 1) {
+        return res.status(400).json({ error: 'expected_revision must be a positive integer' });
+      }
+      expectedRevision = rev;
+    }
     const { status, body } = await handleUpdateUserData(
       { userId, id, species, product, yield: yieldVal, source, expectedRevision },
       db
@@ -64,7 +72,8 @@ async function handler(req, res) {
 
   // DELETE /api/user-data?id=:id — delete entry
   if (req.method === 'DELETE' && id) {
-    const { expected_revision: expectedRevision } = req.body ?? {};
+    // Accept from query string first (DELETE bodies are dropped by some proxies)
+    const expectedRevision = req.query.expected_revision ?? (req.body ?? {}).expected_revision;
     const { status, body } = await handleDeleteUserData({ userId, id, expectedRevision }, db);
     return res.status(status).json(body);
   }
