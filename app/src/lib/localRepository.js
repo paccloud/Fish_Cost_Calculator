@@ -4,8 +4,14 @@ const INSTALLATION_ID_KEY = 'fish-calc:installation-id';
 
 // --- Identity ---
 
+let _fallbackInstallationId = null;
+
 export function getInstallationId(storage = globalThis.localStorage) {
-  if (!storage) return crypto.randomUUID();
+  if (!storage) {
+    // Cache the fallback so guestScope() is stable for the session when localStorage is unavailable.
+    _fallbackInstallationId ||= crypto.randomUUID();
+    return _fallbackInstallationId;
+  }
   let id = storage.getItem(INSTALLATION_ID_KEY);
   if (!id) {
     id = crypto.randomUUID();
@@ -70,6 +76,8 @@ class LocalRepository {
   }
 
   // Only display metadata (name) may be changed on a snapshot.
+  // Rename is intentionally local-only: the name never reaches the sync queue.
+  // Records arriving on a new device will carry the original name from the server.
   async renameCalc(id, name) {
     const key = idbKey(this._scope, 'calcs');
     const all = (await this._get(key)) || [];
@@ -112,22 +120,22 @@ class LocalRepository {
   async mergeServerCalcs(serverCalcs) {
     const key = idbKey(this._scope, 'calcs');
     const all = (await this._get(key)) || [];
+    // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set.
     const trackedIds = new Set(all.filter((c) => c.serverId).map((c) => String(c.serverId)));
-    const tombstoneIds = new Set(
-      all
-        .filter((c) => c.syncStatus === 'pending-delete' && c.serverId)
-        .map((c) => String(c.serverId))
-    );
     for (const sc of serverCalcs) {
-      const sid = String(sc.id);
-      if (trackedIds.has(sid) || tombstoneIds.has(sid)) continue;
+      if (trackedIds.has(String(sc.id))) continue;
       const ts = sc.created_at || now();
       all.push({
-        ...sc,
         id: crypto.randomUUID(),
         scope: this._scope,
         serverId: sc.id,
         syncStatus: 'synced',
+        species: sc.species,
+        product: sc.product,
+        cost: sc.cost,
+        yield: sc.yield,
+        result: sc.result,
+        name: sc.name,
         createdAt: ts,
         updatedAt: ts,
       });
@@ -201,6 +209,8 @@ class LocalRepository {
   async mergeServerYields(serverYields) {
     const key = idbKey(this._scope, 'yields');
     const all = (await this._get(key)) || [];
+    // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set,
+    // so a tombstoned yield is never resurrected by a server merge.
     const trackedIds = new Set(all.filter((y) => y.serverId).map((y) => String(y.serverId)));
     for (const sy of serverYields) {
       if (trackedIds.has(String(sy.id))) continue;
@@ -224,10 +234,12 @@ class LocalRepository {
   // ---- Sync queue ----
 
   async getPendingSync() {
-    const [allCalcs, allYields] = await Promise.all([
-      (await this._get(idbKey(this._scope, 'calcs'))) || [],
-      (await this._get(idbKey(this._scope, 'yields'))) || [],
+    const [calcsRaw, yieldsRaw] = await Promise.all([
+      this._get(idbKey(this._scope, 'calcs')),
+      this._get(idbKey(this._scope, 'yields')),
     ]);
+    const allCalcs = calcsRaw || [];
+    const allYields = yieldsRaw || [];
     return {
       calcs: allCalcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete'),
       yields: allYields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),

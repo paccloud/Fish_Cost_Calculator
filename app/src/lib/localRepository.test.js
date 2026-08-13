@@ -35,6 +35,13 @@ describe('getInstallationId', () => {
     expect(getInstallationId(storage)).toBe('existing-id');
     expect(storage.setItem).not.toHaveBeenCalled();
   });
+
+  it('returns a stable id across calls when storage is unavailable', () => {
+    const id1 = getInstallationId(null);
+    const id2 = getInstallationId(null);
+    expect(id1).toMatch(/^[0-9a-f-]{36}$/);
+    expect(id1).toBe(id2);
+  });
 });
 
 describe('guestScope / accountScope', () => {
@@ -51,15 +58,13 @@ describe('guestScope / accountScope', () => {
 // ---- Scope isolation ----
 
 describe('scope isolation', () => {
-  let storeA, storeB, repoA, repoB;
+  let repoA, repoB;
 
   beforeEach(() => {
     // Two scopes sharing the same underlying IDB store to prove keys are separate
     const shared = makeStore();
     repoA = makeRepo('guest:device-1', shared);
     repoB = makeRepo('guest:device-2', shared);
-    storeA = shared;
-    storeB = shared;
   });
 
   it('calcs written to scope A are not visible in scope B', async () => {
@@ -280,12 +285,12 @@ describe('transactional queue behavior', () => {
     expect(pending.calcs).toHaveLength(0);
   });
 
-  it('rename of a synced calc re-queues it as local', async () => {
+  it('rename of a synced calc does NOT re-queue it (rename is local-only metadata)', async () => {
     const rec = await repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 5, yield: 50, result: 10 });
     await repo.markCalcSynced(rec.id, 11);
     await repo.renameCalc(rec.id, 'Renamed');
-    // renameCalc only touches name/updatedAt — syncStatus unchanged (synced stays synced).
-    // This matches the contract: rename is metadata-only and does NOT re-queue.
+    // Rename only touches name/updatedAt — syncStatus stays 'synced'.
+    // The new name is local-only; a record arriving on a new device will have the server name.
     const pending = await repo.getPendingSync();
     expect(pending.calcs).toHaveLength(0);
   });
@@ -390,6 +395,19 @@ describe('mergeServerYields', () => {
     await repo.mergeServerYields([{ id: 12, species: 'Halibut', product: 'Skinless Fillet', yield: 48 }]);
     const yields = await repo.getYields();
     expect(yields).toHaveLength(1);
+  });
+
+  it('does not resurrect a tombstoned yield (pending-delete)', async () => {
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48 });
+    await repo.markYieldSynced(rec.id, 12);
+    await repo.removeYield(rec.id);
+
+    await repo.mergeServerYields([{ id: 12, species: 'Halibut', product: 'Skinless Fillet', yield: 48 }]);
+
+    const yields = await repo.getYields();
+    expect(yields).toHaveLength(0);
+    const pending = await repo.getPendingSync();
+    expect(pending.yields[0].syncStatus).toBe('pending-delete');
   });
 });
 
