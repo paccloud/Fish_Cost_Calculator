@@ -90,25 +90,27 @@ export function makeNeonAdapter() {
       const { name, species, product, cost, yield: yieldVal, result, clientId } = fields;
 
       if (clientId) {
-        // Check for existing row with this clientId owned by this user.
-        const existing = await query(
-          `SELECT id, COALESCE(created_at, date) AS created_at, COALESCE(updated_at, date) AS updated_at
-             FROM calculations WHERE client_id = $1 AND user_id = $2`,
-          [clientId, userId]
-        );
-        if (existing.rows.length > 0) return existing.rows[0];
-
-        // No duplicate — insert with clientId.
-        const dbResult = await query(
+        // Atomic upsert: insert unless (user_id, client_id) already exists, then
+        // return whichever row now owns the pair — safe under concurrent retries.
+        const upsert = await query(
           `INSERT INTO calculations
              (user_id, name, species, product, cost, yield, result, date,
               client_id, is_private, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(),
                    $8, TRUE, NOW(), NOW())
+           ON CONFLICT (user_id, client_id) WHERE client_id IS NOT NULL
+           DO NOTHING
            RETURNING id, created_at, updated_at`,
           [userId, name, species, product, cost, yieldVal, result, clientId]
         );
-        return dbResult.rows[0];
+        if (upsert.rows.length > 0) return upsert.rows[0];
+        // Conflict: fetch the existing row.
+        const existing = await query(
+          `SELECT id, COALESCE(created_at, date) AS created_at, COALESCE(updated_at, date) AS updated_at
+             FROM calculations WHERE user_id = $1 AND client_id = $2`,
+          [userId, clientId]
+        );
+        return existing.rows[0];
       }
 
       // Legacy path: no clientId — plain insert, private by default.

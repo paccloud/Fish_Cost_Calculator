@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS calculations (
     cost DECIMAL(10,2),
     yield DECIMAL(5,2),
     result DECIMAL(10,2),
-    date TIMESTAMPTZ DEFAULT NOW()
+    date TIMESTAMPTZ DEFAULT NOW(),
+    client_id TEXT,
+    is_private BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- User data table (custom yield data)
@@ -53,6 +57,9 @@ CREATE TABLE IF NOT EXISTS contributors (
 CREATE INDEX IF NOT EXISTS idx_calculations_user_id ON calculations(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_data_user_id ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_calculations_date ON calculations(date DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS calculations_user_client_id_unique
+    ON calculations (user_id, client_id)
+ WHERE client_id IS NOT NULL;
 
 -- Migration for existing databases (run in order if upgrading)
 -- New databases created from this script already include all columns and constraints.

@@ -107,33 +107,25 @@ function makeSqliteAdapter(db) {
       const { name, species, product, cost, yield: yieldVal, result, clientId } = fields;
       return new Promise((resolve, reject) => {
         if (clientId) {
-          // Check for existing row with this clientId owned by this user.
-          db.get(
-            `SELECT id, COALESCE(created_at, date) AS created_at, COALESCE(updated_at, date) AS updated_at
-               FROM calculations WHERE client_id = ? AND user_id = ?`,
-            [clientId, userId],
-            (err, existing) => {
+          // INSERT OR IGNORE skips silently on (user_id, client_id) conflict;
+          // the subsequent SELECT always returns the winning row — safe under
+          // concurrent retries because SQLite serialises writes.
+          db.run(
+            `INSERT OR IGNORE INTO calculations
+               (user_id, name, species, product, cost, yield, result, date,
+                client_id, is_private, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+                     ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [userId, name, species, product, cost, yieldVal, result, clientId],
+            (err) => {
               if (err) return reject(err);
-              if (existing) return resolve(existing);
-              // No duplicate — insert with clientId.
-              db.run(
-                `INSERT INTO calculations
-                   (user_id, name, species, product, cost, yield, result, date,
-                    client_id, is_private, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
-                         ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-                [userId, name, species, product, cost, yieldVal, result, clientId],
-                function callback(err2) {
+              db.get(
+                `SELECT id, COALESCE(created_at, date) AS created_at, COALESCE(updated_at, date) AS updated_at
+                   FROM calculations WHERE user_id = ? AND client_id = ?`,
+                [userId, clientId],
+                (err2, row) => {
                   if (err2) return reject(err2);
-                  db.get(
-                    `SELECT id, COALESCE(created_at, date) AS created_at, COALESCE(updated_at, date) AS updated_at
-                       FROM calculations WHERE id = ?`,
-                    [this.lastID],
-                    (err3, row) => {
-                      if (err3) return reject(err3);
-                      resolve(row);
-                    }
-                  );
+                  resolve(row);
                 }
               );
             }

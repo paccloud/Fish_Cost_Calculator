@@ -25,8 +25,10 @@ UPDATE calculations
    SET is_private = TRUE
  WHERE is_private IS NULL;
 
--- Unique index prevents duplicate inserts for the same client_id.
--- Partial index excludes NULLs so legacy rows (no client_id) are unaffected.
-CREATE UNIQUE INDEX IF NOT EXISTS calculations_client_id_unique
-    ON calculations (client_id)
+-- Account-scoped unique index: (user_id, client_id) so two users can share a
+-- client_id value without blocking each other.  Replace the previously-deployed
+-- global index first; IF NOT EXISTS alone would silently retain the old one.
+DROP INDEX IF EXISTS calculations_client_id_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS calculations_user_client_id_unique
+    ON calculations (user_id, client_id)
  WHERE client_id IS NOT NULL;

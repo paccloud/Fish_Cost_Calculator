@@ -206,6 +206,7 @@ describe('handleSaveCalc — clientId idempotency', () => {
     expect(result.status).toBe(200);
     expect(result.body.id).toBe(42);
     expect(result.body.created_at).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.body.updated_at).toBe('2026-01-01T00:00:00.000Z');
   });
 
   it('strips whitespace-only clientId and passes undefined to saveCalc', async () => {

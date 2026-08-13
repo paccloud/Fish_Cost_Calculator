@@ -184,10 +184,14 @@ db.serialize(() => {
         'UPDATE calculations SET created_at = date, updated_at = date WHERE created_at IS NULL',
         (err) => { if (err) console.error('[migration 003] backfill timestamps:', err.message); }
     );
-    db.run(
-        'CREATE UNIQUE INDEX IF NOT EXISTS calculations_client_id_unique ON calculations(client_id)',
-        (err) => { if (err && !/already exists/i.test(err.message)) console.error('[migration 003] index:', err.message); }
-    );
+    // Drop the old global index explicitly before creating the account-scoped one.
+    // IF NOT EXISTS alone would silently retain an already-deployed global index.
+    db.run('DROP INDEX IF EXISTS calculations_client_id_unique', () => {
+        db.run(
+            'CREATE UNIQUE INDEX IF NOT EXISTS calculations_user_client_id_unique ON calculations(user_id, client_id) WHERE client_id IS NOT NULL',
+            (err) => { if (err && !/already exists/i.test(err.message)) console.error('[migration 003] index:', err.message); }
+        );
+    });
 });
 
 const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
