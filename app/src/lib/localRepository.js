@@ -239,8 +239,8 @@ class LocalRepository {
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
       const rec = all[idx];
-      // Skip if a concurrent sync already resolved this record (parallel 409 race).
-      if (rec.syncStatus === 'synced') return;
+      // Skip if already resolved, deleted, or tombstoned by a concurrent operation.
+      if (rec.syncStatus === 'synced' || rec.syncStatus === 'pending-delete' || rec.syncStatus === 'conflict-delete') return;
       all[idx] = {
         ...rec,
         syncStatus: 'conflicted',
@@ -296,8 +296,10 @@ class LocalRepository {
 
       if (action === 'use-local') {
         // Retry local edit stamped with the server's current revision so the next PUT succeeds.
+        // Carry over server is_shared so sharing state stays consistent.
         all[idx] = {
           ...rec,
+          is_shared: server?.is_shared ?? rec.is_shared,
           syncStatus: 'local',
           serverRevision: server?.serverRevision ?? rec.serverRevision,
           conflictLocal: undefined,
@@ -309,6 +311,8 @@ class LocalRepository {
       }
 
       if (action === 'use-server') {
+        // Require a populated server snapshot before accepting server state.
+        if (!server) return null;
         // Accept server state as ground truth; mark synced.
         all[idx] = {
           ...rec,
@@ -328,6 +332,8 @@ class LocalRepository {
       }
 
       if (action === 'keep-both') {
+        // Require a populated server snapshot before creating a forked record.
+        if (!server) return null;
         // Accept server state for the existing record; create a new local record for the local edit.
         // The new record has a fresh id and no serverId, guaranteeing no duplicate remote identity.
         const newRecord = {

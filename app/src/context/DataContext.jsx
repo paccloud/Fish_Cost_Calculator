@@ -120,6 +120,7 @@ export function DataProvider({ children }) {
     setConflictedYields(conflicts);
     const count = await coordinator.pendingCount();
     setPendingCount(count);
+    return { conflictCount: conflicts.length };
   }, [repo, coordinator]);
 
   // Detect guest records when user transitions from null → authenticated.
@@ -144,10 +145,10 @@ export function DataProvider({ children }) {
       const stats = await syncPromise;
       // Discard stale results if the account changed while the sync was in flight.
       if (gen !== syncGenRef.current) return;
-      await reloadFromRepo();
+      const { conflictCount } = await reloadFromRepo();
       // Re-check after the async reload — account may have switched during it.
       if (gen !== syncGenRef.current) return;
-      if (stats.conflicts > 0) {
+      if (stats.conflicts > 0 || conflictCount > 0) {
         setSyncError(null);
         setSyncStatus('conflict');
       } else if (stats.errors > 0) {
@@ -295,10 +296,10 @@ export function DataProvider({ children }) {
 
   const handleDeleteConflictDismiss = useCallback(async (id) => {
     await repo.dismissYieldDeleteConflict(id);
-    const conflicts = await repo.getConflictedYields();
-    setConflictedYields(conflicts);
-    if (conflicts.length === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
-  }, [repo]);
+    // Use reloadFromRepo so customYields is refreshed too (dismissed record was still in getYields).
+    const { conflictCount } = await reloadFromRepo();
+    if (conflictCount === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
+  }, [repo, reloadFromRepo]);
 
   const handleConflictKeepBoth = useCallback(async (id) => {
     await repo.resolveYieldConflict(id, 'keep-both');
@@ -373,7 +374,7 @@ export function DataProvider({ children }) {
     savedCalcs: scopeReady ? savedCalcs : [],
     customYields: scopeReady ? customYields : [],
     customSpecies,
-    conflictedYields,
+    conflictedYields: scopeReady ? conflictedYields : [],
     isOnline,
     dataLoaded,
     syncStatus,
