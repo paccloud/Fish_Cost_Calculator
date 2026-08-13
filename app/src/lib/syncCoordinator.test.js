@@ -166,7 +166,7 @@ describe('createSyncCoordinator', () => {
       );
     });
 
-    it('tracks a 409 conflict without discarding local data', async () => {
+    it('tracks a 409 conflict: increments conflicts (not errors), moves record to conflicted state', async () => {
       const yld = await repo.addYield({ species: 'Sole', product: 'Fillet', yield: 42 });
       await repo.markYieldSynced(yld.id, 'srv-yld-2', 1);
       await repo.updateYield(yld.id, { yield: 45 });
@@ -177,10 +177,59 @@ describe('createSyncCoordinator', () => {
       const stats = await coordinator.sync(AUTH_USER);
 
       expect(stats.conflicts).toBe(1);
-      expect(stats.errors).toBeGreaterThan(0);
-      // Local record must still be pending (not cleared).
+      expect(stats.errors).toBe(0);
+      // Record transitions to 'conflicted' — no longer in the sync queue.
       const pending = await coordinator.pendingCount();
-      expect(pending).toBeGreaterThan(0);
+      expect(pending).toBe(0);
+      const conflicted = await repo.getConflictedYields();
+      expect(conflicted).toHaveLength(1);
+      expect(conflicted[0].syncStatus).toBe('conflicted');
+      expect(conflicted[0].conflictLocal.yield).toBe(45);
+    });
+  });
+
+  // ---- Stale delete conflict ----
+
+  describe('push yield deletes — stale delete conflicts', () => {
+    it('holds a 409 on DELETE as conflict-delete, removes from sync queue', async () => {
+      const yld = await repo.addYield({ species: 'Sole', product: 'Fillet', yield: 38 });
+      await repo.markYieldSynced(yld.id, 'srv-del-1', 1);
+      await repo.removeYield(yld.id);
+
+      client.deleteUserDataRaw = vi.fn(async () => fakeRes({ ok: false, status: 409 }));
+
+      const coordinator = createSyncCoordinator(repo, client);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(stats.conflicts).toBe(1);
+      expect(stats.errors).toBe(0);
+      const pending = await coordinator.pendingCount();
+      expect(pending).toBe(0);
+      const conflicted = await repo.getConflictedYields();
+      expect(conflicted).toHaveLength(1);
+      expect(conflicted[0].syncStatus).toBe('conflict-delete');
+    });
+  });
+
+  // ---- Conflict + pull: server state populated ----
+
+  describe('409 conflict then pull: conflictServer is populated', () => {
+    it('pull phase sets conflictServer on a conflicted record', async () => {
+      const yld = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+      await repo.markYieldSynced(yld.id, 'srv-conflict-pull', 1);
+      await repo.updateYield(yld.id, { yield: 45 });
+
+      client.updateUserDataRaw = vi.fn(async () => fakeRes({ ok: false, status: 409 }));
+      client.listUserDataRaw = vi.fn(async () =>
+        fakeRes({ body: [{ id: 'srv-conflict-pull', revision: 2, species: 'Cod', product: 'Fillet', yield: 50, source: 'Server', is_shared: false }] })
+      );
+
+      const coordinator = createSyncCoordinator(repo, client);
+      await coordinator.sync(AUTH_USER);
+
+      const conflicted = await repo.getConflictedYields();
+      expect(conflicted).toHaveLength(1);
+      expect(conflicted[0].conflictServer).toMatchObject({ serverRevision: 2, yield: 50 });
     });
   });
 

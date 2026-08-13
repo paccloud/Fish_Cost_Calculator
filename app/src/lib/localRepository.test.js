@@ -540,3 +540,184 @@ describe('discardUnsynchronized', () => {
     expect(yields.map((y) => y.id)).not.toContain(localYield.id);
   });
 });
+
+// ---- Conflict resolution ----
+
+describe('markYieldConflicted', () => {
+  let repo, store;
+  beforeEach(() => { store = makeStore(); repo = makeRepo('account:u1', store); });
+
+  it('transitions a local yield to conflicted state, preserving the local payload', async () => {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42, source: 'Test' });
+    await repo.markYieldSynced(rec.id, 'srv-1', 1);
+    await repo.updateYield(rec.id, { yield: 45 });
+
+    await repo.markYieldConflicted(rec.id);
+
+    const conflicts = await repo.getConflictedYields();
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].syncStatus).toBe('conflicted');
+    expect(conflicts[0].conflictLocal.yield).toBe(45);
+    expect(conflicts[0].conflictServer).toBeNull();
+  });
+
+  it('removes the conflicted record from the sync queue', async () => {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    await repo.markYieldSynced(rec.id, 'srv-2', 1);
+    await repo.updateYield(rec.id, { yield: 50 });
+    await repo.markYieldConflicted(rec.id);
+
+    const pending = await repo.getPendingSync();
+    expect(pending.yields).toHaveLength(0);
+  });
+
+  it('is a no-op for an unknown id', async () => {
+    await expect(repo.markYieldConflicted('does-not-exist')).resolves.toBeUndefined();
+  });
+});
+
+describe('holdStaleYieldDelete', () => {
+  let repo, store;
+  beforeEach(() => { store = makeStore(); repo = makeRepo('account:u1', store); });
+
+  it('transitions a pending-delete yield to conflict-delete state', async () => {
+    const rec = await repo.addYield({ species: 'Salmon', product: 'Fillet', yield: 50 });
+    await repo.markYieldSynced(rec.id, 'srv-3', 1);
+    await repo.removeYield(rec.id);
+    await repo.holdStaleYieldDelete(rec.id);
+
+    const conflicts = await repo.getConflictedYields();
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].syncStatus).toBe('conflict-delete');
+  });
+
+  it('removes the stale-delete record from the sync queue', async () => {
+    const rec = await repo.addYield({ species: 'Tuna', product: 'Loin', yield: 60 });
+    await repo.markYieldSynced(rec.id, 'srv-4', 1);
+    await repo.removeYield(rec.id);
+    await repo.holdStaleYieldDelete(rec.id);
+
+    const pending = await repo.getPendingSync();
+    expect(pending.yields).toHaveLength(0);
+  });
+
+  it('is a no-op if syncStatus is not pending-delete', async () => {
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Steak', yield: 55 });
+    await repo.holdStaleYieldDelete(rec.id); // local, not pending-delete
+
+    const conflicts = await repo.getConflictedYields();
+    expect(conflicts).toHaveLength(0);
+  });
+});
+
+describe('mergeServerYields — updates conflictServer for conflicted records', () => {
+  let repo, store;
+  beforeEach(() => { store = makeStore(); repo = makeRepo('account:u1', store); });
+
+  it('populates conflictServer when server yields are pulled after a conflict', async () => {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    await repo.markYieldSynced(rec.id, 'srv-5', 1);
+    await repo.updateYield(rec.id, { yield: 45 });
+    await repo.markYieldConflicted(rec.id);
+
+    await repo.mergeServerYields([{
+      id: 'srv-5', revision: 2, species: 'Cod', product: 'Fillet', yield: 48, source: 'Server', is_shared: false,
+    }]);
+
+    const conflicts = await repo.getConflictedYields();
+    expect(conflicts[0].conflictServer).toMatchObject({
+      serverId: 'srv-5', serverRevision: 2, yield: 48,
+    });
+  });
+
+  it('does not insert a duplicate record for a conflicted yield', async () => {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    await repo.markYieldSynced(rec.id, 'srv-6', 1);
+    await repo.updateYield(rec.id, { yield: 45 });
+    await repo.markYieldConflicted(rec.id);
+
+    await repo.mergeServerYields([{ id: 'srv-6', revision: 2, species: 'Cod', product: 'Fillet', yield: 48, source: 'Server', is_shared: false }]);
+
+    const all = await repo.getYields();
+    expect(all.filter((y) => String(y.serverId) === 'srv-6')).toHaveLength(1);
+  });
+});
+
+describe('resolveYieldConflict', () => {
+  let repo, store;
+
+  async function makeConflictedYield(yieldVal = 42) {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: yieldVal });
+    await repo.markYieldSynced(rec.id, 'srv-10', 1);
+    await repo.updateYield(rec.id, { yield: yieldVal + 5 });
+    await repo.markYieldConflicted(rec.id);
+    await repo.mergeServerYields([{
+      id: 'srv-10', revision: 2, species: 'Cod', product: 'Fillet', yield: yieldVal + 10, source: 'Server', is_shared: false,
+    }]);
+    const [conflict] = await repo.getConflictedYields();
+    return conflict;
+  }
+
+  beforeEach(() => { store = makeStore(); repo = makeRepo('account:u1', store); });
+
+  it('use-local: marks record as local with updated serverRevision for retry', async () => {
+    const conflict = await makeConflictedYield(40);
+    await repo.resolveYieldConflict(conflict.id, 'use-local');
+
+    const pending = await repo.getPendingSync();
+    expect(pending.yields).toHaveLength(1);
+    expect(pending.yields[0].syncStatus).toBe('local');
+    expect(pending.yields[0].serverRevision).toBe(2); // updated to server revision
+    expect(pending.yields[0].yield).toBe(45); // local edit preserved
+    expect(await repo.getConflictedYields()).toHaveLength(0);
+  });
+
+  it('use-server: replaces record with server state, marks synced', async () => {
+    const conflict = await makeConflictedYield(40);
+    await repo.resolveYieldConflict(conflict.id, 'use-server');
+
+    const yields = await repo.getYields();
+    expect(yields).toHaveLength(1);
+    expect(yields[0].syncStatus).toBe('synced');
+    expect(yields[0].yield).toBe(50); // server value
+    expect(await repo.getConflictedYields()).toHaveLength(0);
+    const pending = await repo.getPendingSync();
+    expect(pending.yields).toHaveLength(0);
+  });
+
+  it('keep-both: existing record → server state (synced); new record → local edit (local)', async () => {
+    const conflict = await makeConflictedYield(40);
+    await repo.resolveYieldConflict(conflict.id, 'keep-both');
+
+    const yields = await repo.getYields();
+    expect(yields).toHaveLength(2);
+
+    const synced = yields.find((y) => y.syncStatus === 'synced');
+    const local = yields.find((y) => y.syncStatus === 'local');
+    expect(synced).toBeDefined();
+    expect(local).toBeDefined();
+    expect(synced.yield).toBe(50); // server value
+    expect(local.yield).toBe(45); // local edit
+    expect(local.serverId).toBeUndefined(); // fresh identity — no duplicate remote claim
+    expect(await repo.getConflictedYields()).toHaveLength(0);
+  });
+
+  it('keep-both: the two resulting records have distinct ids', async () => {
+    const conflict = await makeConflictedYield(40);
+    await repo.resolveYieldConflict(conflict.id, 'keep-both');
+
+    const yields = await repo.getYields();
+    expect(yields[0].id).not.toBe(yields[1].id);
+  });
+
+  it('returns null for an unknown id', async () => {
+    const result = await repo.resolveYieldConflict('no-such-id', 'use-local');
+    expect(result).toBeNull();
+  });
+
+  it('returns null if record is not in conflicted state', async () => {
+    const rec = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    const result = await repo.resolveYieldConflict(rec.id, 'use-local');
+    expect(result).toBeNull();
+  });
+});
