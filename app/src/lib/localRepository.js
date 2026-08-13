@@ -198,6 +198,8 @@ class LocalRepository {
         ...data,
         id: prev.id,
         scope: this._scope,
+        serverId: prev.serverId,
+        createdAt: prev.createdAt,
         syncStatus: prev.syncStatus === 'synced' ? 'local' : prev.syncStatus,
         updatedAt: now(),
       };
@@ -286,6 +288,9 @@ class LocalRepository {
 
 // --- Factory ---
 
+// Callers must use a single repository instance per scope. Concurrent instances
+// for the same scope share the same IDB keys but have independent lock maps,
+// so concurrent mutations will race and can corrupt the stored collection.
 export function createRepository(scope, options) {
   return new LocalRepository(scope, options);
 }
