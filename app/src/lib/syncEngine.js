@@ -43,6 +43,8 @@ export async function syncAll(user) {
         cost: calc.cost,
         yield: calc.yield,
         result: calc.result,
+        // Stable local UUID used as clientId for idempotent retry.
+        client_id: calc.id,
       }, headers);
       if (res.ok) {
         const data = await res.json();

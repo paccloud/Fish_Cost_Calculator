@@ -484,18 +484,29 @@ describe('apiClient.uploadData — request construction', () => {
 // ---------------------------------------------------------------------------
 
 describe('apiClient.saveCalcRaw — request construction', () => {
-  it('sends POST to /api/save-calc with JSON body', async () => {
+  it('sends POST to /api/saved-calcs with JSON body', async () => {
     const body = { name: 'Test', species: 'Salmon', product: 'Fillet', cost: 5, yield: 42, result: 11.9 };
-    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 201, body: { id: 7 } }));
+    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: { id: 7, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' } }));
     const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
 
     const res = await client.saveCalcRaw(body);
 
     const [url, options] = fetchStub.mock.calls[0];
-    expect(url).toBe(`${BASE}/api/save-calc`);
+    expect(url).toBe(`${BASE}/api/saved-calcs`);
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body)).toEqual(body);
     expect(res.ok).toBe(true);
+  });
+
+  it('sends client_id for idempotent retry', async () => {
+    const body = { name: 'Test', species: 'Salmon', product: 'Fillet', cost: 5, yield: 42, result: 11.9, client_id: 'stable-uuid' };
+    const fetchStub = stubFetch(fakeResponse({ ok: true, status: 200, body: { id: 7, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' } }));
+    const client = createApiClient({ baseUrl: BASE, getToken: () => TOKEN, fetch: fetchStub });
+
+    await client.saveCalcRaw(body);
+
+    const [, options] = fetchStub.mock.calls[0];
+    expect(JSON.parse(options.body).client_id).toBe('stable-uuid');
   });
 
   it('returns non-ok response without throwing', async () => {

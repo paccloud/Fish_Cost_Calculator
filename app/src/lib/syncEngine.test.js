@@ -117,6 +117,29 @@ describe('syncAll', () => {
     expect(markCalcSynced).toHaveBeenCalledWith('local-calc-id', 'server-id');
   });
 
+  it('sends the local record id as client_id for idempotent retry', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [
+        {
+          id: 'stable-uuid-123',
+          syncStatus: 'local',
+          name: 'Halibut Fillet',
+          species: 'Pacific Halibut',
+          product: 'Skinless Fillet',
+          cost: 3.5,
+          yield: 55,
+          result: 6.36,
+        },
+      ],
+      yields: [],
+    });
+
+    await syncAll(passwordUser);
+
+    const [body] = apiClient.saveCalcRaw.mock.calls[0];
+    expect(body.client_id).toBe('stable-uuid-123');
+  });
+
   it('omits saved calculation fields that the remote schema does not store', async () => {
     getAllPendingSync.mockResolvedValue({
       calcs: [

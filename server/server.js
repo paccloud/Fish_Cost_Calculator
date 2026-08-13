@@ -167,6 +167,27 @@ db.serialize(() => {
         });
     });
     db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid)');
+    // Migration 003: private-by-default calcs + idempotent clientId sync.
+    [
+        'ALTER TABLE calculations ADD COLUMN client_id TEXT',
+        'ALTER TABLE calculations ADD COLUMN is_private INTEGER NOT NULL DEFAULT 1',
+        'ALTER TABLE calculations ADD COLUMN created_at TEXT',
+        'ALTER TABLE calculations ADD COLUMN updated_at TEXT',
+    ].forEach((statement) => {
+        db.run(statement, (err) => {
+            if (err && !/duplicate column/i.test(err.message)) {
+                console.error(`[migration 003] ${err.message}`);
+            }
+        });
+    });
+    db.run(
+        'UPDATE calculations SET created_at = date, updated_at = date WHERE created_at IS NULL',
+        (err) => { if (err) console.error('[migration 003] backfill timestamps:', err.message); }
+    );
+    db.run(
+        'CREATE UNIQUE INDEX IF NOT EXISTS calculations_client_id_unique ON calculations(client_id)',
+        (err) => { if (err && !/already exists/i.test(err.message)) console.error('[migration 003] index:', err.message); }
+    );
 });
 
 const sqliteQuery = (text, params = []) => new Promise((resolve, reject) => {
@@ -242,15 +263,20 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Save Calculation — delegates to shared handler core.
-app.post('/api/save-calc', authenticate, async (req, res) => {
+async function handleSaveCalcRequest(req, res) {
     const { handleSaveCalc } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
+    const { client_id: clientId, ...rest } = req.body ?? {};
     const { status, body } = await handleSaveCalc(
-        { userId: req.user.id, ...req.body },
+        { userId: req.user.id, clientId, ...rest },
         dbAdapter
     );
     return res.status(status).json(body);
-});
+}
+
+// Legacy path kept for backwards compatibility; vercel.json rewrites /api/save-calc → /api/saved-calcs.
+app.post('/api/save-calc', authenticate, handleSaveCalcRequest);
+app.post('/api/saved-calcs', authenticate, handleSaveCalcRequest);
 
 // List Calculations — delegates to shared handler core.
 app.get('/api/saved-calcs', authenticate, async (req, res) => {
