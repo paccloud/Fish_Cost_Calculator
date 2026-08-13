@@ -44,9 +44,9 @@ async function handler(req, res) {
 
   // POST /api/user-data — create new entry
   if (req.method === 'POST' && !id) {
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, client_id: clientId } = req.body ?? {};
     const { status, body } = await handleCreateUserData(
-      { userId, species, product, yield: yieldVal, source },
+      { userId, species, product, yield: yieldVal, source, clientId },
       db
     );
     return res.status(status).json(body);
@@ -54,9 +54,9 @@ async function handler(req, res) {
 
   // PUT /api/user-data?id=:id — update entry
   if (req.method === 'PUT' && id) {
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, expected_revision: expectedRevision } = req.body ?? {};
     const { status, body } = await handleUpdateUserData(
-      { userId, id, species, product, yield: yieldVal, source },
+      { userId, id, species, product, yield: yieldVal, source, expectedRevision },
       db
     );
     return res.status(status).json(body);

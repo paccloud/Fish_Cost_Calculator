@@ -291,24 +291,38 @@ export function makeNeonAdapter() {
 
     async listUserData(userId) {
       const result = await query(
-        'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = $1',
+        `SELECT id, species, product, yield, source, is_shared,
+                client_id, revision, created_at, updated_at
+         FROM user_data WHERE user_id = $1`,
         [userId]
       );
       return result.rows;
     },
 
     async createUserDataEntry(userId, fields) {
-      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+      const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
+
+      if (clientId) {
+        const existing = await query(
+          'SELECT id, revision, created_at, updated_at FROM user_data WHERE client_id = $1 AND user_id = $2',
+          [clientId, userId]
+        );
+        if (existing.rows[0]) return existing.rows[0];
+      }
+
       const result = await query(
-        'INSERT INTO user_data (user_id, species, product, yield, source) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-        [userId, species, product, yieldVal, source]
+        `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+         RETURNING id, revision, created_at, updated_at`,
+        [userId, species, product, yieldVal, source, clientId ?? null]
       );
       return result.rows[0];
     },
 
     async findUserDataEntryById(id, userId) {
       const result = await query(
-        'SELECT id, species, product, yield, source FROM user_data WHERE id = $1 AND user_id = $2',
+        `SELECT id, species, product, yield, source, is_shared, revision, created_at, updated_at
+         FROM user_data WHERE id = $1 AND user_id = $2`,
         [id, userId]
       );
       return result.rows[0] ?? null;
@@ -318,10 +332,12 @@ export function makeNeonAdapter() {
       const { species, product, yield: yieldVal, source } = fields;
       await query(
         `UPDATE user_data
-         SET species = COALESCE($1, species),
-             product = COALESCE($2, product),
-             yield   = COALESCE($3, yield),
-             source  = COALESCE($4, source)
+         SET species  = COALESCE($1, species),
+             product  = COALESCE($2, product),
+             yield    = COALESCE($3, yield),
+             source   = COALESCE($4, source),
+             revision = revision + 1,
+             updated_at = NOW()
          WHERE id = $5 AND user_id = $6`,
         [species, product, yieldVal, source, id, userId]
       );

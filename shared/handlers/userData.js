@@ -49,16 +49,27 @@ export async function handleListUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleCreateUserData(input, db) {
-  const { userId, species, product, yield: yieldVal, source = 'User Input' } = input;
+  const { userId, species, product, yield: yieldVal, source = 'User Input', clientId } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
 
   if (!species || !product || yieldVal === undefined) {
     return { status: 400, body: { error: 'Species, product, and yield are required' } };
   }
 
+  const safeClientId = (typeof clientId === 'string' && clientId.trim()) ? clientId.trim() : undefined;
+
   try {
-    const row = await db.createUserDataEntry(userId, { species, product, yield: yieldVal, source });
-    return { status: 201, body: { id: row.id, message: 'Data added successfully' } };
+    const row = await db.createUserDataEntry(userId, { species, product, yield: yieldVal, source, clientId: safeClientId });
+    return {
+      status: 200,
+      body: {
+        id: row.id,
+        revision: row.revision ?? 1,
+        created_at: row.created_at ?? null,
+        updated_at: row.updated_at ?? null,
+        message: 'Data added successfully',
+      },
+    };
   } catch (err) {
     console.error('[user-data create] error:', err.message ?? err);
     return { status: 500, body: { error: 'Failed to add data' } };
@@ -75,13 +86,20 @@ export async function handleCreateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleUpdateUserData(input, db) {
-  const { userId, id, species, product, yield: yieldVal, source } = input;
+  const { userId, id, species, product, yield: yieldVal, source, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
   try {
     const existing = await db.findUserDataEntryById(id, userId);
     if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+
+    if (expectedRevision !== undefined) {
+      const currentRevision = existing.revision ?? 1;
+      if (currentRevision !== Number(expectedRevision)) {
+        return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
+      }
+    }
 
     await db.updateUserDataEntry(id, userId, { species, product, yield: yieldVal, source });
     return { status: 200, body: { message: 'Updated successfully' } };

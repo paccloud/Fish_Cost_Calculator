@@ -167,6 +167,28 @@ describe('syncAll', () => {
     expect(body).not.toHaveProperty('target_weight');
   });
 
+  it('sends the local record id as client_id for idempotent yield push', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [],
+      yields: [
+        {
+          id: 'stable-yield-uuid',
+          syncStatus: 'local',
+          species: 'Pacific Halibut',
+          product: 'Round → Skinless Fillet',
+          yield: 48,
+          source: 'User Input',
+        },
+      ],
+    });
+
+    await syncAll(passwordUser);
+
+    expect(apiClient.createUserDataRaw).toHaveBeenCalledTimes(1);
+    const [body] = apiClient.createUserDataRaw.mock.calls[0];
+    expect(body.client_id).toBe('stable-yield-uuid');
+  });
+
   it('sends custom yields with the yield field the server accepts', async () => {
     getAllPendingSync.mockResolvedValue({
       calcs: [],

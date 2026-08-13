@@ -300,7 +300,9 @@ function makeSqliteAdapter(db) {
     listUserData(userId) {
       return new Promise((resolve, reject) => {
         db.all(
-          'SELECT id, species, product, yield, source, is_shared FROM user_data WHERE user_id = ?',
+          `SELECT id, species, product, yield, source, is_shared,
+                  client_id, revision, created_at, updated_at
+           FROM user_data WHERE user_id = ?`,
           [userId],
           (err, rows) => {
             if (err) return reject(err);
@@ -310,15 +312,36 @@ function makeSqliteAdapter(db) {
       });
     },
 
-    createUserDataEntry(userId, fields) {
-      const { species, product, yield: yieldVal, source = 'User Input' } = fields;
+    async createUserDataEntry(userId, fields) {
+      const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
+
+      if (clientId) {
+        const existing = await new Promise((resolve, reject) => {
+          db.get(
+            'SELECT id, revision, created_at, updated_at FROM user_data WHERE client_id = ? AND user_id = ?',
+            [clientId, userId],
+            (err, row) => { if (err) return reject(err); resolve(row ?? null); }
+          );
+        });
+        if (existing) return existing;
+      }
+
       return new Promise((resolve, reject) => {
         db.run(
-          'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
-          [userId, species, product, yieldVal, source],
+          `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [userId, species, product, yieldVal, source, clientId ?? null],
           function callback(err) {
             if (err) return reject(err);
-            resolve({ id: this.lastID });
+            const insertedId = this.lastID;
+            db.get(
+              'SELECT id, revision, created_at, updated_at FROM user_data WHERE id = ?',
+              [insertedId],
+              (err2, row) => {
+                if (err2) return reject(err2);
+                resolve(row);
+              }
+            );
           }
         );
       });
@@ -327,7 +350,8 @@ function makeSqliteAdapter(db) {
     findUserDataEntryById(id, userId) {
       return new Promise((resolve, reject) => {
         db.get(
-          'SELECT id, species, product, yield, source FROM user_data WHERE id = ? AND user_id = ?',
+          `SELECT id, species, product, yield, source, is_shared, revision, created_at, updated_at
+           FROM user_data WHERE id = ? AND user_id = ?`,
           [id, userId],
           (err, row) => {
             if (err) return reject(err);
@@ -342,7 +366,10 @@ function makeSqliteAdapter(db) {
       const { species, product, yield: yieldVal, source } = fields;
       return new Promise((resolve, reject) => {
         db.run(
-          'UPDATE user_data SET species = ?, product = ?, yield = ?, source = ? WHERE id = ? AND user_id = ?',
+          `UPDATE user_data
+           SET species = ?, product = ?, yield = ?, source = ?,
+               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND user_id = ?`,
           [
             species ?? existing?.species,
             product ?? existing?.product,

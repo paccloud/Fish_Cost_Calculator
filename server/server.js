@@ -154,6 +154,20 @@ db.serialize(() => {
             console.warn('[migration] ALTER TABLE user_data:', err.message);
         }
     });
+    // Add revisioned-sync columns to user_data (issue #86).
+    [
+        'ALTER TABLE user_data ADD COLUMN client_id TEXT',
+        'ALTER TABLE user_data ADD COLUMN revision INTEGER NOT NULL DEFAULT 1',
+        'ALTER TABLE user_data ADD COLUMN created_at TEXT',
+        'ALTER TABLE user_data ADD COLUMN updated_at TEXT',
+    ].forEach((stmt) => {
+        db.run(stmt, (err) => {
+            if (err && !/duplicate column/i.test(err.message)) {
+                console.warn(`[migration] user_data: ${err.message}`);
+            }
+        });
+    });
+    db.run('CREATE UNIQUE INDEX IF NOT EXISTS user_data_client_id_unique ON user_data (client_id) WHERE client_id IS NOT NULL');
     [
         'ALTER TABLE users ADD COLUMN firebase_uid TEXT',
         'ALTER TABLE users ADD COLUMN email TEXT',
@@ -393,9 +407,9 @@ app.get('/api/user-data', authenticate, async (req, res) => {
 app.post('/api/user-data', authenticate, async (req, res) => {
     const { handleCreateUserData } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, client_id: clientId } = req.body ?? {};
     const { status, body } = await handleCreateUserData(
-        { userId: req.user.id, species, product, yield: yieldVal, source },
+        { userId: req.user.id, species, product, yield: yieldVal, source, clientId },
         dbAdapter
     );
     return res.status(status).json(body);
@@ -404,9 +418,9 @@ app.post('/api/user-data', authenticate, async (req, res) => {
 app.put('/api/user-data/:id', authenticate, async (req, res) => {
     const { handleUpdateUserData } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
-    const { species, product, yield: yieldVal, source } = req.body ?? {};
+    const { species, product, yield: yieldVal, source, expected_revision: expectedRevision } = req.body ?? {};
     const { status, body } = await handleUpdateUserData(
-        { userId: req.user.id, id: req.params.id, species, product, yield: yieldVal, source },
+        { userId: req.user.id, id: req.params.id, species, product, yield: yieldVal, source, expectedRevision },
         dbAdapter
     );
     return res.status(status).json(body);

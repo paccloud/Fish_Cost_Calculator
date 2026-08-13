@@ -92,6 +92,7 @@ export async function syncAll(user) {
         product: yld.product,
         yield: yld.yield,
         source: yld.source || 'User Input',
+        client_id: yld.id,
       }, headers);
       if (res.ok) {
         const data = await res.json();
