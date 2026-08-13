@@ -316,6 +316,106 @@ describe('handleDeleteUserData', () => {
 });
 
 // ===========================================================================
+// handleDeleteUserData — revision guard (stale-delete)
+// ===========================================================================
+
+describe('handleDeleteUserData — revision guard', () => {
+  it('returns 409 when expectedRevision does not match the current revision', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 3 }),
+    });
+    const result = await handleDeleteUserData(
+      { userId: 1, id: 1, expectedRevision: 1 },
+      db
+    );
+    expect(result.status).toBe(409);
+    expect(result.body.error).toMatch(/conflict/i);
+    expect(db.deleteUserDataEntry).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when expectedRevision matches', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 3 }),
+    });
+    const result = await handleDeleteUserData(
+      { userId: 1, id: 1, expectedRevision: 3 },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1);
+  });
+
+  it('skips revision check when expectedRevision is not provided', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 99 }),
+    });
+    const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
+    expect(result.status).toBe(200);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ===========================================================================
+// Ownership isolation
+// ===========================================================================
+
+describe('ownership isolation', () => {
+  it('does not let user 2 update user 1 entry', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 2, id: 1, species: 'Tuna' },
+      db
+    );
+    expect(result.status).toBe(404);
+    expect(db.updateUserDataEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not let user 2 delete user 1 entry', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+    });
+    const result = await handleDeleteUserData({ userId: 2, id: 1 }, db);
+    expect(result.status).toBe(404);
+    expect(db.deleteUserDataEntry).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Revision advancement
+// ===========================================================================
+
+describe('revision advancement', () => {
+  it('calls updateUserDataEntry after confirming ownership', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 2 }),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
+      db
+    );
+    expect(result.status).toBe(200);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Coho Salmon', product: undefined, yield: undefined, source: undefined }
+    );
+  });
+
+  it('rejects stale update when entry has been revised by another session', async () => {
+    const db = makeFakeDb({
+      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 5 }),
+    });
+    const result = await handleUpdateUserData(
+      { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
+      db
+    );
+    expect(result.status).toBe(409);
+    expect(db.updateUserDataEntry).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
 // handleSetUserDataSharing
 // ===========================================================================
 

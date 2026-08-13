@@ -119,13 +119,20 @@ export async function handleUpdateUserData(input, db) {
  * @returns {Promise<{status: number, body: Object}>}
  */
 export async function handleDeleteUserData(input, db) {
-  const { userId, id } = input;
+  const { userId, id, expectedRevision } = input;
   if (!userId) return { status: 401, body: { error: 'Unauthorized' } };
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
   try {
     const existing = await db.findUserDataEntryById(id, userId);
     if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+
+    if (expectedRevision !== undefined) {
+      const currentRevision = existing.revision ?? 1;
+      if (currentRevision !== Number(expectedRevision)) {
+        return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
+      }
+    }
 
     await db.deleteUserDataEntry(id, userId);
     return { status: 200, body: { message: 'Deleted successfully' } };

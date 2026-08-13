@@ -64,7 +64,8 @@ async function handler(req, res) {
 
   // DELETE /api/user-data?id=:id — delete entry
   if (req.method === 'DELETE' && id) {
-    const { status, body } = await handleDeleteUserData({ userId, id }, db);
+    const { expected_revision: expectedRevision } = req.body ?? {};
+    const { status, body } = await handleDeleteUserData({ userId, id, expectedRevision }, db);
     return res.status(status).json(body);
   }
 
