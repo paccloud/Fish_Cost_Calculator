@@ -29,14 +29,20 @@ export function DataProvider({ children }) {
   const [signOutGuardState, setSignOutGuardState] = useState(null);
 
   // Derive scope and repository from the current user.
-  const uid = user?.uid ?? null;
+  // Treat legacy password/JWT sessions (user.id but no user.uid) as authenticated.
+  const uid = user?.uid ?? user?.id ?? null;
   const prevUidRef = useRef(uid);
+  // Incremented on every uid change to invalidate in-flight sync callbacks.
+  const syncGenRef = useRef(0);
+  // Tracks the active coordinator.sync() promise for discard coordination.
+  const activeSyncRef = useRef(null);
 
   // When uid changes (sign-out or account switch), clear React state immediately so
   // the previous account's records are never visible under the new identity.
   useEffect(() => {
     if (prevUidRef.current === uid) return;
     prevUidRef.current = uid;
+    syncGenRef.current += 1;
     setSavedCalcs([]);
     setCustomYields([]);
     setSyncStatus('idle');
@@ -110,9 +116,14 @@ export function DataProvider({ children }) {
 
   const triggerSync = useCallback(async () => {
     if (!hasAuthCredential(user) || !navigator.onLine) return;
+    const gen = syncGenRef.current;
     setSyncStatus('syncing');
+    const syncPromise = coordinator.sync(user);
+    activeSyncRef.current = syncPromise;
     try {
-      const stats = await coordinator.sync(user);
+      const stats = await syncPromise;
+      // Discard stale results if the account changed while the sync was in flight.
+      if (gen !== syncGenRef.current) return;
       await reloadFromRepo();
       if (stats.conflicts > 0) {
         setSyncError(null);
@@ -126,18 +137,21 @@ export function DataProvider({ children }) {
         setSyncStatus('synced');
       }
     } catch {
+      if (gen !== syncGenRef.current) return;
       setSyncError('network');
       setSyncStatus('error');
+    } finally {
+      if (activeSyncRef.current === syncPromise) activeSyncRef.current = null;
     }
   }, [user, coordinator, reloadFromRepo]);
 
   const handleAdoptionConfirm = useCallback(async () => {
-    const uid = user?.uid;
-    if (!uid) return;
+    const currentUid = user?.uid ?? user?.id;
+    if (!currentUid) return;
     setAdoptionLoading(true);
     try {
       const guestRepo = createRepository(guestScope());
-      const accountRepo = createRepository(accountScope(uid));
+      const accountRepo = createRepository(accountScope(currentUid));
       await adoptGuestRecords(guestRepo, accountRepo);
       setGuestAdoptionCounts(null);
       await reloadFromRepo();
@@ -174,7 +188,9 @@ export function DataProvider({ children }) {
   }, [repo, logout]);
 
   const handleSignOutDiscard = useCallback(async () => {
-    // Discard unsynchronized mutations then clear synced cache before signing out.
+    // Wait for any in-flight sync before discarding — prevents discarded records
+    // from being committed to the server by a concurrent push.
+    if (activeSyncRef.current) await activeSyncRef.current.catch(() => {});
     await repo.discardUnsynchronized();
     await repo.clearSyncedCache();
     setSignOutGuardState(null);
