@@ -218,7 +218,51 @@ describe('syncAll', () => {
       source: 'User Input',
     });
     expect(body).not.toHaveProperty('yield_percentage');
-    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 1);
+    // After POST a reconciling PUT is issued to ensure the server holds current
+    // local fields (guards against idempotent-retry lost-response edits).
+    expect(apiClient.updateUserDataRaw).toHaveBeenCalledTimes(1);
+    const [putServerId, putBody] = apiClient.updateUserDataRaw.mock.calls[0];
+    expect(putServerId).toBe('server-id');
+    expect(putBody).toMatchObject({ species: 'Pacific Halibut', yield: 48, expected_revision: 1 });
+    // markYieldSynced uses the PUT response revision (2), not the POST revision (1).
+    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 2);
+  });
+
+  it('reconciles local edits after an idempotent POST retry (lost-response scenario)', async () => {
+    // Simulate: user edited yield between the original POST (response lost) and
+    // this retry. The POST returns the original row; the reconciling PUT must
+    // send the current edited fields so the server is up to date.
+    getAllPendingSync.mockResolvedValue({
+      calcs: [],
+      yields: [
+        {
+          id: 'edited-yield-id',
+          syncStatus: 'local',
+          // serverId is null because the original POST response was lost
+          species: 'Pacific Halibut',
+          product: 'Round → Skinless Fillet',
+          yield: 55, // edited from the original 48
+          source: 'User Input',
+        },
+      ],
+    });
+    // POST returns existing row (idempotent — server still has original values)
+    apiClient.createUserDataRaw.mockResolvedValue(
+      fakeResponse({ ok: true, status: 200, body: { id: 'server-id', revision: 1 } })
+    );
+    // PUT applies the edited fields
+    apiClient.updateUserDataRaw.mockResolvedValue(
+      fakeResponse({ ok: true, status: 200, body: { id: 'server-id', revision: 2 } })
+    );
+
+    await syncAll(passwordUser);
+
+    expect(apiClient.createUserDataRaw).toHaveBeenCalledTimes(1);
+    expect(apiClient.updateUserDataRaw).toHaveBeenCalledTimes(1);
+    const [putServerId, putBody] = apiClient.updateUserDataRaw.mock.calls[0];
+    expect(putServerId).toBe('server-id');
+    expect(putBody).toMatchObject({ yield: 55, expected_revision: 1 });
+    expect(markYieldSynced).toHaveBeenCalledWith('edited-yield-id', 'server-id', 2);
   });
 
   it('uses PUT for a synced yield edited locally (serverId set)', async () => {
@@ -274,7 +318,9 @@ describe('syncAll', () => {
     await syncAll(passwordUser);
 
     expect(markCalcSynced).toHaveBeenCalledWith('local-calc-id', 'server-id');
-    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 1);
+    // New yield sync always issues a reconciling PUT; markYieldSynced gets the
+    // PUT response revision (2) not the POST revision (1).
+    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 2);
   });
 
   it('uses shared auth headers so Firebase sessions can sync without a legacy JWT', async () => {

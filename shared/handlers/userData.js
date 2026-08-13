@@ -123,17 +123,13 @@ export async function handleDeleteUserData(input, db) {
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
   try {
-    const existing = await db.findUserDataEntryById(id, userId);
-    if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
-
-    if (expectedRevision !== undefined) {
-      const currentRevision = existing.revision ?? 1;
-      if (currentRevision !== Number(expectedRevision)) {
-        return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
-      }
+    // Pass expectedRevision into the adapter so the revision check and the
+    // DELETE execute atomically — no separate read-then-delete race.
+    const { rowCount, notFound } = await db.deleteUserDataEntry(id, userId, expectedRevision);
+    if (rowCount === 0) {
+      if (notFound) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+      return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
     }
-
-    await db.deleteUserDataEntry(id, userId);
     return { status: 200, body: { message: 'Deleted successfully' } };
   } catch (err) {
     console.error('[user-data delete] error:', err.message ?? err);

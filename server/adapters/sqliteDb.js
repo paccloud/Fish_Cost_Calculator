@@ -369,9 +369,10 @@ function makeSqliteAdapter(db) {
 
     updateUserDataEntry(id, userId, fields, expectedRevision) {
       const { species, product, yield: yieldVal, source } = fields;
-      // Revision check is baked into WHERE so the check-and-increment is atomic.
+      // RETURNING makes the update and the revision read one atomic operation,
+      // so a concurrent update cannot slip a stale revision into the response.
       return new Promise((resolve, reject) => {
-        db.run(
+        db.get(
           `UPDATE user_data
            SET species    = COALESCE(?, species),
                product    = COALESCE(?, product),
@@ -380,32 +381,38 @@ function makeSqliteAdapter(db) {
                revision   = revision + 1,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND user_id = ?
-             AND (? IS NULL OR revision = ?)`,
+             AND (? IS NULL OR revision = ?)
+           RETURNING id, revision, updated_at`,
           [species, product, yieldVal, source, id, userId, expectedRevision ?? null, expectedRevision ?? null],
-          function callback(err) {
+          (err, row) => {
             if (err) return reject(err);
-            if (this.changes === 0) return resolve({ rowCount: 0, row: null });
-            db.get(
-              'SELECT id, revision, updated_at FROM user_data WHERE id = ?',
-              [id],
-              (err2, row) => {
-                if (err2) return reject(err2);
-                resolve({ rowCount: 1, row: row ?? null });
-              }
-            );
+            if (!row) return resolve({ rowCount: 0, row: null });
+            resolve({ rowCount: 1, row });
           }
         );
       });
     },
 
-    deleteUserDataEntry(id, userId) {
+    deleteUserDataEntry(id, userId, expectedRevision) {
+      // Revision-conditional delete: atomic check-and-delete prevents a stale
+      // client from deleting a yield another device updated since the last read.
       return new Promise((resolve, reject) => {
         db.run(
-          'DELETE FROM user_data WHERE id = ? AND user_id = ?',
-          [id, userId],
-          (err) => {
+          `DELETE FROM user_data WHERE id = ? AND user_id = ?
+             AND (? IS NULL OR revision = ?)`,
+          [id, userId, expectedRevision ?? null, expectedRevision ?? null],
+          function callback(err) {
             if (err) return reject(err);
-            resolve();
+            if (this.changes > 0) return resolve({ rowCount: 1 });
+            // Distinguish not-found from revision-mismatch.
+            db.get(
+              'SELECT id FROM user_data WHERE id = ? AND user_id = ?',
+              [id, userId],
+              (err2, row) => {
+                if (err2) return reject(err2);
+                resolve({ rowCount: 0, notFound: !row });
+              }
+            );
           }
         );
       });

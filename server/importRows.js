@@ -179,14 +179,18 @@ async function upsertImportedYieldRowsSqlite(db, userId, rows) {
             if (existing) {
                 await runSql(
                     db,
-                    'UPDATE user_data SET yield = ?, source = ? WHERE id = ? AND user_id = ?',
+                    `UPDATE user_data
+                        SET yield = ?, source = ?,
+                            revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                      WHERE id = ? AND user_id = ?`,
                     [row.yield, row.source, existing.id, userId]
                 );
                 updated++;
             } else {
                 await runSql(
                     db,
-                    'INSERT INTO user_data (user_id, species, product, yield, source) VALUES (?, ?, ?, ?, ?)',
+                    `INSERT INTO user_data (user_id, species, product, yield, source, revision, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
                     [userId, row.species, row.product, row.yield, row.source]
                 );
                 inserted++;

@@ -360,11 +360,22 @@ export function makeNeonAdapter() {
       return { rowCount: result.rowCount, row: result.rows[0] ?? null };
     },
 
-    async deleteUserDataEntry(id, userId) {
-      await query(
-        'DELETE FROM user_data WHERE id = $1 AND user_id = $2',
+    async deleteUserDataEntry(id, userId, expectedRevision) {
+      // Revision-conditional delete: atomic check-and-delete prevents a stale
+      // client from deleting a yield another device updated since the last read.
+      const result = await query(
+        `DELETE FROM user_data WHERE id = $1 AND user_id = $2
+           AND ($3::integer IS NULL OR revision = $3)
+         RETURNING id`,
+        [id, userId, expectedRevision ?? null]
+      );
+      if (result.rowCount > 0) return { rowCount: 1 };
+      // Distinguish not-found from revision-mismatch.
+      const check = await query(
+        'SELECT id FROM user_data WHERE id = $1 AND user_id = $2',
         [id, userId]
       );
+      return { rowCount: 0, notFound: check.rowCount === 0 };
     },
 
     async setUserDataSharing(id, userId, isShared) {

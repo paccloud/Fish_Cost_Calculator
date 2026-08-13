@@ -49,7 +49,7 @@ function makeFakeDb(overrides = {}) {
     }),
     findUserDataEntryById: vi.fn().mockResolvedValue(SAMPLE_ENTRY),
     updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 1, row: { id: 1, revision: 2, updated_at: '2026-01-01T00:00:01Z' } }),
-    deleteUserDataEntry: vi.fn().mockResolvedValue(undefined),
+    deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 1 }),
     setUserDataSharing: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -308,7 +308,9 @@ describe('handleDeleteUserData', () => {
   });
 
   it('returns 404 when entry not found or not owned', async () => {
-    const db = makeFakeDb({ findUserDataEntryById: vi.fn().mockResolvedValue(null) });
+    const db = makeFakeDb({
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: true }),
+    });
     const result = await handleDeleteUserData({ userId: 1, id: 99 }, db);
     expect(result.status).toBe(404);
     expect(result.body.error).toMatch(/not found/i);
@@ -318,7 +320,7 @@ describe('handleDeleteUserData', () => {
     const db = makeFakeDb();
     const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
     expect(result.status).toBe(200);
-    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, undefined);
   });
 
   it('returns 500 when db throws', async () => {
@@ -335,8 +337,9 @@ describe('handleDeleteUserData', () => {
 
 describe('handleDeleteUserData — revision guard', () => {
   it('returns 409 when expectedRevision does not match the current revision', async () => {
+    // Adapter returns notFound=false when the row exists but revision differs.
     const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 3 }),
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: false }),
     });
     const result = await handleDeleteUserData(
       { userId: 1, id: 1, expectedRevision: 1 },
@@ -344,28 +347,24 @@ describe('handleDeleteUserData — revision guard', () => {
     );
     expect(result.status).toBe(409);
     expect(result.body.error).toMatch(/conflict/i);
-    expect(db.deleteUserDataEntry).not.toHaveBeenCalled();
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, 1);
   });
 
   it('proceeds when expectedRevision matches', async () => {
-    const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 3 }),
-    });
+    const db = makeFakeDb(); // default returns { rowCount: 1 }
     const result = await handleDeleteUserData(
       { userId: 1, id: 1, expectedRevision: 3 },
       db
     );
     expect(result.status).toBe(200);
-    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, 3);
   });
 
   it('skips revision check when expectedRevision is not provided', async () => {
-    const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 99 }),
-    });
+    const db = makeFakeDb();
     const result = await handleDeleteUserData({ userId: 1, id: 1 }, db);
     expect(result.status).toBe(200);
-    expect(db.deleteUserDataEntry).toHaveBeenCalledTimes(1);
+    expect(db.deleteUserDataEntry).toHaveBeenCalledWith(1, 1, undefined);
   });
 });
 
@@ -389,12 +388,12 @@ describe('ownership isolation', () => {
   });
 
   it('does not let user 2 delete user 1 entry', async () => {
+    // Adapter's WHERE user_id = ? clause rejects the delete; notFound=true.
     const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+      deleteUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, notFound: true }),
     });
     const result = await handleDeleteUserData({ userId: 2, id: 1 }, db);
     expect(result.status).toBe(404);
-    expect(db.deleteUserDataEntry).not.toHaveBeenCalled();
   });
 });
 
