@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
 
 const DataManagement = () => {
     const { user, getAuthHeaders } = useAuth();
-    const [userData, setUserData] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { customYields, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly } = useData();
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -16,43 +16,20 @@ const DataManagement = () => {
         species: '',
         product: '',
         yield: '',
-        source: 'User Input'
+        source: 'User Input',
     });
-
-    const loadUserData = useCallback(async () => {
-        try {
-            const headers = await getAuthHeaders();
-            const res = await fetch(apiUrl('/api/user-data'), { headers });
-            const data = await res.json();
-            if (Array.isArray(data)) {
-                setUserData(data);
-            }
-        } catch (e) {
-            console.error('Failed to load user data:', e);
-        } finally {
-            setLoading(false);
-        }
-    }, [getAuthHeaders]);
-
-    useEffect(() => {
-        if (user) {
-            loadUserData();
-        } else {
-            setLoading(false);
-        }
-    }, [user, loadUserData]);
 
     const handleToggleShare = async (item) => {
         const action = item.is_shared ? 'unshare' : 'share';
         try {
             const headers = await getAuthHeaders();
-            const res = await fetch(apiUrl(`/api/user-data/${item.id}/${action}`), {
+            const res = await fetch(apiUrl(`/api/user-data/${item.serverId ?? item.id}/${action}`), {
                 method: 'POST',
-                headers
+                headers,
             });
             if (res.ok) {
+                updateYieldLocalOnly(item.id, { is_shared: !item.is_shared });
                 setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
-                loadUserData();
             } else {
                 const err = await res.json();
                 setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
@@ -64,35 +41,27 @@ const DataManagement = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
-        const endpoint = editingId
-            ? apiUrl(`/api/user-data/${editingId}`)
-            : apiUrl('/api/user-data');
-        const method = editingId ? 'PUT' : 'POST';
-
         try {
-            const headers = await getAuthHeaders('application/json');
-            const res = await fetch(endpoint, {
-                method,
-                headers,
-                body: JSON.stringify({
+            if (editingId) {
+                await updateYield(editingId, {
                     species: formData.species,
                     product: formData.product,
                     yield: parseFloat(formData.yield),
-                    source: formData.source
-                })
-            });
-
-            if (res.ok) {
-                setStatus({ type: 'success', message: editingId ? 'Updated successfully!' : 'Added successfully!' });
-                resetForm();
-                loadUserData();
+                    source: formData.source,
+                });
+                setStatus({ type: 'success', message: 'Updated successfully!' });
             } else {
-                const err = await res.json();
-                setStatus({ type: 'error', message: err.error || 'Operation failed.' });
+                await addYield({
+                    species: formData.species,
+                    product: formData.product,
+                    yield: parseFloat(formData.yield),
+                    source: formData.source,
+                });
+                setStatus({ type: 'success', message: 'Added successfully!' });
             }
+            resetForm();
         } catch {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
+            setStatus({ type: 'error', message: 'Operation failed.' });
         }
     };
 
@@ -101,7 +70,7 @@ const DataManagement = () => {
             species: item.species,
             product: item.product,
             yield: String(item.yield),
-            source: item.source || 'User Input'
+            source: item.source || 'User Input',
         });
         setEditingId(item.id);
         setShowForm(true);
@@ -109,22 +78,11 @@ const DataManagement = () => {
 
     const handleDelete = async (id) => {
         if (!confirm('Are you sure you want to delete this entry?')) return;
-
         try {
-            const headers = await getAuthHeaders();
-            const res = await fetch(apiUrl(`/api/user-data/${id}`), {
-                method: 'DELETE',
-                headers
-            });
-
-            if (res.ok) {
-                setStatus({ type: 'success', message: 'Deleted successfully!' });
-                loadUserData();
-            } else {
-                setStatus({ type: 'error', message: 'Failed to delete.' });
-            }
+            await removeYield(id);
+            setStatus({ type: 'success', message: 'Deleted successfully!' });
         } catch {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
+            setStatus({ type: 'error', message: 'Failed to delete.' });
         }
     };
 
@@ -185,7 +143,7 @@ const DataManagement = () => {
                             }
                         }}
                         className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        disabled={userData.length === 0}
+                        disabled={customYields.length === 0}
                     >
                         <Download size={16} />
                         Export CSV
@@ -209,7 +167,7 @@ const DataManagement = () => {
                             }
                         }}
                         className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        disabled={userData.length === 0}
+                        disabled={customYields.length === 0}
                     >
                         <Download size={16} />
                         Export Excel
@@ -253,7 +211,7 @@ const DataManagement = () => {
                                 <input
                                     type="text"
                                     value={formData.species}
-                                    onChange={(e) => setFormData({...formData, species: e.target.value})}
+                                    onChange={(e) => setFormData({ ...formData, species: e.target.value })}
                                     className="form-input"
                                     placeholder="e.g. Atlantic Salmon"
                                     required
@@ -265,7 +223,7 @@ const DataManagement = () => {
                                 <input
                                     type="text"
                                     value={formData.product}
-                                    onChange={(e) => setFormData({...formData, product: e.target.value})}
+                                    onChange={(e) => setFormData({ ...formData, product: e.target.value })}
                                     className="form-input"
                                     placeholder="e.g. Skinless Fillet"
                                     required
@@ -280,7 +238,7 @@ const DataManagement = () => {
                                     min="0"
                                     max="100"
                                     value={formData.yield}
-                                    onChange={(e) => setFormData({...formData, yield: e.target.value})}
+                                    onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
                                     className="form-input"
                                     placeholder="e.g. 45"
                                     required
@@ -292,7 +250,7 @@ const DataManagement = () => {
                                 <input
                                     type="text"
                                     value={formData.source}
-                                    onChange={(e) => setFormData({...formData, source: e.target.value})}
+                                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                                     className="form-input"
                                     placeholder="e.g. Personal experience"
                                 />
@@ -326,22 +284,27 @@ const DataManagement = () => {
                     <h2 className="text-base font-semibold text-brand-teal">Your Custom Data</h2>
                 </div>
 
-                {loading ? (
+                {!dataLoaded ? (
                     <div className="p-8 text-center text-text-secondary">Loading...</div>
-                ) : userData.length === 0 ? (
+                ) : customYields.length === 0 ? (
                     <div className="p-8 text-center text-text-secondary">
                         <Database size={40} className="mx-auto mb-4 opacity-30" />
                         <p>No custom data yet. Add your first entry above!</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-line-subtle">
-                        {userData.map((item) => (
+                        {customYields.map((item) => (
                             <div key={item.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
                                 <div>
                                     <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
                                         {item.species}
                                         {item.is_shared ? (
                                             <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
+                                        ) : null}
+                                        {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
+                                            <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full">
+                                                {item.syncStatus === 'pending-delete' ? 'Deleting…' : 'Pending'}
+                                            </span>
                                         ) : null}
                                     </p>
                                     <p className="text-sm text-text-secondary">
@@ -350,13 +313,15 @@ const DataManagement = () => {
                                     </p>
                                 </div>
                                 <div className="flex gap-1">
-                                    <button
-                                        onClick={() => handleToggleShare(item)}
-                                        className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal hover:text-text-secondary' : 'text-text-secondary hover:text-brand-teal'}`}
-                                        title={item.is_shared ? 'Remove from community' : 'Share with community'}
-                                    >
-                                        {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
-                                    </button>
+                                    {item.serverId && (
+                                        <button
+                                            onClick={() => handleToggleShare(item)}
+                                            className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal hover:text-text-secondary' : 'text-text-secondary hover:text-brand-teal'}`}
+                                            title={item.is_shared ? 'Remove from community' : 'Share with community'}
+                                        >
+                                            {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => handleEdit(item)}
                                         className="p-2 rounded text-text-secondary hover:text-brand-teal transition"

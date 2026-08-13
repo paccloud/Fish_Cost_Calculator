@@ -258,6 +258,7 @@ class LocalRepository {
           product: sy.product,
           yield: sy.yield,
           source: sy.source || 'User Input',
+          is_shared: sy.is_shared ?? false,
           id: crypto.randomUUID(),
           scope: this._scope,
           serverId: sy.id,

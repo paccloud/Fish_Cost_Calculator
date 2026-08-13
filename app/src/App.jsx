@@ -12,12 +12,16 @@ const ContributorProfile = lazy(() => import('./components/ContributorProfile'))
 const CommunityData = lazy(() => import('./components/CommunityData'));
 import { Fish, UserCircle, Menu, X, Database, BookOpen, Sun, Moon, Users, Upload } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DataProvider } from './context/DataContext';
 import { useTheme } from './context/ThemeContext';
+import SyncStatusBadge from './components/SyncStatusBadge';
+import SyncDetailsPanel from './components/SyncDetailsPanel';
 
 const NavBar = () => {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+    const [syncPanelOpen, setSyncPanelOpen] = React.useState(false);
 
     const navLinkClass = ({ isActive }) =>
         `text-sm font-medium transition-colors ${
@@ -70,6 +74,15 @@ const NavBar = () => {
                         >
                             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                         </button>
+
+                        {user && (
+                            <div className="relative text-white">
+                                <SyncStatusBadge onToggleDetails={() => setSyncPanelOpen((o) => !o)} />
+                                {syncPanelOpen && (
+                                    <SyncDetailsPanel onClose={() => setSyncPanelOpen(false)} />
+                                )}
+                            </div>
+                        )}
 
                         {user ? (
                             <div className="hidden md:flex items-center gap-3">
@@ -207,7 +220,9 @@ function App() {
         }>
             <Router>
                 <AuthProvider>
-                    <AppContent />
+                    <DataProvider>
+                        <AppContent />
+                    </DataProvider>
                 </AuthProvider>
             </Router>
         </Suspense>
