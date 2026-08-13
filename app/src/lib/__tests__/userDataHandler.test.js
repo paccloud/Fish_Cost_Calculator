@@ -48,7 +48,7 @@ function makeFakeDb(overrides = {}) {
       updated_at: '2026-01-01T00:00:00Z',
     }),
     findUserDataEntryById: vi.fn().mockResolvedValue(SAMPLE_ENTRY),
-    updateUserDataEntry: vi.fn().mockResolvedValue(undefined),
+    updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 1, row: { id: 1, revision: 2, updated_at: '2026-01-01T00:00:01Z' } }),
     deleteUserDataEntry: vi.fn().mockResolvedValue(undefined),
     setUserDataSharing: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -213,7 +213,11 @@ describe('handleUpdateUserData', () => {
   });
 
   it('returns 404 when entry not found or not owned', async () => {
-    const db = makeFakeDb({ findUserDataEntryById: vi.fn().mockResolvedValue(null) });
+    // rowCount=0 from DB + findUserDataEntryById returns null → 404
+    const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
+      findUserDataEntryById: vi.fn().mockResolvedValue(null),
+    });
     const result = await handleUpdateUserData({ userId: 1, id: 99, species: 'Tuna' }, db);
     expect(result.status).toBe(404);
     expect(result.body.error).toMatch(/not found/i);
@@ -223,7 +227,11 @@ describe('handleUpdateUserData', () => {
     const db = makeFakeDb();
     const result = await handleUpdateUserData({ userId: 1, id: 1, species: 'Tuna' }, db);
     expect(result.status).toBe(200);
-    expect(db.updateUserDataEntry).toHaveBeenCalledWith(1, 1, { species: 'Tuna', product: undefined, yield: undefined, source: undefined });
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      undefined
+    );
   });
 
   it('returns 500 when db throws', async () => {
@@ -239,9 +247,11 @@ describe('handleUpdateUserData', () => {
 // ===========================================================================
 
 describe('handleUpdateUserData — revision guard', () => {
-  it('returns 409 when expectedRevision does not match the current revision', async () => {
+  it('returns 409 when DB rejects the update due to revision mismatch', async () => {
+    // The adapter returns rowCount=0 when the revision in WHERE doesn't match.
+    // findUserDataEntryById returns the entry — confirms it exists, so 409.
     const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 5 }),
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
     });
     const result = await handleUpdateUserData(
       { userId: 1, id: 1, species: 'Tuna', expectedRevision: 3 },
@@ -249,30 +259,34 @@ describe('handleUpdateUserData — revision guard', () => {
     );
     expect(result.status).toBe(409);
     expect(result.body.error).toMatch(/conflict/i);
-    expect(db.updateUserDataEntry).not.toHaveBeenCalled();
   });
 
-  it('proceeds when expectedRevision matches', async () => {
-    const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 5 }),
-    });
+  it('proceeds when expectedRevision matches (rowCount=1)', async () => {
+    const db = makeFakeDb();
     const result = await handleUpdateUserData(
-      { userId: 1, id: 1, species: 'Tuna', expectedRevision: 5 },
+      { userId: 1, id: 1, species: 'Tuna', expectedRevision: 1 },
       db
     );
     expect(result.status).toBe(200);
-    expect(db.updateUserDataEntry).toHaveBeenCalledTimes(1);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      1
+    );
   });
 
   it('skips revision check when expectedRevision is not provided', async () => {
-    const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 99 }),
-    });
+    const db = makeFakeDb();
     const result = await handleUpdateUserData(
       { userId: 1, id: 1, species: 'Tuna' },
       db
     );
     expect(result.status).toBe(200);
+    expect(db.updateUserDataEntry).toHaveBeenCalledWith(
+      1, 1,
+      { species: 'Tuna', product: undefined, yield: undefined, source: undefined },
+      undefined
+    );
   });
 });
 
@@ -361,7 +375,10 @@ describe('handleDeleteUserData — revision guard', () => {
 
 describe('ownership isolation', () => {
   it('does not let user 2 update user 1 entry', async () => {
+    // The adapter's WHERE user_id = ? prevents cross-user updates; rowCount=0.
+    // The fallback SELECT also returns null, so we get 404.
     const db = makeFakeDb({
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
       findUserDataEntryById: vi.fn().mockResolvedValue(null),
     });
     const result = await handleUpdateUserData(
@@ -369,7 +386,6 @@ describe('ownership isolation', () => {
       db
     );
     expect(result.status).toBe(404);
-    expect(db.updateUserDataEntry).not.toHaveBeenCalled();
   });
 
   it('does not let user 2 delete user 1 entry', async () => {
@@ -387,10 +403,8 @@ describe('ownership isolation', () => {
 // ===========================================================================
 
 describe('revision advancement', () => {
-  it('calls updateUserDataEntry after confirming ownership', async () => {
-    const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 2 }),
-    });
+  it('calls updateUserDataEntry with expectedRevision baked in', async () => {
+    const db = makeFakeDb();
     const result = await handleUpdateUserData(
       { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
       db
@@ -398,20 +412,22 @@ describe('revision advancement', () => {
     expect(result.status).toBe(200);
     expect(db.updateUserDataEntry).toHaveBeenCalledWith(
       1, 1,
-      { species: 'Coho Salmon', product: undefined, yield: undefined, source: undefined }
+      { species: 'Coho Salmon', product: undefined, yield: undefined, source: undefined },
+      2
     );
   });
 
-  it('rejects stale update when entry has been revised by another session', async () => {
+  it('rejects stale update when DB reports 0 rows affected and row still exists', async () => {
+    // updateUserDataEntry returns rowCount=0 (revision mismatch in WHERE clause).
+    // findUserDataEntryById returns the entry — confirms it exists, so 409.
     const db = makeFakeDb({
-      findUserDataEntryById: vi.fn().mockResolvedValue({ ...SAMPLE_ENTRY, revision: 5 }),
+      updateUserDataEntry: vi.fn().mockResolvedValue({ rowCount: 0, row: null }),
     });
     const result = await handleUpdateUserData(
       { userId: 1, id: 1, species: 'Coho Salmon', expectedRevision: 2 },
       db
     );
     expect(result.status).toBe(409);
-    expect(db.updateUserDataEntry).not.toHaveBeenCalled();
   });
 });
 

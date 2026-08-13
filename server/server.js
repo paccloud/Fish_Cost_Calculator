@@ -167,7 +167,10 @@ db.serialize(() => {
             }
         });
     });
-    db.run('CREATE UNIQUE INDEX IF NOT EXISTS user_data_client_id_unique ON user_data (client_id) WHERE client_id IS NOT NULL');
+    // Drop the old global index explicitly before creating the account-scoped one.
+    db.run('DROP INDEX IF EXISTS user_data_client_id_unique', () => {
+        db.run('CREATE UNIQUE INDEX IF NOT EXISTS user_data_user_client_id_unique ON user_data (user_id, client_id) WHERE client_id IS NOT NULL');
+    });
     [
         'ALTER TABLE users ADD COLUMN firebase_uid TEXT',
         'ALTER TABLE users ADD COLUMN email TEXT',

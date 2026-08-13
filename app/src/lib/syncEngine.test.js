@@ -32,6 +32,7 @@ vi.mock('./apiClient', () => {
   const saveCalcRaw = vi.fn();
   const deleteCalcRaw = vi.fn();
   const createUserDataRaw = vi.fn();
+  const updateUserDataRaw = vi.fn();
   const deleteUserDataRaw = vi.fn();
   const listSavedCalcsRaw = vi.fn();
   const listUserDataRaw = vi.fn();
@@ -40,6 +41,7 @@ vi.mock('./apiClient', () => {
       saveCalcRaw,
       deleteCalcRaw,
       createUserDataRaw,
+      updateUserDataRaw,
       deleteUserDataRaw,
       listSavedCalcsRaw,
       listUserDataRaw,
@@ -79,7 +81,8 @@ describe('syncAll', () => {
     // Default: push succeeds with id, pull returns empty arrays
     apiClient.saveCalcRaw.mockResolvedValue(fakeResponse({ ok: true, status: 201, body: { id: 'server-id' } }));
     apiClient.deleteCalcRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: {} }));
-    apiClient.createUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 201, body: { id: 'server-id' } }));
+    apiClient.createUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 201, body: { id: 'server-id', revision: 1 } }));
+    apiClient.updateUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: { id: 'server-id', revision: 2 } }));
     apiClient.deleteUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: {} }));
     apiClient.listSavedCalcsRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: [] }));
     apiClient.listUserDataRaw.mockResolvedValue(fakeResponse({ ok: true, status: 200, body: [] }));
@@ -215,7 +218,34 @@ describe('syncAll', () => {
       source: 'User Input',
     });
     expect(body).not.toHaveProperty('yield_percentage');
-    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id');
+    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 1);
+  });
+
+  it('uses PUT for a synced yield edited locally (serverId set)', async () => {
+    getAllPendingSync.mockResolvedValue({
+      calcs: [],
+      yields: [
+        {
+          id: 'local-yield-id',
+          syncStatus: 'local',
+          serverId: 77,
+          serverRevision: 3,
+          species: 'Pacific Halibut',
+          product: 'Round → Skinless Fillet',
+          yield: 52,
+          source: 'User Input',
+        },
+      ],
+    });
+
+    await syncAll(passwordUser);
+
+    expect(apiClient.updateUserDataRaw).toHaveBeenCalledTimes(1);
+    expect(apiClient.createUserDataRaw).not.toHaveBeenCalled();
+    const [serverId, body] = apiClient.updateUserDataRaw.mock.calls[0];
+    expect(serverId).toBe(77);
+    expect(body).toMatchObject({ species: 'Pacific Halibut', yield: 52, expected_revision: 3 });
+    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 2);
   });
 
   it('marks pushed records as synced only after successful server responses', async () => {
@@ -244,7 +274,7 @@ describe('syncAll', () => {
     await syncAll(passwordUser);
 
     expect(markCalcSynced).toHaveBeenCalledWith('local-calc-id', 'server-id');
-    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id');
+    expect(markYieldSynced).toHaveBeenCalledWith('local-yield-id', 'server-id', 1);
   });
 
   it('uses shared auth headers so Firebase sessions can sync without a legacy JWT', async () => {

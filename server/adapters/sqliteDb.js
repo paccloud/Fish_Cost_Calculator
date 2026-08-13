@@ -312,35 +312,41 @@ function makeSqliteAdapter(db) {
       });
     },
 
-    async createUserDataEntry(userId, fields) {
+    createUserDataEntry(userId, fields) {
       const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
 
       if (clientId) {
-        const existing = await new Promise((resolve, reject) => {
-          db.get(
-            'SELECT id, revision, created_at, updated_at FROM user_data WHERE client_id = ? AND user_id = ?',
-            [clientId, userId],
-            (err, row) => { if (err) return reject(err); resolve(row ?? null); }
+        // INSERT OR IGNORE skips silently on (user_id, client_id) conflict;
+        // the subsequent SELECT always returns the winning row.
+        return new Promise((resolve, reject) => {
+          db.run(
+            `INSERT OR IGNORE INTO user_data
+               (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [userId, species, product, yieldVal, source, clientId],
+            (err) => {
+              if (err) return reject(err);
+              db.get(
+                'SELECT id, revision, created_at, updated_at FROM user_data WHERE user_id = ? AND client_id = ?',
+                [userId, clientId],
+                (err2, row) => { if (err2) return reject(err2); resolve(row); }
+              );
+            }
           );
         });
-        if (existing) return existing;
       }
 
       return new Promise((resolve, reject) => {
         db.run(
           `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          [userId, species, product, yieldVal, source, clientId ?? null],
+           VALUES (?, ?, ?, ?, ?, NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [userId, species, product, yieldVal, source],
           function callback(err) {
             if (err) return reject(err);
-            const insertedId = this.lastID;
             db.get(
               'SELECT id, revision, created_at, updated_at FROM user_data WHERE id = ?',
-              [insertedId],
-              (err2, row) => {
-                if (err2) return reject(err2);
-                resolve(row);
-              }
+              [this.lastID],
+              (err2, row) => { if (err2) return reject(err2); resolve(row); }
             );
           }
         );
@@ -361,26 +367,32 @@ function makeSqliteAdapter(db) {
       });
     },
 
-    async updateUserDataEntry(id, userId, fields) {
-      const existing = await this.findUserDataEntryById(id, userId);
+    updateUserDataEntry(id, userId, fields, expectedRevision) {
       const { species, product, yield: yieldVal, source } = fields;
+      // Revision check is baked into WHERE so the check-and-increment is atomic.
       return new Promise((resolve, reject) => {
         db.run(
           `UPDATE user_data
-           SET species = ?, product = ?, yield = ?, source = ?,
-               revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND user_id = ?`,
-          [
-            species ?? existing?.species,
-            product ?? existing?.product,
-            yieldVal !== undefined ? yieldVal : existing?.yield,
-            source ?? existing?.source,
-            id,
-            userId,
-          ],
-          (err) => {
+           SET species    = COALESCE(?, species),
+               product    = COALESCE(?, product),
+               yield      = COALESCE(?, yield),
+               source     = COALESCE(?, source),
+               revision   = revision + 1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND user_id = ?
+             AND (? IS NULL OR revision = ?)`,
+          [species, product, yieldVal, source, id, userId, expectedRevision ?? null, expectedRevision ?? null],
+          function callback(err) {
             if (err) return reject(err);
-            resolve();
+            if (this.changes === 0) return resolve({ rowCount: 0, row: null });
+            db.get(
+              'SELECT id, revision, updated_at FROM user_data WHERE id = ?',
+              [id],
+              (err2, row) => {
+                if (err2) return reject(err2);
+                resolve({ rowCount: 1, row: row ?? null });
+              }
+            );
           }
         );
       });

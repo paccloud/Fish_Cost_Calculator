@@ -91,18 +91,17 @@ export async function handleUpdateUserData(input, db) {
   if (!id) return { status: 400, body: { error: 'Entry id is required' } };
 
   try {
-    const existing = await db.findUserDataEntryById(id, userId);
-    if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
-
-    if (expectedRevision !== undefined) {
-      const currentRevision = existing.revision ?? 1;
-      if (currentRevision !== Number(expectedRevision)) {
-        return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
-      }
+    // Revision check is baked into the WHERE clause of the UPDATE — no separate
+    // SELECT-then-UPDATE race.  0 rows updated means either 404 or 409.
+    const { rowCount, row } = await db.updateUserDataEntry(
+      id, userId, { species, product, yield: yieldVal, source }, expectedRevision
+    );
+    if (rowCount === 0) {
+      const existing = await db.findUserDataEntryById(id, userId);
+      if (!existing) return { status: 404, body: { error: 'Entry not found or not owned by user' } };
+      return { status: 409, body: { error: 'Conflict: revision has changed since last read' } };
     }
-
-    await db.updateUserDataEntry(id, userId, { species, product, yield: yieldVal, source });
-    return { status: 200, body: { message: 'Updated successfully' } };
+    return { status: 200, body: { message: 'Updated successfully', id: row?.id, revision: row?.revision, updated_at: row?.updated_at } };
   } catch (err) {
     console.error('[user-data update] error:', err.message ?? err);
     return { status: 500, body: { error: 'Failed to update data' } };

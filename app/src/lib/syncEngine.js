@@ -87,16 +87,30 @@ export async function syncAll(user) {
   // Push new/updated yields
   for (const yld of pending.yields.filter((y) => y.syncStatus === 'local')) {
     try {
-      const res = await apiClient.createUserDataRaw({
-        species: yld.species,
-        product: yld.product,
-        yield: yld.yield,
-        source: yld.source || 'User Input',
-        client_id: yld.id,
-      }, headers);
+      let res;
+      if (yld.serverId) {
+        // Edited synced yield — use PUT so the server applies the field changes.
+        // A POST with the same client_id would return the existing row unchanged.
+        res = await apiClient.updateUserDataRaw(yld.serverId, {
+          species: yld.species,
+          product: yld.product,
+          yield: yld.yield,
+          source: yld.source || 'User Input',
+          expected_revision: yld.serverRevision,
+        }, headers);
+      } else {
+        // New yield — use POST with idempotent client_id.
+        res = await apiClient.createUserDataRaw({
+          species: yld.species,
+          product: yld.product,
+          yield: yld.yield,
+          source: yld.source || 'User Input',
+          client_id: yld.id,
+        }, headers);
+      }
       if (res.ok) {
         const data = await res.json();
-        await markYieldSynced(yld.id, data.id);
+        await markYieldSynced(yld.id, data.id ?? yld.serverId, data.revision);
         stats.pushed++;
       } else {
         stats.errors++;

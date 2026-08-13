@@ -11,8 +11,8 @@
 
 ALTER TABLE user_data ADD COLUMN IF NOT EXISTS client_id TEXT;
 ALTER TABLE user_data ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE user_data ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
-ALTER TABLE user_data ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE user_data ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE user_data ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- Backfill timestamps for existing rows using the current time (no historical date available).
 UPDATE user_data
@@ -20,8 +20,10 @@ UPDATE user_data
        updated_at = NOW()
  WHERE created_at IS NULL;
 
--- Unique index prevents duplicate inserts for the same client_id.
--- Partial index excludes NULLs so legacy rows are unaffected.
-CREATE UNIQUE INDEX IF NOT EXISTS user_data_client_id_unique
-    ON user_data (client_id)
+-- Account-scoped unique index: (user_id, client_id) so two users can share a
+-- client_id value without blocking each other.  Replace the previously-deployed
+-- global index first; IF NOT EXISTS alone would silently retain the old one.
+DROP INDEX IF EXISTS user_data_client_id_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS user_data_user_client_id_unique
+    ON user_data (user_id, client_id)
  WHERE client_id IS NOT NULL;

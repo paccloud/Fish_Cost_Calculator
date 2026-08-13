@@ -303,18 +303,30 @@ export function makeNeonAdapter() {
       const { species, product, yield: yieldVal, source = 'User Input', clientId } = fields;
 
       if (clientId) {
-        const existing = await query(
-          'SELECT id, revision, created_at, updated_at FROM user_data WHERE client_id = $1 AND user_id = $2',
-          [clientId, userId]
+        // Atomic upsert: insert unless (user_id, client_id) already exists, then
+        // return whichever row now owns the pair — safe under concurrent retries.
+        const upsert = await query(
+          `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+           ON CONFLICT (user_id, client_id) WHERE client_id IS NOT NULL
+           DO NOTHING
+           RETURNING id, revision, created_at, updated_at`,
+          [userId, species, product, yieldVal, source, clientId]
         );
-        if (existing.rows[0]) return existing.rows[0];
+        if (upsert.rows.length > 0) return upsert.rows[0];
+        // Conflict: fetch the existing row.
+        const existing = await query(
+          'SELECT id, revision, created_at, updated_at FROM user_data WHERE user_id = $1 AND client_id = $2',
+          [userId, clientId]
+        );
+        return existing.rows[0];
       }
 
       const result = await query(
         `INSERT INTO user_data (user_id, species, product, yield, source, client_id, revision, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
          RETURNING id, revision, created_at, updated_at`,
-        [userId, species, product, yieldVal, source, clientId ?? null]
+        [userId, species, product, yieldVal, source, null]
       );
       return result.rows[0];
     },
@@ -328,9 +340,11 @@ export function makeNeonAdapter() {
       return result.rows[0] ?? null;
     },
 
-    async updateUserDataEntry(id, userId, fields) {
+    async updateUserDataEntry(id, userId, fields, expectedRevision) {
       const { species, product, yield: yieldVal, source } = fields;
-      await query(
+      // Include the revision predicate in the WHERE clause so the check and
+      // increment are atomic — no separate SELECT-then-UPDATE race.
+      const result = await query(
         `UPDATE user_data
          SET species  = COALESCE($1, species),
              product  = COALESCE($2, product),
@@ -338,9 +352,12 @@ export function makeNeonAdapter() {
              source   = COALESCE($4, source),
              revision = revision + 1,
              updated_at = NOW()
-         WHERE id = $5 AND user_id = $6`,
-        [species, product, yieldVal, source, id, userId]
+         WHERE id = $5 AND user_id = $6
+           AND ($7::integer IS NULL OR revision = $7)
+         RETURNING id, revision, updated_at`,
+        [species, product, yieldVal, source, id, userId, expectedRevision ?? null]
       );
+      return { rowCount: result.rowCount, row: result.rows[0] ?? null };
     },
 
     async deleteUserDataEntry(id, userId) {

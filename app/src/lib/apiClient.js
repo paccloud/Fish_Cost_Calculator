@@ -382,6 +382,21 @@ export function createApiClient(options = {}) {
   }
 
   /**
+   * PUT /api/user-data?id=:serverId — update a synced yield entry.
+   * @param {number|string} serverId
+   * @param {{ species, product, yield, source, expected_revision? }} body
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function updateUserDataRaw(serverId, body, extraHeaders = {}) {
+    return rawRequest(`/api/user-data?id=${serverId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...extraHeaders },
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
    * DELETE /api/user-data/:id — remove a synced yield entry.
    * @param {number|string} serverId
    * @param {Record<string,string>} extraHeaders
@@ -432,6 +447,7 @@ export function createApiClient(options = {}) {
     saveCalcRaw,
     deleteCalcRaw,
     createUserDataRaw,
+    updateUserDataRaw,
     deleteUserDataRaw,
     listSavedCalcsRaw,
     listUserDataRaw,
