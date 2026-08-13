@@ -4,6 +4,8 @@ import { getCustomSpecies, setCustomSpecies as setSpeciesLocal } from '../lib/lo
 import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
+import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
+import GuestAdoptionModal from '../components/GuestAdoptionModal';
 
 const DataContext = createContext(null);
 
@@ -19,6 +21,9 @@ export function DataProvider({ children }) {
   const [syncError, setSyncError] = useState(null); // null | 'auth' | 'network'
   const [pendingCount, setPendingCount] = useState(0);
   const syncTimeoutRef = useRef(null);
+  const [guestAdoptionCounts, setGuestAdoptionCounts] = useState(null);
+  const [adoptionLoading, setAdoptionLoading] = useState(false);
+  const prevUserRef = useRef(user);
 
   // Derive scope and repository from the current user.
   const uid = user?.uid ?? null;
@@ -73,6 +78,17 @@ export function DataProvider({ children }) {
     setPendingCount(count);
   }, [repo, coordinator]);
 
+  // Detect guest records when user transitions from null → authenticated.
+  useEffect(() => {
+    const prevUser = prevUserRef.current;
+    prevUserRef.current = user;
+    if (prevUser !== null || user === null) return;
+    const guestRepo = createRepository(guestScope());
+    detectGuestRecords(guestRepo).then((counts) => {
+      if (counts.total > 0) setGuestAdoptionCounts(counts);
+    });
+  }, [user]);
+
   const triggerSync = useCallback(async () => {
     if (!hasAuthCredential(user) || !navigator.onLine) return;
     setSyncStatus('syncing');
@@ -95,6 +111,26 @@ export function DataProvider({ children }) {
       setSyncStatus('error');
     }
   }, [user, coordinator, reloadFromRepo]);
+
+  const handleAdoptionConfirm = useCallback(async () => {
+    const uid = user?.uid;
+    if (!uid) return;
+    setAdoptionLoading(true);
+    try {
+      const guestRepo = createRepository(guestScope());
+      const accountRepo = createRepository(accountScope(uid));
+      await adoptGuestRecords(guestRepo, accountRepo);
+      setGuestAdoptionCounts(null);
+      await reloadFromRepo();
+      triggerSync();
+    } finally {
+      setAdoptionLoading(false);
+    }
+  }, [user, reloadFromRepo, triggerSync]);
+
+  const handleAdoptionDecline = useCallback(() => {
+    setGuestAdoptionCounts(null);
+  }, []);
 
   // Debounced sync: immediately show 'pending', then fire after 2 s idle.
   const debouncedSync = useCallback(() => {
@@ -199,7 +235,20 @@ export function DataProvider({ children }) {
     retrySync,
   };
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  return (
+    <DataContext.Provider value={value}>
+      {children}
+      {guestAdoptionCounts && (
+        <GuestAdoptionModal
+          calcs={guestAdoptionCounts.calcs}
+          yields={guestAdoptionCounts.yields}
+          loading={adoptionLoading}
+          onConfirm={handleAdoptionConfirm}
+          onDecline={handleAdoptionDecline}
+        />
+      )}
+    </DataContext.Provider>
+  );
 }
 
 export function useData() {
