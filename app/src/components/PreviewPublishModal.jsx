@@ -14,18 +14,20 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  *   onCancel  — called when the user cancels
  */
 export default function PreviewPublishModal({ calc, loading, onConfirm, onCancel }) {
-  if (!calc) return null;
-
   const dialogRef = useRef(null);
-  const triggerRef = useRef(document.activeElement);
+  const triggerRef = useRef(null);
 
   useEffect(() => {
+    if (!calc) return;
+    triggerRef.current = document.activeElement;
     const dialog = dialogRef.current;
     const focusable = dialog ? Array.from(dialog.querySelectorAll(FOCUSABLE)) : [];
     focusable[0]?.focus();
     const trigger = triggerRef.current;
     return () => { trigger?.focus(); };
-  }, []);
+  }, [calc]);
+
+  if (!calc) return null;
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') { onCancel(); return; }
