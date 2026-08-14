@@ -27,7 +27,7 @@
  *   listUserDataRaw(extraHeaders)              → Promise<Response>
  *
  * Methods suffixed *Raw return the raw Response so callers can inspect
- * status codes (e.g. syncEngine needs to detect 401 and 404 without throwing).
+ * status codes (e.g. syncCoordinator needs to detect 401 and 404 without throwing).
  */
 
 // ---------------------------------------------------------------------------
@@ -333,9 +333,9 @@ export function createApiClient(options = {}) {
   }
 
   // ---------------------
-  // Sync-engine raw API
+  // Sync coordinator raw API
   // ---------------------
-  // These return the raw Response so syncEngine can inspect status codes
+  // These return the raw Response so syncCoordinator can inspect status codes
   // (401 to break the loop, 404 as an acceptable delete outcome).
 
   /**
