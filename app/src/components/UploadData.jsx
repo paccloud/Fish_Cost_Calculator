@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, Download, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, ArrowRight, Download, X, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 
 const TEMPLATE_CSV = `Species,% Yield,Product,Source\nAtlantic Salmon,45,Skinless Fillet,\nHalibut,38,Steak,\nDungeness Crab,25,Picked Meat,\n`;
@@ -14,6 +15,7 @@ function formatBytes(bytes) {
 
 const UploadData = () => {
     const { user, getAuthHeaders } = useAuth();
+    const { isOnline, retrySync } = useData();
     const [file, setFile] = useState(null);
     const [dragOver, setDragOver] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -44,7 +46,7 @@ const UploadData = () => {
     const handleDragLeave = () => setDragOver(false);
 
     const handleUpload = async () => {
-        if (!file || !user) return;
+        if (!file || !user || !isOnline) return;
 
         setUploading(true);
         const formData = new FormData();
@@ -63,6 +65,8 @@ const UploadData = () => {
             if (res.ok) {
                 setStatus({ type: 'success', data });
                 setFile(null);
+                // Pull imported records into the active local scope.
+                retrySync();
             } else {
                 setStatus({ type: 'error', message: data.error || 'Upload failed.' });
             }
@@ -125,6 +129,13 @@ const UploadData = () => {
                     Upload a spreadsheet with columns <strong>Species</strong> and <strong>% Yield</strong>.
                     Optionally include <strong>Product</strong> and <strong>Source</strong> columns.
                 </p>
+
+                {!isOnline && (
+                    <div className="mb-4 flex items-center gap-2 rounded border border-yellow-400/40 bg-yellow-50 dark:bg-yellow-900/20 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
+                        <WifiOff size={16} className="shrink-0" />
+                        Import requires an internet connection.
+                    </div>
+                )}
 
                 {/* Drop zone */}
                 <div
@@ -227,7 +238,7 @@ const UploadData = () => {
 
                 <button
                     onClick={handleUpload}
-                    disabled={!file || uploading}
+                    disabled={!file || uploading || !isOnline}
                     className="mt-6 btn-primary w-full"
                 >
                     {uploading ? 'Uploading...' : 'Upload Data'}

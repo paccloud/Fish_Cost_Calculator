@@ -4,10 +4,11 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
     const { user, getAuthHeaders } = useAuth();
-    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
+    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc, isOnline } = useData();
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -125,52 +126,16 @@ const DataManagement = () => {
 
                 <div className="flex gap-3">
                     <button
-                        onClick={async () => {
-                            try {
-                                const headers = await getAuthHeaders();
-                                const response = await fetch(apiUrl('/api/export?type=data'), { headers });
-                                const blob = await response.blob();
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'custom-yield-data.csv';
-                                document.body.appendChild(a);
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                            } catch (error) {
-                                console.error('Export failed:', error);
-                            }
+                        onClick={() => {
+                            const csv = yieldsToCSV(customYields);
+                            downloadText(csv, 'custom-yield-data.csv');
                         }}
                         className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                         disabled={customYields.length === 0}
+                        title="Download your yield data as a CSV (works offline)"
                     >
                         <Download size={16} />
                         Export CSV
-                    </button>
-                    <button
-                        onClick={async () => {
-                            try {
-                                const headers = await getAuthHeaders();
-                                const response = await fetch(apiUrl('/api/export?type=data&format=xlsx'), { headers });
-                                const blob = await response.blob();
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'yield-data.xlsx';
-                                document.body.appendChild(a);
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                            } catch (err) {
-                                console.error('Excel export failed:', err);
-                            }
-                        }}
-                        className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        disabled={customYields.length === 0}
-                    >
-                        <Download size={16} />
-                        Export Excel
                     </button>
                     <button
                         onClick={() => setShowForm(!showForm)}
