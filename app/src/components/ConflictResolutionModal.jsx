@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseServer, onKeepBoth, onDismissDelete }) {
   if (!conflicts || conflicts.length === 0) return null;
@@ -7,13 +9,62 @@ export default function ConflictResolutionModal({ conflicts, onUseLocal, onUseSe
   const deleteConflicts = conflicts.filter((c) => c.syncStatus === 'conflict-delete');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8">
-      <div className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 my-auto">
-        <h2 className="text-lg font-semibold text-text-primary mb-1">Sync conflict</h2>
+    <ConflictDialog
+      editConflicts={editConflicts}
+      deleteConflicts={deleteConflicts}
+      onUseLocal={onUseLocal}
+      onUseServer={onUseServer}
+      onKeepBoth={onKeepBoth}
+      onDismissDelete={onDismissDelete}
+      total={conflicts.length}
+    />
+  );
+}
+
+function ConflictDialog({ editConflicts, deleteConflicts, onUseLocal, onUseServer, onKeepBoth, onDismissDelete, total }) {
+  const dialogRef = useRef(null);
+  const triggerRef = useRef(document.activeElement);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const focusable = dialog ? Array.from(dialog.querySelectorAll(FOCUSABLE)) : [];
+    focusable[0]?.focus();
+    const trigger = triggerRef.current;
+    return () => { trigger?.focus(); };
+  }, []);
+
+  function handleKeyDown(e) {
+    if (e.key !== 'Tab') return;
+    const focusable = dialogRef.current
+      ? Array.from(dialogRef.current.querySelectorAll(FOCUSABLE))
+      : [];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="conflict-dialog-title"
+        className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-lg w-full mx-4 my-auto"
+      >
+        <h2 id="conflict-dialog-title" className="text-lg font-semibold text-text-primary mb-1">Sync conflict</h2>
         <p className="text-sm text-text-secondary mb-5">
-          {conflicts.length === 1
+          {total === 1
             ? 'A yield entry was edited on another device at the same time.'
-            : `${conflicts.length} yield entries have sync conflicts.`}
+            : `${total} yield entries have sync conflicts.`}
           {editConflicts.length > 0 && ' Choose how to resolve each edit conflict below.'}
         </p>
         <div className="space-y-5">

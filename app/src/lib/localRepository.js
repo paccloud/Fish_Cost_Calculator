@@ -369,16 +369,34 @@ class LocalRepository {
     });
   }
 
-  // Dismiss a 'conflict-delete' record — removes the local tombstone.
-  // The server retains its newer version; the record will re-appear on next pull.
+  // Dismiss a 'conflict-delete' record — accept the server version.
+  // If conflictServer is available, restore it as a synced local copy so the
+  // record is immediately visible without waiting for the next pull.
+  // If conflictServer is missing (rare: pull hasn't happened yet), remove the
+  // tombstone and let the next sync restore it from the server.
   async dismissYieldDeleteConflict(id) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
-      if (all[idx].syncStatus !== 'conflict-delete') return;
-      all.splice(idx, 1);
+      const rec = all[idx];
+      if (rec.syncStatus !== 'conflict-delete') return;
+      const server = rec.conflictServer;
+      if (server) {
+        // Restore the server snapshot as a locally-synced record.
+        all[idx] = {
+          ...server,
+          id: rec.id,
+          syncStatus: 'synced',
+          conflictLocal: undefined,
+          conflictServer: undefined,
+          updatedAt: now(),
+        };
+      } else {
+        // Server snapshot not yet fetched; remove tombstone and rely on next pull.
+        all.splice(idx, 1);
+      }
       await this._set(key, all);
     });
   }
