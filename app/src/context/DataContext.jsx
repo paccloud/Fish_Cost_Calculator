@@ -6,11 +6,12 @@ import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
+import SignOutGuardModal from '../components/SignOutGuardModal';
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -24,9 +25,39 @@ export function DataProvider({ children }) {
   const [guestAdoptionCounts, setGuestAdoptionCounts] = useState(null);
   const [adoptionLoading, setAdoptionLoading] = useState(false);
   const prevUserRef = useRef(user);
+  // null | { calcs: number, yields: number } — non-null while sign-out guard is shown
+  const [signOutGuardState, setSignOutGuardState] = useState(null);
 
   // Derive scope and repository from the current user.
-  const uid = user?.uid ?? null;
+  // Treat legacy password/JWT sessions (user.id but no user.uid) as authenticated.
+  const uid = user?.uid ?? user?.id ?? null;
+  const prevUidRef = useRef(uid);
+  // Incremented on every uid change to invalidate in-flight sync callbacks.
+  const syncGenRef = useRef(0);
+  // Tracks the active coordinator.sync() promise for discard coordination.
+  const activeSyncRef = useRef(null);
+  // Set to true while a sign-out (keep or discard) is in progress so new syncs don't race.
+  const signingOutRef = useRef(false);
+  // Tracks which scope's data is currently loaded; null means no data loaded yet.
+  const loadedScopeRef = useRef(null);
+
+  // When uid changes (sign-out or account switch), clear React state immediately so
+  // the previous account's records are never visible under the new identity.
+  useEffect(() => {
+    if (prevUidRef.current === uid) return;
+    prevUidRef.current = uid;
+    syncGenRef.current += 1;
+    setSavedCalcs([]);
+    setCustomYields([]);
+    setSyncStatus('idle');
+    setSyncError(null);
+    setPendingCount(0);
+    setDataLoaded(false);
+    setSignOutGuardState(null);
+    loadedScopeRef.current = null;
+    clearTimeout(syncTimeoutRef.current);
+  }, [uid]);
+
   const scope = useMemo(
     () => (uid ? accountScope(uid) : guestScope()),
     [uid]
@@ -38,6 +69,8 @@ export function DataProvider({ children }) {
   // Load from IndexedDB when scope changes.
   useEffect(() => {
     let cancelled = false;
+    const loadingScope = scope;
+    loadedScopeRef.current = null;
     async function loadData() {
       setDataLoaded(false);
       const [calcs, yields, species] = await Promise.all([
@@ -50,11 +83,12 @@ export function DataProvider({ children }) {
         setCustomYields(yields);
         setCustomSpeciesState(species);
         setDataLoaded(true);
+        loadedScopeRef.current = loadingScope;
       }
     }
     loadData();
     return () => { cancelled = true; };
-  }, [repo]);
+  }, [repo, scope]);
 
   // Online/offline listeners.
   useEffect(() => {
@@ -91,10 +125,18 @@ export function DataProvider({ children }) {
 
   const triggerSync = useCallback(async () => {
     if (!hasAuthCredential(user) || !navigator.onLine) return;
+    if (signingOutRef.current) return;
+    const gen = syncGenRef.current;
     setSyncStatus('syncing');
+    const syncPromise = coordinator.sync(user);
+    activeSyncRef.current = syncPromise;
     try {
-      const stats = await coordinator.sync(user);
+      const stats = await syncPromise;
+      // Discard stale results if the account changed while the sync was in flight.
+      if (gen !== syncGenRef.current) return;
       await reloadFromRepo();
+      // Re-check after the async reload — account may have switched during it.
+      if (gen !== syncGenRef.current) return;
       if (stats.conflicts > 0) {
         setSyncError(null);
         setSyncStatus('conflict');
@@ -107,18 +149,21 @@ export function DataProvider({ children }) {
         setSyncStatus('synced');
       }
     } catch {
+      if (gen !== syncGenRef.current) return;
       setSyncError('network');
       setSyncStatus('error');
+    } finally {
+      if (activeSyncRef.current === syncPromise) activeSyncRef.current = null;
     }
   }, [user, coordinator, reloadFromRepo]);
 
   const handleAdoptionConfirm = useCallback(async () => {
-    const uid = user?.uid;
-    if (!uid) return;
+    const currentUid = user?.uid ?? user?.id;
+    if (!currentUid) return;
     setAdoptionLoading(true);
     try {
       const guestRepo = createRepository(guestScope());
-      const accountRepo = createRepository(accountScope(uid));
+      const accountRepo = createRepository(accountScope(currentUid));
       await adoptGuestRecords(guestRepo, accountRepo);
       setGuestAdoptionCounts(null);
       await reloadFromRepo();
@@ -130,6 +175,63 @@ export function DataProvider({ children }) {
 
   const handleAdoptionDecline = useCallback(() => {
     setGuestAdoptionCounts(null);
+  }, []);
+
+  // ---- Sign-out guard ----
+
+  // Intercept sign-out: clear synced cache, and if there is unsynchronized work
+  // show a modal offering keep/discard/cancel before calling auth logout.
+  const signOut = useCallback(async () => {
+    if (!uid) { await logout(); return; }
+    let pending;
+    try {
+      pending = await repo.getPendingSync();
+    } catch {
+      // IndexedDB unavailable — sign out directly rather than leaving the user stuck.
+      await logout();
+      return;
+    }
+    const { calcs, yields } = pending;
+    if (calcs.length === 0 && yields.length === 0) {
+      try { await repo.clearSyncedCache(); } catch { /* best-effort */ }
+      await logout();
+    } else {
+      setSignOutGuardState({ calcs: calcs.length, yields: yields.length });
+    }
+  }, [uid, repo, logout]);
+
+  const handleSignOutKeep = useCallback(async () => {
+    signingOutRef.current = true;
+    clearTimeout(syncTimeoutRef.current);
+    try {
+      // Keep pending mutations in account scope; only discard synced cache.
+      if (activeSyncRef.current) await activeSyncRef.current.catch(() => {});
+      await repo.clearSyncedCache();
+      setSignOutGuardState(null);
+      await logout();
+    } finally {
+      signingOutRef.current = false;
+    }
+  }, [repo, logout]);
+
+  const handleSignOutDiscard = useCallback(async () => {
+    signingOutRef.current = true;
+    clearTimeout(syncTimeoutRef.current);
+    try {
+      // Wait for any in-flight sync before discarding — prevents discarded records
+      // from being committed to the server by a concurrent push.
+      if (activeSyncRef.current) await activeSyncRef.current.catch(() => {});
+      await repo.discardUnsynchronized();
+      await repo.clearSyncedCache();
+      setSignOutGuardState(null);
+      await logout();
+    } finally {
+      signingOutRef.current = false;
+    }
+  }, [repo, logout]);
+
+  const handleSignOutCancel = useCallback(() => {
+    setSignOutGuardState(null);
   }, []);
 
   // Debounced sync: immediately show 'pending', then fire after 2 s idle.
@@ -216,9 +318,13 @@ export function DataProvider({ children }) {
     triggerSync();
   }, [user, triggerSync]);
 
+  // Gate account data so consumers never see the previous scope's records
+  // during the render cycle between a uid change and the clearing effect.
+  const scopeReady = loadedScopeRef.current === scope;
+
   const value = {
-    savedCalcs,
-    customYields,
+    savedCalcs: scopeReady ? savedCalcs : [],
+    customYields: scopeReady ? customYields : [],
     customSpecies,
     isOnline,
     dataLoaded,
@@ -233,6 +339,7 @@ export function DataProvider({ children }) {
     removeYield,
     updateCustomSpecies,
     retrySync,
+    signOut,
   };
 
   return (
@@ -245,6 +352,15 @@ export function DataProvider({ children }) {
           loading={adoptionLoading}
           onConfirm={handleAdoptionConfirm}
           onDecline={handleAdoptionDecline}
+        />
+      )}
+      {signOutGuardState && (
+        <SignOutGuardModal
+          calcs={signOutGuardState.calcs}
+          yields={signOutGuardState.yields}
+          onKeep={handleSignOutKeep}
+          onDiscard={handleSignOutDiscard}
+          onCancel={handleSignOutCancel}
         />
       )}
     </DataContext.Provider>

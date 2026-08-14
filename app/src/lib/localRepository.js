@@ -286,6 +286,43 @@ class LocalRepository {
       yields: allYields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),
     };
   }
+
+  // ---- Sign-out cache management ----
+
+  // Remove all synced records (safe to discard — can be re-fetched from server on next login).
+  // Called on every sign-out path before auth.logout().
+  async clearSyncedCache() {
+    const calcsKey = idbKey(this._scope, 'calcs');
+    const yieldsKey = idbKey(this._scope, 'yields');
+    await Promise.all([
+      this._withLock(calcsKey, async () => {
+        const all = (await this._get(calcsKey)) || [];
+        await this._set(calcsKey, all.filter((c) => c.syncStatus !== 'synced'));
+      }),
+      this._withLock(yieldsKey, async () => {
+        const all = (await this._get(yieldsKey)) || [];
+        await this._set(yieldsKey, all.filter((y) => y.syncStatus !== 'synced'));
+      }),
+    ]);
+  }
+
+  // Remove unsynchronized records (local edits and pending-delete tombstones).
+  // Called when the user chooses "Discard" in the sign-out guard modal.
+  // Combine with clearSyncedCache() to empty the scope entirely before sign-out.
+  async discardUnsynchronized() {
+    const calcsKey = idbKey(this._scope, 'calcs');
+    const yieldsKey = idbKey(this._scope, 'yields');
+    await Promise.all([
+      this._withLock(calcsKey, async () => {
+        const all = (await this._get(calcsKey)) || [];
+        await this._set(calcsKey, all.filter((c) => c.syncStatus === 'synced'));
+      }),
+      this._withLock(yieldsKey, async () => {
+        const all = (await this._get(yieldsKey)) || [];
+        await this._set(yieldsKey, all.filter((y) => y.syncStatus === 'synced'));
+      }),
+    ]);
+  }
 }
 
 // --- Factory ---

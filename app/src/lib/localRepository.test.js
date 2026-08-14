@@ -448,3 +448,95 @@ describe('removeYieldTombstone', () => {
     expect(pending.yields).toHaveLength(0);
   });
 });
+
+// ---- Sign-out cache management ----
+
+describe('clearSyncedCache', () => {
+  let repo, store;
+
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('removes synced calcs and yields, leaves local and pending-delete', async () => {
+    const localCalc = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    const syncedCalc = await repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 5, yield: 50, result: 10 });
+    await repo.markCalcSynced(syncedCalc.id, 99);
+
+    const localYield = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    const syncedYield = await repo.addYield({ species: 'Salmon', product: 'Fillet', yield: 50 });
+    await repo.markYieldSynced(syncedYield.id, 88, 1);
+
+    await repo.clearSyncedCache();
+
+    const remaining = await repo.getPendingSync();
+    expect(remaining.calcs.map((c) => c.id)).toContain(localCalc.id);
+    expect(remaining.calcs.map((c) => c.id)).not.toContain(syncedCalc.id);
+    expect(remaining.yields.map((y) => y.id)).toContain(localYield.id);
+    expect(remaining.yields.map((y) => y.id)).not.toContain(syncedYield.id);
+  });
+
+  it('leaves pending-delete tombstones intact', async () => {
+    const calc = await repo.addCalc({ species: 'Tuna', product: 'Loin', cost: 8, yield: 60, result: 13.3 });
+    await repo.markCalcSynced(calc.id, 5);
+    await repo.removeCalc(calc.id);
+
+    await repo.clearSyncedCache();
+
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(1);
+    expect(pending.calcs[0].syncStatus).toBe('pending-delete');
+  });
+
+  it('does not affect other scopes', async () => {
+    const store2Shared = makeStore();
+    const repoA = makeRepo('account:u1', store2Shared);
+    const repoB = makeRepo('account:u2', store2Shared);
+
+    await repoB.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    const syncedA = await repoA.addCalc({ species: 'Salmon', product: 'Fillet', cost: 5, yield: 50, result: 10 });
+    await repoA.markCalcSynced(syncedA.id, 1);
+
+    await repoA.clearSyncedCache();
+
+    const calcsB = await repoB.getCalcs();
+    expect(calcsB).toHaveLength(1);
+  });
+});
+
+describe('discardUnsynchronized', () => {
+  let repo, store;
+
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('removes local and pending-delete records, leaves synced', async () => {
+    const localCalc = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    const syncedCalc = await repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 5, yield: 50, result: 10 });
+    await repo.markCalcSynced(syncedCalc.id, 1);
+    const toDelete = await repo.addCalc({ species: 'Tuna', product: 'Loin', cost: 8, yield: 60, result: 13 });
+    await repo.markCalcSynced(toDelete.id, 2);
+    await repo.removeCalc(toDelete.id);
+
+    const localYield = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 42 });
+    const syncedYield = await repo.addYield({ species: 'Salmon', product: 'Fillet', yield: 50 });
+    await repo.markYieldSynced(syncedYield.id, 9, 1);
+
+    await repo.discardUnsynchronized();
+
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+    expect(pending.yields).toHaveLength(0);
+
+    const calcs = await repo.getCalcs();
+    expect(calcs.map((c) => c.id)).toContain(syncedCalc.id);
+    expect(calcs.map((c) => c.id)).not.toContain(localCalc.id);
+
+    const yields = await repo.getYields();
+    expect(yields.map((y) => y.id)).toContain(syncedYield.id);
+    expect(yields.map((y) => y.id)).not.toContain(localYield.id);
+  });
+});
