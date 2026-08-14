@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -8,6 +8,8 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
   if (yields > 0) parts.push(`${yields} custom yield${yields !== 1 ? 's' : ''}`);
   const summary = parts.join(' and ');
   const plural = calcs + yields !== 1;
+
+  const [processing, setProcessing] = useState(false);
 
   const dialogRef = useRef(null);
   const triggerRef = useRef(document.activeElement);
@@ -21,7 +23,7 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
   }, []);
 
   function handleKeyDown(e) {
-    if (e.key === 'Escape') { e.preventDefault(); onCancel(); return; }
+    if (e.key === 'Escape') { if (!processing) { e.preventDefault(); onCancel(); } return; }
     if (e.key !== 'Tab') return;
     const focusable = dialogRef.current
       ? Array.from(dialogRef.current.querySelectorAll(FOCUSABLE))
@@ -36,6 +38,16 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
     }
   }
 
+  async function handleKeep() {
+    setProcessing(true);
+    try { await onKeep(); } finally { setProcessing(false); }
+  }
+
+  async function handleDiscard() {
+    setProcessing(true);
+    try { await onDiscard(); } finally { setProcessing(false); }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -46,6 +58,7 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
         role="dialog"
         aria-modal="true"
         aria-labelledby="sign-out-guard-title"
+        aria-busy={processing}
         className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4"
       >
         <h2 id="sign-out-guard-title" className="text-lg font-semibold text-text-primary mb-2">
@@ -57,20 +70,23 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
         </p>
         <div className="space-y-2">
           <button
-            onClick={onKeep}
-            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg bg-brand-teal text-white hover:bg-brand-teal/90 transition-colors"
+            onClick={handleKeep}
+            disabled={processing}
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg bg-brand-teal text-white hover:bg-brand-teal/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Keep locally — save for next sign-in
+            {processing ? 'Working…' : 'Keep locally — save for next sign-in'}
           </button>
           <button
-            onClick={onDiscard}
-            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg border border-border bg-surface text-text-secondary hover:bg-brand-terracotta/10 hover:text-brand-terracotta hover:border-brand-terracotta/30 transition-colors"
+            onClick={handleDiscard}
+            disabled={processing}
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg border border-border bg-surface text-text-secondary hover:bg-brand-terracotta/10 hover:text-brand-terracotta hover:border-brand-terracotta/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Discard unsaved data and sign out
           </button>
           <button
             onClick={onCancel}
-            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg text-text-muted hover:text-text-primary transition-colors"
+            disabled={processing}
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg text-text-muted hover:text-text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Cancel
           </button>

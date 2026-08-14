@@ -183,9 +183,17 @@ export function DataProvider({ children }) {
   // show a modal offering keep/discard/cancel before calling auth logout.
   const signOut = useCallback(async () => {
     if (!uid) { await logout(); return; }
-    const { calcs, yields } = await repo.getPendingSync();
+    let pending;
+    try {
+      pending = await repo.getPendingSync();
+    } catch {
+      // IndexedDB unavailable — sign out directly rather than leaving the user stuck.
+      await logout();
+      return;
+    }
+    const { calcs, yields } = pending;
     if (calcs.length === 0 && yields.length === 0) {
-      await repo.clearSyncedCache();
+      try { await repo.clearSyncedCache(); } catch { /* best-effort */ }
       await logout();
     } else {
       setSignOutGuardState({ calcs: calcs.length, yields: yields.length });
