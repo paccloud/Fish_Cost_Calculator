@@ -175,6 +175,11 @@ class LocalRepository {
     return all.filter((y) => y.syncStatus !== 'pending-delete');
   }
 
+  async getConflictedYields() {
+    const all = (await this._get(idbKey(this._scope, 'yields'))) || [];
+    return all.filter((y) => y.syncStatus === 'conflicted' || y.syncStatus === 'conflict-delete');
+  }
+
   async addYield(data) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
@@ -224,6 +229,178 @@ class LocalRepository {
     });
   }
 
+  // Transition a local yield to 'conflicted' after a 409 push response.
+  // Stores the current local payload so the resolution UI can compare versions.
+  // The conflictServer field is populated later by mergeServerYields on pull.
+  async markYieldConflicted(id) {
+    const key = idbKey(this._scope, 'yields');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      const rec = all[idx];
+      // Skip if already resolved, deleted, or tombstoned by a concurrent operation.
+      if (rec.syncStatus === 'synced' || rec.syncStatus === 'pending-delete' || rec.syncStatus === 'conflict-delete') return;
+      all[idx] = {
+        ...rec,
+        syncStatus: 'conflicted',
+        conflictLocal: {
+          species: rec.species,
+          product: rec.product,
+          yield: rec.yield,
+          source: rec.source,
+          updatedAt: rec.updatedAt,
+        },
+        conflictServer: null,
+        updatedAt: now(),
+      };
+      await this._set(key, all);
+    });
+  }
+
+  // Transition a pending-delete yield to 'conflict-delete' after a 409 on DELETE.
+  // Held without auto-resolving — requires product decision to restore or remove.
+  async holdStaleYieldDelete(id) {
+    const key = idbKey(this._scope, 'yields');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      const rec = all[idx];
+      if (rec.syncStatus !== 'pending-delete') return;
+      all[idx] = {
+        ...rec,
+        syncStatus: 'conflict-delete',
+        conflictServer: null,
+        updatedAt: now(),
+      };
+      await this._set(key, all);
+    });
+  }
+
+  // Resolve a 'conflicted' yield.
+  // action: 'use-local' | 'use-server' | 'keep-both'
+  // Returns the updated or newly-created record, or null if not found.
+  async resolveYieldConflict(id, action) {
+    const key = idbKey(this._scope, 'yields');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return null;
+      const rec = all[idx];
+      if (rec.syncStatus !== 'conflicted') return null;
+
+      const server = rec.conflictServer;
+      const local = rec.conflictLocal;
+      const ts = now();
+
+      if (action === 'use-local') {
+        // Retry local edit stamped with the server's current revision so the next PUT succeeds.
+        // Carry over server is_shared so sharing state stays consistent.
+        all[idx] = {
+          ...rec,
+          is_shared: server?.is_shared ?? rec.is_shared,
+          syncStatus: 'local',
+          serverRevision: server?.serverRevision ?? rec.serverRevision,
+          conflictLocal: undefined,
+          conflictServer: undefined,
+          updatedAt: ts,
+        };
+        await this._set(key, all);
+        return all[idx];
+      }
+
+      if (action === 'use-server') {
+        // Require a populated server snapshot before accepting server state.
+        if (!server) return null;
+        // Accept server state as ground truth; mark synced.
+        all[idx] = {
+          ...rec,
+          species: server?.species ?? rec.species,
+          product: server?.product ?? rec.product,
+          yield: server?.yield ?? rec.yield,
+          source: server?.source ?? rec.source,
+          is_shared: server?.is_shared ?? rec.is_shared,
+          serverRevision: server?.serverRevision ?? rec.serverRevision,
+          syncStatus: 'synced',
+          conflictLocal: undefined,
+          conflictServer: undefined,
+          updatedAt: ts,
+        };
+        await this._set(key, all);
+        return all[idx];
+      }
+
+      if (action === 'keep-both') {
+        // Require a populated server snapshot before creating a forked record.
+        if (!server) return null;
+        // Accept server state for the existing record; create a new local record for the local edit.
+        // The new record has a fresh id and no serverId, guaranteeing no duplicate remote identity.
+        const newRecord = {
+          id: crypto.randomUUID(),
+          scope: this._scope,
+          species: local?.species ?? rec.species,
+          product: local?.product ?? rec.product,
+          yield: local?.yield ?? rec.yield,
+          source: local?.source ?? rec.source,
+          syncStatus: 'local',
+          createdAt: ts,
+          updatedAt: ts,
+        };
+        all[idx] = {
+          ...rec,
+          species: server?.species ?? rec.species,
+          product: server?.product ?? rec.product,
+          yield: server?.yield ?? rec.yield,
+          source: server?.source ?? rec.source,
+          is_shared: server?.is_shared ?? rec.is_shared,
+          serverRevision: server?.serverRevision ?? rec.serverRevision,
+          syncStatus: 'synced',
+          conflictLocal: undefined,
+          conflictServer: undefined,
+          updatedAt: ts,
+        };
+        all.push(newRecord);
+        await this._set(key, all);
+        return newRecord;
+      }
+
+      return null;
+    });
+  }
+
+  // Dismiss a 'conflict-delete' record — accept the server version.
+  // If conflictServer is available, restore it as a synced local copy so the
+  // record is immediately visible without waiting for the next pull.
+  // If conflictServer is missing (rare: pull hasn't happened yet), remove the
+  // tombstone and let the next sync restore it from the server.
+  async dismissYieldDeleteConflict(id) {
+    const key = idbKey(this._scope, 'yields');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((y) => y.id === id);
+      if (idx === -1) return;
+      const rec = all[idx];
+      if (rec.syncStatus !== 'conflict-delete') return;
+      const server = rec.conflictServer;
+      if (server) {
+        // Restore the server snapshot as a locally-synced record.
+        all[idx] = {
+          ...server,
+          id: rec.id,
+          syncStatus: 'synced',
+          conflictLocal: undefined,
+          conflictServer: undefined,
+          updatedAt: now(),
+        };
+      } else {
+        // Server snapshot not yet fetched; remove tombstone and rely on next pull.
+        all.splice(idx, 1);
+      }
+      await this._set(key, all);
+    });
+  }
+
   async markYieldSynced(id, serverId, serverRevision) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
@@ -247,27 +424,56 @@ class LocalRepository {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
-      // trackedIds covers synced records AND tombstones (pending-delete) — both have serverId set,
-      // so a tombstoned yield is never resurrected by a server merge.
-      const trackedIds = new Set(all.filter((y) => y.serverId).map((y) => String(y.serverId)));
+      // Map serverId → local id for quick lookup.
+      // Covers synced records, tombstones, and conflict records — all have serverId set.
+      const byServerId = new Map(
+        all.filter((y) => y.serverId).map((y) => [String(y.serverId), y.id])
+      );
+
       for (const sy of serverYields) {
-        if (trackedIds.has(String(sy.id))) continue;
-        const ts = now();
-        all.push({
-          species: sy.species,
-          product: sy.product,
-          yield: sy.yield,
-          source: sy.source || 'User Input',
-          is_shared: sy.is_shared ?? false,
-          id: crypto.randomUUID(),
-          scope: this._scope,
-          serverId: sy.id,
-          serverRevision: sy.revision,
-          syncStatus: 'synced',
-          createdAt: ts,
-          updatedAt: ts,
-        });
+        const localId = byServerId.get(String(sy.id));
+        if (!localId) {
+          // New from server — insert as synced.
+          const ts = now();
+          all.push({
+            species: sy.species,
+            product: sy.product,
+            yield: sy.yield,
+            source: sy.source || 'User Input',
+            is_shared: sy.is_shared ?? false,
+            id: crypto.randomUUID(),
+            scope: this._scope,
+            serverId: sy.id,
+            serverRevision: sy.revision,
+            syncStatus: 'synced',
+            createdAt: ts,
+            updatedAt: ts,
+          });
+          continue;
+        }
+
+        // Known record — update conflictServer snapshot for conflicted/conflict-delete records
+        // so the resolution UI can show the current server state.
+        const idx = all.findIndex((y) => y.id === localId);
+        if (idx === -1) continue;
+        const rec = all[idx];
+        if (rec.syncStatus === 'conflicted' || rec.syncStatus === 'conflict-delete') {
+          all[idx] = {
+            ...rec,
+            conflictServer: {
+              serverId: sy.id,
+              serverRevision: sy.revision,
+              species: sy.species,
+              product: sy.product,
+              yield: sy.yield,
+              source: sy.source || 'User Input',
+              is_shared: sy.is_shared ?? false,
+            },
+          };
+        }
+        // pending-delete, local, synced: no change needed
       }
+
       await this._set(key, all);
     });
   }

@@ -124,10 +124,9 @@ export function createSyncCoordinator(repo, client = defaultApiClient) {
 
         if (res.status === 409) {
           // Optimistic-concurrency conflict — server has a newer revision.
-          // Leave the record local so it is retried after pull reconciles.
+          // Capture the local payload and enter conflict state; pull phase will populate server snapshot.
+          await repo.markYieldConflicted(yld.id);
           stats.conflicts++;
-          stats.errors++;
-          stats.errorDetails.push({ type: 'conflict-yield', id: yld.id, status: 409 });
           continue;
         }
 
@@ -176,6 +175,10 @@ export function createSyncCoordinator(repo, client = defaultApiClient) {
           if (res.ok || res.status === 404) {
             await repo.removeYieldTombstone(yld.id);
             stats.pushed++;
+          } else if (res.status === 409) {
+            // Server has a newer revision — hold without auto-resolving or auto-restoring.
+            await repo.holdStaleYieldDelete(yld.id);
+            stats.conflicts++;
           } else {
             stats.errors++;
             stats.errorDetails.push({ type: 'delete-yield', id: yld.id, status: res.status, isAuthError: res.status === 401 });

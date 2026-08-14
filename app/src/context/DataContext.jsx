@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
 import SignOutGuardModal from '../components/SignOutGuardModal';
+import ConflictResolutionModal from '../components/ConflictResolutionModal';
 
 const DataContext = createContext(null);
 
@@ -27,6 +28,7 @@ export function DataProvider({ children }) {
   const prevUserRef = useRef(user);
   // null | { calcs: number, yields: number } — non-null while sign-out guard is shown
   const [signOutGuardState, setSignOutGuardState] = useState(null);
+  const [conflictedYields, setConflictedYields] = useState([]);
 
   // Derive scope and repository from the current user.
   // Treat legacy password/JWT sessions (user.id but no user.uid) as authenticated.
@@ -49,6 +51,7 @@ export function DataProvider({ children }) {
     syncGenRef.current += 1;
     setSavedCalcs([]);
     setCustomYields([]);
+    setConflictedYields([]);
     setSyncStatus('idle');
     setSyncError(null);
     setPendingCount(0);
@@ -73,15 +76,17 @@ export function DataProvider({ children }) {
     loadedScopeRef.current = null;
     async function loadData() {
       setDataLoaded(false);
-      const [calcs, yields, species] = await Promise.all([
+      const [calcs, yields, species, conflicts] = await Promise.all([
         repo.getCalcs(),
         repo.getYields(),
         getCustomSpecies(),
+        repo.getConflictedYields(),
       ]);
       if (!cancelled) {
         setSavedCalcs(calcs);
         setCustomYields(yields);
         setCustomSpeciesState(species);
+        setConflictedYields(conflicts);
         setDataLoaded(true);
         loadedScopeRef.current = loadingScope;
       }
@@ -105,11 +110,17 @@ export function DataProvider({ children }) {
   useEffect(() => () => clearTimeout(syncTimeoutRef.current), []);
 
   const reloadFromRepo = useCallback(async () => {
-    const [calcs, yields] = await Promise.all([repo.getCalcs(), repo.getYields()]);
+    const [calcs, yields, conflicts] = await Promise.all([
+      repo.getCalcs(),
+      repo.getYields(),
+      repo.getConflictedYields(),
+    ]);
     setSavedCalcs(calcs);
     setCustomYields(yields);
+    setConflictedYields(conflicts);
     const count = await coordinator.pendingCount();
     setPendingCount(count);
+    return { conflictCount: conflicts.length };
   }, [repo, coordinator]);
 
   // Detect guest records when user transitions from null → authenticated.
@@ -134,10 +145,10 @@ export function DataProvider({ children }) {
       const stats = await syncPromise;
       // Discard stale results if the account changed while the sync was in flight.
       if (gen !== syncGenRef.current) return;
-      await reloadFromRepo();
+      const { conflictCount } = await reloadFromRepo();
       // Re-check after the async reload — account may have switched during it.
       if (gen !== syncGenRef.current) return;
-      if (stats.conflicts > 0) {
+      if (stats.conflicts > 0 || conflictCount > 0) {
         setSyncError(null);
         setSyncStatus('conflict');
       } else if (stats.errors > 0) {
@@ -259,6 +270,43 @@ export function DataProvider({ children }) {
     }
   }, [isOnline, user, dataLoaded, triggerSync]);
 
+  // ---- Conflict resolution ----
+
+  const handleConflictUseLocal = useCallback(async (id) => {
+    await repo.resolveYieldConflict(id, 'use-local');
+    await reloadFromRepo();
+    debouncedSync();
+  }, [repo, reloadFromRepo, debouncedSync]);
+
+  const handleConflictUseServer = useCallback(async (id) => {
+    await repo.resolveYieldConflict(id, 'use-server');
+    const [calcs, yields, conflicts] = await Promise.all([
+      repo.getCalcs(),
+      repo.getYields(),
+      repo.getConflictedYields(),
+    ]);
+    setSavedCalcs(calcs);
+    setCustomYields(yields);
+    setConflictedYields(conflicts);
+    const count = await coordinator.pendingCount();
+    setPendingCount(count);
+    // Clear conflict status once all conflicts are resolved.
+    if (conflicts.length === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
+  }, [repo, coordinator]);
+
+  const handleDeleteConflictDismiss = useCallback(async (id) => {
+    await repo.dismissYieldDeleteConflict(id);
+    // Use reloadFromRepo so customYields is refreshed too (dismissed record was still in getYields).
+    const { conflictCount } = await reloadFromRepo();
+    if (conflictCount === 0) setSyncStatus((s) => (s === 'conflict' ? 'synced' : s));
+  }, [repo, reloadFromRepo]);
+
+  const handleConflictKeepBoth = useCallback(async (id) => {
+    await repo.resolveYieldConflict(id, 'keep-both');
+    await reloadFromRepo();
+    debouncedSync();
+  }, [repo, reloadFromRepo, debouncedSync]);
+
   // ---- Saved Calculations ----
 
   const saveCalc = useCallback(async (calc) => {
@@ -326,6 +374,7 @@ export function DataProvider({ children }) {
     savedCalcs: scopeReady ? savedCalcs : [],
     customYields: scopeReady ? customYields : [],
     customSpecies,
+    conflictedYields: scopeReady ? conflictedYields : [],
     isOnline,
     dataLoaded,
     syncStatus,
@@ -361,6 +410,15 @@ export function DataProvider({ children }) {
           onKeep={handleSignOutKeep}
           onDiscard={handleSignOutDiscard}
           onCancel={handleSignOutCancel}
+        />
+      )}
+      {conflictedYields.length > 0 && (
+        <ConflictResolutionModal
+          conflicts={conflictedYields}
+          onUseLocal={handleConflictUseLocal}
+          onUseServer={handleConflictUseServer}
+          onKeepBoth={handleConflictKeepBoth}
+          onDismissDelete={handleDeleteConflictDismiss}
         />
       )}
     </DataContext.Provider>
