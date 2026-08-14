@@ -5,10 +5,12 @@ import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
+import { migrateLegacyRecords, getRecoveryCounts, assignRecoveryToAccount, discardRecovery } from '../lib/legacyMigration';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
 import SignOutGuardModal from '../components/SignOutGuardModal';
 import ConflictResolutionModal from '../components/ConflictResolutionModal';
 import PreviewPublishModal from '../components/PreviewPublishModal';
+import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 
 const DataContext = createContext(null);
@@ -34,6 +36,10 @@ export function DataProvider({ children }) {
   // null | calc record — non-null while publish preview modal is shown
   const [publishPreviewCalc, setPublishPreviewCalc] = useState(null);
   const [publishLoading, setPublishLoading] = useState(false);
+  // null | { calcs: number, yields: number } — non-null while recovery modal is shown
+  const [recoveryCounts, setRecoveryCounts] = useState(null);
+  const [recoveryAssigning, setRecoveryAssigning] = useState(false);
+  const recoveryCheckedRef = useRef(false);
 
   // Derive scope and repository from the current user.
   // Treat legacy password/JWT sessions (user.id but no user.uid) as authenticated.
@@ -99,6 +105,22 @@ export function DataProvider({ children }) {
     loadData();
     return () => { cancelled = true; };
   }, [repo, scope]);
+
+  // One-time legacy migration + recovery check. Runs once per session.
+  useEffect(() => {
+    if (recoveryCheckedRef.current) return;
+    recoveryCheckedRef.current = true;
+    async function checkMigration() {
+      try {
+        await migrateLegacyRecords();
+        const counts = await getRecoveryCounts();
+        if (counts.total > 0) setRecoveryCounts({ calcs: counts.calcs, yields: counts.yields });
+      } catch {
+        // Migration errors are non-fatal — log and continue.
+      }
+    }
+    checkMigration();
+  }, []);
 
   // Online/offline listeners.
   useEffect(() => {
@@ -191,6 +213,33 @@ export function DataProvider({ children }) {
 
   const handleAdoptionDecline = useCallback(() => {
     setGuestAdoptionCounts(null);
+  }, []);
+
+  // ---- Recovery ----
+
+  const handleRecoveryAssign = useCallback(async () => {
+    if (!uid) return;
+    setRecoveryAssigning(true);
+    try {
+      const accountRepo = createRepository(accountScope(uid));
+      await assignRecoveryToAccount(accountRepo);
+      setRecoveryCounts(null);
+      await reloadFromRepo();
+      triggerSync();
+    } catch {
+      // Leave modal open so the user can retry.
+    } finally {
+      setRecoveryAssigning(false);
+    }
+  }, [uid, reloadFromRepo, triggerSync]);
+
+  const handleRecoveryDiscard = useCallback(async () => {
+    try { await discardRecovery(); } catch { /* best-effort */ }
+    setRecoveryCounts(null);
+  }, []);
+
+  const handleRecoveryLater = useCallback(() => {
+    setRecoveryCounts(null);
   }, []);
 
   // ---- Sign-out guard ----
@@ -516,6 +565,17 @@ export function DataProvider({ children }) {
           loading={publishLoading}
           onConfirm={confirmPublish}
           onCancel={cancelPublish}
+        />
+      )}
+      {recoveryCounts && (
+        <RecoveryModal
+          calcs={recoveryCounts.calcs}
+          yields={recoveryCounts.yields}
+          isAuthenticated={!!uid}
+          assigning={recoveryAssigning}
+          onAssign={handleRecoveryAssign}
+          onDiscard={handleRecoveryDiscard}
+          onLater={handleRecoveryLater}
         />
       )}
     </DataContext.Provider>

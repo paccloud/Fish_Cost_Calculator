@@ -579,6 +579,17 @@ class LocalRepository {
 
   // ---- Sign-out cache management ----
 
+  // Remove every record in this scope (calcs and yields).
+  // Used to clear the recovery scope after the user assigns or discards its contents.
+  async clearAll() {
+    const calcsKey = idbKey(this._scope, 'calcs');
+    const yieldsKey = idbKey(this._scope, 'yields');
+    await Promise.all([
+      this._withLock(calcsKey, async () => { await this._set(calcsKey, []); }),
+      this._withLock(yieldsKey, async () => { await this._set(yieldsKey, []); }),
+    ]);
+  }
+
   // Remove all synced records (safe to discard — can be re-fetched from server on next login).
   // Called on every sign-out path before auth.logout().
   async clearSyncedCache() {
