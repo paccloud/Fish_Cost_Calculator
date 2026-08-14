@@ -12,15 +12,12 @@ import ConflictResolutionModal from '../components/ConflictResolutionModal';
 import PreviewPublishModal from '../components/PreviewPublishModal';
 import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
-import { isLifecycleEnabled } from '../lib/lifecycleFlag';
 import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
   const { user, logout } = useAuth();
-  // Evaluated once at mount; rollback by setting localStorage lifecycle_override=false.
-  const lifecycleEnabledRef = useRef(isLifecycleEnabled());
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -85,13 +82,7 @@ export function DataProvider({ children }) {
   const coordinator = useMemo(() => createSyncCoordinator(repo), [repo]);
 
   // Load from IndexedDB when scope changes.
-  // When lifecycle is disabled (emergency rollback), skip IndexedDB — data loads on sync.
   useEffect(() => {
-    if (!lifecycleEnabledRef.current) {
-      loadedScopeRef.current = scope;
-      setDataLoaded(true);
-      return;
-    }
     let cancelled = false;
     const loadingScope = scope;
     loadedScopeRef.current = null;
@@ -184,7 +175,6 @@ export function DataProvider({ children }) {
   }, [user]);
 
   const triggerSync = useCallback(async () => {
-    if (!lifecycleEnabledRef.current) return;
     if (!hasAuthCredential(user) || !navigator.onLine) return;
     if (signingOutRef.current) return;
     const gen = syncGenRef.current;
