@@ -24,6 +24,8 @@ function makeClient(overrides = {}) {
   return {
     saveCalcRaw: vi.fn(async () => fakeRes({ body: { id: 'server-1' } })),
     deleteCalcRaw: vi.fn(async () => fakeRes()),
+    publishCalcRaw: vi.fn(async () => fakeRes()),
+    unpublishCalcRaw: vi.fn(async () => fakeRes()),
     createUserDataRaw: vi.fn(async () => fakeRes({ body: { id: 'sy-1', revision: 1 } })),
     updateUserDataRaw: vi.fn(async () => fakeRes({ body: { id: 'sy-1', revision: 2 } })),
     deleteUserDataRaw: vi.fn(async () => fakeRes()),
@@ -314,6 +316,120 @@ describe('createSyncCoordinator', () => {
       await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 60 });
       const coordinator = createSyncCoordinator(repo, client);
       expect(await coordinator.pendingCount()).toBe(2);
+    });
+
+    it('counts pending-publish and pending-unpublish as pending', async () => {
+      // pending-publish
+      const c1 = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 5, yield: 60, result: 8 });
+      await repo.markCalcSynced(c1.id, 1);
+      await repo.queuePublish(c1.id);
+      // pending-unpublish
+      const c2 = await repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 6, yield: 50, result: 12 });
+      await repo.markCalcSynced(c2.id, 2);
+      await repo.updateCalcPublicationState(c2.id, false);
+      await repo.queueUnpublish(c2.id);
+
+      const coordinator = createSyncCoordinator(repo, client);
+      expect(await coordinator.pendingCount()).toBe(2);
+    });
+  });
+
+  describe('publication queue flushing', () => {
+    it('calls publishCalcRaw for a pending-publish calc and marks it synced', async () => {
+      const pubClient = makeClient({
+        publishCalcRaw: vi.fn(async () => fakeRes()),
+      });
+      const c = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+      await repo.markCalcSynced(c.id, 77);
+      await repo.queuePublish(c.id);
+
+      const coordinator = createSyncCoordinator(repo, pubClient);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(pubClient.publishCalcRaw).toHaveBeenCalledWith(77, expect.objectContaining({ Authorization: expect.any(String) }));
+      expect(stats.pushed).toBe(1);
+      const pending = await repo.getPendingSync();
+      expect(pending.calcs).toHaveLength(0);
+      const calcs = await repo.getCalcs();
+      expect(calcs.find((c2) => c2.id === c.id)?.is_private).toBe(false);
+    });
+
+    it('calls unpublishCalcRaw for a pending-unpublish calc and marks it synced', async () => {
+      const pubClient = makeClient({
+        unpublishCalcRaw: vi.fn(async () => fakeRes()),
+      });
+      const c = await repo.addCalc({ species: 'Salmon', product: 'Fillet', cost: 6, yield: 50, result: 12 });
+      await repo.markCalcSynced(c.id, 88);
+      await repo.updateCalcPublicationState(c.id, false);
+      await repo.queueUnpublish(c.id);
+
+      const coordinator = createSyncCoordinator(repo, pubClient);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(pubClient.unpublishCalcRaw).toHaveBeenCalledWith(88, expect.objectContaining({ Authorization: expect.any(String) }));
+      expect(stats.pushed).toBe(1);
+      const pending = await repo.getPendingSync();
+      expect(pending.calcs).toHaveLength(0);
+      const calcs = await repo.getCalcs();
+      expect(calcs.find((c2) => c2.id === c.id)?.is_private).toBe(true);
+    });
+
+    it('retains the pending-publish intent when the server call fails', async () => {
+      const pubClient = makeClient({
+        publishCalcRaw: vi.fn(async () => fakeRes({ ok: false, status: 503 })),
+      });
+      const c = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+      await repo.markCalcSynced(c.id, 77);
+      await repo.queuePublish(c.id);
+
+      const coordinator = createSyncCoordinator(repo, pubClient);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(stats.errors).toBeGreaterThan(0);
+      const pending = await repo.getPendingSync();
+      expect(pending.calcs).toHaveLength(1);
+      expect(pending.calcs[0].syncStatus).toBe('pending-publish');
+    });
+
+    it('retains the pending-publish intent when a network error is thrown', async () => {
+      const pubClient = makeClient({
+        publishCalcRaw: vi.fn(async () => { throw new Error('offline'); }),
+      });
+      const c = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+      await repo.markCalcSynced(c.id, 77);
+      await repo.queuePublish(c.id);
+
+      const coordinator = createSyncCoordinator(repo, pubClient);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(stats.errors).toBeGreaterThan(0);
+      const pending = await repo.getPendingSync();
+      expect(pending.calcs).toHaveLength(1);
+      expect(pending.calcs[0].syncStatus).toBe('pending-publish');
+    });
+
+    it('repeated delivery of one publish intent does not create duplicate public entries', async () => {
+      let callCount = 0;
+      const pubClient = makeClient({
+        publishCalcRaw: vi.fn(async () => {
+          callCount++;
+          return fakeRes();
+        }),
+      });
+      const c = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+      await repo.markCalcSynced(c.id, 77);
+      await repo.queuePublish(c.id);
+
+      const coordinator = createSyncCoordinator(repo, pubClient);
+      await coordinator.sync(AUTH_USER);
+      // Re-queue and sync again (simulating retry after partial failure)
+      await repo.queuePublish(c.id);
+      await coordinator.sync(AUTH_USER);
+
+      expect(callCount).toBe(2);
+      // Local state is synced after second run — only one record
+      const calcs = await repo.getCalcs();
+      expect(calcs.filter((c2) => c2.serverId === 77)).toHaveLength(1);
     });
   });
 });

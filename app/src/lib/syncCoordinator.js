@@ -100,6 +100,28 @@ export function createSyncCoordinator(repo, client = defaultApiClient) {
       }
     }
 
+    // ---- Push queued publication changes ----
+    for (const calc of pending.calcs.filter((c) => c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish')) {
+      if (!calc.serverId) continue;
+      try {
+        const isPublish = calc.syncStatus === 'pending-publish';
+        const res = isPublish
+          ? await client.publishCalcRaw(calc.serverId, headers)
+          : await client.unpublishCalcRaw(calc.serverId, headers);
+        if (res.ok) {
+          await repo.markCalcPublicationSynced(calc.id, !isPublish);
+          stats.pushed++;
+        } else {
+          stats.errors++;
+          stats.errorDetails.push({ type: isPublish ? 'publish-calc' : 'unpublish-calc', id: calc.id, status: res.status, isAuthError: res.status === 401 });
+          if (res.status === 401) return stats;
+        }
+      } catch (err) {
+        stats.errors++;
+        stats.errorDetails.push({ type: 'publish-calc', id: calc.id, message: err.message });
+      }
+    }
+
     // ---- Push new/updated yields ----
     for (const yld of pending.yields.filter((y) => y.syncStatus === 'local')) {
       try {

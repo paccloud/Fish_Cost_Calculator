@@ -325,18 +325,32 @@ export function DataProvider({ children }) {
     setPublishLoading(true);
     try {
       const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
-      const res = await apiClient.publishCalcRaw(publishPreviewCalc.serverId, authHeaders);
-      if (res.ok) {
-        await repo.updateCalcPublicationState(publishPreviewCalc.id, false);
-        setSavedCalcs((prev) =>
-          prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, is_private: false } : c))
-        );
-        setPublishPreviewCalc(null);
+      let succeeded = false;
+      try {
+        const res = await apiClient.publishCalcRaw(publishPreviewCalc.serverId, authHeaders);
+        if (res.ok) {
+          await repo.updateCalcPublicationState(publishPreviewCalc.id, false);
+          setSavedCalcs((prev) =>
+            prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, is_private: false, syncStatus: 'synced' } : c))
+          );
+          succeeded = true;
+        }
+      } catch {
+        // Network error — fall through to queue
       }
+      if (!succeeded) {
+        // Queue the intent for retry when connectivity returns.
+        await repo.queuePublish(publishPreviewCalc.id);
+        setSavedCalcs((prev) =>
+          prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, syncStatus: 'pending-publish' } : c))
+        );
+        debouncedSync();
+      }
+      setPublishPreviewCalc(null);
     } finally {
       setPublishLoading(false);
     }
-  }, [publishPreviewCalc, user, repo]);
+  }, [publishPreviewCalc, user, repo, debouncedSync]);
 
   const cancelPublish = useCallback(() => {
     setPublishPreviewCalc(null);
@@ -345,19 +359,28 @@ export function DataProvider({ children }) {
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
     if (!calc?.serverId) return;
+    let succeeded = false;
     try {
       const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
       const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
       if (res.ok) {
         await repo.updateCalcPublicationState(calc.id, true);
         setSavedCalcs((prev) =>
-          prev.map((c) => (c.id === calc.id ? { ...c, is_private: true } : c))
+          prev.map((c) => (c.id === calc.id ? { ...c, is_private: true, syncStatus: 'synced' } : c))
         );
+        succeeded = true;
       }
     } catch {
-      // best-effort
+      // fall through to queue
     }
-  }, [user, repo]);
+    if (!succeeded) {
+      await repo.queueUnpublish(calc.id);
+      setSavedCalcs((prev) =>
+        prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
+      );
+      debouncedSync();
+    }
+  }, [user, repo, debouncedSync]);
 
   // ---- Saved Calculations ----
 
