@@ -326,6 +326,7 @@ export function DataProvider({ children }) {
     try {
       const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
       let succeeded = false;
+      let transientFailure = false;
       try {
         const res = await apiClient.publishCalcRaw(publishPreviewCalc.serverId, authHeaders);
         if (res.ok) {
@@ -334,12 +335,15 @@ export function DataProvider({ children }) {
             prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, is_private: false, syncStatus: 'synced' } : c))
           );
           succeeded = true;
+        } else {
+          // Only retry on transient failures; permanent 4xx (e.g. 404 stale ID) should not be queued.
+          transientFailure = res.status === 429 || res.status >= 500;
         }
       } catch {
-        // Network error — fall through to queue
+        // Network error → transient
+        transientFailure = true;
       }
-      if (!succeeded) {
-        // Queue the intent for retry when connectivity returns.
+      if (!succeeded && transientFailure) {
         await repo.queuePublish(publishPreviewCalc.id);
         setSavedCalcs((prev) =>
           prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, syncStatus: 'pending-publish' } : c))
@@ -360,6 +364,7 @@ export function DataProvider({ children }) {
   const unpublishCalc = useCallback(async (calc) => {
     if (!calc?.serverId) return;
     let succeeded = false;
+    let transientFailure = false;
     try {
       const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
       const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
@@ -369,11 +374,14 @@ export function DataProvider({ children }) {
           prev.map((c) => (c.id === calc.id ? { ...c, is_private: true, syncStatus: 'synced' } : c))
         );
         succeeded = true;
+      } else {
+        transientFailure = res.status === 429 || res.status >= 500;
       }
     } catch {
-      // fall through to queue
+      // Network error → transient
+      transientFailure = true;
     }
-    if (!succeeded) {
+    if (!succeeded && transientFailure) {
       await repo.queueUnpublish(calc.id);
       setSavedCalcs((prev) =>
         prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
