@@ -12,11 +12,15 @@ import ConflictResolutionModal from '../components/ConflictResolutionModal';
 import PreviewPublishModal from '../components/PreviewPublishModal';
 import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
+import { isLifecycleEnabled } from '../lib/lifecycleFlag';
+import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
   const { user, logout } = useAuth();
+  // Evaluated once at mount; rollback by setting localStorage lifecycle_override=false.
+  const lifecycleEnabledRef = useRef(isLifecycleEnabled());
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -81,7 +85,13 @@ export function DataProvider({ children }) {
   const coordinator = useMemo(() => createSyncCoordinator(repo), [repo]);
 
   // Load from IndexedDB when scope changes.
+  // When lifecycle is disabled (emergency rollback), skip IndexedDB — data loads on sync.
   useEffect(() => {
+    if (!lifecycleEnabledRef.current) {
+      loadedScopeRef.current = scope;
+      setDataLoaded(true);
+      return;
+    }
     let cancelled = false;
     const loadingScope = scope;
     loadedScopeRef.current = null;
@@ -137,16 +147,28 @@ export function DataProvider({ children }) {
   useEffect(() => () => clearTimeout(syncTimeoutRef.current), []);
 
   const reloadFromRepo = useCallback(async () => {
-    const [calcs, yields, conflicts] = await Promise.all([
+    const [calcs, yields, conflicts, pending] = await Promise.all([
       repo.getCalcs(),
       repo.getYields(),
       repo.getConflictedYields(),
+      repo.getPendingSync(),
     ]);
     setSavedCalcs(calcs);
     setCustomYields(yields);
     setConflictedYields(conflicts);
-    const count = await coordinator.pendingCount();
+    const count = pending.calcs.length + pending.yields.length;
     setPendingCount(count);
+
+    if (count > 0) {
+      const now = Date.now();
+      const allPending = [...pending.calcs, ...pending.yields];
+      const oldest = allPending.reduce((min, r) => {
+        const age = r.createdAt ? now - new Date(r.createdAt).getTime() : 0;
+        return age > min ? age : min;
+      }, 0);
+      trackPendingAge(count, oldest);
+    }
+
     return { conflictCount: conflicts.length };
   }, [repo, coordinator]);
 
@@ -162,6 +184,7 @@ export function DataProvider({ children }) {
   }, [user]);
 
   const triggerSync = useCallback(async () => {
+    if (!lifecycleEnabledRef.current) return;
     if (!hasAuthCredential(user) || !navigator.onLine) return;
     if (signingOutRef.current) return;
     const gen = syncGenRef.current;
@@ -203,17 +226,23 @@ export function DataProvider({ children }) {
       const guestRepo = createRepository(guestScope());
       const accountRepo = createRepository(accountScope(currentUid));
       await adoptGuestRecords(guestRepo, accountRepo);
+      if (guestAdoptionCounts) {
+        trackGuestAdoption('accepted', guestAdoptionCounts.calcs, guestAdoptionCounts.yields);
+      }
       setGuestAdoptionCounts(null);
       await reloadFromRepo();
       triggerSync();
     } finally {
       setAdoptionLoading(false);
     }
-  }, [user, reloadFromRepo, triggerSync]);
+  }, [user, reloadFromRepo, triggerSync, guestAdoptionCounts]);
 
   const handleAdoptionDecline = useCallback(() => {
+    if (guestAdoptionCounts) {
+      trackGuestAdoption('declined', guestAdoptionCounts.calcs, guestAdoptionCounts.yields);
+    }
     setGuestAdoptionCounts(null);
-  }, []);
+  }, [guestAdoptionCounts]);
 
   // ---- Recovery ----
 
