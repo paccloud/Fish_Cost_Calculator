@@ -82,6 +82,7 @@ export function DataProvider({ children }) {
   // When lifecycle is disabled (emergency rollback), skip IndexedDB — data loads on sync.
   useEffect(() => {
     if (!lifecycleEnabledRef.current) {
+      loadedScopeRef.current = scope;
       setDataLoaded(true);
       return;
     }
