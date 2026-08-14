@@ -73,14 +73,15 @@ describe('migrateLegacyRecords — quarantine unsynchronized records', () => {
     expect(recovered[0].legacyId).toBe('c2');
   });
 
-  it('copies tombstones (pending-delete) into the recovery scope', async () => {
+  it('discards pending-delete tombstones (re-inserting them as local would un-delete)', async () => {
+    // makeRecord always sets syncStatus:'local', so a pending-delete tombstone would
+    // be stored as a new local record and then synced as an INSERT, silently un-deleting
+    // data the user explicitly removed. Skip them during migration instead.
     const store = makeStore({ [LEGACY_CALCS_KEY]: [tombCalc] });
     const recoveryRepo = makeRecoveryRepo(store);
     const { calcs } = await migrateLegacyRecords({ store, recoveryRepo });
-    expect(calcs).toBe(1);
-    const recovered = await recoveryRepo.getCalcs();
-    expect(recovered).toHaveLength(1);
-    expect(recovered[0].legacyId).toBe('c3');
+    expect(calcs).toBe(0);
+    expect(await recoveryRepo.getCalcs()).toHaveLength(0);
   });
 
   it('copies local yields into the recovery scope', async () => {

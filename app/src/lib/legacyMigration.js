@@ -44,8 +44,15 @@ export async function migrateLegacyRecords({ store, recoveryRepo, localStorage: 
   ]);
 
   // Discard synced records (clean cache; safely re-fetched after sign-in).
-  const calcsToRecover = (rawCalcs || []).filter((c) => c.syncStatus !== 'synced');
-  const yieldsToRecover = (rawYields || []).filter((y) => y.syncStatus !== 'synced');
+  // Also discard pending-delete tombstones: makeRecord always sets syncStatus:'local',
+  // so they would be re-inserted as new records instead of completing the deletion —
+  // silently un-deleting data the user had explicitly removed.
+  const calcsToRecover = (rawCalcs || []).filter(
+    (c) => c.syncStatus !== 'synced' && c.syncStatus !== 'pending-delete'
+  );
+  const yieldsToRecover = (rawYields || []).filter(
+    (y) => y.syncStatus !== 'synced' && y.syncStatus !== 'pending-delete'
+  );
 
   if (calcsToRecover.length > 0 || yieldsToRecover.length > 0) {
     const repo = recoveryRepo || createRepository(recoveryScope(ls), { store });
