@@ -415,6 +415,33 @@ export function createApiClient(options = {}) {
   }
 
   /**
+   * PATCH /api/saved-calcs/:id/publish — set is_private = FALSE.
+   * Returns the updated calc row (id, name, species, product, cost, yield, result, date, is_private).
+   * @param {number|string} serverId
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function publishCalcRaw(serverId, extraHeaders = {}) {
+    return rawRequest(`/api/saved-calcs/${serverId}/publish`, {
+      method: 'PATCH',
+      headers: { ...extraHeaders },
+    });
+  }
+
+  /**
+   * PATCH /api/saved-calcs/:id/unpublish — set is_private = TRUE.
+   * @param {number|string} serverId
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function unpublishCalcRaw(serverId, extraHeaders = {}) {
+    return rawRequest(`/api/saved-calcs/${serverId}/unpublish`, {
+      method: 'PATCH',
+      headers: { ...extraHeaders },
+    });
+  }
+
+  /**
    * GET /api/saved-calcs — pull the server's saved-calcs list.
    * @param {Record<string,string>} extraHeaders
    * @returns {Promise<Response>}
@@ -451,6 +478,8 @@ export function createApiClient(options = {}) {
     uploadData,
     saveCalcRaw,
     deleteCalcRaw,
+    publishCalcRaw,
+    unpublishCalcRaw,
     createUserDataRaw,
     updateUserDataRaw,
     deleteUserDataRaw,

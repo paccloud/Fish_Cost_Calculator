@@ -80,10 +80,23 @@ class LocalRepository {
     const key = idbKey(this._scope, 'calcs');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
-      const record = makeRecord(inputs, this._scope);
+      const record = { is_private: true, ...makeRecord(inputs, this._scope) };
       all.push(record);
       await this._set(key, all);
       return record;
+    });
+  }
+
+  // Update is_private on a local calc record (optimistic update after publish/unpublish).
+  async updateCalcPublicationState(id, is_private) {
+    const key = idbKey(this._scope, 'calcs');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return null;
+      all[idx] = { ...all[idx], is_private };
+      await this._set(key, all);
+      return all[idx];
     });
   }
 
@@ -158,9 +171,21 @@ class LocalRepository {
           yield: sc.yield,
           result: sc.result,
           name: sc.name,
-          createdAt: ts,
-          updatedAt: ts,
+          is_private: sc.is_private ?? true,
+          createdAt: sc.created_at ?? ts,
+          updatedAt: sc.updated_at ?? ts,
         });
+      }
+
+      // Update is_private for calcs already tracked (publication state may change without resync).
+      for (const sc of serverCalcs) {
+        const localId = all.find((c) => c.serverId != null && String(c.serverId) === String(sc.id))?.id;
+        if (!localId) continue;
+        const idx = all.findIndex((c) => c.id === localId);
+        if (idx === -1) continue;
+        if (all[idx].is_private !== (sc.is_private ?? true)) {
+          all[idx] = { ...all[idx], is_private: sc.is_private ?? true };
+        }
       }
       await this._set(key, all);
     });

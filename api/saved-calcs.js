@@ -26,6 +26,8 @@ import {
   handleListSavedCalcs,
   handleSaveCalc,
   handleDeleteCalc,
+  handlePublishCalc,
+  handleUnpublishCalc,
 } from '../shared/handlers/index.js';
 import { makeNeonAdapter } from './_lib/neonDb.js';
 
@@ -54,6 +56,26 @@ async function handler(req, res) {
       db
     );
     return res.status(status).json(body);
+  }
+
+  // PATCH /api/saved-calcs/:id/publish — set is_private = FALSE
+  // PATCH /api/saved-calcs/:id/unpublish — set is_private = TRUE
+  if (req.method === 'PATCH') {
+    const { action } = req.query;
+    if (action === 'publish') {
+      const { status, body } = await handlePublishCalc(
+        { userId: req.user.id, id: req.query.id },
+        db
+      );
+      return res.status(status).json(body);
+    }
+    if (action === 'unpublish') {
+      const { status, body } = await handleUnpublishCalc(
+        { userId: req.user.id, id: req.query.id },
+        db
+      );
+      return res.status(status).json(body);
+    }
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

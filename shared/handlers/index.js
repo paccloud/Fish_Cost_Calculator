@@ -9,7 +9,7 @@
 
 export { handleRegister } from './register.js';
 export { handleLogin } from './login.js';
-export { handleListSavedCalcs, handleSaveCalc, handleDeleteCalc } from './savedCalcs.js';
+export { handleListSavedCalcs, handleSaveCalc, handleDeleteCalc, handlePublishCalc, handleUnpublishCalc } from './savedCalcs.js';
 export {
   handleGetContributorProfile,
   handleGetFishData,

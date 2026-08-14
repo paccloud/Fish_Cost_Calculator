@@ -191,6 +191,43 @@ function makeSqliteAdapter(db) {
       });
     },
 
+    publishCalc(id) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          `UPDATE calculations SET is_private = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+          [id],
+          (err) => {
+            if (err) return reject(err);
+            db.get(
+              `SELECT id, name, species, product, cost, yield, result, date,
+                      is_private,
+                      COALESCE(created_at, date) AS created_at,
+                      COALESCE(updated_at, date) AS updated_at
+               FROM calculations WHERE id = ?`,
+              [id],
+              (err2, row) => {
+                if (err2) return reject(err2);
+                resolve(row ?? null);
+              }
+            );
+          }
+        );
+      });
+    },
+
+    unpublishCalc(id) {
+      return new Promise((resolve, reject) => {
+        db.run(
+          'UPDATE calculations SET is_private = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [id],
+          (err) => {
+            if (err) return reject(err);
+            resolve();
+          }
+        );
+      });
+    },
+
     listPublicCalcs() {
       return new Promise((resolve, reject) => {
         db.all(

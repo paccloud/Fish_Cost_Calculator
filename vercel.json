@@ -5,6 +5,7 @@
   "installCommand": "npm install && cd app && npm install",
   "rewrites": [
     { "source": "/api/save-calc", "destination": "/api/saved-calcs" },
+    { "source": "/api/saved-calcs/:id/:action", "destination": "/api/saved-calcs?id=:id&action=:action" },
     { "source": "/api/saved-calcs/:id", "destination": "/api/saved-calcs?id=:id" },
     { "source": "/api/user-data/:id/:action", "destination": "/api/user-data?id=:id&action=:action" },
     { "source": "/api/user-data/:id", "destination": "/api/user-data?id=:id" },

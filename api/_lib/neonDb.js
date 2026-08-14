@@ -151,6 +151,25 @@ export function makeNeonAdapter() {
       await query('DELETE FROM calculations WHERE id = $1', [id]);
     },
 
+    async publishCalc(id) {
+      const result = await query(
+        `UPDATE calculations
+         SET is_private = FALSE, updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, name, species, product, cost, yield, result, date,
+                   is_private, COALESCE(created_at, date) AS created_at, updated_at`,
+        [id]
+      );
+      return result.rows[0] ?? null;
+    },
+
+    async unpublishCalc(id) {
+      await query(
+        'UPDATE calculations SET is_private = TRUE, updated_at = NOW() WHERE id = $1',
+        [id]
+      );
+    },
+
     async listPublicCalcs() {
       const result = await query(
         `SELECT id, species, product, cost, yield, result, date
