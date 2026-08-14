@@ -8,6 +8,8 @@ import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
 import SignOutGuardModal from '../components/SignOutGuardModal';
 import ConflictResolutionModal from '../components/ConflictResolutionModal';
+import PreviewPublishModal from '../components/PreviewPublishModal';
+import { apiClient } from '../lib/apiClient';
 
 const DataContext = createContext(null);
 
@@ -29,6 +31,9 @@ export function DataProvider({ children }) {
   // null | { calcs: number, yields: number } — non-null while sign-out guard is shown
   const [signOutGuardState, setSignOutGuardState] = useState(null);
   const [conflictedYields, setConflictedYields] = useState([]);
+  // null | calc record — non-null while publish preview modal is shown
+  const [publishPreviewCalc, setPublishPreviewCalc] = useState(null);
+  const [publishLoading, setPublishLoading] = useState(false);
 
   // Derive scope and repository from the current user.
   // Treat legacy password/JWT sessions (user.id but no user.uid) as authenticated.
@@ -307,6 +312,53 @@ export function DataProvider({ children }) {
     debouncedSync();
   }, [repo, reloadFromRepo, debouncedSync]);
 
+  // ---- Saved Calculation Publication ----
+
+  // Open the preview modal — no API call yet.
+  const requestPublish = useCallback((calc) => {
+    setPublishPreviewCalc(calc);
+  }, []);
+
+  // Called when the user confirms publication in the preview modal.
+  const confirmPublish = useCallback(async () => {
+    if (!publishPreviewCalc?.serverId) return;
+    setPublishLoading(true);
+    try {
+      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      const res = await apiClient.publishCalcRaw(publishPreviewCalc.serverId, authHeaders);
+      if (res.ok) {
+        await repo.updateCalcPublicationState(publishPreviewCalc.id, false);
+        setSavedCalcs((prev) =>
+          prev.map((c) => (c.id === publishPreviewCalc.id ? { ...c, is_private: false } : c))
+        );
+        setPublishPreviewCalc(null);
+      }
+    } finally {
+      setPublishLoading(false);
+    }
+  }, [publishPreviewCalc, user, repo]);
+
+  const cancelPublish = useCallback(() => {
+    setPublishPreviewCalc(null);
+  }, []);
+
+  // Called directly — no preview modal needed to make something private.
+  const unpublishCalc = useCallback(async (calc) => {
+    if (!calc?.serverId) return;
+    try {
+      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
+      if (res.ok) {
+        await repo.updateCalcPublicationState(calc.id, true);
+        setSavedCalcs((prev) =>
+          prev.map((c) => (c.id === calc.id ? { ...c, is_private: true } : c))
+        );
+      }
+    } catch {
+      // best-effort
+    }
+  }, [user, repo]);
+
   // ---- Saved Calculations ----
 
   const saveCalc = useCallback(async (calc) => {
@@ -389,6 +441,12 @@ export function DataProvider({ children }) {
     updateCustomSpecies,
     retrySync,
     signOut,
+    requestPublish,
+    confirmPublish,
+    cancelPublish,
+    unpublishCalc,
+    publishPreviewCalc,
+    publishLoading,
   };
 
   return (
@@ -419,6 +477,14 @@ export function DataProvider({ children }) {
           onUseServer={handleConflictUseServer}
           onKeepBoth={handleConflictKeepBoth}
           onDismissDelete={handleDeleteConflictDismiss}
+        />
+      )}
+      {publishPreviewCalc && (
+        <PreviewPublishModal
+          calc={publishPreviewCalc}
+          loading={publishLoading}
+          onConfirm={confirmPublish}
+          onCancel={cancelPublish}
         />
       )}
     </DataContext.Provider>

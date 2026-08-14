@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff, Globe, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { apiUrl } from '../config/api';
 
 const DataManagement = () => {
     const { user, getAuthHeaders } = useAuth();
-    const { customYields, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly } = useData();
+    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -277,6 +277,72 @@ const DataManagement = () => {
                     </form>
                 </div>
             )}
+
+            {/* Saved Calculations */}
+            <div className="card overflow-hidden mb-8">
+                <div className="p-4 border-b border-line">
+                    <h2 className="text-base font-semibold text-brand-teal">Saved Calculations</h2>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                        Publish a calculation to share it anonymously on the community feed.
+                    </p>
+                </div>
+
+                {!dataLoaded ? (
+                    <div className="p-8 text-center text-text-secondary">Loading...</div>
+                ) : savedCalcs.length === 0 ? (
+                    <div className="p-8 text-center text-text-secondary">
+                        <Database size={40} className="mx-auto mb-4 opacity-30" />
+                        <p>No saved calculations yet.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-line-subtle">
+                        {savedCalcs.map((calc) => (
+                            <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
+                                <div>
+                                    <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
+                                        {calc.name || `${calc.species} — ${calc.product}`}
+                                        {calc.is_private === false ? (
+                                            <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                <Globe size={10} />Public
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                <Lock size={10} />Private
+                                            </span>
+                                        )}
+                                    </p>
+                                    <p className="text-sm text-text-secondary">
+                                        {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
+                                    </p>
+                                </div>
+                                <div className="flex gap-1">
+                                    {calc.serverId && (
+                                        calc.is_private === false ? (
+                                            <button
+                                                onClick={() => unpublishCalc(calc)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
+                                                title="Make private"
+                                            >
+                                                <EyeOff size={13} />
+                                                Unpublish
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => requestPublish(calc)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
+                                                title="Publish to community feed"
+                                            >
+                                                <Globe size={13} />
+                                                Publish
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Data List */}
             <div className="card overflow-hidden">

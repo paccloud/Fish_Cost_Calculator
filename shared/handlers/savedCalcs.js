@@ -195,3 +195,72 @@ export async function handleDeleteCalc(input, db) {
     return { status: 500, body: { error: 'Failed to delete calculation' } };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Publish / unpublish a calculation
+// ---------------------------------------------------------------------------
+
+/**
+ * Publish a calculation — set is_private = FALSE after ownership check.
+ * Returns the full calc row so the client can confirm what fields are now public.
+ *
+ * @param {{ userId: string|number, id: unknown }} input
+ * @param {import('../db/interface.js').DbAdapter} db
+ * @returns {Promise<{status: number, body: Object}>}
+ */
+export async function handlePublishCalc(input, db) {
+  const { userId, id } = input;
+
+  if (!userId) {
+    return { status: 401, body: { error: 'Unauthorized' } };
+  }
+
+  const calcId = Number(id);
+  if (!id || Number.isNaN(calcId)) {
+    return { status: 400, body: { error: 'Invalid calculation id' } };
+  }
+
+  try {
+    const calc = await db.findCalcById(calcId);
+    if (!calc) return { status: 404, body: { error: 'Calculation not found' } };
+    if (String(calc.user_id) !== String(userId)) return { status: 403, body: { error: 'Forbidden' } };
+
+    const published = await db.publishCalc(calcId);
+    return { status: 200, body: { ...published, is_private: false } };
+  } catch (err) {
+    console.error('[publish-calc] unexpected error:', err.message ?? err);
+    return { status: 500, body: { error: 'Failed to publish calculation' } };
+  }
+}
+
+/**
+ * Unpublish a calculation — set is_private = TRUE after ownership check.
+ *
+ * @param {{ userId: string|number, id: unknown }} input
+ * @param {import('../db/interface.js').DbAdapter} db
+ * @returns {Promise<{status: number, body: Object}>}
+ */
+export async function handleUnpublishCalc(input, db) {
+  const { userId, id } = input;
+
+  if (!userId) {
+    return { status: 401, body: { error: 'Unauthorized' } };
+  }
+
+  const calcId = Number(id);
+  if (!id || Number.isNaN(calcId)) {
+    return { status: 400, body: { error: 'Invalid calculation id' } };
+  }
+
+  try {
+    const calc = await db.findCalcById(calcId);
+    if (!calc) return { status: 404, body: { error: 'Calculation not found' } };
+    if (String(calc.user_id) !== String(userId)) return { status: 403, body: { error: 'Forbidden' } };
+
+    await db.unpublishCalc(calcId);
+    return { status: 200, body: { message: 'Calculation unpublished' } };
+  } catch (err) {
+    console.error('[unpublish-calc] unexpected error:', err.message ?? err);
+    return { status: 500, body: { error: 'Failed to unpublish calculation' } };
+  }
+}

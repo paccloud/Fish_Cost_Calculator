@@ -53,6 +53,14 @@
  *   Delete the calculation with the given id.
  *   The caller (handler) is responsible for ownership checks before calling this.
  *
+ * @property {function(string|number): Promise<Object>} publishCalc
+ *   Set is_private = FALSE for the calc and return the updated row.
+ *   Caller must verify ownership before calling.
+ *
+ * @property {function(string|number): Promise<void>} unpublishCalc
+ *   Set is_private = TRUE for the calc.
+ *   Caller must verify ownership before calling.
+ *
  * @property {function(): Promise<DbCalc[]>} listPublicCalcs
  *   Return public calculation rows for the unauthenticated community feed.
  *   Must omit user_id and other private user fields.
