@@ -51,6 +51,13 @@ describe('lifecycleTelemetry', () => {
     });
   });
 
+  describe('trackSyncAttempt', () => {
+    it('emits lifecycle:sync:attempt with no properties', () => {
+      trackSyncAttempt();
+      expect(vaTrack).toHaveBeenCalledWith('lifecycle:sync:attempt', {});
+    });
+  });
+
   describe('trackSyncSuccess', () => {
     it('emits pushed/pulled/conflicts counts', () => {
       trackSyncSuccess({ pushed: 3, pulled: 2, conflicts: 1 });

@@ -13,7 +13,7 @@ import PreviewPublishModal from '../components/PreviewPublishModal';
 import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 import { isLifecycleEnabled } from '../lib/lifecycleFlag';
-import { trackGuestAdoption, trackPendingAge, getSyncHealth } from '../lib/lifecycleTelemetry';
+import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 
 const DataContext = createContext(null);
 
