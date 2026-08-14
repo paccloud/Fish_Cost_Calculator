@@ -131,7 +131,11 @@ export function normalizeYieldRows(data, sourceName) {
       return;
     }
 
-    if (finalYield > 0 && finalYield <= 1) {
+    // Excel stores percentage cells as fractions (0.75 means 75%). Detect and
+    // convert only when the raw cell value is numeric (XLSX). For CSV, the raw
+    // value is always a string, so 0.5 means 0.5% — not 50% — and must not
+    // be scaled.
+    if (typeof yieldRaw === 'number' && finalYield > 0 && finalYield <= 1) {
       finalYield *= 100;
     }
 

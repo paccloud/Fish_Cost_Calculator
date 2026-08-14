@@ -56,6 +56,12 @@ describe('yieldsToCSV', () => {
     expect(row).toMatch(/^"Sal/);
   });
 
+  it('escapes carriage returns in field values', () => {
+    const csv = yieldsToCSV([make({ species: 'Sal\rmon' })]);
+    const row = csv.split('\n')[1];
+    expect(row).toMatch(/^"Sal/);
+  });
+
   it('excludes no records itself — callers must pass already-filtered yields', () => {
     // LocalRepository.getYields() already filters pending-delete; CSV has no extra filtering.
     const csv = yieldsToCSV([make({ syncStatus: 'pending-delete' })]);
