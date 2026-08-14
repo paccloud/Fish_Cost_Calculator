@@ -4,7 +4,7 @@ const CSV_HEADER = 'Species,% Yield,Product,Source';
 
 function escapeCSVField(value) {
   const s = String(value ?? '');
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+  if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
