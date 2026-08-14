@@ -8,7 +8,7 @@ import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
     const { user, getAuthHeaders } = useAuth();
-    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc, isOnline } = useData();
+    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
     const [status, setStatus] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
