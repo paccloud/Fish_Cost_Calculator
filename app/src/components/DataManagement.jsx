@@ -4,425 +4,377 @@ import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
-    const { user, getAuthHeaders } = useAuth();
-    const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
-    const [status, setStatus] = useState(null);
-    const [showForm, setShowForm] = useState(false);
-    const [editingId, setEditingId] = useState(null);
+  const { user, getAuthHeaders } = useAuth();
+  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
+  const [status, setStatus] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
-    const [formData, setFormData] = useState({
-        species: '',
-        product: '',
-        yield: '',
-        source: 'User Input',
-    });
+  const [formData, setFormData] = useState({
+    species: '',
+    product: '',
+    yield: '',
+    source: 'User Input',
+  });
 
-    const handleToggleShare = async (item) => {
-        const action = item.is_shared ? 'unshare' : 'share';
-        try {
-            const headers = await getAuthHeaders();
-            const res = await fetch(apiUrl(`/api/user-data/${item.serverId ?? item.id}/${action}`), {
-                method: 'POST',
-                headers,
-            });
-            if (res.ok) {
-                updateYieldLocalOnly(item.id, { is_shared: !item.is_shared });
-                setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
-            } else {
-                const err = await res.json();
-                setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
-            }
-        } catch {
-            setStatus({ type: 'error', message: 'Network error occurred.' });
-        }
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editingId) {
-                await updateYield(editingId, {
-                    species: formData.species,
-                    product: formData.product,
-                    yield: parseFloat(formData.yield),
-                    source: formData.source,
-                });
-                setStatus({ type: 'success', message: 'Updated successfully!' });
-            } else {
-                await addYield({
-                    species: formData.species,
-                    product: formData.product,
-                    yield: parseFloat(formData.yield),
-                    source: formData.source,
-                });
-                setStatus({ type: 'success', message: 'Added successfully!' });
-            }
-            resetForm();
-        } catch {
-            setStatus({ type: 'error', message: 'Operation failed.' });
-        }
-    };
-
-    const handleEdit = (item) => {
-        setFormData({
-            species: item.species,
-            product: item.product,
-            yield: String(item.yield),
-            source: item.source || 'User Input',
-        });
-        setEditingId(item.id);
-        setShowForm(true);
-    };
-
-    const handleDelete = async (id) => {
-        if (!confirm('Are you sure you want to delete this entry?')) return;
-        try {
-            await removeYield(id);
-            setStatus({ type: 'success', message: 'Deleted successfully!' });
-        } catch {
-            setStatus({ type: 'error', message: 'Failed to delete.' });
-        }
-    };
-
-    const resetForm = () => {
-        setFormData({ species: '', product: '', yield: '', source: 'User Input' });
-        setEditingId(null);
-        setShowForm(false);
-    };
-
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-surface p-8 rounded-full">
-                    <Database size={40} className="text-text-secondary" />
-                </div>
-                <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
-                <p className="text-text-secondary max-w-md text-sm">
-                    You need to be logged in to manage your custom yield data.
-                </p>
-                <Link to="/login" className="px-6 py-2 bg-brand-teal hover:bg-brand-teal-light text-white rounded transition text-sm font-medium">
-                    Go to Login
-                </Link>
-            </div>
-        );
+  const handleToggleShare = async (item) => {
+    const action = item.is_shared ? 'unshare' : 'share';
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(apiUrl(`/api/user-data/${item.serverId ?? item.id}/${action}`), {
+        method: 'POST',
+        headers,
+      });
+      if (res.ok) {
+        updateYieldLocalOnly(item.id, { is_shared: !item.is_shared });
+        setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
+      } else {
+        const err = await res.json();
+        setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
+      }
+    } catch {
+      setStatus({ type: 'error', message: 'Network error occurred.' });
     }
+  };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingId) {
+        await updateYield(editingId, {
+          species: formData.species,
+          product: formData.product,
+          yield: parseFloat(formData.yield),
+          source: formData.source,
+        });
+        setStatus({ type: 'success', message: 'Updated successfully!' });
+      } else {
+        await addYield({
+          species: formData.species,
+          product: formData.product,
+          yield: parseFloat(formData.yield),
+          source: formData.source,
+        });
+        setStatus({ type: 'success', message: 'Added successfully!' });
+      }
+      resetForm();
+    } catch {
+      setStatus({ type: 'error', message: 'Operation failed.' });
+    }
+  };
+
+  const handleEdit = (item) => {
+    setFormData({
+      species: item.species,
+      product: item.product,
+      yield: String(item.yield),
+      source: item.source || 'User Input',
+    });
+    setEditingId(item.id);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Are you sure you want to delete this entry?')) return;
+    try {
+      await removeYield(id);
+      setStatus({ type: 'success', message: 'Deleted successfully!' });
+    } catch {
+      setStatus({ type: 'error', message: 'Failed to delete.' });
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ species: '', product: '', yield: '', source: 'User Input' });
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  if (!user) {
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-                        <Database className="text-brand-terracotta" size={22} />
-                        Manage Your Data
-                    </h1>
-                    <p className="text-text-secondary mt-1 text-sm">
-                        Add, edit, or delete your custom yield data •{' '}
-                        <Link to="/profile" className="text-brand-terracotta hover:underline">Edit Contributor Profile</Link>
-                    </p>
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={async () => {
-                            try {
-                                const headers = await getAuthHeaders();
-                                const response = await fetch(apiUrl('/api/export?type=data'), { headers });
-                                const blob = await response.blob();
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'custom-yield-data.csv';
-                                document.body.appendChild(a);
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                            } catch (error) {
-                                console.error('Export failed:', error);
-                            }
-                        }}
-                        className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        disabled={customYields.length === 0}
-                    >
-                        <Download size={16} />
-                        Export CSV
-                    </button>
-                    <button
-                        onClick={async () => {
-                            try {
-                                const headers = await getAuthHeaders();
-                                const response = await fetch(apiUrl('/api/export?type=data&format=xlsx'), { headers });
-                                const blob = await response.blob();
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'yield-data.xlsx';
-                                document.body.appendChild(a);
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                                document.body.removeChild(a);
-                            } catch (err) {
-                                console.error('Excel export failed:', err);
-                            }
-                        }}
-                        className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        disabled={customYields.length === 0}
-                    >
-                        <Download size={16} />
-                        Export Excel
-                    </button>
-                    <button
-                        onClick={() => setShowForm(!showForm)}
-                        className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
-                    >
-                        <Plus size={16} />
-                        Add Entry
-                    </button>
-                </div>
-            </div>
-
-            {/* Status Message */}
-            {status && (
-                <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
-                    status.type === 'success'
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
-                        : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-                }`}>
-                    {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-                    {status.message}
-                    <button onClick={() => setStatus(null)} className="ml-auto">
-                        <X size={16} />
-                    </button>
-                </div>
-            )}
-
-            {/* Add/Edit Form */}
-            {showForm && (
-                <div className="card p-6 mb-8">
-                    <h2 className="text-lg font-semibold text-brand-teal mb-4">
-                        {editingId ? 'Edit Entry' : 'Add New Entry'}
-                    </h2>
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="form-label">Species Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.species}
-                                    onChange={(e) => setFormData({ ...formData, species: e.target.value })}
-                                    className="form-input"
-                                    placeholder="e.g. Atlantic Salmon"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="form-label">Product/Conversion</label>
-                                <input
-                                    type="text"
-                                    value={formData.product}
-                                    onChange={(e) => setFormData({ ...formData, product: e.target.value })}
-                                    className="form-input"
-                                    placeholder="e.g. Skinless Fillet"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="form-label">Yield (%)</label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    min="0"
-                                    max="100"
-                                    value={formData.yield}
-                                    onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
-                                    className="form-input"
-                                    placeholder="e.g. 45"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="form-label">Source/Notes</label>
-                                <input
-                                    type="text"
-                                    value={formData.source}
-                                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                                    className="form-input"
-                                    placeholder="e.g. Personal experience"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                type="submit"
-                                className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
-                            >
-                                <Save size={16} />
-                                {editingId ? 'Update' : 'Save'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={resetForm}
-                                className="flex items-center gap-2 bg-surface border border-line text-text-secondary hover:bg-surface-raised px-4 py-2 rounded transition text-sm font-medium"
-                            >
-                                <X size={16} />
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            )}
-
-            {/* Saved Calculations */}
-            <div className="card overflow-hidden mb-8">
-                <div className="p-4 border-b border-line">
-                    <h2 className="text-base font-semibold text-brand-teal">Saved Calculations</h2>
-                    <p className="text-xs text-text-secondary mt-0.5">
-                        Publish a calculation to share it anonymously on the community feed.
-                    </p>
-                </div>
-
-                {!dataLoaded ? (
-                    <div className="p-8 text-center text-text-secondary">Loading...</div>
-                ) : savedCalcs.length === 0 ? (
-                    <div className="p-8 text-center text-text-secondary">
-                        <Database size={40} className="mx-auto mb-4 opacity-30" />
-                        <p>No saved calculations yet.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-line-subtle">
-                        {savedCalcs.map((calc) => {
-                            const pendingPublish = calc.syncStatus === 'pending-publish';
-                            const pendingUnpublish = calc.syncStatus === 'pending-unpublish';
-                            const pendingPublication = pendingPublish || pendingUnpublish;
-                            return (
-                                <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
-                                    <div>
-                                        <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
-                                            {calc.name || `${calc.species} — ${calc.product}`}
-                                            {pendingPublish ? (
-                                                <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full" title="Publishing queued — will go live when connectivity returns">
-                                                    Publishing…
-                                                </span>
-                                            ) : pendingUnpublish ? (
-                                                <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full" title="Removal queued — snapshot remains publicly visible until the server confirms">
-                                                    Unpublishing…
-                                                </span>
-                                            ) : calc.is_private === false ? (
-                                                <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                    <Globe size={10} />Public
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                    <Lock size={10} />Private
-                                                </span>
-                                            )}
-                                        </p>
-                                        <p className="text-sm text-text-secondary">
-                                            {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
-                                        </p>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        {calc.serverId && !pendingPublication && (
-                                            calc.is_private === false ? (
-                                                <button
-                                                    onClick={() => unpublishCalc(calc)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
-                                                    title="Make private"
-                                                >
-                                                    <EyeOff size={13} />
-                                                    Unpublish
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={() => requestPublish(calc)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
-                                                    title="Publish to community feed"
-                                                >
-                                                    <Globe size={13} />
-                                                    Publish
-                                                </button>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            {/* Data List */}
-            <div className="card overflow-hidden">
-                <div className="p-4 border-b border-line">
-                    <h2 className="text-base font-semibold text-brand-teal">Your Custom Data</h2>
-                </div>
-
-                {!dataLoaded ? (
-                    <div className="p-8 text-center text-text-secondary">Loading...</div>
-                ) : customYields.length === 0 ? (
-                    <div className="p-8 text-center text-text-secondary">
-                        <Database size={40} className="mx-auto mb-4 opacity-30" />
-                        <p>No custom data yet. Add your first entry above!</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-line-subtle">
-                        {customYields.map((item) => (
-                            <div key={item.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
-                                <div>
-                                    <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
-                                        {item.species}
-                                        {item.is_shared ? (
-                                            <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
-                                        ) : null}
-                                        {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
-                                            <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full">
-                                                {item.syncStatus === 'pending-delete' ? 'Deleting…' : 'Pending'}
-                                            </span>
-                                        ) : null}
-                                    </p>
-                                    <p className="text-sm text-text-secondary">
-                                        {item.product} → <span className="text-brand-teal font-medium">{item.yield}%</span>
-                                        {item.source && <span className="ml-2 text-text-muted">({item.source})</span>}
-                                    </p>
-                                </div>
-                                <div className="flex gap-1">
-                                    {item.serverId && (
-                                        <button
-                                            onClick={() => handleToggleShare(item)}
-                                            className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal hover:text-text-secondary' : 'text-text-secondary hover:text-brand-teal'}`}
-                                            title={item.is_shared ? 'Remove from community' : 'Share with community'}
-                                        >
-                                            {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleEdit(item)}
-                                        className="p-2 rounded text-text-secondary hover:text-brand-teal transition"
-                                        title="Edit"
-                                    >
-                                        <Edit2 size={16} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(item.id)}
-                                        className="p-2 rounded text-text-secondary hover:text-red-500 transition"
-                                        title="Delete"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
+        <div className="bg-surface p-8 rounded-full">
+          <Database size={40} className="text-text-secondary" />
         </div>
+        <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+        <p className="text-text-secondary max-w-md text-sm">
+          You need to be logged in to manage your custom yield data.
+        </p>
+        <Link to="/login" className="px-6 py-2 bg-brand-teal hover:bg-brand-teal-light text-white rounded transition text-sm font-medium">
+          Go to Login
+        </Link>
+      </div>
     );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
+            <Database className="text-brand-terracotta" size={22} />
+            Manage Your Data
+          </h1>
+          <p className="text-text-secondary mt-1 text-sm">
+            Add, edit, or delete your custom yield data •{' '}
+            <Link to="/profile" className="text-brand-terracotta hover:underline">Edit Contributor Profile</Link>
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              const csv = yieldsToCSV(customYields.filter(y => y.syncStatus !== 'pending-delete'));
+              downloadText(csv, 'custom-yield-data.csv');
+            }}
+            className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            disabled={customYields.length === 0}
+            title="Download your yield data as a CSV (works offline)"
+          >
+            <Download size={16} />
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
+          >
+            <Plus size={16} />
+            Add Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Status Message */}
+      {status && (
+        <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
+          status.type === 'success'
+            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
+            : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30'
+        }`}>
+          {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+          {status.message}
+          <button onClick={() => setStatus(null)} className="ml-auto">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Add/Edit Form */}
+      {showForm && (
+        <div className="card p-6 mb-8">
+          <h2 className="text-lg font-semibold text-brand-teal mb-4">
+            {editingId ? 'Edit Entry' : 'Add New Entry'}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="form-label">Species Name</label>
+                <input
+                  type="text"
+                  value={formData.species}
+                  onChange={(e) => setFormData({ ...formData, species: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. Atlantic Salmon"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Product/Conversion</label>
+                <input
+                  type="text"
+                  value={formData.product}
+                  onChange={(e) => setFormData({ ...formData, product: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. Skinless Fillet"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Yield (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={formData.yield}
+                  onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. 45"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Source/Notes</label>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                  className="form-input"
+                  placeholder="e.g. Personal experience"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
+              >
+                <Save size={16} />
+                {editingId ? 'Update' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="flex items-center gap-2 bg-surface border border-line text-text-secondary hover:bg-surface-raised px-4 py-2 rounded transition text-sm font-medium"
+              >
+                <X size={16} />
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Saved Calculations */}
+      <div className="card overflow-hidden mb-8">
+        <div className="p-4 border-b border-line">
+          <h2 className="text-base font-semibold text-brand-teal">Saved Calculations</h2>
+          <p className="text-xs text-text-secondary mt-0.5">
+            Publish a calculation to share it anonymously on the community feed.
+          </p>
+        </div>
+
+        {!dataLoaded ? (
+          <div className="p-8 text-center text-text-secondary">Loading...</div>
+        ) : savedCalcs.length === 0 ? (
+          <div className="p-8 text-center text-text-secondary">
+            <Database size={40} className="mx-auto mb-4 opacity-30" />
+            <p>No saved calculations yet.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-line-subtle">
+            {savedCalcs.map((calc) => (
+              <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
+                <div>
+                  <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
+                    {calc.name || `${calc.species} — ${calc.product}`}
+                    {calc.is_private === false ? (
+                      <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Globe size={10} />Public
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Lock size={10} />Private
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-sm text-text-secondary">
+                    {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  {calc.serverId && (
+                    calc.is_private === false ? (
+                      <button
+                        onClick={() => unpublishCalc(calc)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
+                        title="Make private"
+                      >
+                        <EyeOff size={13} />
+                        Unpublish
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => requestPublish(calc)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
+                        title="Publish to community feed"
+                      >
+                        <Globe size={13} />
+                        Publish
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Data List */}
+      <div className="card overflow-hidden">
+        <div className="p-4 border-b border-line">
+          <h2 className="text-base font-semibold text-brand-teal">Your Custom Data</h2>
+        </div>
+
+        {!dataLoaded ? (
+          <div className="p-8 text-center text-text-secondary">Loading...</div>
+        ) : customYields.length === 0 ? (
+          <div className="p-8 text-center text-text-secondary">
+            <Database size={40} className="mx-auto mb-4 opacity-30" />
+            <p>No custom data yet. Add your first entry above!</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-line-subtle">
+            {customYields.map((item) => (
+              <div key={item.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
+                <div>
+                  <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
+                    {item.species}
+                    {item.is_shared ? (
+                      <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
+                    ) : null}
+                    {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
+                      <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full">
+                        {item.syncStatus === 'pending-delete' ? 'Deleting…' : 'Pending'}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-sm text-text-secondary">
+                    {item.product} → <span className="text-brand-teal font-medium">{item.yield}%</span>
+                    {item.source && <span className="ml-2 text-text-muted">({item.source})</span>}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  {item.serverId && (
+                    <button
+                      onClick={() => handleToggleShare(item)}
+                      className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal hover:text-text-secondary' : 'text-text-secondary hover:text-brand-teal'}`}
+                      title={item.is_shared ? 'Remove from community' : 'Share with community'}
+                    >
+                      {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="p-2 rounded text-text-secondary hover:text-brand-teal transition"
+                    title="Edit"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="p-2 rounded text-text-secondary hover:text-red-500 transition"
+                    title="Delete"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default DataManagement;

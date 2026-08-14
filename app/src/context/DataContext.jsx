@@ -446,7 +446,7 @@ export function DataProvider({ children }) {
 
   const retrySync = useCallback(() => {
     if (!user || !navigator.onLine) return;
-    triggerSync();
+    return triggerSync();
   }, [user, triggerSync]);
 
   // Gate account data so consumers never see the previous scope's records
