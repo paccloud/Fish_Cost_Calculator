@@ -903,3 +903,22 @@ describe('discardUnsynchronized resets pending publication intents', () => {
     expect(calcs[0].syncStatus).toBe('synced');
   });
 });
+
+// ---- clearAll ----
+
+describe('clearAll', () => {
+  let repo;
+  beforeEach(() => { repo = makeRepo('test:scope', makeStore()); });
+
+  it('removes all calcs and yields from the scope', async () => {
+    await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 5, yield: 40, result: 12.5 });
+    await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 40 });
+    await repo.clearAll();
+    expect(await repo.getCalcs()).toHaveLength(0);
+    expect(await repo.getYields()).toHaveLength(0);
+  });
+
+  it('is a no-op on an already empty scope', async () => {
+    await expect(repo.clearAll()).resolves.not.toThrow();
+  });
+});
