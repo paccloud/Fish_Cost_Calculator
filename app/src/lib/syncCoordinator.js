@@ -1,5 +1,10 @@
 import { getAuthHeaders, hasAuthCredential } from './authHeaders';
 import { apiClient as defaultApiClient } from './apiClient';
+import {
+  trackSyncAttempt,
+  trackSyncSuccess,
+  trackSyncFailure,
+} from './lifecycleTelemetry';
 
 /**
  * Create a scope-aware sync coordinator for a LocalRepository.
@@ -9,10 +14,12 @@ import { apiClient as defaultApiClient } from './apiClient';
  *
  * @param {LocalRepository} repo
  * @param {object} [client] - apiClient override (for tests)
- * @returns {{ sync(user): Promise<SyncStats>, pendingCount(): Promise<number> }}
+ * @param {object} [telemetry] - telemetry override (for tests); uses lifecycleTelemetry by default
+ * @returns {{ sync(user): Promise<SyncStats>, pendingCount(): Promise<number>, consecutiveFailures: number }}
  */
-export function createSyncCoordinator(repo, client = defaultApiClient) {
+export function createSyncCoordinator(repo, client = defaultApiClient, telemetry = { trackSyncAttempt, trackSyncSuccess, trackSyncFailure }) {
   let _inFlight = null;
+  let consecutiveFailures = 0;
 
   /**
    * Run a push+pull sync for the given user session.
@@ -39,12 +46,20 @@ export function createSyncCoordinator(repo, client = defaultApiClient) {
   async function _run(user) {
     const stats = { pushed: 0, pulled: 0, errors: 0, errorDetails: [], conflicts: 0 };
 
-    if (!hasAuthCredential(user)) return stats;
+    telemetry.trackSyncAttempt();
+
+    if (!hasAuthCredential(user)) {
+      consecutiveFailures++;
+      telemetry.trackSyncFailure('auth', consecutiveFailures);
+      return stats;
+    }
 
     const headers = await getAuthHeaders(user, { 'Content-Type': 'application/json' });
     if (!headers.Authorization) {
       stats.errors++;
       stats.errorDetails.push({ type: 'auth', isAuthError: true, message: 'Missing auth headers' });
+      consecutiveFailures++;
+      telemetry.trackSyncFailure('auth', consecutiveFailures);
       return stats;
     }
 
@@ -243,8 +258,18 @@ export function createSyncCoordinator(repo, client = defaultApiClient) {
       // Pull errors are non-critical — local data is intact
     }
 
+    // Emit aggregate outcome telemetry
+    if (stats.errors > 0) {
+      const isAuth = stats.errorDetails.some((e) => e.isAuthError);
+      consecutiveFailures++;
+      telemetry.trackSyncFailure(isAuth ? 'auth' : 'server', consecutiveFailures);
+    } else {
+      consecutiveFailures = 0;
+      telemetry.trackSyncSuccess(stats);
+    }
+
     return stats;
   }
 
-  return { sync, pendingCount };
+  return { sync, pendingCount, get consecutiveFailures() { return consecutiveFailures; } };
 }
