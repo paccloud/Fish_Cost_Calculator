@@ -296,50 +296,63 @@ const DataManagement = () => {
                     </div>
                 ) : (
                     <div className="divide-y divide-line-subtle">
-                        {savedCalcs.map((calc) => (
-                            <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
-                                <div>
-                                    <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
-                                        {calc.name || `${calc.species} — ${calc.product}`}
-                                        {calc.is_private === false ? (
-                                            <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                <Globe size={10} />Public
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                <Lock size={10} />Private
-                                            </span>
+                        {savedCalcs.map((calc) => {
+                            const pendingPublish = calc.syncStatus === 'pending-publish';
+                            const pendingUnpublish = calc.syncStatus === 'pending-unpublish';
+                            const pendingPublication = pendingPublish || pendingUnpublish;
+                            return (
+                                <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
+                                    <div>
+                                        <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
+                                            {calc.name || `${calc.species} — ${calc.product}`}
+                                            {pendingPublish ? (
+                                                <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full" title="Publishing queued — will go live when connectivity returns">
+                                                    Publishing…
+                                                </span>
+                                            ) : pendingUnpublish ? (
+                                                <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full" title="Removal queued — snapshot remains publicly visible until the server confirms">
+                                                    Unpublishing…
+                                                </span>
+                                            ) : calc.is_private === false ? (
+                                                <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <Globe size={10} />Public
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                    <Lock size={10} />Private
+                                                </span>
+                                            )}
+                                        </p>
+                                        <p className="text-sm text-text-secondary">
+                                            {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        {calc.serverId && !pendingPublication && (
+                                            calc.is_private === false ? (
+                                                <button
+                                                    onClick={() => unpublishCalc(calc)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
+                                                    title="Make private"
+                                                >
+                                                    <EyeOff size={13} />
+                                                    Unpublish
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => requestPublish(calc)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
+                                                    title="Publish to community feed"
+                                                >
+                                                    <Globe size={13} />
+                                                    Publish
+                                                </button>
+                                            )
                                         )}
-                                    </p>
-                                    <p className="text-sm text-text-secondary">
-                                        {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
-                                    </p>
+                                    </div>
                                 </div>
-                                <div className="flex gap-1">
-                                    {calc.serverId && (
-                                        calc.is_private === false ? (
-                                            <button
-                                                onClick={() => unpublishCalc(calc)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
-                                                title="Make private"
-                                            >
-                                                <EyeOff size={13} />
-                                                Unpublish
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => requestPublish(calc)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
-                                                title="Publish to community feed"
-                                            >
-                                                <Globe size={13} />
-                                                Publish
-                                            </button>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

@@ -721,3 +721,185 @@ describe('resolveYieldConflict', () => {
     expect(result).toBeNull();
   });
 });
+
+// ---- Publication queue ----
+
+describe('queuePublish', () => {
+  let repo, store;
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('transitions a synced calc to pending-publish', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.queuePublish(rec.id);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(1);
+    expect(pending.calcs[0].syncStatus).toBe('pending-publish');
+    expect(pending.calcs[0].is_private).toBe(true);
+  });
+
+  it('cancels a pending-unpublish by restoring synced (is_private=false)', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.updateCalcPublicationState(rec.id, false); // was public
+    await repo.queueUnpublish(rec.id);
+    // now cancel via queuePublish — should restore to synced=public
+    await repo.queuePublish(rec.id);
+    const calcs = await repo.getCalcs();
+    const updated = calcs.find((c) => c.id === rec.id);
+    expect(updated.syncStatus).toBe('synced');
+    expect(updated.is_private).toBe(false);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+
+  it('returns null for an unknown id', async () => {
+    expect(await repo.queuePublish('no-such-id')).toBeNull();
+  });
+
+  it('returns null for a calc without a serverId', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    expect(await repo.queuePublish(rec.id)).toBeNull();
+  });
+});
+
+describe('queueUnpublish', () => {
+  let repo, store;
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('transitions a public synced calc to pending-unpublish', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.updateCalcPublicationState(rec.id, false); // make public
+    await repo.queueUnpublish(rec.id);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(1);
+    expect(pending.calcs[0].syncStatus).toBe('pending-unpublish');
+    expect(pending.calcs[0].is_private).toBe(false); // still visible as public until server confirms
+  });
+
+  it('cancels a pending-publish by restoring synced (is_private=true)', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.queuePublish(rec.id);
+    await repo.queueUnpublish(rec.id);
+    const calcs = await repo.getCalcs();
+    const updated = calcs.find((c) => c.id === rec.id);
+    expect(updated.syncStatus).toBe('synced');
+    expect(updated.is_private).toBe(true);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+
+  it('does nothing on a private synced calc (already private)', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    // is_private defaults to true — queueUnpublish is a no-op
+    await repo.queueUnpublish(rec.id);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+});
+
+describe('markCalcPublicationSynced', () => {
+  let repo, store;
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('clears pending-publish and sets is_private=false', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.queuePublish(rec.id);
+    await repo.markCalcPublicationSynced(rec.id, false);
+    const calcs = await repo.getCalcs();
+    const updated = calcs.find((c) => c.id === rec.id);
+    expect(updated.syncStatus).toBe('synced');
+    expect(updated.is_private).toBe(false);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+
+  it('clears pending-unpublish and sets is_private=true', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.updateCalcPublicationState(rec.id, false);
+    await repo.queueUnpublish(rec.id);
+    await repo.markCalcPublicationSynced(rec.id, true);
+    const calcs = await repo.getCalcs();
+    const updated = calcs.find((c) => c.id === rec.id);
+    expect(updated.syncStatus).toBe('synced');
+    expect(updated.is_private).toBe(true);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+});
+
+describe('mergeServerCalcs skips pending publication records', () => {
+  let repo, store;
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('does not overwrite is_private for a pending-publish calc', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.queuePublish(rec.id);
+    // Server still says is_private=true — merge should not clear the pending intent
+    await repo.mergeServerCalcs([{ id: 7, species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10, is_private: true }]);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(1);
+    expect(pending.calcs[0].syncStatus).toBe('pending-publish');
+  });
+
+  it('does not overwrite is_private for a pending-unpublish calc', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.updateCalcPublicationState(rec.id, false);
+    await repo.queueUnpublish(rec.id);
+    // Server still says is_private=false — merge should not clear the pending intent
+    await repo.mergeServerCalcs([{ id: 7, species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10, is_private: false }]);
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(1);
+    expect(pending.calcs[0].syncStatus).toBe('pending-unpublish');
+  });
+});
+
+describe('discardUnsynchronized resets pending publication intents', () => {
+  let repo, store;
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('resets pending-publish to synced on discard', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.queuePublish(rec.id);
+    await repo.discardUnsynchronized();
+    const calcs = await repo.getCalcs();
+    expect(calcs).toHaveLength(1);
+    expect(calcs[0].syncStatus).toBe('synced');
+    const pending = await repo.getPendingSync();
+    expect(pending.calcs).toHaveLength(0);
+  });
+
+  it('resets pending-unpublish to synced on discard', async () => {
+    const rec = await repo.addCalc({ species: 'Cod', product: 'Fillet', cost: 4, yield: 40, result: 10 });
+    await repo.markCalcSynced(rec.id, 7);
+    await repo.updateCalcPublicationState(rec.id, false);
+    await repo.queueUnpublish(rec.id);
+    await repo.discardUnsynchronized();
+    const calcs = await repo.getCalcs();
+    expect(calcs).toHaveLength(1);
+    expect(calcs[0].syncStatus).toBe('synced');
+  });
+});

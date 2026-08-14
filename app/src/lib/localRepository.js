@@ -100,6 +100,63 @@ class LocalRepository {
     });
   }
 
+  // Queue a publish intent while offline. Stays is_private=true until server confirms.
+  // Cancels a prior pending-unpublish by restoring to synced (net effect: stay public).
+  async queuePublish(id) {
+    const key = idbKey(this._scope, 'calcs');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return null;
+      const rec = all[idx];
+      if (!rec.serverId) return null;
+      // If there is a pending unpublish queued, canceling publish vs unpublish leaves us at synced.
+      if (rec.syncStatus === 'pending-unpublish') {
+        all[idx] = { ...rec, syncStatus: 'synced', is_private: false, updatedAt: now() };
+      } else if (rec.syncStatus === 'synced') {
+        all[idx] = { ...rec, syncStatus: 'pending-publish', updatedAt: now() };
+      }
+      await this._set(key, all);
+      return all[idx];
+    });
+  }
+
+  // Queue an unpublish intent while offline.
+  // Cancels a prior pending-publish (net effect: the calc never becomes public).
+  async queueUnpublish(id) {
+    const key = idbKey(this._scope, 'calcs');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return null;
+      const rec = all[idx];
+      if (!rec.serverId) return null;
+      if (rec.syncStatus === 'pending-publish') {
+        // The calc was never confirmed public — cancel the publish intent entirely.
+        all[idx] = { ...rec, syncStatus: 'synced', is_private: true, updatedAt: now() };
+      } else if (rec.syncStatus === 'synced' && rec.is_private === false) {
+        // Calc is currently public — queue unpublish. Keep is_private=false so the UI
+        // can warn the user it remains publicly visible until the server confirms removal.
+        all[idx] = { ...rec, syncStatus: 'pending-unpublish', updatedAt: now() };
+      }
+      await this._set(key, all);
+      return all[idx];
+    });
+  }
+
+  // Mark a queued publication change as confirmed by the server.
+  async markCalcPublicationSynced(id, is_private) {
+    const key = idbKey(this._scope, 'calcs');
+    return this._withLock(key, async () => {
+      const all = (await this._get(key)) || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx === -1) return null;
+      all[idx] = { ...all[idx], syncStatus: 'synced', is_private, updatedAt: now() };
+      await this._set(key, all);
+      return all[idx];
+    });
+  }
+
   // Only display metadata (name) may be changed on a snapshot.
   // Rename is intentionally local-only: the name never reaches the sync queue.
   // syncStatus is preserved so a rename does not re-queue a synced record.
@@ -178,11 +235,13 @@ class LocalRepository {
       }
 
       // Update is_private for calcs already tracked (publication state may change without resync).
+      // Skip calcs that have a pending publication intent — don't let a stale pull overwrite it.
       for (const sc of serverCalcs) {
-        const localId = all.find((c) => c.serverId != null && String(c.serverId) === String(sc.id))?.id;
-        if (!localId) continue;
-        const idx = all.findIndex((c) => c.id === localId);
+        const local = all.find((c) => c.serverId != null && String(c.serverId) === String(sc.id));
+        if (!local) continue;
+        const idx = all.findIndex((c) => c.id === local.id);
         if (idx === -1) continue;
+        if (local.syncStatus === 'pending-publish' || local.syncStatus === 'pending-unpublish') continue;
         if (all[idx].is_private !== (sc.is_private ?? true)) {
           all[idx] = { ...all[idx], is_private: sc.is_private ?? true };
         }
@@ -513,7 +572,7 @@ class LocalRepository {
     const allCalcs = calcsRaw || [];
     const allYields = yieldsRaw || [];
     return {
-      calcs: allCalcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete'),
+      calcs: allCalcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete' || c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish'),
       yields: allYields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),
     };
   }
@@ -546,7 +605,15 @@ class LocalRepository {
     await Promise.all([
       this._withLock(calcsKey, async () => {
         const all = (await this._get(calcsKey)) || [];
-        await this._set(calcsKey, all.filter((c) => c.syncStatus === 'synced'));
+        // Reset pending publication intents to synced (discard the queued change).
+        // Remove records that were never synced (local) or are tombstoned (pending-delete).
+        await this._set(calcsKey, all
+          .filter((c) => c.syncStatus !== 'local' && c.syncStatus !== 'pending-delete')
+          .map((c) =>
+            (c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish')
+              ? { ...c, syncStatus: 'synced' }
+              : c
+          ));
       }),
       this._withLock(yieldsKey, async () => {
         const all = (await this._get(yieldsKey)) || [];
