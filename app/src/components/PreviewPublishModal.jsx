@@ -10,10 +10,11 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  * Props:
  *   calc    — the local calc record { species, product, cost, yield, result, createdAt, name }
  *   loading — true while the publish API call is in flight
+ *   error   — message shown when publishing failed permanently
  *   onConfirm — called when the user clicks "Publish"
  *   onCancel  — called when the user cancels
  */
-export default function PreviewPublishModal({ calc, loading, onConfirm, onCancel }) {
+export default function PreviewPublishModal({ calc, loading, error, onConfirm, onCancel }) {
   const dialogRef = useRef(null);
   const triggerRef = useRef(null);
 
@@ -86,6 +87,12 @@ export default function PreviewPublishModal({ calc, loading, onConfirm, onCancel
           <Row label="Result" value={`$${Number(calc.result).toFixed(2)} / lb`} />
           <Row label="Date" value={date} />
         </div>
+
+        {error && (
+          <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
 
         <div className="flex gap-2">
           <button

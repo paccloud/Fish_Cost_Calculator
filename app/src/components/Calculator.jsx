@@ -3,6 +3,7 @@ import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
+import { withConversionStates, hasUsableConversions, parseYieldPercent } from '../lib/fishDataShape';
 
 const Tooltip = ({ text, children }) => {
   const [show, setShow] = useState(false);
@@ -93,7 +94,7 @@ const Calculator = () => {
   const [_history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
 
-  const [fishData, setFishData] = useState(FISH_DATA_V3);
+  const [fishData, setFishData] = useState(() => withConversionStates(FISH_DATA_V3));
   const [profilesData, setProfilesData] = useState(PROFILES_DATA);
   const [dataLoading, _setDataLoading] = useState(false);
 
@@ -101,7 +102,9 @@ const Calculator = () => {
     fetch(apiUrl('/api/fish-data'))
       .then(res => res.json())
       .then(data => {
-        if (data.fishData && Object.keys(data.fishData).length > 0) setFishData(data.fishData);
+        // Keep the bundled data unless the API returns something usable.
+        const apiData = withConversionStates(data.fishData);
+        if (hasUsableConversions(apiData)) setFishData(apiData);
         if (data.profiles && Object.keys(data.profiles).length > 0) setProfilesData(data.profiles);
       })
       .catch(() => {});
@@ -218,7 +221,9 @@ const Calculator = () => {
   }, [useRangeMin, useRangeMax, yieldRange, currentConversion]);
 
   const calculate = () => {
-    const y = (parseFloat(yieldPercent) || 100) / 100;
+    const yieldValue = parseYieldPercent(yieldPercent);
+    if (yieldValue === null) return;
+    const y = yieldValue / 100;
 
     if (mode === 'weight') {
       const target = parseFloat(targetWeight) || 0;
@@ -300,7 +305,14 @@ const Calculator = () => {
     }
   };
 
-  const canCalculate = species && toState;
+  const yieldIsValid = parseYieldPercent(yieldPercent) !== null;
+  const canCalculate = species && toState && yieldIsValid;
+
+  // A result computed from different inputs is misleading; clear it on edit.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResult(null);
+  }, [mode, cost, targetWeight, yieldPercent, processingCost, weightType]);
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
@@ -514,6 +526,11 @@ const Calculator = () => {
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">%</span>
               </div>
+              {yieldPercent !== '' && !yieldIsValid && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                  Enter a yield between 0 and 100%.
+                </p>
+              )}
               {yieldRange && (
                 <p className="mt-1 text-xs text-text-muted">
                   Reported range: {yieldRange[0]}–{yieldRange[1]}%

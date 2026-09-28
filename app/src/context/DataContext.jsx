@@ -17,7 +17,7 @@ import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, getAuthHeaders } = useAuth();
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -37,6 +37,7 @@ export function DataProvider({ children }) {
   // null | calc record — non-null while publish preview modal is shown
   const [publishPreviewCalc, setPublishPreviewCalc] = useState(null);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState(null);
   // null | { calcs: number, yields: number } — non-null while recovery modal is shown
   const [recoveryCounts, setRecoveryCounts] = useState(null);
   const [recoveryAssigning, setRecoveryAssigning] = useState(false);
@@ -384,6 +385,7 @@ export function DataProvider({ children }) {
 
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
+    setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
 
@@ -392,7 +394,7 @@ export function DataProvider({ children }) {
     if (!publishPreviewCalc?.serverId) return;
     setPublishLoading(true);
     try {
-      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      const authHeaders = await getAuthHeaders();
       let succeeded = false;
       let transientFailure = false;
       try {
@@ -418,13 +420,19 @@ export function DataProvider({ children }) {
         );
         debouncedSync();
       }
+      if (!succeeded && !transientFailure) {
+        // Permanent failure (e.g. 401/404): keep the modal open and say so.
+        setPublishError('Could not publish this calculation. Sign in again and retry.');
+        return;
+      }
       setPublishPreviewCalc(null);
     } finally {
       setPublishLoading(false);
     }
-  }, [publishPreviewCalc, user, repo, debouncedSync]);
+  }, [publishPreviewCalc, getAuthHeaders, repo, debouncedSync]);
 
   const cancelPublish = useCallback(() => {
+    setPublishError(null);
     setPublishPreviewCalc(null);
   }, []);
 
@@ -434,7 +442,7 @@ export function DataProvider({ children }) {
     let succeeded = false;
     let transientFailure = false;
     try {
-      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      const authHeaders = await getAuthHeaders();
       const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
       if (res.ok) {
         await repo.updateCalcPublicationState(calc.id, true);
@@ -456,7 +464,7 @@ export function DataProvider({ children }) {
       );
       debouncedSync();
     }
-  }, [user, repo, debouncedSync]);
+  }, [getAuthHeaders, repo, debouncedSync]);
 
   // ---- Saved Calculations ----
 
@@ -582,6 +590,7 @@ export function DataProvider({ children }) {
         <PreviewPublishModal
           calc={publishPreviewCalc}
           loading={publishLoading}
+          error={publishError}
           onConfirm={confirmPublish}
           onCancel={cancelPublish}
         />

@@ -21,7 +21,7 @@ const ContributorProfile = () => {
         const loadProfile = async () => {
             try {
                 const headers = await getAuthHeaders();
-                const res = await fetch(apiUrl('/api/contributor/me'), { headers });
+                const res = await fetch(apiUrl('/api/contributor'), { headers });
 
                 if (res.status === 404) return;
 
@@ -51,7 +51,8 @@ const ContributorProfile = () => {
                         display_name: data.display_name || '',
                         organization: data.organization || '',
                         bio: data.bio || '',
-                        show_on_page: data.show_on_page === 1
+                        // Postgres returns a boolean, SQLite returns 0/1.
+                        show_on_page: data.show_on_page === true || data.show_on_page === 1
                     });
                 }
             } catch (err) {

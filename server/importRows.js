@@ -65,7 +65,19 @@ function parseYieldPercent(value) {
     return Number.parseFloat(text);
 }
 
-function rowsFromWorksheet(worksheet) {
+// Mirrors api/_lib/importRows.js: XLSX keeps numeric cells as numbers so a
+// "42%" cell (stored as 0.42) can be scaled; CSV cells stay strings.
+function cellValue(value, keepNumbers) {
+    if (keepNumbers) {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (value && typeof value === 'object' && typeof value.result === 'number' && Number.isFinite(value.result)) {
+            return value.result;
+        }
+    }
+    return normalizeCell(value);
+}
+
+function rowsFromWorksheet(worksheet, { keepNumbers = false } = {}) {
     const rows = [];
     const headerRow = worksheet.getRow(1);
     const headers = [];
@@ -81,9 +93,9 @@ function rowsFromWorksheet(worksheet) {
         const item = {};
         headers.forEach((header, colNumber) => {
             if (!header) return;
-            item[header] = normalizeCell(row.getCell(colNumber).value);
+            item[header] = cellValue(row.getCell(colNumber).value, keepNumbers);
         });
-        if (Object.values(item).some(Boolean)) rows.push(item);
+        if (Object.values(item).some((v) => v !== '' && v !== null && v !== undefined)) rows.push(item);
     });
 
     return rows;
@@ -102,7 +114,7 @@ async function parseImportRows(buffer, extension) {
         await workbook.xlsx.load(buffer);
         const worksheet = workbook.worksheets[0];
         if (!worksheet) return [];
-        return rowsFromWorksheet(worksheet);
+        return rowsFromWorksheet(worksheet, { keepNumbers: true });
     }
 
     throw new Error('Unsupported file type. Please upload a .csv or .xlsx file.');
@@ -129,7 +141,8 @@ function normalizeYieldRows(data, sourceName) {
             return;
         }
 
-        if (finalYield > 0 && finalYield <= 1) {
+        // Only numeric (XLSX) fractions are percentages; CSV "0.5" means 0.5%.
+        if (typeof yieldRaw === 'number' && finalYield > 0 && finalYield <= 1) {
             finalYield *= 100;
         }
 
