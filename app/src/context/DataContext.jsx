@@ -394,7 +394,16 @@ export function DataProvider({ children }) {
     if (!publishPreviewCalc?.serverId) return;
     setPublishLoading(true);
     try {
-      const authHeaders = await getAuthHeaders();
+      let authHeaders;
+      try {
+        authHeaders = await getAuthHeaders();
+      } catch {
+        // Token refresh failed: the session is ending, so close this
+        // account-scoped preview rather than leave it open.
+        setPublishError(null);
+        setPublishPreviewCalc(null);
+        return;
+      }
       let succeeded = false;
       let transientFailure = false;
       try {
