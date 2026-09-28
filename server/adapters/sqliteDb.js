@@ -259,16 +259,19 @@ function makeSqliteAdapter(db) {
       };
     },
 
+    // Public listing. Deliberately does not join users and does not use c.*:
+    // no username, email, firebase_uid or user_id is ever selected. Shaping is
+    // done by shared/handlers/contributorsList.js.
     listContributors() {
       return new Promise((resolve, reject) => {
         db.all(
-          `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+          `SELECT c.id, c.display_name, c.organization, c.bio,
+                  COUNT(ud.id) AS contribution_count
            FROM contributors c
-           JOIN users u ON c.user_id = u.id
-           LEFT JOIN user_data ud ON c.user_id = ud.user_id
+           LEFT JOIN user_data ud ON ud.user_id = c.user_id
            WHERE c.show_on_page = 1
            GROUP BY c.id
-           ORDER BY contribution_count DESC`,
+           ORDER BY contribution_count DESC, c.id ASC`,
           [],
           (err, rows) => {
             if (err) return reject(err);

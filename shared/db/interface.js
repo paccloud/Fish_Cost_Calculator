@@ -70,7 +70,10 @@
  *   {fishData, profiles, source}.
  *
  * @property {function(): Promise<Array>} listContributors
- *   Return visible contributor profiles plus contribution_count.
+ *   Return visible (show_on_page true) contributor profiles as
+ *   {id, display_name, organization, bio, contribution_count}. Must NOT select
+ *   account identifiers (username, email, user_id, firebase_uid) or use c.*;
+ *   the result is public and is allowlist-shaped by shared/handlers/contributorsList.js.
  *
  * @property {function(string|number): Promise<Object|null>} getContributorProfile
  *   Return the authenticated user's contributor profile, or null if none exists.

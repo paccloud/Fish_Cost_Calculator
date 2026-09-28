@@ -10,6 +10,7 @@
 export { handleRegister } from './register.js';
 export { handleLogin } from './login.js';
 export { handleListSavedCalcs, handleSaveCalc, handleDeleteCalc, handlePublishCalc, handleUnpublishCalc } from './savedCalcs.js';
+export { shapeContributor, shapeContributors } from './contributorsList.js';
 export {
   handleGetContributorProfile,
   handleGetFishData,
