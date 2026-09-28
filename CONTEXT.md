@@ -20,6 +20,9 @@ Terms as this project uses them. Use these words in code, issues and docs.
   1. keeping a person's custom yields and saved calculations across devices;
   2. sharing custom yields to the community dataset.
   The calculator never requires an account.
+- **Guest** — someone using the app without signing in. The first time a guest
+  saves something, they get an anonymous Firebase account; signing in later
+  keeps the same data. Clearing browser data loses a guest's data.
 - **Shared yield** — a custom yield its owner has chosen to make public.
 - **Community dataset** — all shared yields, readable by anyone, attributed by
   display name or "Anonymous". Never attributed by email.
