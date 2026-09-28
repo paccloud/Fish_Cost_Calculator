@@ -99,6 +99,15 @@
  *
  * @property {function(string|number, string|number, boolean): Promise<void>} setUserDataSharing
  *   Set the is_shared flag on the user-data entry (id, userId, isShared).
+ *
+ * @property {function(): Promise<Array>} listSharedYieldRows
+ *   Return every user-data row with is_shared = true for the public community
+ *   feed, ordered by species then product. Each row has
+ *   {id, species, product, yield, source, contributor_display_name,
+ *   contributor_organization, contributor_show_on_page} — the contributor_*
+ *   fields come from the owner's contributor profile (null when none exists).
+ *   The query must NOT select users.username, email, firebase_uid or user_id;
+ *   attribution consent is applied by shared/handlers/communityData.js.
  */
 
 /**

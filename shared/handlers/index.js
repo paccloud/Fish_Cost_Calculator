@@ -24,3 +24,9 @@ export {
   handleDeleteUserData,
   handleSetUserDataSharing,
 } from './userData.js';
+export {
+  handleListCommunityData,
+  shapeCommunityRow,
+  resolveCommunityAttribution,
+  communityRowsToCsv,
+} from './communityData.js';

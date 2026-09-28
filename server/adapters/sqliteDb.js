@@ -278,6 +278,29 @@ function makeSqliteAdapter(db) {
       });
     },
 
+    // Public community feed. Deliberately does not join users: no username,
+    // email, firebase_uid or user_id is ever selected. Consent is applied by
+    // shared/handlers/communityData.js (show_on_page must be 1).
+    listSharedYieldRows() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
+                  c.display_name AS contributor_display_name,
+                  c.organization AS contributor_organization,
+                  c.show_on_page AS contributor_show_on_page
+           FROM user_data ud
+           LEFT JOIN contributors c ON c.user_id = ud.user_id
+           WHERE ud.is_shared = 1
+           ORDER BY ud.species ASC, ud.product ASC, ud.id ASC`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
     getContributorProfile(userId) {
       return new Promise((resolve, reject) => {
         db.get(

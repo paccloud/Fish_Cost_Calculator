@@ -271,6 +271,23 @@ export function makeNeonAdapter() {
       return result.rows;
     },
 
+    // Public community feed. Deliberately does not join users: no username,
+    // email, firebase_uid or user_id is ever selected. Consent is applied by
+    // shared/handlers/communityData.js (show_on_page must be true).
+    async listSharedYieldRows() {
+      const result = await query(
+        `SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
+                c.display_name AS contributor_display_name,
+                c.organization AS contributor_organization,
+                c.show_on_page AS contributor_show_on_page
+         FROM user_data ud
+         LEFT JOIN contributors c ON c.user_id = ud.user_id
+         WHERE ud.is_shared = true
+         ORDER BY ud.species ASC, ud.product ASC, ud.id ASC`
+      );
+      return result.rows;
+    },
+
     async getContributorProfile(userId) {
       const result = await query(
         'SELECT * FROM contributors WHERE user_id = $1',
