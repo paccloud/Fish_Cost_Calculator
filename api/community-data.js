@@ -10,7 +10,7 @@ function sanitizeCsvValue(value) {
 
 const DATA_QUERY = `
   SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
-         NULLIF(TRIM(c.display_name), '') AS contributor,
+         COALESCE(NULLIF(TRIM(c.display_name), ''), 'Anonymous') AS contributor,
          c.organization
   FROM user_data ud
   LEFT JOIN contributors c ON ud.user_id = c.user_id

@@ -612,7 +612,7 @@ app.post('/api/user-data/:id/unshare', authenticate, async (req, res) => {
 app.get('/api/community-data', (req, res) => {
     const sql = `
         SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
-               NULLIF(TRIM(c.display_name), '') AS contributor,
+               COALESCE(NULLIF(TRIM(c.display_name), ''), 'Anonymous') AS contributor,
                c.organization
         FROM user_data ud
         LEFT JOIN contributors c ON ud.user_id = c.user_id
@@ -629,7 +629,7 @@ app.get('/api/community-data', (req, res) => {
 app.get('/api/export-community-data', (req, res) => {
     const sql = `
         SELECT ud.species, ud.product, ud.yield, ud.source,
-               NULLIF(TRIM(c.display_name), '') AS contributor,
+               COALESCE(NULLIF(TRIM(c.display_name), ''), 'Anonymous') AS contributor,
                c.organization
         FROM user_data ud
         LEFT JOIN contributors c ON ud.user_id = c.user_id

@@ -65,6 +65,15 @@ describe('public endpoints never fall back to the account username/email', () =>
     expect(sql).not.toMatch(/username/i);
   });
 
+  it('community CSV labels rows without a display name as Anonymous', async () => {
+    query.mockResolvedValue({ rows: [] });
+
+    await communityData({ method: 'GET', query: { format: 'csv' } }, makeRes());
+
+    const [sql] = query.mock.calls[0];
+    expect(sql).toMatch(/'Anonymous'\) AS contributor/);
+  });
+
   it('contributors list selects no username or user id', async () => {
     query.mockResolvedValue({ rows: [] });
 

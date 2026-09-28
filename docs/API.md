@@ -445,7 +445,7 @@ Retrieve the 100 most recent calculations. No authentication required.
 
 ### Get Contributors
 
-Retrieve opt-in contributor profiles. No authentication required.
+Retrieve opt-in contributor profiles. No authentication required. Account usernames, emails and user ids are never returned; `display_name` may be `null`, and clients show it as "Anonymous".
 
 **Endpoint:** `GET /api/contributors`
 
@@ -455,12 +455,9 @@ Retrieve opt-in contributor profiles. No authentication required.
 [
   {
     "id": 1,
-    "user_id": 42,
-    "username": "fisherman_joe",
     "display_name": "Joe Fisher",
     "organization": "Pacific Catch Co.",
     "bio": "20 years of commercial fishing.",
-    "show_on_page": true,
     "contribution_count": 15
   }
 ]
