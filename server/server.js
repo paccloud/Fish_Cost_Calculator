@@ -289,7 +289,7 @@ async function handleSaveCalcRequest(req, res) {
     const dbAdapter = makeSqliteAdapter(db);
     const { client_id: clientId, ...rest } = req.body ?? {};
     const { status, body } = await handleSaveCalc(
-        { userId: req.user.id, clientId, ...rest },
+        { ...rest, clientId, userId: req.user.id },
         dbAdapter
     );
     return res.status(status).json(body);
@@ -571,7 +571,7 @@ app.post('/api/contributor', authenticate, async (req, res) => {
     const { handleSaveContributorProfile } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleSaveContributorProfile(
-        { userId: req.user.id, ...req.body },
+        { ...req.body, userId: req.user.id },
         dbAdapter
     );
     return res.status(status).json(body);
@@ -612,10 +612,9 @@ app.post('/api/user-data/:id/unshare', authenticate, async (req, res) => {
 app.get('/api/community-data', (req, res) => {
     const sql = `
         SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) AS contributor,
+               NULLIF(TRIM(c.display_name), '') AS contributor,
                c.organization
         FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
         LEFT JOIN contributors c ON ud.user_id = c.user_id
         WHERE ud.is_shared = 1
         ORDER BY ud.species ASC, ud.product ASC
@@ -630,10 +629,9 @@ app.get('/api/community-data', (req, res) => {
 app.get('/api/export-community-data', (req, res) => {
     const sql = `
         SELECT ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) AS contributor,
+               NULLIF(TRIM(c.display_name), '') AS contributor,
                c.organization
         FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
         LEFT JOIN contributors c ON ud.user_id = c.user_id
         WHERE ud.is_shared = 1
         ORDER BY ud.species ASC

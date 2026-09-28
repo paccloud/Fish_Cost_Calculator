@@ -44,7 +44,7 @@ async function handler(req, res) {
     // expected by the transport-agnostic handler.
     const { client_id: clientId, ...rest } = req.body ?? {};
     const { status, body } = await handleSaveCalc(
-      { userId: req.user.id, clientId, ...rest },
+      { ...rest, clientId, userId: req.user.id },
       db
     );
     return res.status(status).json(body);

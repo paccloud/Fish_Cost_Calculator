@@ -260,12 +260,12 @@ export function makeNeonAdapter() {
 
     async listContributors() {
       const result = await query(
-        `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+        `SELECT c.id, c.display_name, c.organization, c.bio,
+                COUNT(ud.id) as contribution_count
          FROM contributors c
-         JOIN users u ON c.user_id = u.id
          LEFT JOIN user_data ud ON c.user_id = ud.user_id
          WHERE c.show_on_page = true
-         GROUP BY c.id, u.username
+         GROUP BY c.id
          ORDER BY contribution_count DESC`
       );
       return result.rows;

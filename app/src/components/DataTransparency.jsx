@@ -185,7 +185,7 @@ const DataTransparency = () => {
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                         <h3 className="font-semibold text-text-primary text-sm">
-                                            {contributor.display_name}
+                                            {contributor.display_name || 'Anonymous'}
                                         </h3>
                                         {contributor.organization && (
                                             <p className="text-sm text-brand-terracotta mt-1">

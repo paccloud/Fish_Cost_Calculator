@@ -262,9 +262,9 @@ function makeSqliteAdapter(db) {
     listContributors() {
       return new Promise((resolve, reject) => {
         db.all(
-          `SELECT c.*, u.username, COUNT(ud.id) as contribution_count
+          `SELECT c.id, c.display_name, c.organization, c.bio,
+                  COUNT(ud.id) as contribution_count
            FROM contributors c
-           JOIN users u ON c.user_id = u.id
            LEFT JOIN user_data ud ON c.user_id = ud.user_id
            WHERE c.show_on_page = 1
            GROUP BY c.id
