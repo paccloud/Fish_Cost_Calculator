@@ -77,7 +77,7 @@ Express + SQLite (`server/`) and the Vercel functions (`api/`) duplicate about 1
 Recommendation:
 1. Move upload, export and community-data into `shared/handlers`.
 2. Serve every route from one **Hono** app, which runs unchanged on Node, Vercel and Cloudflare Workers.
-3. Use Postgres everywhere, with **PGlite** or Docker for local development and **dbmate** for plain-SQL migrations.
+3. Use Postgres everywhere, with **PGlite** or Docker for local development and **dbmate** for plain-SQL migrations. `db/migrations/` starts at `002_community_sharing.sql` and assumes tables that only `scripts/neon-schema.sql` creates, so first add a complete `001` baseline and a CI test that builds an empty database from the migrations alone.
 4. Parse spreadsheets in the browser.
 5. Delete the SQLite server and adapter.
 
@@ -100,7 +100,7 @@ Email codes beat magic links on phones, because links open outside the installed
 |---|---|---|
 | 0 | Close legacy registration, restrict the Firebase API key, and archive `docs/AUTH_MIGRATION_ROADMAP.md` as superseded. Before retiring legacy login and JWT verification, inventory the remaining password-only accounts (they can own calculations, yields and profiles) and move them to Firebase with a verified-email reset-and-link flow; `AuthContext.login()` still routes non-email usernames to `/api/login`. | 2–4 days |
 | 1 (Firebase) | Persistent sessions (the refresh token is currently memory-only), password reset, social buttons on both tabs, Apple, smoother email verification, and Spanish and Vietnamese auth screens. | 6–10 days |
-| 2 (provider-neutral) | Verify tokens with `jose` (`createRemoteJWKSet` + `jwtVerify`) configured by issuer, audience and JWKS URL. Add an `auth_identities (issuer, subject)` table, explicit linking rules (link by email only when verified by a trusted issuer), and Firebase Auth Emulator dev mode. | 4–6 days |
+| 2 (provider-neutral) | Verify tokens with `jose` (`createRemoteJWKSet` + `jwtVerify`) configured by issuer, audience and JWKS URL. Add an `auth_identities (issuer, subject)` table, explicit linking rules (link by email only when verified by a trusted issuer), and Firebase Auth Emulator dev mode. The emulator needs configurable Identity Toolkit and Secure Token hosts in `firebaseRestAuth.js`, and a separate verifier for its unsigned tokens that runs only when `FIREBASE_AUTH_EMULATOR_HOST` is set outside production; the production path keeps RS256 only. | 4–6 days |
 | 3 (suite identity) | When passkeys, email codes, team accounts, or sign-in for third-party (non-Firebase) tools are needed, adopt **Logto** (MPL-2.0; cloud free tier, self-host later), or **Better Auth** (MIT) if the team prefers to own the code. Add organizations with owner / manager / crew roles. | 6–10 days |
 
 Firebase is fine today but can't be the end state. It has no native passkeys, no email-code sign-in (only magic links, capped on the free plan), and it isn't a general OIDC provider for third-party tools. Sibling apps registered in the same Firebase project can share its user store, so a second suite app alone doesn't require a migration.
@@ -186,7 +186,7 @@ Suggested suite layout, starting from `shared/` as a workspace root:
 |---|---|
 | Code | MIT. Fix `server/package.json` ("ISC"). |
 | MAB-37-derived reference yields | Individual values are facts, very likely reusable with attribution. Remove the copyrighted PDF and full OCR text from `research/` and link the NOAA IR / Alaska Sea Grant copy instead. Ask Alaska Sea Grant for written permission and a review of the flagged values. |
-| Community yields | CC BY 4.0 outbound, with contributor terms that allow relicensing through governance (the lesson from OpenStreetMap's 2012 relicense). Record `terms_version` and `consented_at` per row. |
+| Community yields | CC BY 4.0 outbound, with contributor terms that allow relicensing through governance (the lesson from OpenStreetMap's 2012 relicense). Record `terms_version` and `consented_at` per row. Rows shared before this existed carry no license grant: exclude them from licensed releases until their contributors re-consent. |
 | FishBase data | Don't import it. CC BY-NC conflicts with a tool for commercial fishers. |
 
 **Community contribution model:**
