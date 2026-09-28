@@ -1,22 +1,83 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useId } from 'react';
+import { Link } from 'react-router-dom';
 import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
-import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, ChevronRight } from 'lucide-react';
+import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, ChevronRight, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
 
-const Tooltip = ({ text, children }) => {
+/**
+ * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
+ * Hover-only tooltips are invisible on phones, which is where most people use this.
+ *
+ * The bubble is `position: fixed` and placed from the trigger's rect. Fixed elements never add
+ * scrollable overflow, so a bubble near the screen edge can't widen the page on mobile.
+ */
+const Tooltip = ({ text, label, iconOnly = false, children }) => {
   const [show, setShow] = useState(false);
+  const bubbleId = useId();
+  const wrapperRef = useRef(null);
+  const bubbleRef = useRef(null);
+  const lastPointer = useRef('mouse');
+
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current;
+    const trigger = wrapperRef.current;
+    if (!show || !bubble || !trigger) return;
+    const gap = 8;
+    const vv = window.visualViewport;
+    const minX = (vv?.offsetLeft ?? 0) + gap;
+    const maxX = (vv?.offsetLeft ?? 0) + (vv?.width ?? document.documentElement.clientWidth) - gap;
+    const t = trigger.getBoundingClientRect();
+    const { width, height } = bubble.getBoundingClientRect();
+    const left = Math.min(Math.max(t.left, minX), Math.max(minX, maxX - width));
+    // Prefer above the trigger; drop below when it would slide under the 56px sticky navbar
+    const fitsAbove = t.top - height - gap >= (vv?.offsetTop ?? 0) + 64;
+    bubble.style.left = `${left}px`;
+    bubble.style.top = `${fitsAbove ? t.top - height - gap : t.bottom + gap}px`;
+  }, [show]);
+
+  // Tapping elsewhere closes it (iOS never blurs a tapped button); scrolling would detach it
+  useEffect(() => {
+    if (!show) return undefined;
+    const close = (e) => {
+      if (e.type === 'scroll' || !wrapperRef.current?.contains(e.target)) setShow(false);
+    };
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [show]);
+
   return (
-    <span
-      className="relative inline-block cursor-help"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {children}
+    <span ref={wrapperRef} className="inline-block">
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={show ? bubbleId : undefined}
+        aria-expanded={show}
+        className={`cursor-help rounded text-left ${iconOnly ? '-m-2.5 p-2.5' : ''}`}
+        onPointerDown={(e) => { lastPointer.current = e.pointerType; }}
+        onPointerEnter={(e) => { if (e.pointerType === 'mouse') setShow(true); }}
+        onPointerLeave={(e) => { if (e.pointerType === 'mouse') setShow(false); }}
+        onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setShow(true); }}
+        onBlur={() => setShow(false)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setShow(false); }}
+        onClick={() => { if (lastPointer.current !== 'mouse') setShow((s) => !s); }}
+      >
+        {children}
+      </button>
       {show && (
-        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs bg-surface-raised text-text-primary rounded-md shadow-lg whitespace-nowrap border border-line">
+        <span
+          id={bubbleId}
+          ref={bubbleRef}
+          role="tooltip"
+          className="fixed left-0 top-0 z-50 w-max max-w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm font-normal leading-snug text-text-primary shadow-lg"
+        >
           {text}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-raised"></span>
         </span>
       )}
     </span>
@@ -46,8 +107,8 @@ const TextWithTooltips = ({ text }) => {
     <>
       {parts.map((part, i) =>
         part.isAcronym ? (
-          <Tooltip key={i} text={part.tooltip}>
-            <span className="border-b border-dashed border-brand-terracotta/50 text-brand-teal dark:text-brand-yellow">{part.text}</span>
+          <Tooltip key={i} text={part.tooltip} label={`${part.text}: ${part.tooltip}`}>
+            <span className="border-b border-dashed border-brand-terracotta/60 font-medium text-accent">{part.text}</span>
           </Tooltip>
         ) : (
           <span key={i}>{part.text}</span>
@@ -59,15 +120,29 @@ const TextWithTooltips = ({ text }) => {
 
 const RangeButton = ({ active, onClick, label }) => (
   <button
+    type="button"
     onClick={onClick}
-    className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+    aria-pressed={active}
+    className={`min-h-[2.75rem] rounded-lg px-4 text-sm font-semibold transition-colors ${
       active
-        ? 'bg-brand-teal text-white'
-        : 'bg-surface border border-line text-text-secondary hover:text-text-primary hover:border-brand-teal/50'
+        ? 'bg-primary text-white'
+        : 'border border-line-strong bg-surface-raised text-text-primary hover:border-accent hover:text-accent'
     }`}
   >
     {label}
   </button>
+);
+
+const StepHeading = ({ number, children }) => (
+  <h2 className="flex items-center gap-2.5 text-lg font-semibold text-text-primary">
+    <span
+      aria-hidden="true"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+    >
+      {number}
+    </span>
+    {children}
+  </h2>
 );
 
 const Calculator = () => {
@@ -85,6 +160,7 @@ const Calculator = () => {
   const [shipping, _setShipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
   const [result, setResult] = useState(null);
+  const resultRef = useRef(null);
   const [saveStatus, setSaveStatus] = useState('');
   const [useRangeMin, setUseRangeMin] = useState(false);
   const [useRangeMax, setUseRangeMax] = useState(false);
@@ -241,6 +317,13 @@ const Calculator = () => {
     setSaveStatus('');
   };
 
+  // Bring a fresh result into view: on a phone it lands below the fold, under the keyboard
+  useEffect(() => {
+    if (result === null || !resultRef.current) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    resultRef.current.scrollIntoView?.({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+  }, [result]);
+
   const handleSave = async () => {
     if (!user || !result) return;
     try {
@@ -302,310 +385,366 @@ const Calculator = () => {
 
   const canCalculate = species && toState;
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (canCalculate) calculate();
+  };
+
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div className="mx-auto max-w-2xl space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-xl font-semibold text-text-primary">Fish Cost Calculator</h1>
-        <p className="text-sm text-text-secondary mt-0.5">
-          Estimate processed cost per pound from raw input cost and yield data.
+      <header>
+        <h1 className="text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">Fish Cost Calculator</h1>
+        <p className="mt-1 text-base text-text-secondary">
+          See what your fish really costs per pound after cutting and trimming.
         </p>
-      </div>
+      </header>
 
       {/* Main calculator card */}
       <div className="card p-5 sm:p-6">
         {/* Mode toggle */}
-        <div className="flex bg-surface rounded-md p-0.5 border border-line mb-6">
-          <button
-            onClick={() => { setMode('cost'); setResult(null); }}
-            className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-              mode === 'cost'
-                ? 'bg-brand-teal text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Cost per Pound
-          </button>
-          <button
-            onClick={() => { setMode('weight'); setResult(null); }}
-            className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-              mode === 'weight'
-                ? 'bg-brand-teal text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Required Input Weight
-          </button>
+        <div
+          role="group"
+          aria-label="What do you want to work out?"
+          className="mb-6 flex gap-1 rounded-xl border border-line-strong bg-surface p-1"
+        >
+          {[
+            { id: 'cost', label: 'Cost per pound' },
+            { id: 'weight', label: 'Pounds to buy' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={mode === id}
+              onClick={() => { setMode(id); setResult(null); }}
+              className={`min-h-[2.75rem] flex-1 rounded-lg px-2 text-sm font-semibold transition-colors sm:px-3 sm:text-base ${
+                mode === id
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-5">
-          {/* Species */}
-          <div>
-            <label className="form-label">Species</label>
-            {dataLoading ? (
-              <div className="form-select text-text-muted">Loading species data…</div>
-            ) : (
-              <select value={species} onChange={handleSpeciesChange} className="form-select">
-                <option value="">Select a species</option>
-                {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            )}
-            {scientificName && (
-              <p className="mt-1 text-xs text-text-muted italic">{scientificName}</p>
-            )}
-          </div>
-
-          {/* From / To */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label flex items-center gap-1.5">
-                From State
-                <Tooltip text="Starting form of the fish (e.g., Round = whole fish as caught)">
-                  <HelpCircle size={13} className="text-text-muted" />
-                </Tooltip>
-              </label>
-              <select
-                value={fromState}
-                onChange={handleFromChange}
-                className="form-select"
-                disabled={!species}
-              >
-                <option value="">{species ? 'Select starting form' : '— select species first —'}</option>
-                {fromStates.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
-            </div>
+        <form onSubmit={handleSubmit} noValidate className="space-y-7">
+          {/* Step 1: the fish */}
+          <section className="space-y-4" aria-labelledby="step-fish">
+            <div id="step-fish"><StepHeading number="1">Your fish</StepHeading></div>
 
             <div>
-              <label className="form-label flex items-center gap-1.5">
-                To Product
-                <Tooltip text="Final form after processing">
-                  <HelpCircle size={13} className="text-text-muted" />
-                </Tooltip>
-              </label>
-              <select
-                value={toState}
-                onChange={handleToChange}
-                className="form-select"
-                disabled={!fromState}
-              >
-                <option value="">{fromState ? 'Select product form' : '— select from state first —'}</option>
-                {toStates.map(t => (
-                  <option key={t.to} value={t.to}>
-                    {t.to} ({t.yield}%{t.range ? `, ${t.range[0]}–${t.range[1]}%` : ''})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Conversion info */}
-          {currentConversion && (
-            <div className="bg-brand-teal/5 dark:bg-brand-teal/15 border border-brand-teal/20 rounded-md p-4 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-teal dark:text-text-secondary">
-                <Info size={13} />
-                Conversion Details
-              </div>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                <span>
-                  <span className="text-text-secondary">Conversion: </span>
-                  <TextWithTooltips text={currentConversion.from} />
-                  <ChevronRight size={12} className="inline mx-0.5 text-text-muted" />
-                  <TextWithTooltips text={currentConversion.to} />
-                </span>
-                <span>
-                  <span className="text-text-secondary">Avg yield: </span>
-                  <span className="font-semibold text-text-primary">{currentConversion.yield}%</span>
-                </span>
-                {currentConversion.range && (
-                  <span>
-                    <span className="text-text-secondary">Range: </span>
-                    <span className="text-text-primary">{currentConversion.range[0]}–{currentConversion.range[1]}%</span>
-                  </span>
-                )}
-              </div>
-
-              {currentConversion.range && (
-                <div className="flex gap-2 flex-wrap">
-                  <RangeButton
-                    active={useRangeMin}
-                    onClick={() => { setUseRangeMin(true); setUseRangeMax(false); }}
-                    label={`Min (${currentConversion.range[0]}%)`}
-                  />
-                  <RangeButton
-                    active={!useRangeMin && !useRangeMax}
-                    onClick={() => { setUseRangeMin(false); setUseRangeMax(false); }}
-                    label={`Avg (${currentConversion.yield}%)`}
-                  />
-                  <RangeButton
-                    active={useRangeMax}
-                    onClick={() => { setUseRangeMax(true); setUseRangeMin(false); }}
-                    label={`Max (${currentConversion.range[1]}%)`}
-                  />
-                </div>
+              <label htmlFor="calc-species" className="form-label">Species</label>
+              {dataLoading ? (
+                <div className="form-select text-text-muted">Loading species data…</div>
+              ) : (
+                <select id="calc-species" value={species} onChange={handleSpeciesChange} className="form-select">
+                  <option value="">Choose a species</option>
+                  {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              )}
+              {scientificName && (
+                <p className="mt-1.5 text-sm italic text-text-secondary">{scientificName}</p>
               )}
             </div>
-          )}
 
-          {/* Species profile */}
-          {profile && (
-            <div className="text-sm space-y-1 text-text-secondary border-l-2 border-brand-terracotta/40 pl-3">
-              {profile.description && <p>{profile.description}</p>}
-              {profile.edible_portions && (
-                <p><span className="text-text-muted">Edible portions: </span>{profile.edible_portions}</p>
-              )}
-              {profile.url && (
-                <a href={profile.url} target="_blank" rel="noreferrer" className="text-brand-terracotta hover:underline text-xs">
-                  Read more →
-                </a>
-              )}
-            </div>
-          )}
-
-          <div className="section-divider" />
-
-          {/* Cost/weight + yield row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {mode === 'cost' ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="form-label">
-                  Cost per lb ({fromState || 'whole fish'})
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">$</span>
-                  <input
-                    type="number"
-                    value={cost}
-                    onChange={(e) => setCost(e.target.value)}
-                    className="form-input pl-7"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                  />
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor="calc-from" className="text-sm font-semibold text-text-primary">What you have</label>
+                  <Tooltip
+                    iconOnly
+                    label="Help: what you have"
+                    text="The form of the fish you're starting with. Round means the whole fish, as caught."
+                  >
+                    <HelpCircle size={18} className="text-text-secondary" aria-hidden="true" />
+                  </Tooltip>
                 </div>
-              </div>
-            ) : (
-              <div>
-                <label className="form-label">
-                  Target output (lbs of {toState || 'product'})
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={targetWeight}
-                    onChange={(e) => setTargetWeight(e.target.value)}
-                    className="form-input pr-10"
-                    placeholder="e.g. 100"
-                    inputMode="decimal"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">lbs</span>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="form-label">Yield percentage</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={yieldPercent}
-                  onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
-                  className="form-input pr-8"
-                  placeholder="0"
-                  inputMode="decimal"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">%</span>
-              </div>
-              {yieldRange && (
-                <p className="mt-1 text-xs text-text-muted">
-                  Reported range: {yieldRange[0]}–{yieldRange[1]}%
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Additional costs (cost mode only) */}
-          {mode === 'cost' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Processing cost (optional)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">$</span>
-                  <input
-                    type="number"
-                    value={processingCost}
-                    onChange={(e) => setProcessingCost(e.target.value)}
-                    className="form-input pl-7"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">Applied to weight</label>
                 <select
-                  value={weightType}
-                  onChange={(e) => setWeightType(e.target.value)}
+                  id="calc-from"
+                  value={fromState}
+                  onChange={handleFromChange}
                   className="form-select"
+                  disabled={!species}
                 >
-                  <option value="incoming">Incoming ({fromState || 'whole'})</option>
-                  <option value="outgoing">Outgoing ({toState || 'product'})</option>
+                  <option value="">{species ? 'Choose starting form' : 'Choose a species first'}</option>
+                  {fromStates.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor="calc-to" className="text-sm font-semibold text-text-primary">What you're making</label>
+                  <Tooltip
+                    iconOnly
+                    label="Help: what you're making"
+                    text="The finished cut or product you'll sell, such as a skinless fillet."
+                  >
+                    <HelpCircle size={18} className="text-text-secondary" aria-hidden="true" />
+                  </Tooltip>
+                </div>
+                <select
+                  id="calc-to"
+                  value={toState}
+                  onChange={handleToChange}
+                  className="form-select"
+                  disabled={!fromState}
+                >
+                  <option value="">{fromState ? 'Choose finished product' : 'Choose what you have first'}</option>
+                  {toStates.map(t => (
+                    <option key={t.to} value={t.to}>
+                      {t.to} ({t.yield}%{t.range ? `, ${t.range[0]}–${t.range[1]}%` : ''})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
-          )}
+
+            {/* Conversion info */}
+            {currentConversion && (
+              <div className="space-y-3 rounded-xl border border-brand-teal/25 bg-brand-teal/5 p-4 dark:bg-brand-teal/15">
+                <div className="flex items-center gap-2 text-sm font-semibold text-accent">
+                  <Info size={16} aria-hidden="true" />
+                  Yield for this cut
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-base">
+                  <span>
+                    <TextWithTooltips text={currentConversion.from} />
+                    <ChevronRight size={14} className="mx-1 inline text-text-secondary" aria-label="to" />
+                    <TextWithTooltips text={currentConversion.to} />
+                  </span>
+                  <span>
+                    <span className="text-text-secondary">Average yield </span>
+                    <span className="font-bold tabular-nums text-text-primary">{currentConversion.yield}%</span>
+                  </span>
+                  {currentConversion.range && (
+                    <span>
+                      <span className="text-text-secondary">Typical range </span>
+                      <span className="tabular-nums text-text-primary">{currentConversion.range[0]}–{currentConversion.range[1]}%</span>
+                    </span>
+                  )}
+                </div>
+
+                {currentConversion.range && (
+                  <div>
+                    <p className="mb-2 text-sm text-text-secondary">
+                      Yield changes with fish size and cutting skill. Pick what fits your shop:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <RangeButton
+                        active={useRangeMin}
+                        onClick={() => { setUseRangeMin(true); setUseRangeMax(false); }}
+                        label={`Low ${currentConversion.range[0]}%`}
+                      />
+                      <RangeButton
+                        active={!useRangeMin && !useRangeMax}
+                        onClick={() => { setUseRangeMin(false); setUseRangeMax(false); }}
+                        label={`Average ${currentConversion.yield}%`}
+                      />
+                      <RangeButton
+                        active={useRangeMax}
+                        onClick={() => { setUseRangeMax(true); setUseRangeMin(false); }}
+                        label={`High ${currentConversion.range[1]}%`}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Species profile */}
+            {profile && (
+              <div className="space-y-1 border-l-2 border-brand-terracotta/50 pl-3 text-sm text-text-secondary">
+                {profile.description && <p>{profile.description}</p>}
+                {profile.edible_portions && (
+                  <p><span className="font-semibold">Edible portions: </span>{profile.edible_portions}</p>
+                )}
+                {profile.url && (
+                  <a href={profile.url} target="_blank" rel="noreferrer" className="inline-block font-medium text-link underline">
+                    Read more →
+                  </a>
+                )}
+              </div>
+            )}
+          </section>
+
+          <div className="section-divider !my-0" />
+
+          {/* Step 2: the numbers */}
+          <section className="space-y-4" aria-labelledby="step-numbers">
+            <div id="step-numbers"><StepHeading number="2">Your numbers</StepHeading></div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {mode === 'cost' ? (
+                <div>
+                  <label htmlFor="calc-cost" className="form-label">
+                    What you pay per lb
+                    <span className="font-normal text-text-secondary"> ({fromState || 'whole fish'})</span>
+                  </label>
+                  <div className="relative">
+                    <span aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-text-secondary">$</span>
+                    <input
+                      id="calc-cost"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={cost}
+                      onChange={(e) => setCost(e.target.value)}
+                      className="form-input pl-8 tabular-nums"
+                      placeholder="0.00"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="calc-target" className="form-label">
+                    Pounds of {toState || 'finished product'} you need
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="calc-target"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={targetWeight}
+                      onChange={(e) => setTargetWeight(e.target.value)}
+                      className="form-input pr-12 tabular-nums"
+                      placeholder="e.g. 100"
+                      inputMode="decimal"
+                    />
+                    <span aria-hidden="true" className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-text-secondary">lbs</span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="calc-yield" className="form-label">Yield</label>
+                <div className="relative">
+                  <input
+                    id="calc-yield"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={yieldPercent}
+                    onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
+                    className="form-input pr-10 tabular-nums"
+                    placeholder="0"
+                    inputMode="decimal"
+                    aria-describedby={yieldRange ? 'calc-yield-hint' : undefined}
+                  />
+                  <span aria-hidden="true" className="absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-text-secondary">%</span>
+                </div>
+                {yieldRange && (
+                  <p id="calc-yield-hint" className="mt-1.5 text-sm text-text-secondary">
+                    Typical range: {yieldRange[0]}–{yieldRange[1]}%
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Additional costs (cost mode only) */}
+            {mode === 'cost' && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="calc-processing" className="form-label">
+                    Processing cost per lb
+                    <span className="font-normal text-text-secondary"> (optional)</span>
+                  </label>
+                  <div className="relative">
+                    <span aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-text-secondary">$</span>
+                    <input
+                      id="calc-processing"
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={processingCost}
+                      onChange={(e) => setProcessingCost(e.target.value)}
+                      className="form-input pl-8 tabular-nums"
+                      placeholder="0.00"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+
+                {/* Only ask which weight it applies to once there is a processing cost */}
+                {processingCost !== '' && (
+                  <div>
+                    <label htmlFor="calc-weight-type" className="form-label">Processing is charged per lb of</label>
+                    <select
+                      id="calc-weight-type"
+                      value={weightType}
+                      onChange={(e) => setWeightType(e.target.value)}
+                      className="form-select"
+                    >
+                      <option value="incoming">Starting fish ({fromState || 'whole'})</option>
+                      <option value="outgoing">Finished product ({toState || 'product'})</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
 
           {/* Calculate */}
-          <button
-            onClick={calculate}
-            disabled={!canCalculate}
-            className="btn-primary w-full"
-          >
-            {mode === 'cost' ? 'Calculate Cost per Pound' : 'Calculate Required Input Weight'}
-          </button>
-
-          {/* Result */}
-          {result !== null && (
-            <div className="mt-2 rounded-md border border-brand-teal/25 bg-brand-teal/5 dark:bg-brand-teal/10 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1">
-                {mode === 'cost' ? `Cost per lb — ${toState}` : `Required ${fromState} input`}
+          <div>
+            <button
+              type="submit"
+              disabled={!canCalculate}
+              aria-describedby={canCalculate ? undefined : 'calc-hint'}
+              className="btn-primary w-full"
+            >
+              <CalcIcon size={20} aria-hidden="true" />
+              {mode === 'cost' ? 'Calculate cost per pound' : 'Calculate pounds to buy'}
+            </button>
+            {!canCalculate && (
+              <p id="calc-hint" className="mt-2 text-center text-sm text-text-secondary">
+                Choose a species, what you have, and what you're making to get started.
               </p>
-              <p className="text-4xl font-bold tracking-tight text-brand-teal dark:text-text-primary">
+            )}
+          </div>
+        </form>
+
+        {/* Result: announced to screen readers and scrolled into view when it appears */}
+        <div aria-live="polite" ref={resultRef} className="scroll-mt-20">
+          {result !== null && (
+            <div className="mt-6 rounded-xl border-2 border-brand-teal bg-brand-teal/5 p-5 dark:border-accent dark:bg-brand-teal/15">
+              <p className="text-sm font-semibold text-text-secondary">
+                {mode === 'cost' ? `Your cost per lb of ${toState}` : `You need to buy (${fromState})`}
+              </p>
+              <p className="mt-1 text-5xl font-bold tabular-nums tracking-tight text-accent">
                 {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(1)} lbs`}
               </p>
-              <p className="mt-1.5 text-sm text-text-secondary">
+              <p className="mt-2 text-base text-text-secondary">
                 {mode === 'cost'
                   ? `At ${yieldPercent}% yield from ${fromState} to ${toState}`
-                  : `${result.toFixed(1)} lbs ${fromState} needed to yield ${targetWeight} lbs of ${toState}`
+                  : `${result.toFixed(1)} lbs of ${fromState} makes ${targetWeight} lbs of ${toState}`
                 }
               </p>
 
               {user ? (
-                <div className="mt-4 flex items-center gap-4 flex-wrap">
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center gap-1.5 text-sm font-medium text-brand-terracotta hover:text-brand-terracotta-light transition-colors"
-                  >
-                    <Save size={15} /> Save calculation
+                <div className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <button type="button" onClick={handleSave} className="btn-secondary">
+                    <Save size={18} aria-hidden="true" /> Save calculation
                   </button>
-                  <button
-                    onClick={handleExport}
-                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
-                  >
-                    <Download size={15} /> Export CSV
+                  <button type="button" onClick={handleExport} className="btn-ghost">
+                    <Download size={16} aria-hidden="true" /> CSV
                   </button>
-                  <button
-                    onClick={handleExportXlsx}
-                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
-                  >
-                    <Download size={15} /> Export Excel
+                  <button type="button" onClick={handleExportXlsx} className="btn-ghost">
+                    <Download size={16} aria-hidden="true" /> Excel
                   </button>
                   {saveStatus && (
-                    <span className="text-xs text-text-muted">{saveStatus}</span>
+                    <span
+                      role="status"
+                      className={`text-sm font-semibold ${saveStatus === 'Saved!' ? 'text-success' : 'text-danger'}`}
+                    >
+                      {saveStatus}
+                    </span>
                   )}
                 </div>
               ) : (
-                <p className="mt-3 text-xs text-text-muted">
-                  <a href="/login" className="text-brand-terracotta hover:underline">Sign in</a> to save calculations
+                <p className="mt-4 text-sm text-text-secondary">
+                  Want to keep this? <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your calculations.
                 </p>
               )}
             </div>
@@ -613,53 +752,54 @@ const Calculator = () => {
         </div>
       </div>
 
-      {/* Acronym reference */}
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
-          <HelpCircle size={14} className="text-brand-terracotta" />
-          Acronym Reference
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {Object.entries(ACRONYMS).slice(0, 9).map(([abbr, full]) => (
-            <div key={abbr} className="flex items-baseline gap-1.5 text-sm">
-              <span className="font-semibold text-brand-teal dark:text-brand-yellow shrink-0">{abbr}</span>
-              <span className="text-text-muted text-xs truncate">{full.split(' - ')[0]}</span>
+      {/* Abbreviation reference (collapsed: regulars know these, newcomers can open it) */}
+      <details className="card group">
+        <summary className="flex min-h-[3rem] cursor-pointer list-none items-center gap-2 rounded-xl px-5 py-3 text-base font-semibold text-text-primary [&::-webkit-details-marker]:hidden">
+          <HelpCircle size={18} className="text-link" aria-hidden="true" />
+          What do D/H-On, S/B and Round mean?
+          <ChevronDown size={18} className="ml-auto shrink-0 text-text-secondary transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line-subtle px-5 py-4 sm:grid-cols-2">
+          {Object.entries(ACRONYMS).map(([abbr, full]) => (
+            <div key={abbr}>
+              <dt className="text-sm font-bold text-accent">{abbr}</dt>
+              <dd className="text-sm text-text-secondary">{full.split(' - ')[0]}</dd>
             </div>
           ))}
-        </div>
-      </div>
+        </dl>
+      </details>
 
       {/* Community recent calculations */}
       {publicHistory.length > 0 && (
-        <div className="card p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-4 flex items-center gap-2">
-            <CalcIcon size={14} className="text-brand-terracotta" />
-            Recent Community Calculations
-          </h3>
-          <div className="divide-y divide-line-subtle">
+        <section className="card p-5" aria-labelledby="community-calcs">
+          <h2 id="community-calcs" className="mb-4 flex items-center gap-2 text-base font-semibold text-text-primary">
+            <CalcIcon size={18} className="text-link" aria-hidden="true" />
+            Recent community calculations
+          </h2>
+          <ul className="divide-y divide-line-subtle">
             {publicHistory.slice(0, 8).map((calc) => (
-              <div key={calc.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+              <li key={calc.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-text-primary truncate">{calc.name || calc.species}</p>
-                  <p className="text-xs text-text-muted mt-0.5">{calc.product} · {calc.yield}% yield</p>
+                  <p className="break-words text-base font-medium text-text-primary">{calc.name || calc.species}</p>
+                  <p className="mt-0.5 text-sm text-text-secondary">{calc.product} · {calc.yield}% yield</p>
                 </div>
-                <div className="text-right ml-4 shrink-0">
-                  <p className="text-sm font-semibold text-brand-teal dark:text-brand-yellow">
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-bold tabular-nums text-accent">
                     ${parseFloat(calc.result).toFixed(2)}/lb
                   </p>
-                  <p className="text-xs text-text-muted">
+                  <p className="text-sm text-text-secondary">
                     {new Date(calc.date).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
           {!user && (
-            <p className="mt-4 text-xs text-text-muted text-center border-t border-line-subtle pt-3">
-              <a href="/login" className="text-brand-terracotta hover:underline">Sign in</a> to save your own calculations
+            <p className="mt-4 border-t border-line-subtle pt-3 text-center text-sm text-text-secondary">
+              <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your own calculations
             </p>
           )}
-        </div>
+        </section>
       )}
     </div>
   );

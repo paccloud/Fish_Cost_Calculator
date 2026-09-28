@@ -4,7 +4,7 @@ import { useData } from '../context/DataContext';
 
 const STATUS_COPY = {
   synced:   { icon: CheckCircle,   text: 'All data is up to date.',            color: 'text-green-500' },
-  syncing:  { icon: RefreshCw,     text: 'Synchronizing with server…',         color: 'text-brand-teal' },
+  syncing:  { icon: RefreshCw,     text: 'Synchronizing with server…',         color: 'text-accent' },
   pending:  { icon: Clock,         text: 'Changes queued — syncing soon.',     color: 'text-yellow-400' },
   offline:  { icon: CloudOff,      text: 'You are offline. Changes saved locally.', color: 'text-text-muted' },
   error:    { icon: AlertCircle,   text: 'Sync encountered an error.',         color: 'text-red-400' },

@@ -96,11 +96,11 @@ const ContributorProfile = () => {
                 <div className="bg-surface p-8 rounded-full">
                     <User size={40} className="text-text-secondary" />
                 </div>
-                <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+                <h2 className="text-xl font-bold text-accent">Login Required</h2>
                 <p className="text-text-secondary max-w-md text-sm">
                     You need to be logged in to create a contributor profile.
                 </p>
-                <Link to="/login" className="text-brand-terracotta hover:underline text-sm font-medium">
+                <Link to="/login" className="text-link hover:underline text-sm font-medium">
                     Go to Login
                 </Link>
             </div>
@@ -110,8 +110,8 @@ const ContributorProfile = () => {
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-                    <User className="text-brand-terracotta" size={22} />
+                <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
+                    <User className="text-link" size={22} />
                     Contributor Profile
                 </h1>
                 <p className="text-text-secondary mt-1 text-sm">
