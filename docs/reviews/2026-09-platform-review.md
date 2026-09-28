@@ -2,7 +2,7 @@
 
 Reviewed at commit `d6ee642` on 2026-09-28. Six parallel reviews covered design and UX, functionality and architecture, security and privacy, sign-up and auth, hosting economics and interoperability, and open-source and community readiness. Their key claims were checked against the code before being combined here.
 
-> A separate security and privacy review was shared privately with the maintainer. Its fixes will land as ordinary PRs. Please report vulnerabilities privately, not in public issues.
+> A separate security and privacy review was shared privately with the maintainer. Its fixes will land as ordinary PRs.
 
 ## Summary
 
@@ -10,7 +10,7 @@ Reviewed at commit `d6ee642` on 2026-09-28. Six parallel reviews covered design 
 |---|---|---|
 | Design & layout | Needs work | The teal-on-warm-paper palette is a strong base. Dark mode, the phone flow and form accessibility are broken, and the March 2026 brand spec was never implemented. |
 | Core function | Broken in places | The calculator needs `/api/fish-data` to work at all. Publishing, the contributor profile and Excel percent import fail. |
-| Sign-up | Needs work | Firebase email and Google sign-in work. There's no password reset, users are signed out about an hour after sign-in, and there are no passkeys or email codes. |
+| Sign-up | Needs work | Firebase email and Google sign-in work. There's no password reset. An open tab refreshes its token, but after a reload or reopening the installed app the session can expire within about an hour, because the refresh token is kept only in memory. There are no passkeys or email codes. |
 | Hosting | Fragile | Roughly $0/month, but 11 of 12 Vercel Hobby functions are used, and Neon Free suspends the database when its compute quota runs out. |
 | Open source | Not ready | CI, CodeQL and 2,197 tests exist. The README quick start crashes, and there's no data license, code of conduct or SECURITY.md. |
 
@@ -98,12 +98,12 @@ Email codes beat magic links on phones, because links open outside the installed
 
 | Phase | Work | Effort |
 |---|---|---|
-| 0 | Retire the legacy JWT endpoints, restrict the Firebase API key, and archive `docs/AUTH_MIGRATION_ROADMAP.md` as superseded. | 1–2 days |
+| 0 | Close legacy registration, restrict the Firebase API key, and archive `docs/AUTH_MIGRATION_ROADMAP.md` as superseded. Before retiring legacy login and JWT verification, inventory the remaining password-only accounts (they can own calculations, yields and profiles) and move them to Firebase with a verified-email reset-and-link flow; `AuthContext.login()` still routes non-email usernames to `/api/login`. | 2–4 days |
 | 1 (Firebase) | Persistent sessions (the refresh token is currently memory-only), password reset, social buttons on both tabs, Apple, smoother email verification, and Spanish and Vietnamese auth screens. | 6–10 days |
 | 2 (provider-neutral) | Verify tokens with `jose` (`createRemoteJWKSet` + `jwtVerify`) configured by issuer, audience and JWKS URL. Add an `auth_identities (issuer, subject)` table, explicit linking rules (link by email only when verified by a trusted issuer), and Firebase Auth Emulator dev mode. | 4–6 days |
-| 3 (suite identity) | When a second app, passkeys, email codes or team accounts are needed, adopt **Logto** (MPL-2.0; cloud free tier, self-host later), or **Better Auth** (MIT) if the team prefers to own the code. Add organizations with owner / manager / crew roles. | 6–10 days |
+| 3 (suite identity) | When passkeys, email codes, team accounts, or sign-in for third-party (non-Firebase) tools are needed, adopt **Logto** (MPL-2.0; cloud free tier, self-host later), or **Better Auth** (MIT) if the team prefers to own the code. Add organizations with owner / manager / crew roles. | 6–10 days |
 
-Firebase is fine today but can't be the end state. It has no native passkeys, no email-code sign-in (only magic links, capped on the free plan), and it can't act as an identity provider for other apps.
+Firebase is fine today but can't be the end state. It has no native passkeys, no email-code sign-in (only magic links, capped on the free plan), and it isn't a general OIDC provider for third-party tools. Sibling apps registered in the same Firebase project can share its user store, so a second suite app alone doesn't require a migration.
 
 **How auth works in an open-source project:**
 - **What's public and what's secret.**
@@ -125,7 +125,7 @@ Firebase is fine today but can't be the end state. It has no native passkeys, no
 | Supabase | $0 | $25 | $25 | Free projects pause after 7 idle days. |
 | Firebase + Cloud SQL (SQL Connect) | ~$10 | ~$10–15 | ~$10–20 | No scale-to-zero. Close this track. |
 
-Vendor figures came from web search on 2026-09-28. Check them before committing money.
+Assumptions behind these figures: about 40 API requests per active user per month (two public reads per calculator visit, about 6 visits, plus sync for the roughly 30% who sign in), about 2 MB of static transfer per user (the PWA caches after the first visit), a database under 50 MB, and no CDN caching of public reads. Neon compute time is the only meter likely to bill at this scale, and caching public reads roughly halves it. Different traffic patterns can move these numbers a lot. Vendor figures came from web search on 2026-09-28. Check them before committing money.
 
 **Now:**
 - Add `Cache-Control` to public reads, or ship fish data as static JSON, so anonymous visits stop waking Neon.
@@ -160,7 +160,7 @@ Publish the data before building an API:
    - Align with the DFC standard used by Open Food Network.
    - Local Line, GrazeCart and Barn2Door are reachable mainly through Zapier or CSV. Harvie shut down at the end of 2024.
 
-Keep traceability (GDST 1.2 / EPCIS 2.0) in a sibling "catch story" app. Finfish must meet the FDA food-traceability record rules by 2028-07-20.
+Keep traceability (GDST 1.2 / EPCIS 2.0) in a sibling "catch story" app. Under the FSMA Food Traceability Rule, covered entities handling finfish on FDA's Food Traceability List (Siluriformes such as catfish are excluded, and some entities qualify for exemptions) will need traceability records. FDA has proposed moving compliance to 2028-07-20, and Congress separately barred FDA from spending appropriated funds to administer or enforce the rule before that date.
 
 Suggested suite layout, starting from `shared/` as a workspace root:
 - **Packages:** `vocab`, `yield-data`, `calc-engine` (from `app/src/lib/calcEngine.js`), `ui` (web components), `api` (Hono) and `mcp`.
