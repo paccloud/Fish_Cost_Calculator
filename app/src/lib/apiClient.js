@@ -23,6 +23,8 @@
  *   deleteCalcRaw(serverId, extraHeaders)      → Promise<Response>
  *   createUserDataRaw(body, extraHeaders)      → Promise<Response>
  *   deleteUserDataRaw(serverId, extraHeaders)  → Promise<Response>
+ *   shareUserDataRaw(serverId, extraHeaders)   → Promise<Response>
+ *   unshareUserDataRaw(serverId, extraHeaders) → Promise<Response>
  *   listSavedCalcsRaw(extraHeaders)            → Promise<Response>
  *   listUserDataRaw(extraHeaders)              → Promise<Response>
  *
@@ -442,6 +444,33 @@ export function createApiClient(options = {}) {
   }
 
   /**
+   * POST /api/user-data/:id/share — add a yield row to the public community pool.
+   * Callers must show the share confirmation (ShareYieldModal) first.
+   * @param {number|string} serverId
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function shareUserDataRaw(serverId, extraHeaders = {}) {
+    return rawRequest(`/api/user-data/${serverId}/share`, {
+      method: 'POST',
+      headers: { ...extraHeaders },
+    });
+  }
+
+  /**
+   * POST /api/user-data/:id/unshare — remove a yield row from the community pool.
+   * @param {number|string} serverId
+   * @param {Record<string,string>} extraHeaders
+   * @returns {Promise<Response>}
+   */
+  async function unshareUserDataRaw(serverId, extraHeaders = {}) {
+    return rawRequest(`/api/user-data/${serverId}/unshare`, {
+      method: 'POST',
+      headers: { ...extraHeaders },
+    });
+  }
+
+  /**
    * GET /api/saved-calcs — pull the server's saved-calcs list.
    * @param {Record<string,string>} extraHeaders
    * @returns {Promise<Response>}
@@ -480,6 +509,8 @@ export function createApiClient(options = {}) {
     deleteCalcRaw,
     publishCalcRaw,
     unpublishCalcRaw,
+    shareUserDataRaw,
+    unshareUserDataRaw,
     createUserDataRaw,
     updateUserDataRaw,
     deleteUserDataRaw,

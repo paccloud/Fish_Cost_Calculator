@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff, Globe, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
-import { apiUrl } from '../config/api';
+import { apiClient } from '../lib/apiClient';
+import { createYieldShareFlow } from '../lib/yieldSharing';
+import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
@@ -20,24 +22,39 @@ const DataManagement = () => {
     source: 'User Input',
   });
 
-  const handleToggleShare = async (item) => {
-    const action = item.is_shared ? 'unshare' : 'share';
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(apiUrl(`/api/user-data/${item.serverId ?? item.id}/${action}`), {
-        method: 'POST',
-        headers,
-      });
-      if (res.ok) {
-        updateYieldLocalOnly(item.id, { is_shared: !item.is_shared });
-        setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
-      } else {
-        const err = await res.json();
-        setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
-      }
-    } catch {
-      setStatus({ type: 'error', message: 'Network error occurred.' });
+  // Share-with-community confirmation (issue #26): sharing opens a preview of
+  // the public fields + attribution; only confirming calls the share API.
+  const [sharePending, setSharePending] = useState(null);
+  const [shareFlow] = useState(() => createYieldShareFlow({
+    client: apiClient,
+    onPendingChange: setSharePending,
+  }));
+  useEffect(() => {
+    shareFlow.configure({
+      getHeaders: () => getAuthHeaders(),
+      onSharingChanged: (item, isShared) => updateYieldLocalOnly(item.id, { is_shared: isShared }),
+    });
+  }, [shareFlow, getAuthHeaders, updateYieldLocalOnly]);
+
+  const reportShareResult = (result) => {
+    if (result.ok && result.action === 'share') {
+      setStatus({ type: 'success', message: 'Shared with community!' });
+    } else if (result.ok && result.action === 'unshare') {
+      setStatus({ type: 'success', message: 'Removed from community.' });
+    } else if (!result.ok && result.error) {
+      setStatus({ type: 'error', message: result.error });
     }
+  };
+
+  const handleToggleShare = async (item) => {
+    reportShareResult(await shareFlow.toggle(item));
+  };
+
+  const handleConfirmShare = async () => {
+    const result = await shareFlow.confirm();
+    // A failure with the dialog still open is shown inside the dialog; a
+    // page-level banner would render behind it.
+    if (result.ok || !shareFlow.getPending()) reportShareResult(result);
   };
 
   const handleSubmit = async (e) => {
@@ -373,6 +390,14 @@ const DataManagement = () => {
           </div>
         )}
       </div>
+
+      {sharePending && (
+        <ShareYieldModal
+          pending={sharePending}
+          onConfirm={handleConfirmShare}
+          onCancel={shareFlow.cancel}
+        />
+      )}
     </div>
   );
 };
