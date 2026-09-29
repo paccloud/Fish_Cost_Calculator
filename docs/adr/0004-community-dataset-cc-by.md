@@ -1,0 +1,19 @@
+---
+status: accepted
+---
+
+# Community dataset is CC BY 4.0; download now, versioned releases later
+
+Submitting a yield means its owner agrees that, once approved, it is released
+under CC BY 4.0 with attribution by display name or "Anonymous"; the submit
+dialog says so. The code stays MIT. A licence on contributed data cannot be
+narrowed after the fact, so this is set before any submissions under the new
+flow. For now the Community page offers a CSV/JSON download built from the
+approved yields. Scheduled, versioned releases (a GitHub Action exporting a
+numbered file) will be added once there are enough approved yields to be worth
+citing.
+
+## Consequences
+
+- Yields shared before this consent existed are not in a licensed release until
+  their owners submit them again under the new terms.

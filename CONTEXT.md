@@ -60,8 +60,8 @@ The person who approves or rejects submitted yields.
 _Avoid_: admin, moderator
 
 **Community dataset**:
-All approved yields, readable by anyone, attributed only by display name or as
-"Anonymous".
+All approved yields, readable and downloadable by anyone under CC BY 4.0,
+attributed only by display name or as "Anonymous".
 _Avoid_: community pool, public data
 
 **Display name**:
