@@ -256,6 +256,7 @@ export function DataProvider({ children }) {
   }, [uid, reloadFromRepo, triggerSync]);
 
   const handleRecoveryDiscard = useCallback(async () => {
+    if (isAppReadOnly) return;
     try { await discardRecovery(); } catch { /* best-effort */ }
     setRecoveryCounts(null);
   }, []);
@@ -709,7 +710,7 @@ export function DataProvider({ children }) {
           isAuthenticated={!!uid}
           assigning={recoveryAssigning}
           onAssign={handleRecoveryAssign}
-          onDiscard={handleRecoveryDiscard}
+          onDiscard={isAppReadOnly ? undefined : handleRecoveryDiscard}
           onLater={handleRecoveryLater}
         />
       )}
