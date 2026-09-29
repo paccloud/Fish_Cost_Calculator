@@ -29,14 +29,18 @@ provider. Firebase Auth was already in use, so no one signs up again.
 
 - `api/`, `server/`, `shared/`, SQLite, Neon, the legacy password login and the
   custom sync layer go away, and so does the rule to change both backends.
-- Excel/CSV import parses in the browser.
+- Excel/CSV import parses in the browser. The import and export format gains
+  separate starting-form and finished-product columns; a row without a starting
+  form imports with it blank, like the Neon copy.
 - Security rules cannot hide single fields of a readable document, so approved
   yields are copied into a separate public collection holding only the public
   fields (species, conversion, yield, display name). The owner's user id, the
   free-text source note, submission details and review note stay in the owner's
-  private document. The reviewer's approval writes both in one batch. Editing or
-  deleting an approved yield deletes its public copy in the same batch, and the
-  rules let an owner delete the public copy of their own yield.
+  private document. The reviewer's approval writes both in one batch. Changing
+  the display name rewrites the name on all of that owner's public copies in one
+  batch. Editing or deleting an approved yield deletes its public copy in the
+  same batch, and the rules let an owner delete the public copy of their own
+  yield.
 - Firestore's persistent cache keeps private data in the browser after sign-out,
   so signing out first sends pending writes (or, if offline, asks whether to
   wait or discard them) and then clears the local cache.
@@ -64,8 +68,12 @@ provider. Firebase Auth was already in use, so no one signs up again.
   account with data is missing from the list, appears twice, or two accounts map
   to one Firebase user. Neon custom yields record only the finished product, not
   the starting form, so the copy leaves the starting form blank for the owner to
-  fill in. Only after the copy has been checked is Vercel reduced to a redirect.
-  Bookmarks follow the redirect; installed copies of the app need to be
-  installed again from the new address. PR previews come from Firebase preview
-  channels.
+  fill in. The dry run lists any yield that is not above 0 and up to 100; the
+  owner fixes those before the freeze, and the copy refuses to run while any
+  remain. After the copy has been checked, the old address keeps serving the
+  read-only app for six months, so an installed copy that comes back online
+  still gets the save-to-file option and a link to the new address; only then is
+  Vercel reduced to a redirect. Bookmarks follow the redirect; installed copies
+  of the app need to be installed again from the new address. PR previews come
+  from Firebase preview channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).
