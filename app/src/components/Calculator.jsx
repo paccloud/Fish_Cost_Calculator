@@ -5,6 +5,7 @@ import { Calculator as CalcIcon, Save, HelpCircle, Download, ChevronDown } from 
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
 import { calculate } from '../lib/calcEngine';
+import { parseAmount } from '../lib/numberInput';
 
 /**
  * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
@@ -123,14 +124,15 @@ const stepButton =
 /** A number field with big − / + buttons either side, for wet or gloved hands. */
 const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy }) => {
   const inputRef = useRef(null);
-  const bump = (delta) => onChange(format(Math.max(0, (parseFloat(value) || 0) + delta)));
+  const invalid = String(value).trim() !== '' && Number.isNaN(parseAmount(value));
+  const bump = (delta) => onChange(format(Math.max(0, (parseAmount(value) || 0) + delta)));
   return (
     <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] gap-2">
       <button type="button" onClick={() => bump(-step)} aria-label={lessLabel} className={stepButton}>−</button>
       {/* The input is sized to its text so the $ or unit sits right beside the number; a tap anywhere in the box focuses it */}
       <div
         onClick={() => inputRef.current?.focus()}
-        className="flex cursor-text items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-line-strong bg-surface-raised px-3 focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[color:var(--color-focus)]">
+        className="flex cursor-text items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-line-strong bg-surface-raised px-3 has-[[aria-invalid=true]]:border-danger focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[color:var(--color-focus)]">
         {prefix && <span aria-hidden="true" className="text-xl font-bold text-text-secondary">{prefix}</span>}
         <input
           ref={inputRef}
@@ -142,6 +144,7 @@ const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel,
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           className="min-h-[3.25rem] min-w-0 max-w-full bg-transparent text-center text-2xl font-extrabold tabular-nums text-text-primary placeholder-text-muted focus:outline-none"
         />
@@ -162,12 +165,12 @@ const dollars = (n) => `$${n.toFixed(2)}`;
  */
 const ExtraCost = ({ id, title, amount, onAmount, basis, onBasis, basisLegend, fromState, toState, perFinishedLb, yieldPercent }) => {
   const hintId = `${id}-hint`;
-  const charged = parseFloat(amount) > 0;
+  const charged = parseAmount(amount) > 0;
   let hint = `Pick which weight the ${title.toLowerCase()} price is per pound of.`;
   if (charged && basis === 'incoming') {
-    hint = `${dollars(parseFloat(amount))} per lb of ${fromState} works out to ${dollars(perFinishedLb)} per lb of ${toState} at ${yieldPercent}% yield.`;
+    hint = `${dollars(parseAmount(amount))} per lb of ${fromState} works out to ${dollars(perFinishedLb)} per lb of ${toState} at ${yieldPercent}% yield.`;
   } else if (charged) {
-    hint = `${dollars(parseFloat(amount))} per lb of ${toState}, added as is.`;
+    hint = `${dollars(parseAmount(amount))} per lb of ${toState}, added as is.`;
   }
   return (
     <div className="space-y-3">
@@ -243,6 +246,7 @@ const Calculator = () => {
   // Which inputs the last save was for, so "Saved" disappears as soon as anything changes
   const [saveState, setSaveState] = useState({ key: null, text: '' });
   const [announcement, setAnnouncement] = useState('');
+  const dockRef = useRef(null);
 
   const [customData, setCustomData] = useState({});
   const [_history, setHistory] = useState([]);
@@ -361,15 +365,25 @@ const Calculator = () => {
 
   // The answer is worked out live from what is on screen, so it can never describe different numbers
   const ready = Boolean(species && fromState && toState);
-  const hasMainInput = mode === 'cost' ? cost !== '' : targetWeight !== '';
+  const mainInput = mode === 'cost' ? cost : targetWeight;
+  const hasMainInput = Number.isFinite(parseAmount(mainInput));
+  // A box with text that isn't a number would otherwise count as 0 and give a wrong answer, so show none
+  const badInput = [mainInput, yieldPercent, ...(mode === 'cost' ? [processingCost, shipping] : [])]
+    .some(v => String(v).trim() !== '' && Number.isNaN(parseAmount(v)));
   const calc = useMemo(() => {
     if (!ready) return null;
     return calculate({
-      mode, yieldPercent, targetWeight, cost,
-      processingCost, weightType, shipping, shippingWeightType,
+      mode,
+      yieldPercent: parseAmount(yieldPercent),
+      targetWeight: parseAmount(targetWeight),
+      cost: parseAmount(cost),
+      processingCost: parseAmount(processingCost),
+      weightType,
+      shipping: parseAmount(shipping),
+      shippingWeightType,
     });
   }, [ready, mode, yieldPercent, targetWeight, cost, processingCost, weightType, shipping, shippingWeightType]);
-  const result = calc && hasMainInput ? calc.result : null;
+  const result = calc && hasMainInput && !badInput ? calc.result : null;
 
   const inputsKey = JSON.stringify([
     mode, species, fromState, toState, cost, targetWeight, yieldPercent,
@@ -377,15 +391,31 @@ const Calculator = () => {
   ]);
   const saveStatus = saveState.key === inputsKey ? saveState.text : '';
 
-  const resultSentence = result === null ? '' : mode === 'cost'
-    ? `${dollars(result)} per lb of ${toState}`
-    : `Buy ${result.toFixed(1)} lbs of ${fromState}`;
+  const numbersOnly = 'Use numbers only in the boxes, like 4.50 or 1,000';
+  let resultSentence = '';
+  if (result !== null) {
+    resultSentence = mode === 'cost' ? `${dollars(result)} per lb of ${toState}` : `Buy ${result.toFixed(1)} lbs of ${fromState}`;
+  } else if (ready && badInput) {
+    resultSentence = numbersOnly;
+  }
 
   // Screen readers hear the answer once typing pauses, not on every keystroke
   useEffect(() => {
     const timer = setTimeout(() => setAnnouncement(resultSentence), 900);
     return () => clearTimeout(timer);
   }, [resultSentence]);
+
+  // Tabbing or scrolling a field into view must not leave it under the pinned result bar (WCAG 2.4.11)
+  useEffect(() => {
+    const bar = dockRef.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return undefined;
+    const root = document.documentElement;
+    const apply = () => { root.style.scrollPaddingBottom = `${bar.offsetHeight + 16}px`; };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    return () => { observer.disconnect(); root.style.scrollPaddingBottom = ''; };
+  }, []);
 
   const handleSave = async () => {
     if (!user || result === null) return;
@@ -398,9 +428,9 @@ const Calculator = () => {
         body: JSON.stringify({
           name: `${species} - ${fromState} → ${toState}`,
           species, product: `${fromState} → ${toState}`,
-          mode, cost: mode === 'cost' ? parseFloat(cost) : 0,
-          target_weight: mode === 'weight' ? parseFloat(targetWeight) : 0,
-          yield: parseFloat(yieldPercent), result
+          mode, cost: mode === 'cost' ? parseAmount(cost) : 0,
+          target_weight: mode === 'weight' ? parseAmount(targetWeight) : 0,
+          yield: parseAmount(yieldPercent), result
         })
       });
       setSaveState({ key, text: res.ok ? 'Saved!' : 'Failed to save' });
@@ -460,7 +490,8 @@ const Calculator = () => {
     : [];
 
   let dockPrompt = 'Pick a species, what you have, and what you’re making';
-  if (ready) dockPrompt = mode === 'cost' ? `Enter what you pay per lb of ${fromState}` : `Enter how many lbs of ${toState} you need`;
+  if (ready && badInput) dockPrompt = numbersOnly;
+  else if (ready) dockPrompt = mode === 'cost' ? `Enter what you pay per lb of ${fromState}` : `Enter how many lbs of ${toState} you need`;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 pb-48">
@@ -661,7 +692,7 @@ const Calculator = () => {
                 <button
                   key={name}
                   type="button"
-                  aria-pressed={parseFloat(yieldPercent) === value}
+                  aria-pressed={parseAmount(yieldPercent) === value}
                   onClick={() => setYieldPercent(String(value))}
                   className="min-h-[3.25rem] rounded-xl border-2 border-line-strong bg-surface-raised px-2 text-sm font-bold leading-tight text-text-primary transition-colors hover:border-accent aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-white"
                 >
@@ -781,6 +812,7 @@ const Calculator = () => {
 
       {/* The answer, pinned to the bottom of the screen so it is always in view while numbers change */}
       <div
+        ref={dockRef}
         role="region"
         aria-label="Your result"
         className="focus-on-dark fixed inset-x-0 bottom-0 z-30 border-t-4 border-brand-yellow bg-brand-teal pb-[env(safe-area-inset-bottom)] text-white shadow-[0_-4px_16px_rgba(0,0,0,0.18)]"
@@ -800,7 +832,7 @@ const Calculator = () => {
               <p className="mt-1 text-sm text-white/90">
                 {mode === 'cost'
                   ? `${yieldPercent || 100}% yield · ${fromState} → ${toState}`
-                  : `makes ${targetWeight} lbs of ${toState} · ${yieldPercent || 100}% yield`}
+                  : `makes ${parseAmount(targetWeight).toLocaleString('en-US')} lbs of ${toState} · ${yieldPercent || 100}% yield`}
               </p>
               {mode === 'cost' && extras.length > 0 && (
                 <p className="text-sm tabular-nums text-white/90">

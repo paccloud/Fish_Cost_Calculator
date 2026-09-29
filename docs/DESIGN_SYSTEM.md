@@ -48,6 +48,11 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
 - **Processing and shipping** are each charged per lb of **incoming** weight (the starting fish; spread over
   fewer finished pounds, so divided by yield) or **outgoing** weight (the finished product; added as is).
   Both choices are always visible, with a line spelling out what the charge comes to per finished lb.
+- **Number boxes read what people type** (`app/src/lib/numberInput.js`): "$4.50", "1,000", "42%" and "4,50"
+  all work. Text that isn't a number marks that box as invalid and the bar says to use numbers; it never
+  counts as 0, because a wrong answer is worse than none.
+- **Nothing hides behind the bar.** The calculator sets the page's `scroll-padding-bottom` to the bar's
+  height, so whatever you Tab to scrolls into view above it (WCAG 2.4.11).
 
 ## Guardrails
 
