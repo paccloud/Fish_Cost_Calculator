@@ -335,6 +335,14 @@ const NON_SECRET_FORMS = /^(?:ENC\[|\$ANSIBLE_VAULT|\$2[abxy]?\$\d{2}\$|\$argon2
 const EXAMPLE_SUFFIX = /EXAMPLE(?:KEY)?$/;
 // "Bearer eyJhbGciOi..." A trailing ellipsis means the author cut the value off, so it cannot be a working credential.
 const TRUNCATED = /(?:\.{3,}|…)$/;
+// Three or more plain words are a passphrase with a trailing ellipsis, not a cut-off token: "correct horse battery..." is
+// judged as a phrase like the same words without the dots.
+const PLAIN_PHRASE_WORD = /^\p{L}[\p{L}'’-]*$/u;
+function isTruncated(value) {
+  if (!TRUNCATED.test(value)) return false;
+  const pieces = value.replace(TRUNCATED, '').trim().split(/\s+/);
+  return !(pieces.length >= 3 && pieces.every((piece) => PLAIN_PHRASE_WORD.test(piece)));
+}
 
 // A letter run equal to one of these makes the value a placeholder wherever it sits.
 const VERY_STRONG_RUNS = new Set([
@@ -387,7 +395,7 @@ export function isPlaceholder(raw) {
     .trim();
   if (value === '' || !/[A-Za-z0-9]/.test(value)) return true;
   if (INTERPOLATION.test(value) || WHOLE_REFERENCE.test(value) || CODE_REFERENCE.test(value)) return true;
-  if (NON_SECRET_FORMS.test(value) || TRUNCATED.test(value) || isMostlyMarkers(value)) return true;
+  if (NON_SECRET_FORMS.test(value) || isTruncated(value) || isMostlyMarkers(value)) return true;
   return isPlaceholderWords(value);
 }
 
@@ -2475,7 +2483,8 @@ const XML_NAME_ATTRIBUTE = /(?:^|[ \t\r\n])(?:name|key)[ \t]*=[ \t]*(?:"([^"]{1,
 // A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key.
 const PATH_VALUE = /^(?:\.{1,2}|~)?(?:\/[A-Za-z0-9._@-]{1,64}){2,12}\/?$/;
 // Example values Maven's reference settings.xml documents; they are sample text, not credentials.
-const XML_EXAMPLE_VALUES = new Set(['proxypass']);
+// (The passphrase hint is exact text: a sentence is not exempt by its punctuation, only this whole value is.)
+const XML_EXAMPLE_VALUES = new Set(['proxypass', 'optional; leave empty if not used.']);
 
 /** Is the text of this XML element (name, start-tag attributes, text) a secret? See the element matchers in RULES. */
 function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
@@ -2491,9 +2500,8 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   // A Maven-encrypted password ({base64}) is not a plaintext credential: it is unreadable without the master key.
   if (/^\{[A-Za-z0-9+/=]{20,}\}$/.test(value)) return false;
   if (PATH_VALUE.test(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
-  // A hint written as a sentence ("optional; leave empty if not used.") is text. A passphrase is words only, so a value with
-  // sentence punctuation after a word is prose.
-  if (/\s/.test(value) && /[A-Za-z][;:,.!?)]/.test(value) && value.split(/\s+/).length >= 3) return false;
+  // Text about the credential ("the password you chose during setup.") is exempt through the same documentation-cue rule
+  // as every other format; punctuation alone never is, or a passphrase ending in "!" would slip through.
   return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
 }
 
@@ -3744,20 +3752,24 @@ function summarizeStderr(stderr) {
   return first === '' ? '' : `: ${printable(first).slice(0, 200)}`;
 }
 
-// Lines of unchanged context read around each change, so a split "name: X / value: Y" pair whose name line did not
-// change can still be recognised. Context lines are never reported by themselves. It is derived from the constants the
-// pair matcher (and the other multi-line rules: PEM headers, netrc tokens, mapping keys) look back and forward with, so
-// the two cannot drift apart: the YAML window and the multi-line literal reader count lines; the brace and XML windows count characters, and a line
-// that holds a name or a value is at least HISTORY_MIN_LINE_CHARS long, so that many characters span at most this many lines.
-const HISTORY_MIN_LINE_CHARS = 4;
-export const HISTORY_CONTEXT = Math.max(
+// Unchanged context kept around each change, so a split "name: X / value: Y" pair whose name line did not change can
+// still be recognised. Context lines are never reported by themselves. It is derived from the constants the pair matcher
+// (and the other multi-line rules: PEM headers, netrc tokens, mapping keys) look back and forward with, so the two cannot
+// drift apart. The YAML window and the multi-line literal reader count LINES; the brace and XML windows count CHARACTERS.
+// A character window is kept as characters: context lines are retained until their text (each line plus its newline, as
+// the scanned text holds it) covers the window, however short or blank the lines are. No line length is assumed anywhere.
+const HISTORY_CONTEXT_LINES = Math.max(
   PAIR_YAML_LINES,
   MULTILINE_MAX_LINES + 1, // a heredoc / triple-quoted body and its closing line
-  Math.ceil(Math.max(PAIR_BACK_CHARS, PAIR_FORWARD_CHARS, PAIR_XML_CHARS) / HISTORY_MIN_LINE_CHARS),
 );
+const HISTORY_CONTEXT_CHARS = Math.max(PAIR_BACK_CHARS, PAIR_FORWARD_CHARS, PAIR_XML_CHARS);
+// The unified context git is asked for. Every line is at least its own newline, so a window of N characters never spans
+// more than N lines: asking git for that many lines (it stops at the file's ends) always supplies enough to fill the window.
+export const HISTORY_CONTEXT = Math.max(HISTORY_CONTEXT_LINES, HISTORY_CONTEXT_CHARS);
 // A lockfile is scanned with single-line rules only (no name/value pairing), so a bump that touches a big lockfile in
 // many places must not drag hundreds of unchanged lines around every change into the text that is size-checked and scanned.
-const HISTORY_LOCKFILE_CONTEXT = 2;
+const HISTORY_LOCKFILE_CONTEXT = { lines: 2, chars: 0 };
+const HISTORY_TEXT_CONTEXT = { lines: HISTORY_CONTEXT_LINES, chars: HISTORY_CONTEXT_CHARS };
 
 /**
  * The first SNIFF_BYTES bytes of `path` as it is in `commit` (`git cat-file blob <commit>:<path>`), or null when git
@@ -3845,10 +3857,25 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   let addedAny = false; // this version had an added line, even one that overflowed the size limit before it could be indexed
   let textChars = 0; // characters held in `lines`
   let overflow = false; // the retained text passed the file's size limit: stop collecting, report it as oversize
-  let recent = []; // context lines seen since the last kept line, at most contextFor(file) of them
+  let recent = []; // context lines seen since the last kept line: the newest ones that cover contextFor(file) (lines AND characters)
+  let recentChars = 0; // characters (lines plus newlines) in `recent`
   let dropped = false; // context lines were left out since the last kept line
-  let after = 0; // context lines still to keep after the last added line
-  const contextFor = (path) => (isLockfile(path) ? HISTORY_LOCKFILE_CONTEXT : HISTORY_CONTEXT);
+  let afterLines = 0; // context lines still to keep after the last added line ...
+  let afterChars = 0; // ... and characters still to cover; a line is kept while either is left
+  const contextFor = (path) => (isLockfile(path) ? HISTORY_LOCKFILE_CONTEXT : HISTORY_TEXT_CONTEXT);
+  // Drop the oldest held context line while the rest still covers the window (enough lines AND enough characters), or
+  // while what is held could not fit the file's size limit anyway (bounded memory, whatever the line lengths).
+  const trimRecent = () => {
+    const window = contextFor(file ?? '');
+    const limit = file === null ? Infinity : sizeLimit(file);
+    while (
+      recent.length > 0 &&
+      ((recent.length > window.lines && recentChars - (recent[0].length + 1) >= window.chars) || recentChars > limit)
+    ) {
+      recentChars -= recent.shift().length + 1;
+      dropped = true;
+    }
+  };
   const keep = (line) => {
     textChars += line.length + 1;
     if (file !== null && textChars > sizeLimit(file)) overflow = true;
@@ -3891,8 +3918,10 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     textChars = 0;
     overflow = false;
     recent = [];
+    recentChars = 0;
     dropped = false;
-    after = 0;
+    afterLines = 0;
+    afterChars = 0;
   };
 
   const onLine = (line) => {
@@ -3919,8 +3948,10 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
       if (lines.length > 0) keep(''); // keep lines from different hunks from looking adjacent
       recent = [];
+      recentChars = 0;
       dropped = false;
-      after = 0;
+      afterLines = 0;
+      afterChars = 0;
     } else if (!inHunk) {
       if (line.startsWith('+++ ')) {
         const raw = line.slice(4);
@@ -3936,20 +3967,20 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
         if (dropped && lines.length > 0) keep('');
         for (const held of recent) keep(held);
         recent = [];
+        recentChars = 0;
         dropped = false;
         keep(content);
         addedAny = true; // an added line that is over the limit on its own still makes this version unscanned
         if (!overflow) addedLines.add(lines.length);
-        after = contextFor(file ?? '');
-      } else if (after > 0) {
+        ({ lines: afterLines, chars: afterChars } = contextFor(file ?? ''));
+      } else if (afterLines > 0 || afterChars > 0) {
         keep(content);
-        after -= 1;
+        afterLines -= 1;
+        afterChars -= content.length + 1;
       } else {
         recent.push(content);
-        if (recent.length > contextFor(file ?? '')) {
-          recent.shift();
-          dropped = true;
-        }
+        recentChars += content.length + 1;
+        trimRecent();
       }
     }
   };

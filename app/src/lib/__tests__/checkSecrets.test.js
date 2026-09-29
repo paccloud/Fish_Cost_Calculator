@@ -3140,9 +3140,83 @@ describe('CLI', () => {
   });
 
   it('the history context is derived from the pair matcher, not a separate number', () => {
-    // 12 lines is the YAML window; the character windows (1500 back or forward) need more lines than that when a line is short.
+    // 12 lines is the YAML window; the character windows (1500 back or forward) can span one line per character (blank lines).
     expect(HISTORY_CONTEXT).toBeGreaterThanOrEqual(12);
-    expect(HISTORY_CONTEXT * 4).toBeGreaterThanOrEqual(1500);
+    expect(HISTORY_CONTEXT).toBeGreaterThanOrEqual(1500);
+  });
+
+  // Class: the pair matcher looks 1,500 CHARACTERS around a JSON/HCL field, and JSON may have blank or one-character lines,
+  // so --history/--range must keep unchanged context by characters, not by a count of lines a minimum line length implies.
+  const GAP_LAYOUTS = [
+    ['500 blank lines', () => '\n'.repeat(500)],
+    ['500 one-character lines', () => ' \n'.repeat(500)],
+    ['500 CRLF blank lines', () => '\r\n'.repeat(500)],
+    ['1,400 blank lines', () => '\n'.repeat(1400)],
+    ['mixed blank, one-character and CRLF lines', () => Array.from({ length: 500 }, (_, i) => ['\n', ' \n', '\r\n', ';\n'][i % 4]).join('')],
+  ];
+  const gapDoc = (gap, v, nameFirst = true) =>
+    nameFirst ? `{"name":"${pairName}",\n${gap}"value":"${v}"}\n` : `{"value":"${v}",\n${gap}"name":"${pairName}"}\n`;
+
+  it.each(GAP_LAYOUTS)('the tree scan pairs a name and a value across %s (the layout the history tests use)', (_label, makeGap) => {
+    expect(scanText('vars.json', gapDoc(makeGap(), randomString(24, 71))).length).toBeGreaterThan(0);
+  });
+
+  it.each(GAP_LAYOUTS)('--history and --range catch a changed value across %s, then a removal', SLOW, (_label, makeGap) => {
+    if (!hasGit()) return;
+    for (const nameFirst of [true, false]) {
+      const dir = makeRepo();
+      const value = randomString(24, 72);
+      const save = (v, message) => {
+        write(dir, 'vars.json', gapDoc(makeGap(), v, nameFirst));
+        run('git', ['add', '-A'], dir);
+        expect(commit(dir, message).status).toBe(0);
+        return run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+      };
+      const first = save('changeme', 'placeholder');
+      const leaking = save(value, 'leak');
+      save('changeme', 'remove');
+      expect(scan(dir).status).toBe(0);
+      const firstFull = run('git', ['rev-parse', first], dir).stdout.trim();
+      for (const args of [['--history'], ['--range', `${firstFull}..HEAD`]]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, args[0]).toBe(1);
+        expect(result.stderr).toContain(`${leaking}  vars.json  secret-name-value-pair  x1`);
+        for (const piece of windows(value)) expect(output).not.toContain(piece);
+      }
+    }
+  });
+
+  it.skipIf(!hasGit())('--history and --range catch a value that stays in the tree across blank lines', SLOW, () => {
+    const dir = makeRepo();
+    const value = randomString(24, 73);
+    write(dir, 'vars.json', gapDoc('\n'.repeat(500), 'changeme'));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'placeholder').status).toBe(0);
+    const first = run('git', ['rev-parse', 'HEAD'], dir).stdout.trim();
+    write(dir, 'vars.json', gapDoc('\n'.repeat(500), value));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    expect(scan(dir).status).toBe(1);
+    for (const args of [['--history'], ['--range', `${first}..HEAD`]]) expect(scan(dir, ...args).status, args[0]).toBe(1);
+  });
+
+  it.skipIf(!hasGit())('--history does not blame a later commit that adds an unrelated line inside a blank-line gap', SLOW, () => {
+    const dir = makeRepo();
+    const value = randomString(24, 74);
+    const layout = (extra) => gapDoc(`${'\n'.repeat(250)}${extra}${'\n'.repeat(250)}`, value);
+    write(dir, 'vars.json', layout(''));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    const leaking = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    write(dir, 'vars.json', layout('\n'));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'one more blank line').status).toBe(0);
+    const later = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(leaking);
+    expect(result.stderr).not.toContain(later);
   });
 
   // Class: the size limit differs by path (5 MB, 16 MB for a lockfile) and the message must name the one that was applied.
@@ -4499,6 +4573,58 @@ describe('review round 10', () => {
       expect(scanText('settings.xml', `<server><privateKey>${random}</privateKey></server>\n`).length).toBeGreaterThan(0);
       expect(scanText('settings.xml', `<server><${PASSWORD}>${passphrase}</${PASSWORD}></server>\n`).length).toBeGreaterThan(0);
       expect(scanText('settings.xml', `<property name="Foo" type="s"><annotation name="X" value="y"/></property>\n<add key="${NAME}" value="${random}"/>\n`).length).toBeGreaterThan(0);
+    });
+
+    // Class: sentence punctuation is not a documentation cue. A passphrase of plain words stays a finding whatever ends it, in
+    // XML (element text, CDATA, a key= entry) and in every other format; only a documentation cue (or a message catalog) exempts.
+    const ENDINGS = ['', '!', '.', '?', ',', ';', ':', '...', '\u2026', '!!', '"', ')', ' :)', '\u3002', '\uFF01', '\u{1F600}'];
+    const plainPhrase = ['tulip', 'marble', 'sunset', 'harbor'].join(' ');
+    const ARRANGEMENTS = [
+      ['an XML element', 'settings.xml', (v) => `<server><${PASSWORD}>${v}</${PASSWORD}></server>\n`],
+      ['an XML CDATA element', 'settings.xml', (v) => `<server><${PASSWORD}><![CDATA[${v}]]></${PASSWORD}></server>\n`],
+      ['an XML key entry', 'app.config', (v) => `<entry key="${PASSWORD}">${v}</entry>\n`],
+      ['an XML attribute', 'app.config', (v) => `<add key="${PASSWORD}" value="${v}"/>\n`],
+      ['a quoted YAML value', 'config.yml', (v) => `${PASSWORD}: "${v}"\n`],
+      ['a bare YAML value', 'config.yml', (v) => `${PASSWORD}: ${v}\n`],
+      ['an ini value', 'config.ini', (v) => `${PASSWORD} = ${v}\n`],
+      ['a properties value', 'config.properties', (v) => `db.${PASSWORD}=${v}\n`],
+      ['a JSON value', 'config.json', (v) => `{"${PASSWORD}": "${v}"}\n`],
+      ['a TOML value', 'config.toml', (v) => `${PASSWORD} = "${v}"\n`],
+      ['a quoted env value', '.env', (v) => `DB_${PASSWORD.toUpperCase()}="${v}"\n`],
+      ['a bare env value', '.env', (v) => `DB_${PASSWORD.toUpperCase()}=${v}\n`],
+      ['a CSV cell', 'export.csv', (v) => `name,value\n${PASSWORD},"${v}"\n`],
+      ['a Markdown table cell', 'notes.md', (v) => `| Name | Value |\n|---|---|\n| DB_${PASSWORD.toUpperCase()} | \`${v}\` |\n`],
+    ];
+    describe.each(ARRANGEMENTS)('%s', (_label, file, make) => {
+      it.each(ENDINGS)(`a passphrase of plain words ending in %j is found`, (ending) => {
+        expect(scanText(file, make(`${plainPhrase}${ending}`)).length).toBeGreaterThan(0);
+      });
+    });
+
+    it.each([
+      'the password you chose during setup.',
+      'Enter your password.',
+      'Ask your team lead for the password.',
+      'Set via environment variable at runtime.',
+    ])('documentation prose %j stays exempt in XML, as it does elsewhere', (prose) => {
+      expect(scanText('settings.xml', `<server><${PASSWORD}>${prose}</${PASSWORD}></server>\n`)).toEqual([]);
+      expect(scanText('config.yml', `${PASSWORD}: "${prose}"\n`)).toEqual([]);
+    });
+
+    it('a sentence with a documentation cue plus a random word is still found', () => {
+      expect(scanText('settings.xml', `<server><${PASSWORD}>the password you chose is ${random}!</${PASSWORD}></server>\n`).length).toBeGreaterThan(0);
+    });
+
+    it('a message catalog keeps its exemption for a punctuated sentence, and the same text elsewhere is found', () => {
+      const text = `<resources><string name="${PASSWORD}">This is the way!</string></resources>\n`;
+      expect(scanText('app/src/main/res/values/auth.xml', text)).toEqual([]);
+      expect(scanText('settings.xml', text).length).toBeGreaterThan(0);
+      expect(scanText('i18n/en.json', `{"${PASSWORD}": "${plainPhrase}\u2026"}\n`)).toEqual([]);
+    });
+
+    it('a trailing ellipsis still marks a cut-off token as a placeholder', () => {
+      expect(scanText('config.yml', `${PASSWORD}: "Bearer ${random.slice(0, 12)}..."\n`)).toEqual([]);
+      expect(scanText('config.yml', `${PASSWORD}: "${random.slice(0, 12)}..."\n`)).toEqual([]);
     });
 
     it('an Android res/values sentence under a password-like name is a message, but the same text elsewhere is a passphrase', () => {
