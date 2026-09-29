@@ -51,6 +51,10 @@
  *   - Literals over several lines are judged like a quoted value: TOML/Python triple quotes, HCL/Ruby/Perl/PHP heredocs, PowerShell
  *     here-strings, template literals, quotes closed on a later line, backslash / INI continuation lines, YAML scalars on the next line.
  *     They are read up to 200 lines / 32 KB; a literal that does not end within that is reported (fail closed).
+ *   - Credentials that are not `name = value`: HTTP `Authorization` values with a scheme (http-auth-credential; Basic is decoded and
+ *     judged by its password), Terraform `variable "api_token" { default = ... }` labels, and whitespace-delimited service directives
+ *     keyed on their own names (config-directive-secret: Redis requirepass / ACL, HAProxy userlist, Mosquitto, nginx / Apache header
+ *     and SetEnv directives, ...). Only literals count; references, placeholders and paths pass.
  *   - Name and value fields in one JSON/YAML/HCL/XML object or call are matched in either order (secret-name-value-pair),
  *     and secrets passed on a command line (gh secret set, vercel env add, aws ssm put-parameter, ...) are their own rule.
  *
@@ -295,6 +299,8 @@ const WEAK_WORDS = new Set([
   'credential', 'credentials', 'salt', 'pepper',
 ]);
 const WEAK_MERGED_SUBSTRING = /secret|passw(?:or)?d|token|privatekey|apikey|credential/;
+// Credential variables whose names do not end in a secret noun: sshpass reads SSHPASS, redis-cli reads REDISCLI_AUTH, Dovecot's LDAP bind is dnpass.
+const EXACT_STRONG_MERGED = new Set(['sshpass', 'rediscliauth', 'dnpass']);
 
 /** @returns {'strong' | 'weak' | null} how secret-like an identifier is (see the file header) */
 export function secretNameKind(name) {
@@ -304,7 +310,7 @@ export function secretNameKind(name) {
   const bare = words.map((w) => w.replace(/\d+$/, ''));
   const last = bare[bare.length - 1];
   const merged = bare.join('');
-  if (STRONG_LAST_WORDS.has(last) || STRONG_MERGED_SUFFIX.test(merged)) return 'strong';
+  if (STRONG_LAST_WORDS.has(last) || STRONG_MERGED_SUFFIX.test(merged) || EXACT_STRONG_MERGED.has(merged)) return 'strong';
   if (last === 'key' && KEY_QUALIFIERS.has(bare[bare.length - 2])) return 'strong';
   // A bare "<vendor>_KEY" (SENDGRID_KEY, STRIPE_KEY) may be a credential or a cache key: only a random-looking value counts.
   if (last === 'key' && bare.length > 1) return 'weak';
@@ -898,7 +904,7 @@ const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.tf', '.tfvars', '.hcl', '.example',
-  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig',
+  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig', '.acl',
 ]);
 // XML configuration formats: Maven settings.xml and pom.xml, Ant, Tomcat server.xml, Android strings.xml, .NET
 // web.config / app.config (.config is above), MSBuild (.csproj, .props, .targets), .plist, .resx, .wsdl. These hold settings
@@ -935,8 +941,11 @@ const CONFIG_BASENAMES = new Set([
   // Shell start-up files have no extension: `export API_TOKEN=...` in them is a setting, not a code expression.
   '.bashrc', '.bash_profile', '.bash_login', '.bash_aliases', '.profile', '.zshrc', '.zshenv', '.zprofile', '.zlogin',
   '.kshrc', '.cshrc', '.tcshrc', '.login', 'fish_variables',
+  // Whitespace-delimited service settings without an extension (see the config-directive-secret rule).
+  '.htaccess', 'msmtprc', '.msmtprc', 'mpoprc', '.mpoprc', 'fetchmailrc', '.fetchmailrc',
 ]);
 
+const WHOLE_FILE_SECRET_NAME = /^(?:\.?erlang\.cookie|(?:mongo(?:db)?[._-])?keyfile|mongo(?:db)?\.key)$/;
 const NETRC_NAME = /(?:^|[._-])netrc(?:$|[._-])/;
 const PGPASS_NAME = /(?:^|[._-])pgpass(?:$|[._-])/;
 const GITCRED_NAME = /(?:^|[._-])git-credentials(?:$|[._-])/;
@@ -969,7 +978,8 @@ export function credentialFormats(filePath) {
   if (base === '.terraformrc' || base === 'terraform.rc' || base.endsWith('.tfrc.json') || base.endsWith('.tfrc') || base.includes('.tfstate')) tags.add('terraformrc');
   if (/^[._]?curlrc$/.test(base)) tags.add('curlrc');
   if (base === '.wgetrc' || base === 'wgetrc') tags.add('wgetrc');
-  if (base === '.vault-token' || base === 'vault-token') tags.add('vault');
+  // Files whose whole content is the secret: a Vault token, a MongoDB replica-set key file, an Erlang (RabbitMQ) cookie.
+  if (base === '.vault-token' || base === 'vault-token' || WHOLE_FILE_SECRET_NAME.test(base)) tags.add('vault');
   return tags;
 }
 
@@ -978,6 +988,9 @@ export function credentialFormats(filePath) {
 const STRICT_CREDENTIAL_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'docker', 'kube', 'mycnf', 's3cfg', 'terraformrc', 'wgetrc', 'curlrc'];
 const CREDENTIAL_FILE_MIN_LENGTH = 4;
 const CREDENTIAL_FILE_NAMES = new Set(['auth', 'authident', 'npmauthident', 'clientkeydata', 'clientkey', 'authorization', 'basicauth']);
+
+// Dovecot keeps settings in dovecot.conf, dovecot-sql.conf.ext, dovecot-ldap.conf.ext: `.ext` alone says nothing about a file.
+const DOVECOT_CONFIG = /^dovecot[a-z0-9._-]{0,60}\.conf(?:\.ext)?$/;
 
 /**
  * 'prose'  Markdown and text: docs paste real values into code fences.
@@ -996,6 +1009,7 @@ export function fileMode(filePath) {
     base.startsWith('env.') ||
     base.startsWith('docker-compose') ||
     base.startsWith('dockerfile') ||
+    DOVECOT_CONFIG.test(base) ||
     CONFIG_BASENAMES.has(base) ||
     CONFIG_EXTENSIONS.has(ext) ||
     XML_CONFIG_EXTENSIONS.has(ext) ||
@@ -1014,7 +1028,7 @@ export function fileMode(filePath) {
 
 // One or more line breaks (real or JSON-escaped). Unambiguous on purpose, to avoid regex backtracking blow-ups.
 const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:\\r|\r)?(?:\\n|\n))+[ \t]*`;
-const SECRET_HINT = /secret|passw|pwd|pass|token|credential|salt|pepper|key/i;
+const SECRET_HINT = /secret|passw|pwd|pass|token|credential|salt|pepper|key|auth/i;
 const ENV_ROOT = String.raw`(?:process\.env|import\.meta\.env)`;
 // A "/" in a URL, or the same "/" escaped for JSON (\/).
 const SLASH = String.raw`\\?\/`;
@@ -1106,7 +1120,7 @@ function shellArgument(input, start) {
 
 // Commands that take a password on their command line, and the rest of that line (see cliPasswordArguments).
 const CLI_PASSWORD_COMMAND =
-  /(?<![A-Za-z0-9_.-])(?:curl|wget2?|mysql(?:dump|admin|pump|import|show|check|slap)?|mariadb(?:-dump|-admin)?|mongo(?:sh|dump|restore|export|import|stat|top)?|redis6?-cli|valkey-cli|sshpass|smbclient|xhs?|https?|ldap(?:search|modify|add|delete|passwd|compare|whoami))(?=[ \t])[^\n]{0,600}/g;
+  /(?<![A-Za-z0-9_.-])(?:curl|wget2?|mysql(?:dump|admin|pump|import|show|check|slap)?|mariadb(?:-dump|-admin)?|mongo(?:sh|dump|restore|export|import|stat|top)?|redis6?-cli|valkey-cli|sshpass|smbclient|xhs?|https?|ldap(?:search|modify|add|delete|passwd|compare|whoami)|mosquitto_(?:pub|sub|rr|passwd)|htpasswd|rabbitmq(?:ctl|admin)|sqlcmd|keytool|gpg2?|(?:docker|podman|az|vault)(?=[ \t]+login))(?=[ \t])[^\n]{0,600}/g;
 
 /** The password arguments of one command line for the tools in CLI_PASSWORD_COMMAND (`words` are its shell words, tool first). */
 function cliPasswordArguments(allWords) {
@@ -1117,6 +1131,10 @@ function cliPasswordArguments(allWords) {
   const tool = words[0].replace(/[0-9]+$/, '');
   const found = [];
   const next = (i) => (i + 1 < words.length && !words[i + 1].startsWith('-') ? words[i + 1] : null);
+  // A password given as a shell variable ($PW, %PW%) is a reference, not a literal.
+  const literal = (value) => {
+    if (value !== null && value !== undefined && !SHELL_REFERENCE.test(value)) found.push(value);
+  };
   const auth = (value) => {
     // user:password; a value without a colon is a bearer token only when the command says so.
     const colon = value.indexOf(':');
@@ -1156,6 +1174,39 @@ function cliPasswordArguments(allWords) {
     } else if (tool.startsWith('ldap')) {
       if (word === '-w') found.push(next(i) ?? '');
       else if (/^-w./.test(word)) found.push(word.slice(2));
+    } else if (tool === 'mosquitto_pub' || tool === 'mosquitto_sub' || tool === 'mosquitto_rr') {
+      if (word === '-P' || flag === '--pw') literal(value());
+    } else if (tool === 'mosquitto_passwd') {
+      // mosquitto_passwd -b [-c] passwordfile username password  (without -b the password is prompted for)
+      if (/^-[A-Za-z]*b[A-Za-z]*$/.test(word)) {
+        const operands = words.slice(i + 1).filter((w) => !w.startsWith('-'));
+        if (operands.length >= 3) literal(operands[2]);
+      }
+    } else if (tool === 'htpasswd') {
+      // htpasswd -b[cmBdps] passwordfile username password;  -nb username password
+      if (/^-[A-Za-z]*b[A-Za-z]*$/.test(word)) {
+        const operands = words.slice(i + 1).filter((w) => !w.startsWith('-'));
+        const password = /^-[A-Za-z]*n/.test(word) ? operands[1] : operands[2];
+        if (password !== undefined) literal(password);
+      }
+    } else if (tool === 'rabbitmqctl') {
+      // rabbitmqctl add_user USER PASSWORD, change_password USER PASSWORD, authenticate_user USER PASSWORD
+      if (/^(?:add_user|change_password|authenticate_user)$/.test(word) && i + 2 < words.length) literal(words[i + 2]);
+    } else if (tool === 'rabbitmqadmin') {
+      if (word === '-p' || flag === '--password') literal(value());
+    } else if (tool === 'sqlcmd') {
+      if (word === '-P') literal(next(i));
+    } else if (tool === 'keytool') {
+      if (/^-(?:store|key|deststore|destkey|srcstore|srckey)pass$/.test(word)) literal(next(i));
+    } else if (tool === 'gpg' || tool === 'gpg2') {
+      if (flag === '--passphrase') literal(value());
+    } else if (tool === 'docker' || tool === 'podman') {
+      if (words[1] === 'login' && (word === '-p' || flag === '--password')) literal(value());
+    } else if (tool === 'az') {
+      if (words[1] === 'login' && (word === '-p' || flag === '--password')) literal(value());
+    } else if (tool === 'vault') {
+      // vault login TOKEN: the first operand that is not a flag or a key=value option
+      if (words[1] === 'login' && i === 2 && !word.startsWith('-') && !word.includes('=') && looksRandom(word, GATES.configWeak)) found.push(word);
     }
   }
   return found.filter((password) => password !== '');
@@ -1909,6 +1960,9 @@ const CLI_TOOLS = [
   [/^az[ \t]+keyvault[ \t]+secret[ \t]+set/, {}],
   [/^kubectl[ \t]+create[ \t]+secret[ \t]+generic/, {}],
   [/^docker[ \t]+secret[ \t]+create/, {}],
+  // `pulumi config set [--secret] NAME VALUE`: with --secret the value is a secret whatever the name says.
+  [/^pulumi[ \t]+config[ \t]+set(?![A-Za-z-])/, { positionalValue: true, secretFlag: '--secret' }],
+  [/^aws[ \t]+configure[ \t]+set/, { positionalValue: true }],
 ];
 
 /** Secret-name kind, with the extra auth-style names that only mean a credential inside a credential file. */
@@ -2777,6 +2831,9 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
 }
 
+/** A multi-line value that is an ansible-vault ciphertext ($ANSIBLE_VAULT;1.1;AES256 and its hex lines): encrypted, so not a credential. */
+const isVaultBody = (values) => values.length > 0 && /^\$ANSIBLE_VAULT[;\s]/.test(values[0]);
+
 const SECRET_ASSIGNMENT_MATCHER = {
   // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
   // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
@@ -2792,7 +2849,11 @@ const SECRET_ASSIGNMENT_MATCHER = {
       // A YAML tag or anchor before the scalar (`!!str V`, `&anchor V`, `!vault V`) is not part of the value.
       YAML_NODE_PROPERTIES.lastIndex = valueStart;
       const properties = YAML_NODE_PROPERTIES.exec(input);
-      if (properties) valueStart += properties[0].length;
+      if (properties) {
+        // `!vault |` marks an ansible-vault ciphertext: encrypted, not a plaintext credential.
+        if (/(?:^|[ \t])!vault[ \t]/.test(properties[0])) return false;
+        valueStart += properties[0].length;
+      }
     }
     // A literal over several lines (heredoc, triple quotes, a quote closed on a later line, a template literal) is judged
     // as a whole. One that does not end within the bounds is reported: it cannot be verified.
@@ -2800,6 +2861,7 @@ const SECRET_ASSIGNMENT_MATCHER = {
     if (multiline !== null) {
       m.spanEnd = multiline.end;
       if (multiline.exhausted) return exhaustedVerdict(m, ctx, multiline);
+      if (isVaultBody(multiline.values)) return false;
       return multiline.values.some((text) =>
         isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
       );
@@ -2831,11 +2893,13 @@ const SECRET_ASSIGNMENT_MATCHER = {
     if (bare.startsWith('`') && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false; // an unquoted command substitution
     if (ctx.mode !== 'config') return check(token, false);
     const extras = unquotedContinuations(ctx, input, m.index, valueStart + bare.length, bare);
+    if (extras.some((extra) => isVaultBody([extra.value]))) return false; // `NAME: |` + an ansible-vault ciphertext
     // A backslash at the end of the line, an INI continuation line, a YAML scalar folded over indented lines.
     const continued = /^[|>][-+0-9]*$/.test(bare) ? null : continuedValue(ctx, input, m.index, valueStart);
     if (continued !== null) {
       m.spanEnd = continued.end;
       if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
+      if (isVaultBody(continued.values)) return false;
       for (const text of continued.values) if (check(text, true)) return true;
     }
     // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
@@ -2867,6 +2931,116 @@ const DEFINITION_ASSIGNMENT_MATCHER = {
     /(?<![A-Za-z0-9_$.\/-])(@|\((?:def|defonce|defvar|defparameter|defconstant|defcustom|setq|setf|define)(?![A-Za-z0-9_-])[ \t]{1,8}(?:\^[^\s()]{1,30}[ \t]{1,8}){0,2}|:)([A-Za-z_][A-Za-z0-9_.-]{0,255})()[ \t]{1,64}(?=["'\x60])/g,
   accept: (m, ctx) => SECRET_ASSIGNMENT_MATCHER.accept(m, ctx),
 };
+
+// ---------------------------------------------------------------------------
+// HTTP credentials written out: `Authorization: Bearer <token>`, headers.set('Authorization', 'Basic <base64>'),
+// `proxy_set_header Authorization "Bearer <token>"`, requests.get(url, auth=('user', 'password')), ...
+// ---------------------------------------------------------------------------
+
+// A token in a header must be at least this long to count: shorter text is a scheme keyword, a label or a test value.
+const HTTP_CREDENTIAL_MIN_LENGTH = 12;
+const HTTP_TOKEN_GATE = { minLength: HTTP_CREDENTIAL_MIN_LENGTH, minEntropy: 3.0 };
+// The examples of RFC 7617, 6749, 6750 and 5849 (Aladdin / open sesame, the OAuth client, and the two sample bearer tokens): documentation, in any file.
+const HTTP_SAMPLE_LOGINS = new Set(['aladdin:open sesame', 's6bhdrkqt3:gx1fbat3bv']);
+const HTTP_SAMPLE_TOKENS = new Set(['mf_9.b5f-4.1jqm', 'h480djs93hd8']);
+// A value that stands for a token (${token}, {token}, $(cat f), <token>, [token], f(x)) contains one of these; real tokens do not.
+const HTTP_TOKEN_REFERENCE = /[{}()<>[\]$]/;
+
+/** The password of a decoded `user:password` pair, or null when `value` is not the base64 of a printable pair. */
+function basicPassword(value) {
+  if (!/^[A-Za-z0-9+/_-]{4,4096}={0,2}$/.test(value)) return null;
+  const decoded = Buffer.from(value.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  if (!/^[\x20-\x7e]{3,4096}$/.test(decoded)) return null;
+  if (HTTP_SAMPLE_LOGINS.has(decoded.toLowerCase())) return '';
+  const colon = decoded.indexOf(':');
+  return colon === -1 ? null : decoded.slice(colon + 1);
+}
+
+/**
+ * Is the credential of an HTTP authorization header (`Bearer <token>`, `Basic <base64>`, `token <x>`, a bare token) a secret?
+ * A reference or placeholder is not. Basic credentials are decoded and the password is judged like a URL password
+ * (so `user:pass` and the RFC sample pass); everything else must look machine-generated. A JWT is the jwt-token rule's business.
+ */
+function httpCredentialIsSecret(scheme, raw) {
+  const value = raw.replace(/[,;.]+$/, '');
+  if (value.includes('${')) return expansionLiterals(value).some((literal) => looksRandom(stripQuotes(literal), HTTP_TOKEN_GATE));
+  if (HTTP_TOKEN_REFERENCE.test(value) || isPlaceholder(value)) return false;
+  if (/^eyJ[A-Za-z0-9_-]{10,}\.eyJ/.test(value) || HTTP_SAMPLE_TOKENS.has(value.toLowerCase())) return false;
+  if (scheme !== undefined && scheme.toLowerCase() === 'basic') {
+    const password = basicPassword(value);
+    if (password !== null) return password !== '' && urlPasswordIsSecret(password);
+  }
+  return looksRandom(value, HTTP_TOKEN_GATE);
+}
+
+// What follows the header name (all groups are shared by the matchers below):
+//   1 = opening quote of the value ('' when there is none), 2 = the scheme (Bearer, Basic, token, ApiKey, ...), 3 = the credential
+// The credential stops at a blank, a quote or a backslash, so `Bearer <t>` inside "..." or a JSON string is read whole.
+const HTTP_CREDENTIAL = String.raw`(["'\x60]?)(?:([A-Za-z][A-Za-z0-9_-]{0,30})[ \t]{1,8})?([^\s"'\x60\\]{${HTTP_CREDENTIAL_MIN_LENGTH},4096})`;
+// [Proxy-]Authorization / X-Authorization
+const HTTP_AUTH_NAME = String.raw`(?<![A-Za-z0-9_-])(?:[A-Za-z]{1,20}-)?authorization(?![A-Za-z0-9_-])`;
+// after the name: `"Authorization": "..."`, `Authorization: ...`, `headers["Authorization"] = ...`, `'Authorization' => ...` | `.set('Authorization', ...)`
+const HTTP_AUTH_SEPARATOR = String.raw`(?:["'\x60]?\]?[ \t]{0,8}(?:=>|[:=])|["'\x60][ \t]{0,8},)[ \t]{0,8}`;
+// Directives of servers and proxies that set a request header: nginx, Apache mod_headers, HAProxy.
+const HTTP_HEADER_DIRECTIVE = String.raw`(?<![A-Za-z0-9_-])(?:proxy_set_header|more_set_headers|add_header|RequestHeader[ \t]+(?:set|add|append|merge)|Header[ \t]+(?:always[ \t]+)?(?:set|add|append|merge)|http-(?:request|response)[ \t]+(?:set|add)-header)`;
+
+// ---------------------------------------------------------------------------
+// Whitespace-delimited service configuration: Redis, Mosquitto, HAProxy, msmtp, fetchmail, nginx / Apache header and variable
+// directives. There is no `=` to anchor on, so every matcher is keyed on a directive or file name specific to the service.
+// ---------------------------------------------------------------------------
+
+// A directive's value: "double" (escapes), 'single' or one bare word. Groups dq / sq / bare.
+const DIRECTIVE_VALUE = String.raw`(?:"(?<dq>(?:[^"\\\n]|\\.){0,4096})"|'(?<sq>[^'\n]{0,4096})'|(?<bare>[^\s"']{1,4096}))`;
+// Documented sample values (redis.conf ships `# requirepass foobared`).
+const DIRECTIVE_SAMPLES = new Set(['foobared', 'changeit']);
+
+/** The text of a DIRECTIVE_VALUE match ({ text, quoted }). A trailing `;` ends an nginx directive; it is not part of the value. */
+function directiveValue(groups) {
+  if (groups.dq !== undefined) return { text: unescapeQuoted(groups.dq), quoted: true };
+  if (groups.sq !== undefined) return { text: groups.sq, quoted: true };
+  return { text: groups.bare.replace(/;+$/, ''), quoted: false };
+}
+
+// nginx variables ($http_x_api_key, ${var}), HAProxy sample fetches and log-format (%[req.hdr(x)]), Apache expressions (%{HTTP_X}e): references.
+const DIRECTIVE_REFERENCE = /^(?:\$[A-Za-z_{(]|%[[{])/;
+
+/** Is the literal value of a service directive a secret? Strong-name rules: any non-placeholder of 8+ characters. */
+function directiveIsSecret(value) {
+  if (DIRECTIVE_SAMPLES.has(value.text.toLowerCase()) || DIRECTIVE_REFERENCE.test(value.text)) return false;
+  return isSecretValue({ kind: 'strong', value: value.text, quoted: value.quoted, separator: '=', mode: 'config' });
+}
+
+/** Directives are read in configuration files, and in fenced blocks of Markdown; anywhere else the text is prose or code. */
+const directiveContextOk = (m, ctx) => ctx.mode === 'config' || (ctx.mode === 'prose' && ctx.fenceLang(m.index) !== undefined);
+
+// Services whose configuration file is recognised by name (lower-case base name, template suffix removed).
+const SERVICE_CONFIG_FILES = [
+  ['redis', /^(?:redis|sentinel|valkey|keydb)[a-z0-9._-]{0,60}\.conf$/],
+  ['mosquitto', /^mosquitto[a-z0-9._-]{0,60}\.conf$/],
+  ['msmtp', /^\.?(?:msmtprc|mpoprc)$/],
+  ['fetchmail', /^\.?fetchmailrc$/],
+  ['tinyproxy', /^tinyproxy[a-z0-9._-]{0,60}\.conf$/],
+];
+
+/** Which service configuration a file is (see SERVICE_CONFIG_FILES), or null; also by directory (`.../mosquitto/*.conf`). */
+function serviceConfigOf(filePath) {
+  const normalized = filePath.split(path.sep).join('/').toLowerCase();
+  const base = baseWithoutTemplateSuffix(path.posix.basename(normalized));
+  for (const [service, pattern] of SERVICE_CONFIG_FILES) if (pattern.test(base)) return service;
+  const dir = /(?:^|\/)(redis|mosquitto)\/[^/]{1,100}\.conf$/.exec(normalized);
+  return dir === null ? null : dir[1];
+}
+
+/** Redis ACL rules: `>plaintext` adds a password, `#<sha256>` a password hash. Other rules (on, ~*, +@all, nopass) are not secrets. */
+function aclRulesHoldSecret(rules) {
+  const tokens = rules.trim().split(/[ \t]+/);
+  // `user NAME` + rules: without an on/off/key/command rule the line is something else (an nginx `user` directive, prose).
+  if (!tokens.some((token) => /^(?:on|off|reset|resetpass|nopass|allkeys|allcommands|allchannels|~.+|%[RW]{1,2}~.+|\+.+|-.+|&.+)$/i.test(token))) return false;
+  return tokens.some((token) => {
+    if (token.startsWith('>')) return directiveIsSecret({ text: token.slice(1), quoted: false });
+    return /^#[0-9a-fA-F]{64}$/.test(token) && !isPlaceholder(token.slice(1));
+  });
+}
 
 export const RULES = [
   {
@@ -3105,6 +3279,19 @@ export const RULES = [
       SECRET_ASSIGNMENT_MATCHER,
       DEFINITION_ASSIGNMENT_MATCHER,
       {
+        // Pulumi.<stack>.yaml: `config:` keys are `<namespace>:<name>: value` (app:apiToken: V). The name is the part after the namespace; a
+        // secret stored by `pulumi config set --secret` is a `secure:` ciphertext mapping and passes.
+        appliesTo: (ctx) => ctx.mode === 'config' && /(?:^|\/)pulumi(?:\.[A-Za-z0-9_-]{1,64})?\.ya?ml$/i.test(ctx.path),
+        pattern: /(?<![A-Za-z0-9_$.-])[A-Za-z0-9_-]{1,64}:([A-Za-z_][A-Za-z0-9_.-]{0,255})(:)[ \t]{0,64}(?=\S)/g,
+        accept: (m, ctx) => {
+          // SECRET_ASSIGNMENT_MATCHER reads the name from group 2 and the separator from group 3.
+          const shifted = Object.assign([m[0], m[1], m[1], m[2]], { index: m.index, input: m.input });
+          const found = SECRET_ASSIGNMENT_MATCHER.accept(shifted, ctx);
+          if (shifted.spanEnd !== undefined) m.spanEnd = shifted.spanEnd;
+          return found;
+        },
+      },
+      {
         // The value starts on a later line: YAML `NAME:` + an indented scalar, INI / configparser `NAME =` + indented
         // continuation lines. A nested mapping (`NAME:` + `value: V`) is the name/value pair rule's business.
         // group 2 = name. The name line ends the match, so the cost per start is the name plus a comment.
@@ -3134,7 +3321,7 @@ export const RULES = [
             }
             at = next + 1;
           }
-          if (pieces.length === 0) return false;
+          if (pieces.length === 0 || isVaultBody(pieces)) return false;
           if (!spendMultiline(ctx, end - m.index)) return exhaustedVerdict(m, ctx, { budget: true });
           m.spanEnd = end;
           const judge = (text) => isSecretValue({ kind, value: stripQuotes(text), quoted: true, separator: m[0].includes('=') ? '=' : ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
@@ -3345,7 +3532,7 @@ export const RULES = [
         // The name is the KEY of a mapping whose child holds the value: `secrets:\n  NAME:\n    value: Y`, {"NAME": {"value": "Y"}},
         // `NAME: {value: Y}`. group 2 = quote, 3 = name; the child is the indented block below, or the object that follows.
         pattern:
-          /(?<![A-Za-z0-9_$.-])(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\1[ \t]*:[ \t]*(?=\{|[ \t]*(?:#[^\n]*)?\r?\n)/g,
+          /(?<![A-Za-z0-9_$.-])(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\1[ \t]*:[ \t]*(?=\{|(?:#[^\n]*)?\r?\n)/g,
         accept: (m, ctx) => {
           if (ctx.mode === 'code' && m[1] === '') return false;
           const kind = nameKindFor(m[2], ctx);
@@ -3355,6 +3542,18 @@ export const RULES = [
           const isBlock = m.input[m.index + m[0].length] !== '{';
           if (isBlock && (ctx.mode === 'code' || !/^[ \t]*(?:-[ \t]+)*$/.test(prefix))) return false;
           return childHoldsSecretValue(m, kind, ctx, prefix.length);
+        },
+      },
+      {
+        // Terraform / OpenTofu / Packer blocks whose secret-like LABEL is the variable's name: variable "api_token" { default = "V" },
+        // output "api_token" { value = "V" }. The label is neither a name/key field nor an assignment, so the matchers above never pair it
+        // with `default` / `value`. A `sensitive = true` or `type = string` alone carries no value and passes.
+        hint: /(?:variable|output)[ \t]/,
+        pattern: /(?<![A-Za-z0-9_$.-])(?:variable|output)[ \t]+(["'])([A-Za-z_][A-Za-z0-9_.-]{0,254})\1[ \t]*(?=\{)/g,
+        appliesTo: (ctx) => ctx.mode !== 'code',
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          return kind !== null && childHoldsSecretValue(m, kind, ctx, 0);
         },
       },
       {
@@ -3385,11 +3584,11 @@ export const RULES = [
     id: 'secret-cli-command',
     description:
       'secret-like variable set on a command line with a literal value (gh secret set NAME --body V, netlify env:set NAME V, vercel env add NAME <<< V, aws ssm put-parameter --name NAME --value V, kubectl create secret --from-literal)',
-    hint: /\b(?:gh|netlify|vercel|heroku|fly|flyctl|wrangler|railway|doppler|aws|firebase|az|kubectl|docker)[ \t]/,
+    hint: /\b(?:gh|netlify|vercel|heroku|fly|flyctl|wrangler|railway|doppler|aws|firebase|az|kubectl|docker|pulumi)[ \t]/,
     matchers: [
       {
         pattern:
-          /(?<![A-Za-z0-9_-])(?:gh[ \t]+(?:secret|variable)[ \t]+set|netlify[ \t]+env:set|vercel[ \t]+env[ \t]+(?:add|update)|heroku[ \t]+config:set|fly(?:ctl)?[ \t]+secrets[ \t]+set|wrangler[ \t]+secret[ \t]+put|railway[ \t]+variables[ \t]+set|doppler[ \t]+secrets[ \t]+set|aws[ \t]+ssm[ \t]+put-parameter|aws[ \t]+secretsmanager[ \t]+(?:create-secret|put-secret-value)|firebase[ \t]+functions:secrets:set|az[ \t]+keyvault[ \t]+secret[ \t]+set|kubectl[ \t]+create[ \t]+secret[ \t]+generic|docker[ \t]+secret[ \t]+create)[^\n]{0,600}/g,
+          /(?<![A-Za-z0-9_-])(?:gh[ \t]+(?:secret|variable)[ \t]+set|netlify[ \t]+env:set|vercel[ \t]+env[ \t]+(?:add|update)|heroku[ \t]+config:set|fly(?:ctl)?[ \t]+secrets[ \t]+set|wrangler[ \t]+secret[ \t]+put|railway[ \t]+variables[ \t]+set|doppler[ \t]+secrets[ \t]+set|aws[ \t]+ssm[ \t]+put-parameter|aws[ \t]+secretsmanager[ \t]+(?:create-secret|put-secret-value)|firebase[ \t]+functions:secrets:set|az[ \t]+keyvault[ \t]+secret[ \t]+set|kubectl[ \t]+create[ \t]+secret[ \t]+generic|docker[ \t]+secret[ \t]+create|pulumi[ \t]+config[ \t]+set(?![A-Za-z-])|aws[ \t]+configure[ \t]+set)[^\n]{0,600}/g,
         accept: (m, ctx) => {
           const tool = CLI_TOOLS.find(([re]) => re.test(m[0]));
           if (!tool) return false;
@@ -3397,14 +3596,16 @@ export const RULES = [
           const stdin = stdinValues(m, ctx);
           const options = { positionalValue: tool[1].positionalValue ?? false, assignments: ctx.mode === 'code' };
           const words = shellWords(m[0].slice(tool[0].exec(m[0])[0].length));
+          // `pulumi config set --secret NAME VALUE` names a secret by its flag, not by its name.
+          const nameKind = (name) => secretNameKind(name) ?? (tool[1].secretFlag !== undefined && words.includes(tool[1].secretFlag) ? 'strong' : null);
           const judge = (piped) =>
             cliPairs(words, options, piped).some(([name, value]) => {
-              const kind = secretNameKind(name);
+              const kind = nameKind(name);
               return kind !== null && isSecretValue({ kind, value: value.trim(), quoted: true, separator: '=', mode: 'config', catalog: false });
             });
           const found = (stdin.values.length === 0 ? [null] : stdin.values).some(judge);
           // A heredoc whose delimiter is not found within the bounds is not verified: fail closed for a secret-like name.
-          const unverified = !found && stdin.unterminated && cliPairs(words, options, HEREDOC_UNVERIFIED).some(([name, value]) => value === HEREDOC_UNVERIFIED && secretNameKind(name) !== null);
+          const unverified = !found && stdin.unterminated && cliPairs(words, options, HEREDOC_UNVERIFIED).some(([name, value]) => value === HEREDOC_UNVERIFIED && nameKind(name) !== null);
           if (found || unverified) {
             // The heredoc body is part of the match: an allow marker on one of its lines counts, and so does a change to one of them.
             if (stdin.end > m.index + m[0].length) m.spanEnd = stdin.end;
@@ -3527,6 +3728,158 @@ export const RULES = [
         accept: (m, ctx) => {
           if (ctx.formats.has('docker') || !ctx.hasBefore('auths', m.index, 500)) return false; // registry entries sit right under "auths"
           return credentialValueIsSecret(m[3] ?? m[4] ?? m[5]);
+        },
+      },
+    ],
+  },
+  {
+    id: 'http-auth-credential',
+    description:
+      'HTTP credential written out: Authorization / Proxy-Authorization with a Bearer, Basic, token or ApiKey value (header text, curl -H, headers.set(...), object or YAML or JSON fields, nginx / Apache / HAProxy header directives), and Basic-auth calls with a literal password (auth=("user", "pw"), HTTPBasicAuth, Credentials.basic)',
+    hint: /auth|basic|credential/i,
+    matchers: [
+      {
+        // Authorization: Bearer <token>  |  "Authorization": "Basic <base64>"  |  .set('Authorization', 'token <token>')
+        pattern: new RegExp(HTTP_AUTH_NAME + HTTP_AUTH_SEPARATOR + HTTP_CREDENTIAL, 'gi'),
+        accept: (m, ctx) => {
+          if ((m[2] ?? '').toLowerCase() === 'digest') return false; // judged by its own matcher
+          // In source code a bare word after the name is an identifier (`Authorization: authHeader`), not a literal token.
+          if (ctx.mode === 'code' && m[2] === undefined && m[1] === '') return false;
+          return httpCredentialIsSecret(m[2], m[3]);
+        },
+      },
+      {
+        // proxy_set_header Authorization "Bearer <token>";  RequestHeader set Authorization "Basic <base64>"  http-request set-header Authorization ...
+        pattern: new RegExp(HTTP_HEADER_DIRECTIVE + String.raw`[ \t]+["']?(?:[A-Za-z]{1,20}-)?authorization["']?[ \t]{1,8}` + HTTP_CREDENTIAL, 'gi'),
+        accept: (m, ctx) => directiveContextOk(m, ctx) && (m[2] ?? '').toLowerCase() !== 'digest' && httpCredentialIsSecret(m[2], m[3]),
+      },
+      {
+        // Authorization: Digest username="u", realm="r", nonce="n", uri="/", response="<hash>"  (the response is replayable within its nonce)
+        pattern: new RegExp(HTTP_AUTH_NAME + HTTP_AUTH_SEPARATOR + String.raw`["'\x60]?digest[ \t][^\n]{0,600}?\bresponse=\\?["']?([A-Za-z0-9+/=_-]{16,256})`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]) && looksRandom(m[1], { minLength: 16, minEntropy: 3.0 }),
+      },
+      {
+        // requests: auth=("user", "pw"), HTTPBasicAuth('user', 'pw'); Java / Kotlin / C# / Go: Credentials.basic("u", "pw"), new UsernamePasswordCredentials("u", "pw"),
+        // new Basic("u", "pw"), NetworkCredential, SetBasicAuth; supertest .auth('u', 'pw'). The second argument is a literal password.
+        hint: /auth|basic|credential/i,
+        pattern:
+          /(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|\.auth\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\()[^,()\n]{1,200},[ \t]{0,8}(["'\x60])([^"'\x60\s]{1,4096})\1(?=[ \t]{0,8}[),])/g,
+        accept: (m) => isSecretValue({ kind: 'strong', value: m[2], quoted: true, separator: '=', mode: 'config' }),
+      },
+    ],
+  },
+  {
+    id: 'config-directive-secret',
+    description:
+      'password on a whitespace-delimited service directive: Redis requirepass / masterauth / sentinel auth-pass / ACL >password, Mosquitto, HAProxy userlist, msmtp, fetchmail, nginx / Apache header and variable directives, ssl_passphrase_command, OpenVPN inline credentials',
+    hint: /secret|passw|pwd|pass|token|credential|key|auth|user[ \t]|header/i,
+    matchers: [
+      {
+        // redis.conf: requirepass P, masterauth P, tls-key-file-pass P, tls-client-key-file-pass P; and the same as command-line options
+        // (redis-server --requirepass P) or commands (CONFIG SET requirepass P). group 1 is set when the directive starts its line.
+        pattern: new RegExp(
+          String.raw`(?:^([ \t]*)|--|\bset[ \t]+)(?:requirepass|masterauth|tls-key-file-pass|tls-client-key-file-pass)(?:[ \t]+|=|["'][ \t]{0,4},[ \t]{0,4}["'])${DIRECTIVE_VALUE}`,
+          'gim',
+        ),
+        accept: (m, ctx) => (m[1] === undefined || directiveContextOk(m, ctx)) && directiveIsSecret(directiveValue(m.groups)),
+      },
+      {
+        // sentinel.conf: sentinel auth-pass <master> P, sentinel requirepass P
+        pattern: new RegExp(String.raw`^[ \t]*sentinel[ \t]+(?:auth-pass[ \t]+\S{1,256}|requirepass)[ \t]+${DIRECTIVE_VALUE}`, 'gim'),
+        accept: (m, ctx) => directiveContextOk(m, ctx) && directiveIsSecret(directiveValue(m.groups)),
+      },
+      {
+        // ACL rules: `user default on >P ~* +@all`, `user app on #<sha256> ...`, ACL SETUSER app on >P
+        pattern: /^[ \t]*(?:user|ACL[ \t]+SETUSER)[ \t]+\S{1,256}[ \t]([^\n]{1,2000})$/gim,
+        accept: (m, ctx) => directiveContextOk(m, ctx) && aclRulesHoldSecret(m[1]),
+      },
+      {
+        // Files of a service that reads `name value`: redis, mosquitto (password P, bridge_password P, remote_password P), msmtp (password P),
+        // tinyproxy. The NAME must be secret-like (nameKindFor), so `passwordeval`, `password_file` and `requirepass`-free lines pass.
+        pattern: new RegExp(String.raw`^[ \t]*(?<name>[A-Za-z][A-Za-z0-9_.-]{0,127})[ \t]+${DIRECTIVE_VALUE}`, 'gm'),
+        appliesTo: (ctx) => ctx.mode === 'config' && serviceConfigOf(ctx.path) !== null && serviceConfigOf(ctx.path) !== 'fetchmail',
+        accept: (m, ctx) => {
+          if (/^(?:BasicAuth|basicauth)$/.test(m.groups.name)) return false;
+          const kind = nameKindFor(m.groups.name, ctx);
+          const value = directiveValue(m.groups);
+          // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
+          return kind === 'strong' && directiveIsSecret(value);
+        },
+      },
+      {
+        // tinyproxy.conf: BasicAuth <user> <password>
+        pattern: new RegExp(String.raw`^[ \t]*BasicAuth[ \t]+\S{1,256}[ \t]+${DIRECTIVE_VALUE}`, 'gim'),
+        appliesTo: (ctx) => ctx.mode === 'config' && serviceConfigOf(ctx.path) === 'tinyproxy',
+        accept: (m) => directiveIsSecret(directiveValue(m.groups)),
+      },
+      {
+        // .fetchmailrc: poll host protocol pop3 user "alice" password "P"  (also `with password P`)
+        pattern: new RegExp(String.raw`(?<![A-Za-z0-9_-])password[ \t]+${DIRECTIVE_VALUE}`, 'gi'),
+        appliesTo: (ctx) => ctx.mode === 'config' && serviceConfigOf(ctx.path) === 'fetchmail',
+        accept: (m) => directiveIsSecret(directiveValue(m.groups)),
+      },
+      {
+        // HAProxy userlist: user NAME [groups G] password HASH | insecure-password P   (a crypt(3) hash after `password` is not plaintext)
+        pattern: new RegExp(String.raw`^[ \t]*user[ \t]+\S{1,256}[ \t]+(?:groups[ \t]+\S{1,256}[ \t]+)?(?<kind>insecure-password|password)[ \t]+${DIRECTIVE_VALUE}`, 'gim'),
+        appliesTo: (ctx) => ctx.mode === 'config',
+        accept: (m, ctx) => {
+          if (!ctx.hasBefore('userlist', m.index, 8000)) return false;
+          const value = directiveValue(m.groups);
+          if (m.groups.kind.toLowerCase() === 'password' && /^\$\d[a-z]?\$/.test(value.text)) return false;
+          return directiveIsSecret(value);
+        },
+      },
+      {
+        // HAProxy: stats auth USER:PASSWORD
+        pattern: /^[ \t]*stats[ \t]+auth[ \t]+[^\s:]{1,256}:(\S{1,4096})/gim,
+        appliesTo: (ctx) => ctx.mode === 'config',
+        accept: (m) => directiveIsSecret({ text: m[1], quoted: false }),
+      },
+      {
+        // nginx, Apache and HAProxy directives that set a header, a FastCGI / uwsgi parameter or a variable to a literal under a secret-like NAME:
+        // proxy_set_header X-Api-Key "V";  fastcgi_param DB_PASSWORD V;  set $api_token "V";  SetEnv DB_PASSWORD V;  RequestHeader set X-Api-Key V
+        pattern: new RegExp(
+          String.raw`(?<![A-Za-z0-9_-])(?:proxy_set_header|more_set_headers|add_header|fastcgi_param|uwsgi_param|scgi_param|SetEnv|RequestHeader[ \t]+(?:set|add|append|merge)|Header[ \t]+(?:always[ \t]+)?(?:set|add|append|merge)|http-(?:request|response)[ \t]+(?:set|add)-header|set)[ \t]+["']?(?<name>\$?[A-Za-z_][A-Za-z0-9_.-]{0,127})["']?[ \t]+${DIRECTIVE_VALUE}`,
+          'gi',
+        ),
+        accept: (m, ctx) => {
+          if (!directiveContextOk(m, ctx)) return false;
+          // The bare `set NAME value` is nginx only with a `$variable` (fish and csh also have `set`).
+          if (/^set[ \t]/i.test(m[0]) && !m.groups.name.startsWith('$')) return false;
+          const kind = nameKindFor(m.groups.name, ctx);
+          const value = directiveValue(m.groups);
+          // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
+          return kind === 'strong' && directiveIsSecret(value);
+        },
+      },
+      {
+        // postgresql.conf: ssl_passphrase_command = 'echo P'  (the passphrase written into the command)
+        pattern: /(?<![A-Za-z0-9_-])ssl_passphrase_command[ \t]*(?:=[ \t]*)?'([^'\n]{1,1024})'/g,
+        appliesTo: (ctx) => ctx.mode === 'config',
+        accept: (m) => {
+          const echo = /(?:^|[ \t;|&])(?:echo|printf)[ \t]+(?:-[A-Za-z]+[ \t]+)*(?:"([^"\n]{1,512})"|''([^'\n]{1,512})''|([^\s"'|;&]{1,512}))/.exec(m[1]);
+          return echo !== null && directiveIsSecret({ text: echo[1] ?? echo[2] ?? echo[3], quoted: false });
+        },
+      },
+      {
+        // Erlang application config (RabbitMQ advanced.config / rabbitmq.config, sys.config): {default_pass, <<"P">>}, {password, "P"}
+        pattern: /\{[ \t\r\n]{0,16}(?<name>[a-z][A-Za-z0-9_@]{0,127})[ \t\r\n]{0,16},[ \t\r\n]{0,16}(?:<<[ \t]{0,4})?"(?<dq>(?:[^"\\\n]|\\.){0,4096})"/g,
+        appliesTo: (ctx) => ctx.mode === 'config' && /\.config(?:\.src)?$|\.app\.src$/i.test(ctx.path),
+        accept: (m, ctx) => nameKindFor(m.groups.name, ctx) === 'strong' && directiveIsSecret({ text: unescapeQuoted(m.groups.dq), quoted: true }),
+      },
+      {
+        // OpenVPN inline credentials: <auth-user-pass> / user / password / </auth-user-pass>
+        hint: /<auth-user-pass>/,
+        pattern: /<auth-user-pass>[ \t]*\r?\n[^\n]{0,256}\n([^\n<]{1,1024})\n[ \t]*<\/auth-user-pass>/g,
+        accept: (m) => directiveIsSecret({ text: m[1].trim(), quoted: false }),
+      },
+      {
+        // echo 'user:P' | chpasswd, chpasswd <<< "user:P": the password of a user account set from a script (a Dockerfile RUN line)
+        hint: /chpasswd/,
+        pattern: /(?:(?:echo|printf)[ \t]+(?:-[A-Za-z]+[ \t]+)*["']?[A-Za-z_][A-Za-z0-9_.-]{0,63}:([^\s"'|;&]{1,1024})["']?[ \t]*\|[ \t]*(?:sudo[ \t]+)?chpasswd|chpasswd[ \t]*<<<[ \t]*["']?[A-Za-z_][A-Za-z0-9_.-]{0,63}:([^\s"'|;&]{1,1024}))/g,
+        accept: (m) => {
+          const password = m[1] ?? m[2];
+          return !/^\$/.test(password) && directiveIsSecret({ text: password, quoted: false });
         },
       },
     ],

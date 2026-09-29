@@ -690,6 +690,22 @@ const SECRET_CASES = (() => {
       text: `gh secret set ${['JWT_', 'SECRET'].join('')} --body ${pairValue}\n`,
     },
     {
+      name: 'Authorization header with an opaque bearer token',
+      rule: 'http-auth-credential',
+      path: 'docs/api.md',
+      line: 1,
+      secret: pairValue,
+      text: `curl -H "${['Author', 'ization'].join('')}: Bearer ${pairValue}" https://api.internal.corp/v1/items\n`,
+    },
+    {
+      name: 'requirepass in redis.conf',
+      rule: 'config-directive-secret',
+      path: 'deploy/redis.conf',
+      line: 1,
+      secret: pairValue,
+      text: `${['require', 'pass'].join('')} ${pairValue}\n`,
+    },
+    {
       name: 'token as the user name in a lockfile dependency URL',
       rule: 'lockfile-credential',
       path: 'package-lock.json',
@@ -6089,6 +6105,521 @@ describe('review round 12', () => {
       scanText('deploy.sh', `cat <<EOF | vercel env add ${NAME}\n`.repeat(60000));
       scanText('deploy.sh', `vercel env add ${NAME} <<EOF\n${'some words here\n'.repeat(150)}EOF\n`.repeat(2000));
       expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 13: Authorization headers, Terraform variable labels, whitespace-delimited service configuration.
+// Every value is generated or assembled at run time; the names that would look like secrets are split.
+// ---------------------------------------------------------------------------
+describe('review round 13', () => {
+  const AUTH = ['Author', 'ization'].join('');
+  const token = randomString(28, 13001);
+  const password = randomString(14, 13002);
+  const basic = Buffer.from(`alice:${password}`).toString('base64');
+  const placeholderBasic = Buffer.from('user:pass').toString('base64');
+  const count = (file, text) => scanText(file, text).length;
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const makeRepo = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r13-'));
+    dirs.push(dir);
+    expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+    return dir;
+  };
+  const commit = (dir, files) => {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    }
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', 'c').status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+  // Tree scan, --range and --history each report the change, and none of them prints the secret.
+  const expectReported = (rule, file, clean, leaked, secret) => {
+    const dir = makeRepo();
+    const from = commit(dir, { [file]: clean });
+    const head = commit(dir, { [file]: leaked });
+    for (const args of [[], ['--range', `${from}..${head}`], ['--history']]) {
+      const found = scan(dir, ...args);
+      expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+      expect(found.stderr).toContain(file);
+      expect(found.stderr).toContain(rule);
+      expect(`${found.stdout}${found.stderr}`).not.toContain(secret);
+    }
+    // the same file with the clean text is not reported
+    expect(scan(dir, '--range', `${head}..${head}`).status).not.toBe(1);
+  };
+
+  // -------------------------------------------------------------------------
+  describe('(1) Authorization headers and other HTTP credentials', () => {
+    const literal = [
+      ['header text, Bearer', 'notes.txt', `${AUTH}: Bearer ${token}\n`],
+      ['header text, Basic', 'notes.txt', `${AUTH}: Basic ${basic}\n`],
+      ['header text, token scheme', 'notes.txt', `${AUTH}: token ${token}\n`],
+      ['header text, ApiKey scheme', 'notes.txt', `${AUTH}: ApiKey ${token}\n`],
+      ['header text, Api-Key scheme', 'notes.txt', `${AUTH}: Api-Key ${token}\n`],
+      ['header text, Negotiate', 'notes.txt', `${AUTH}: Negotiate ${token}${token}\n`],
+      ['header text, no scheme', 'notes.txt', `${AUTH}: ${token}\n`],
+      ['lower-case header name', 'notes.txt', `${AUTH.toLowerCase()}: bearer ${token}\n`],
+      ['Proxy-Authorization', 'notes.txt', `Proxy-${AUTH}: Basic ${basic}\n`],
+      ['Markdown fence', 'README.md', `\`\`\`\n${AUTH}: Bearer ${token}\n\`\`\`\n`],
+      ['curl -H, double quotes', 'run.sh', `curl -H "${AUTH}: Bearer ${token}" https://api.internal.corp/v1\n`],
+      ['curl -H, single quotes', 'run.sh', `curl -H '${AUTH}: Bearer ${token}' https://api.internal.corp/v1\n`],
+      ['curl --header, Basic', 'run.sh', `curl --header "${AUTH}: Basic ${basic}" https://api.internal.corp/v1\n`],
+      ['JS object', 'src/api.js', `fetch(url, { headers: { ${AUTH}: 'Bearer ${token}' } });\n`],
+      ['JS object, quoted name', 'src/api.js', `fetch(url, { headers: { '${AUTH}': "Bearer ${token}" } });\n`],
+      ['JS headers.set', 'src/api.js', `res.headers.set('${AUTH}', 'Bearer ${token}');\n`],
+      ['JS setHeader, Token scheme', 'src/api.ts', `req.setHeader("${AUTH}", "Token ${token}");\n`],
+      ['JS headers.append, template literal', 'src/api.ts', `headers.append('${AUTH}', \`Bearer ${token}\`);\n`],
+      ['Python dict', 'client.py', `requests.get(url, headers={"${AUTH}": "Bearer ${token}"})\n`],
+      ['Python subscript', 'client.py', `session.headers["${AUTH}"] = "Basic ${basic}"\n`],
+      ['Ruby hash rocket', 'client.rb', `headers = { '${AUTH}' => "Bearer ${token}" }\n`],
+      ['JSON', 'requests.json', `{"${AUTH}": "Bearer ${token}"}\n`],
+      ['JSON, nested Basic', 'requests.json', `{"headers": {"${AUTH}": "Basic ${basic}"}}\n`],
+      ['YAML', 'ci.yml', `headers:\n  ${AUTH}: Bearer ${token}\n`],
+      ['YAML, quoted', 'ci.yml', `  ${AUTH}: "Bearer ${token}"\n`],
+      ['YAML list item', 'ci.yml', `headers:\n  - "${AUTH}: Bearer ${token}"\n`],
+      ['.http file', 'api.http', `GET https://api.internal.corp/v1\n${AUTH}: Bearer ${token}\n`],
+      ['git extraheader', 'setup.sh', `git config http.extraheader "${AUTH}: Basic ${basic}"\n`],
+      ['nginx proxy_set_header', 'nginx.conf', `proxy_set_header ${AUTH} "Bearer ${token}";\n`],
+      ['Apache RequestHeader', '.htaccess', `RequestHeader set ${AUTH} "Bearer ${token}"\n`],
+      ['HAProxy set-header', 'haproxy.cfg', `backend b\n  http-request set-header ${AUTH} "Bearer ${token}"\n`],
+      ['Digest response', 'notes.txt', `${AUTH}: Digest username="alice", realm="api", nonce="${randomString(16, 13003)}", response="${randomString(32, 13004, HEX)}"\n`],
+      ['Python auth tuple', 'client.py', `requests.get(url, auth=("alice", "${password}"))\n`],
+      ['Python HTTPBasicAuth', 'client.py', `requests.get(url, auth=HTTPBasicAuth('alice', '${password}'))\n`],
+      ['Java Credentials.basic', 'Client.java', `String c = Credentials.basic("alice", "${password}");\n`],
+      ['Java new Basic', 'Client.java', `Auth a = new Basic("alice", "${password}");\n`],
+      ['Go SetBasicAuth', 'client.go', `req.SetBasicAuth("alice", "${password}")\n`],
+      ['C# NetworkCredential', 'Client.cs', `var c = new NetworkCredential("alice", "${password}");\n`],
+      ['supertest .auth', 'api.test.js', `await request(app).get('/x').auth('alice', '${password}');\n`],
+    ];
+    it.each(literal)('reports: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('http-auth-credential');
+    });
+
+    // The sibling credential headers and their names were already secret-like; they must stay reported.
+    it.each(['X-API-Key', 'X-Api-Key', 'Api-Key', 'X-Auth-Token', 'X-Access-Token', 'Ocp-Apim-Subscription-Key', 'X-Amz-Security-Token', 'PRIVATE-TOKEN'])(
+      'reports the sibling header %s in curl, source and YAML',
+      (header) => {
+        expect(count('run.sh', `curl -H "${header}: ${token}" https://api.internal.corp\n`)).toBe(1);
+        expect(count('src/api.js', `fetch(u, { headers: { '${header}': '${token}' } });\n`)).toBe(1);
+        expect(count('ci.yml', `${header}: ${token}\n`)).toBe(1);
+      },
+    );
+
+    const clean = [
+      ['${...} in a template literal', 'src/api.js', 'fetch(u, { headers: { Authorization: `Bearer ${token}` } });\n'],
+      ['$TOKEN', 'run.sh', `curl -H "${AUTH}: Bearer $TOKEN" https://api.internal.corp\n`],
+      ['${TOKEN}', 'run.sh', `curl -H "${AUTH}: Bearer \${TOKEN}" https://api.internal.corp\n`],
+      ['<token>', 'README.md', `${AUTH}: Bearer <token>\n`],
+      ['<YOUR_TOKEN>', 'README.md', `${AUTH}: Bearer <YOUR_TOKEN>\n`],
+      ['{{ token }}', 'ci.yml', `${AUTH}: Bearer {{ token }}\n`],
+      ['{token}', 'client.py', `requests.get(u, headers={"${AUTH}": f"Bearer {self.access_token_value}"})\n`],
+      ['xxx', 'README.md', `${AUTH}: Bearer xxxxxxxxxxxxxxxx\n`],
+      ['ellipsis', 'README.md', `${AUTH}: Bearer eyJhbGciOi...\n`],
+      ['YOUR_ prefix', 'README.md', `curl -H "${AUTH}: Bearer YOUR_FIREBASE_ID_TOKEN" http://localhost:3000/api/x\n`],
+      ['scheme only', 'README.md', `${AUTH}: Bearer\n`],
+      ['prose', 'README.md', `The ${AUTH} header carries the credentials of the client.\n`],
+      ['concatenation', 'src/api.js', `fetch(u, { headers: { ${AUTH}: 'Bearer ' + accessTokenValueFromStore } });\n`],
+      ['process.env', 'src/api.js', `fetch(u, { headers: { ${AUTH}: 'Bearer ' + process.env.API_TOKEN } });\n`],
+      ['shorthand identifier', 'src/api.js', `fetch(u, { headers: { ${AUTH}: authorizationHeaderValue } });\n`],
+      ['function call', 'src/api.js', `res.headers.set('${AUTH}', getAuthorizationHeaderValue());\n`],
+      ['CORS allow-list', 'src/cors.js', `res.setHeader('Access-Control-Allow-Headers', 'Content-Type, ${AUTH}, X-Requested-With');\n`],
+      ['CORS allow-list array', 'src/cors.js', `allowedHeaders: ['Content-Type', '${AUTH}', 'X-Requested-With'],\n`],
+      ['CORS allow-list YAML', 'cors.yml', `allow_headers: Content-Type, ${AUTH}, X-Requested-With\n`],
+      ['Vary', 'src/cors.js', `res.setHeader('Vary', '${AUTH}');\n`],
+      ['WWW-Authenticate challenge', 'src/api.js', `res.setHeader('WWW-Authenticate', 'Bearer realm="api", error="invalid_token"');\n`],
+      ['bearer test value', 'api.test.js', `request(app).get('/x').set('${AUTH}', 'Bearer invalid-token');\n`],
+      ['Basic user:pass', 'README.md', `${AUTH}: Basic ${placeholderBasic}\n`],
+      ['Basic user:password', 'README.md', `${AUTH}: Basic ${Buffer.from('username:password').toString('base64')}\n`],
+      ['Basic <base64>', 'README.md', `${AUTH}: Basic <base64(user:pass)>\n`],
+      ['JWT (the jwt-token rule reports it, not this one)', 'README.md', `${AUTH}: Bearer ${base64url({ alg: 'none' })}.${base64url({ sub: 'x' })}.\n`],
+      ['nginx variable', 'nginx.conf', `proxy_set_header ${AUTH} $http_authorization;\n`],
+      ['nginx variable, quoted', 'nginx.conf', `proxy_set_header ${AUTH} "$http_authorization";\n`],
+      ['Python auth from variables', 'client.py', 'requests.get(url, auth=(user, password))\n'],
+      ['Python auth placeholders', 'client.py', 'requests.get(url, auth=("user", "pass"))\n'],
+      ['Python auth from the environment', 'client.py', 'requests.get(url, auth=("alice", os.environ["PW"]))\n'],
+      ['Java Credentials.basic from variables', 'Client.java', 'String c = Credentials.basic(user, pw);\n'],
+      ['Digest without a response', 'README.md', `${AUTH}: Digest username="alice", realm="api"\n`],
+      ['X-API-Key placeholder', 'run.sh', 'curl -H "X-API-Key: YOUR_API_KEY" https://api.internal.corp\n'],
+      ['X-API-Key variable', 'run.sh', 'curl -H "X-API-Key: $API_KEY" https://api.internal.corp\n'],
+    ];
+    it.each(clean)('passes: %s', (_label, file, text) => {
+      expect(count(file, text)).toBe(0);
+    });
+
+    it('a JWT is reported once, by the jwt-token rule', () => {
+      const jwt = [base64url({ alg: 'HS256', typ: 'JWT' }), base64url({ sub: 'user-1234', role: 'admin' }), randomString(43, 13005, B64URL)].join('.');
+      expect(rules('notes.txt', `${AUTH}: Bearer ${jwt}\n`)).toEqual(['jwt-token']);
+    });
+
+    it('Basic credentials are decoded: a real password is reported, a placeholder or the RFC sample is not', () => {
+      expect(count('notes.txt', `${AUTH}: Basic ${basic}\n`)).toBe(1);
+      expect(count('notes.txt', `${AUTH}: Basic ${Buffer.from(['Aladdin', 'open sesame'].join(':')).toString('base64')}\n`)).toBe(0);
+      // a Basic value that is not user:password is judged as an opaque token
+      expect(count('notes.txt', `${AUTH}: Basic ${randomString(30, 13007)}\n`)).toBe(1);
+    });
+
+    it('the allow marker silences a header line', () => {
+      expect(count('notes.txt', `${AUTH}: Bearer ${token} # ${ALLOW_MARKER}\n`)).toBe(0);
+    });
+
+    it('is reported by the tree scan, --range and --history without printing the value', SLOW, () => {
+      expectReported('http-auth-credential', 'docs/api.md', `${AUTH}: Bearer <token>\n`, `${AUTH}: Bearer ${token}\n`, token);
+      expectReported('http-auth-credential', 'src/api.js', "fetch(u, { headers: { Authorization: 'Bearer ' + t } });\n", `fetch(u, { headers: { Authorization: 'Bearer ${token}' } });\n`, token);
+    });
+
+    it('hostile header text is scanned in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const H = 'Author' + 'ization';
+        const N = 20000;
+        const texts = [
+          H + ':' + ' '.repeat(200000) + 'x', 'password:' + ' '.repeat(200000) + 'x', 'foo:' + ' '.repeat(200000) + 'x', (H + ': Bearer ').repeat(N), ("'" + H + "'").repeat(N), H.repeat(N), 'A-'.repeat(100000) + H,
+          H + ': Bearer ' + 'a'.repeat(300000), H + ': ' + 'a-'.repeat(50000) + ' x', H + ': Digest ' + 'a '.repeat(100000) + 'response=',
+          (H + ': Digest ').repeat(N), 'auth=(' + 'a,'.repeat(100000), 'auth = ('.repeat(N), 'BasicAuth('.repeat(N), 'proxy_set_header '.repeat(N),
+        ];
+        for (const file of ['a.md', 'a.js', 'nginx.conf', 'ci.yml']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(2) Terraform variable labels and the other ways a variable is set', () => {
+    const NAMES = ['api_' + 'token', 'db_' + 'password', 'client_' + 'secret', 'private_' + 'key', 'admin_' + 'pass'];
+    const variable = (name, body) => `variable "${name}" {\n${body}}\n`;
+    const defaultOf = (v) => `  type    = string\n  default = ${v}\n`;
+
+    it.each(NAMES)('reports a literal default of variable "%s"', (name) => {
+      expect(rules('variables.tf', variable(name, defaultOf(`"${token}"`)))).toEqual(['secret-name-value-pair']);
+      expect(rules('main.tf', variable(name, `  default = "${token}"\n  sensitive = true\n`))).toEqual(['secret-name-value-pair']);
+      expect(rules('main.tf', `variable "${name}" { default = "${token}" }\n`)).toEqual(['secret-name-value-pair']);
+    });
+
+    it('reports the block forms and the file kinds that hold them', () => {
+      const name = NAMES[0];
+      expect(count('vars.hcl', variable(name, defaultOf(`"${token}"`)))).toBe(1);
+      expect(count('build.pkr.hcl', variable(name, defaultOf(`"${token}"`)))).toBe(1);
+      expect(count('README.md', `\`\`\`hcl\n${variable(name, defaultOf(`"${token}"`))}\`\`\`\n`)).toBe(1);
+      expect(count('main.tf', `output "${name}" {\n  value = "${token}"\n}\n`)).toBe(1);
+      expect(count('main.tf', `variable "${name}" {\n  default = <<EOT\n${token}\nEOT\n}\n`)).toBe(1);
+      expect(count('main.tf', `variable "${name}" {\n  validation {\n    condition = length(var.${name}) > 3\n    error_message = "too short"\n  }\n  default = "${token}"\n}\n`)).toBe(1);
+      // already found before: the plain assignments the label form is a sibling of
+      expect(count('main.tf', `locals {\n  ${name} = "${token}"\n}\n`)).toBe(1);
+      expect(count('main.tf', `resource "aws_db_instance" "x" {\n  password = "${password}${password}"\n}\n`)).toBe(1);
+      expect(count('prod.tfvars', `${name} = "${token}"\n`)).toBe(1);
+    });
+
+    const clean = [
+      ['no default', variable(NAMES[0], '  type = string\n  sensitive = true\n')],
+      ['description and sensitive only', variable(NAMES[0], '  description = "The API token for the service"\n  type = string\n  sensitive = true\n')],
+      ['empty string', variable(NAMES[0], defaultOf('""'))],
+      ['null', variable(NAMES[0], defaultOf('null'))],
+      ['var reference', variable(NAMES[0], defaultOf('var.other'))],
+      ['data reference', variable(NAMES[0], defaultOf('data.aws_ssm_parameter.x.value'))],
+      ['file() call', variable(NAMES[0], defaultOf('file("token.txt")'))],
+      ['interpolation', variable(NAMES[0], defaultOf('"${var.prefix}-token"'))],
+      ['placeholder', variable(NAMES[0], defaultOf('"changeme"'))],
+      ['marker', variable(NAMES[0], defaultOf('"<token>"'))],
+      ['empty list', variable('api_' + 'tokens', defaultOf('[]'))],
+      ['empty map', variable(NAMES[0], defaultOf('{}'))],
+      ['a name that is not secret-like', variable('region', defaultOf(`"${token}"`))],
+      ['a URL under a weak name', variable('api_token_url', defaultOf('"https://api.internal.corp/token"'))],
+      ['a TTL under a weak name', variable('token_ttl', defaultOf('"3600"'))],
+      ['a description that mentions a token', variable('region', `  description = "Token bucket region"\n  default = "${token}"\n`).replace(token, 'us-east-1')],
+      ['the next block belongs to another variable', `${variable(NAMES[0], '  type = string\n')}\n${variable('region', defaultOf('"us-east-1"'))}`],
+      ['a secret-named variable followed by a plain resource', `${variable('db_' + 'password', '  type = string\n')}resource "x" "y" {\n  password = var.db_password\n}\n`],
+    ];
+    it.each(clean)('passes: %s', (_label, text) => {
+      expect(count('main.tf', text)).toBe(0);
+    });
+
+    it('a variable label in source code is not a Terraform block', () => {
+      expect(count('src/notes.js', `// variable "${NAMES[0]}" { default = "${token}" }\n`)).toBe(0);
+    });
+
+    it('-var, --var, TF_VAR_ and --build-arg forms are reported when they hold a literal, and pass for references', () => {
+      const name = NAMES[0];
+      for (const line of [
+        `terraform apply -var ${name}=${token}\n`,
+        `terraform apply --var '${name}=${token}'\n`,
+        `terraform plan -var "${name}=${token}" -var region=us-east-1\n`,
+        `tofu apply -var ${name}=${token}\n`,
+        `export TF_VAR_${name}=${token}\n`,
+        `TF_VAR_${name}=${token} terraform apply\n`,
+        `docker build --build-arg ${name.toUpperCase()}=${token} .\n`,
+      ]) expect(count('run.sh', line), line.slice(0, 40)).toBe(1);
+      expect(count('.env', `TF_VAR_${name}=${token}\n`)).toBe(1);
+      expect(count('ci.yml', `env:\n  TF_VAR_${name}: ${token}\n`)).toBe(1);
+      for (const line of [
+        `terraform apply -var ${name}=$TOKEN\n`,
+        `terraform apply -var "${name}=\${TOKEN}"\n`,
+        `terraform apply -var region=${token}\n`,
+        'terraform apply -var-file=secrets.tfvars\n',
+        `docker build --build-arg ${name.toUpperCase()} .\n`,
+        `export TF_VAR_${name}=$API_TOKEN\n`,
+      ]) expect(count('run.sh', line), line.slice(0, 40)).toBe(0);
+    });
+
+    it('pulumi config set: a positional value under a secret-like name, or any name with --secret', () => {
+      for (const line of [
+        `pulumi config set --secret dbPassword ${password}\n`,
+        `pulumi config set apiToken ${token} --secret\n`,
+        `pulumi config set app:apiToken ${token}\n`,
+        `pulumi config set --secret region ${token}\n`,
+      ]) expect(rules('deploy.sh', line), line.slice(0, 40)).toEqual(['secret-cli-command']);
+      // (assembled from words: a JS string that ends a quoted argument with its own quote would read as one unterminated shell word)
+      const pulumi = (...args) => ['pulumi', 'config', ...args].join(' ');
+      for (const line of [pulumi('set', '--secret', 'dbPassword', '"$DB_PASSWORD"'), pulumi('set', 'region', 'us-west-2'), pulumi('set-all', '--secret', 'x')]) {
+        expect(count('deploy.sh', `${line}\n`), line.slice(0, 40)).toBe(0);
+      }
+    });
+
+    it('Pulumi.<stack>.yaml: a plaintext config value is reported, the secure ciphertext is not', () => {
+      expect(rules('Pulumi.dev.yaml', `config:\n  app:apiToken: ${token}\n  aws:region: us-west-2\n`)).toEqual(['secret-assignment']);
+      expect(rules('infra/Pulumi.yaml', `config:\n  app:dbPassword: "${password}${password}"\n`)).toEqual(['secret-assignment']);
+      expect(count('Pulumi.dev.yaml', `config:\n  app:apiToken:\n    secure: v1:${randomString(12, 13008)}:${randomString(60, 13009, BASE64)}\n`)).toBe(0);
+      expect(count('Pulumi.dev.yaml', 'config:\n  app:apiToken: ${TOKEN}\n')).toBe(0);
+      // a namespaced key outside a Pulumi file is not this format
+      expect(count('other.yaml', `config:\n  app:region: ${token}\n`)).toBe(0);
+    });
+
+    it('a kustomize secretGenerator literal is reported', () => {
+      expect(count('kustomization.yaml', `secretGenerator:\n- name: s\n  literals:\n  - ${NAMES[0]}=${token}\n`)).toBe(1);
+      expect(count('kustomization.yaml', `secretGenerator:\n  - name: s\n    literals:\n      - "${NAMES[1]}=${password}${password}"\n`)).toBe(1);
+    });
+
+    it('an ansible-vault ciphertext is not a plaintext credential, a plaintext vars value is', () => {
+      const header = ['$ANSIBLE', '_VAULT;1.1;AES256'].join('');
+      const body = randomString(64, 13010, HEX);
+      expect(count('play.yml', `vars:\n  ${NAMES[0]}: !vault |\n    ${header}\n    ${body}\n`)).toBe(0);
+      expect(count('play.yml', `vars:\n  ${NAMES[1]}: |\n    ${header}\n    ${body}\n    ${body}\n`)).toBe(0);
+      expect(count('play.yml', `vars:\n  ${NAMES[0]}: ${token}\n`)).toBe(1);
+    });
+
+    it('the value line of a Terraform default is what --range and --history blame', SLOW, () => {
+      // the label line is unchanged in the second commit: only the default line is added
+      const name = NAMES[0];
+      expectReported('secret-name-value-pair', 'variables.tf', variable(name, defaultOf('"changeme"')), variable(name, defaultOf(`"${token}"`)), token);
+      // an allow marker on the default line silences it, and one on an unrelated line does not
+      expect(count('variables.tf', variable(name, `  type = string\n  default = "${token}" # ${ALLOW_MARKER}\n`))).toBe(0);
+      expect(count('variables.tf', `# ${ALLOW_MARKER}\n${variable(name, defaultOf(`"${token}"`))}`)).toBe(1);
+    });
+
+    it('many labels and long blocks are read within a budget', SLOW, () => {
+      const timings = timeInChild(`
+        const texts = ['variable "api_' + 'token" '.repeat(20000), 'variable "api_' + 'token" {\\n'.repeat(4000), 'variable "' + 'a'.repeat(200000),
+          'variable "api_' + 'token" {\\n' + '  x = 1\\n'.repeat(40000), 'a:'.repeat(100000)];
+        for (const file of ['main.tf', 'README.md', 'Pulumi.dev.yaml']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(3) whitespace-delimited service configuration', () => {
+    const REQUIREPASS = ['require', 'pass'].join('');
+    const MASTERAUTH = ['master', 'auth'].join('');
+    const pw = randomString(16, 13011);
+    const digest = randomString(64, 13012, HEX);
+
+    const literal = [
+      ['redis requirepass', 'redis.conf', `${REQUIREPASS} ${pw}\n`],
+      ['redis masterauth', 'redis.conf', `${MASTERAUTH} ${pw}\n`],
+      ['redis requirepass, quoted with spaces', 'redis.conf', `${REQUIREPASS} "${pw} ${pw}"\n`],
+      ['redis requirepass in a numbered file', 'redis-6379.conf', `${REQUIREPASS} ${pw}\n`],
+      ['redis requirepass in a template', 'conf/redis.conf.j2', `${REQUIREPASS} ${pw}\n`],
+      ['redis requirepass in a ConfigMap block', 'configmap.yaml', `data:\n  redis.conf: |\n    ${REQUIREPASS} ${pw}\n`],
+      ['redis requirepass in a Markdown fence', 'README.md', `\`\`\`\n${REQUIREPASS} ${pw}\n\`\`\`\n`],
+      ['redis tls-key-file-pass', 'redis.conf', `tls-key-file-pass ${pw}\n`],
+      ['redis tls-client-key-file-pass', 'redis.conf', `tls-client-key-file-pass ${pw}\n`],
+      ['redis-server option', 'run.sh', `redis-server --${REQUIREPASS} ${pw}\n`],
+      ['redis-server option, compose list', 'docker-compose.yml', `command: ["redis-server", "--${REQUIREPASS}", "${pw}"]\n`],
+      ['redis CONFIG SET', 'run.sh', `redis-cli config set ${REQUIREPASS} ${pw}\n`],
+      ['redis CONFIG SET, in a fence', 'README.md', `\`\`\`\nCONFIG SET ${REQUIREPASS} ${pw}\n\`\`\`\n`],
+      ['redis-cli -a', 'run.sh', `redis-cli -a ${pw} ping\n`],
+      ['redis-cli REDISCLI_AUTH', 'run.sh', `REDISCLI_AUTH=${pw} redis-cli ping\n`],
+      ['redis ACL plaintext password', 'redis.conf', `user default on >${pw} ~* +@all\n`],
+      ['redis ACL password, other user', 'users.acl', `user app on >${pw} ~app:* +get\n`],
+      ['redis ACL password hash', 'redis.conf', `user default on #${digest} ~* +@all\n`],
+      ['redis ACL SETUSER', 'README.md', `\`\`\`\nACL SETUSER app on >${pw} ~* +@all\n\`\`\`\n`],
+      ['sentinel auth-pass', 'sentinel.conf', `sentinel auth-pass mymaster ${pw}\n`],
+      ['sentinel auth-pass, redis-sentinel.conf', 'conf/redis-sentinel.conf', `sentinel auth-pass mymaster ${pw}\n`],
+      ['mosquitto password', 'mosquitto.conf', `password ${pw}\n`],
+      ['mosquitto bridge_password', 'mosquitto.conf', `connection b\nbridge_password ${pw}\n`],
+      ['mosquitto remote_password', 'mosquitto.conf', `remote_password ${pw}\n`],
+      ['mosquitto_passwd -b', 'setup.sh', `mosquitto_passwd -b /etc/mosquitto/passwd alice ${pw}\n`],
+      ['mosquitto_pub -P', 'setup.sh', `mosquitto_pub -h h -t t -m hi -u alice -P ${pw}\n`],
+      ['htpasswd -b', 'setup.sh', `htpasswd -b .htpasswd alice ${pw}\n`],
+      ['htpasswd -bc', 'setup.sh', `htpasswd -bc .htpasswd alice ${pw}\n`],
+      ['htpasswd -nb', 'setup.sh', `htpasswd -nb alice ${pw}\n`],
+      ['msmtprc password', 'msmtprc', `account default\nhost smtp.internal.corp\npassword ${pw}\n`],
+      ['.msmtprc password', '.msmtprc', `password ${pw}\n`],
+      ['.fetchmailrc password', '.fetchmailrc', `poll mail.internal.corp protocol pop3 user "alice" password "${pw}"\n`],
+      ['.fetchmailrc with password', '.fetchmailrc', `poll mail.internal.corp protocol imap user alice there with password ${pw} is alice here\n`],
+      ['haproxy userlist insecure-password', 'haproxy.cfg', `userlist L\n  user admin insecure-password ${pw}\n`],
+      ['haproxy userlist password', 'haproxy.cfg', `userlist L\n  user admin password ${pw}\n`],
+      ['haproxy stats auth', 'haproxy.cfg', `listen stats\n  stats auth admin:${pw}\n`],
+      ['haproxy set-header', 'haproxy.cfg', `backend b\n  http-request set-header X-Api-Key ${token}\n`],
+      ['nginx proxy_set_header', 'nginx.conf', `proxy_set_header X-Api-Key "${token}";\n`],
+      ['nginx fastcgi_param', 'site.conf', `fastcgi_param DB_PASSWORD "${pw}";\n`],
+      ['nginx set variable', 'nginx.conf', `set $api_token "${token}";\n`],
+      ['Apache SetEnv', 'httpd.conf', `SetEnv DB_PASSWORD ${pw}\n`],
+      ['Apache SetEnv, quoted', 'site.conf', `<VirtualHost *:80>\n  SetEnv API_TOKEN "${token}"\n</VirtualHost>\n`],
+      ['Apache SetEnv in .htaccess', '.htaccess', `SetEnv DB_PASSWORD ${pw}\n`],
+      ['tinyproxy BasicAuth', 'tinyproxy.conf', `BasicAuth alice ${pw}\n`],
+      ['postgresql ssl_passphrase_command', 'postgresql.conf', `ssl_passphrase_command = 'echo ${pw}'\n`],
+      ['rabbitmq advanced.config', 'advanced.config', `[{rabbit,[{default_pass, <<"${pw}">>}]}].\n`],
+      ['rabbitmq.conf', 'rabbitmq.conf', `default_pass = ${pw}\n`],
+      ['rabbitmqctl add_user', 'setup.sh', `rabbitmqctl add_user alice ${pw}\n`],
+      ['rabbitmqctl change_password', 'setup.sh', `rabbitmqctl change_password alice ${pw}\n`],
+      ['rabbitmqadmin -p', 'setup.sh', `rabbitmqadmin -u alice -p ${pw} list queues\n`],
+      ['openvpn inline credentials', 'client.ovpn', `<auth-user-pass>\nalice\n${pw}\n</auth-user-pass>\n`],
+      ['dovecot SQL connect', 'dovecot-sql.conf.ext', `connect = host=db.internal.corp dbname=mail user=mail password=${pw}\n`],
+      ['dovecot LDAP dnpass', 'dovecot-ldap.conf.ext', `dnpass = ${pw}\n`],
+      ['sshpass -p', 'run.sh', `sshpass -p ${pw} ssh alice@h\n`],
+      ['SSHPASS variable', 'run.sh', `SSHPASS=${pw} sshpass -e ssh h\n`],
+      ['docker login -p', 'run.sh', `docker login -u alice -p ${pw}\n`],
+      ['az login -p', 'run.sh', `az login -u alice -p ${pw}\n`],
+      ['sqlcmd -P', 'run.sh', `sqlcmd -S h -U sa -P ${pw}\n`],
+      ['keytool -storepass', 'run.sh', `keytool -genkey -storepass ${pw} -keypass ${pw}\n`],
+      ['gpg --passphrase', 'run.sh', `gpg --batch --passphrase ${pw} -d f.gpg\n`],
+      ['vault login', 'run.sh', `vault login ${token}\n`],
+      ['chpasswd from echo', 'Dockerfile', `RUN echo 'root:${pw}' | chpasswd\n`],
+      ['chpasswd from a here-string', 'run.sh', `chpasswd <<< "alice:${pw}"\n`],
+      ['aws configure set', 'run.sh', `aws configure set aws_secret_access_key ${token}\n`],
+    ];
+    it.each(literal)('reports: %s', (_label, file, text) => {
+      expect(count(file, text)).toBeGreaterThan(0);
+    });
+
+    it('names the rule that owns each directive family', () => {
+      expect(rules('redis.conf', `${REQUIREPASS} ${pw}\n`)).toEqual(['config-directive-secret']);
+      expect(rules('haproxy.cfg', `userlist L\n  user admin insecure-password ${pw}\n`)).toEqual(['config-directive-secret']);
+      expect(rules('nginx.conf', `proxy_set_header ${AUTH} "Bearer ${token}";\n`)).toEqual(['http-auth-credential']);
+    });
+
+    const clean = [
+      ['requirepass with no value', 'redis.conf', `${REQUIREPASS}\n`],
+      ['requirepass empty string', 'redis.conf', `${REQUIREPASS} ""\n`],
+      ['requirepass commented out', 'redis.conf', `# ${REQUIREPASS} ${pw}\n`],
+      ['requirepass placeholder', 'redis.conf', `${REQUIREPASS} changeme\n`],
+      ['requirepass marker', 'redis.conf', `${REQUIREPASS} <password>\n`],
+      ['requirepass environment reference', 'redis.conf', `${REQUIREPASS} \${REDIS_PASSWORD}\n`],
+      ['the documented redis.conf sample', 'redis.conf', `${REQUIREPASS} foobared\n`],
+      ['masteruser is a user name', 'redis.conf', `masteruser ${pw}\n`],
+      ['sentinel auth-user is a user name', 'sentinel.conf', `sentinel auth-user mymaster ${pw}\n`],
+      ['ACL nopass', 'redis.conf', 'user default on nopass ~* +@all\n'],
+      ['ACL disabled user', 'redis.conf', 'user default off\n'],
+      ['ACL placeholder password', 'redis.conf', 'user default on >changeme ~* +@all\n'],
+      ['nginx user directive', 'nginx.conf', 'user www-data;\n'],
+      ['tls-key-file is a path', 'redis.conf', 'tls-key-file /etc/redis/key.pem\n'],
+      ['requirepass in prose', 'README.md', `Set ${REQUIREPASS} in redis.conf to protect the server. The ${REQUIREPASS} directive is documented.\n`],
+      ['requirepass in a code file', 'src/notes.js', `// ${REQUIREPASS} ${pw}\n`],
+      ['redis-server option with a variable', 'run.sh', `redis-server --${REQUIREPASS} "$REDIS_PASSWORD"\n`],
+      ['redis-cli with a variable', 'run.sh', 'redis-cli -a "$REDIS_PASSWORD" ping\n'],
+      ['mosquitto password_file is a path', 'mosquitto.conf', 'password_file /etc/mosquitto/conf.d/a-rather-long-file-of-passwords.txt\n'],
+      ['mosquitto_passwd without -b prompts', 'setup.sh', 'mosquitto_passwd -c /etc/mosquitto/passwd alice\n'],
+      ['mosquitto_passwd with a variable', 'setup.sh', 'mosquitto_passwd -b /etc/mosquitto/passwd alice "$PW"\n'],
+      ['mosquitto_sub with a variable', 'setup.sh', 'mosquitto_sub -h h -t t -u alice -P "$PW"\n'],
+      ['htpasswd without -b prompts', 'setup.sh', 'htpasswd -c .htpasswd alice\n'],
+      ['htpasswd with a variable', 'setup.sh', 'htpasswd -b .htpasswd alice "$PW"\n'],
+      ['msmtp passwordeval runs a command', 'msmtprc', 'passwordeval "pass show mail"\n'],
+      ['msmtp empty password', '.msmtprc', 'password \n'],
+      ['fetchmail password from a variable', '.fetchmailrc', 'poll mail.internal.corp user alice password "$PW"\n'],
+      ['fetchmail empty password', '.fetchmailrc', 'poll mail.internal.corp proto imap user alice password ""\n'],
+      ['haproxy hashed password', 'haproxy.cfg', `userlist L\n  user admin password $6$rounds=1$${randomString(8, 13013)}$${randomString(40, 13014)}\n`],
+      ['haproxy user outside a userlist', 'haproxy.cfg', `global\n  user haproxy password ${pw}\n`],
+      ['haproxy stats auth placeholder', 'haproxy.cfg', 'listen stats\n  stats auth admin:changeme\n'],
+      ['haproxy server line', 'haproxy.cfg', 'backend b\n  server s1 10.0.0.1:80 check\n'],
+      ['haproxy header from a fetch', 'haproxy.cfg', 'backend b\n  http-request set-header X-Api-Key %[req.hdr(x)]\n'],
+      ['nginx header from a variable', 'nginx.conf', 'proxy_set_header X-Api-Key $http_x_api_key;\n'],
+      ['nginx header with a name that is no credential', 'nginx.conf', `proxy_set_header X-Request-Id ${token};\n`],
+      ['nginx ssl_password_file is a path', 'nginx.conf', 'ssl_password_file /etc/nginx/pass.txt;\n'],
+      ['nginx auth_basic_user_file is a path', 'nginx.conf', 'auth_basic_user_file /etc/nginx/.htpasswd;\n'],
+      ['nginx set of a plain variable', 'nginx.conf', `set $upstream_name "${token}";\n`],
+      ['Apache SetEnv of a plain variable', 'httpd.conf', 'SetEnv APP_ENV production\n'],
+      ['Apache SetEnv from a variable', 'httpd.conf', 'SetEnv DB_PASSWORD $DB_PASSWORD\n'],
+      ['Apache PassEnv', 'httpd.conf', 'PassEnv DB_PASSWORD\n'],
+      ['Apache AuthUserFile is a path', 'httpd.conf', 'AuthUserFile /etc/apache2/.htpasswd\n'],
+      ['openvpn auth-user-pass names a file', 'client.ovpn', 'auth-user-pass /etc/openvpn/creds\n'],
+      ['openvpn auth-user-pass prompts', 'client.ovpn', 'auth-user-pass\n'],
+      ['postgresql ssl_passphrase_command runs a script', 'postgresql.conf', "ssl_passphrase_command = '/usr/local/bin/get-passphrase'\n"],
+      ['postgresql password_encryption', 'postgresql.conf', 'password_encryption = scram-sha-256\n'],
+      ['mongod keyFile is a path', 'mongod.conf', 'security:\n  keyFile: /etc/mongo/keyfile\n'],
+      ['rabbitmq default_pass from a variable', 'rabbitmq.conf', 'default_pass = ${RABBIT_PW}\n'],
+      ['rabbitmq advanced.config, another tuple', 'advanced.config', '[{rabbit,[{default_user, <<"guest">>}]}].\n'],
+      ['git credential helper store', '.gitconfig', '[credential]\n  helper = store\n'],
+      ['sshpass -f reads a file', 'run.sh', 'sshpass -f /run/secrets/pw ssh alice@h\n'],
+      ['sshpass -e reads the environment', 'run.sh', 'sshpass -e ssh alice@h\n'],
+      ['sshpass with a variable', 'run.sh', 'sshpass -p "$PW" ssh alice@h\n'],
+      ['docker login --password-stdin', 'run.sh', 'echo "$PW" | docker login -u alice --password-stdin\n'],
+      ['docker login with a variable', 'run.sh', 'docker login -u alice -p $pw\n'],
+      ['sqlcmd with a variable', 'run.sh', 'sqlcmd -S h -U sa -P "$PW"\n'],
+      ['keytool with the documented default', 'run.sh', 'keytool -list -storepass changeit\n'],
+      ['vault login prompts', 'run.sh', 'vault login -method=oidc\n'],
+      ['vault login with a variable', 'run.sh', 'vault login "$VAULT_TOKEN"\n'],
+      ['chpasswd with a variable', 'Dockerfile', 'RUN echo "root:$ROOT_PW" | chpasswd\n'],
+      ['aws configure set of a plain setting', 'run.sh', `aws configure set region ${token}\n`],
+    ];
+    it.each(clean)('passes: %s', (_label, file, text) => {
+      expect(count(file, text)).toBe(0);
+    });
+
+    it('whole-file secrets: an Erlang cookie and a MongoDB key file', () => {
+      expect(credentialFormats('.erlang.cookie').has('vault')).toBe(true);
+      expect(credentialFormats('etc/mongodb-keyfile').has('vault')).toBe(true);
+      expect(credentialFormats('keyfile').has('vault')).toBe(true);
+      expect(count('.erlang.cookie', `${randomString(20, 13015, UPPER)}\n`)).toBe(1);
+      expect(count('mongodb-keyfile', `${randomString(60, 13016, BASE64)}\n${randomString(60, 13017, BASE64)}\n`)).toBe(2);
+      expect(count('.erlang.cookie', 'your_cookie_here\n')).toBe(0);
+      expect(credentialFormats('keyfile.md').has('vault')).toBe(false);
+    });
+
+    it('is reported by the tree scan, --range and --history without printing the value', SLOW, () => {
+      expectReported('config-directive-secret', 'conf/redis.conf', `${REQUIREPASS} changeme\nport 6379\n`, `${REQUIREPASS} ${pw}\nport 6379\n`, pw);
+      expectReported('config-directive-secret', 'conf/redis.conf', 'user default on nopass ~* +@all\n', `user default on >${pw} ~* +@all\n`, pw);
+      expectReported('config-directive-secret', 'haproxy.cfg', 'userlist L\n  user admin insecure-password changeme\n', `userlist L\n  user admin insecure-password ${pw}\n`, pw);
+    });
+
+    it('the allow marker silences a directive line', () => {
+      expect(count('redis.conf', `${REQUIREPASS} ${pw} # ${ALLOW_MARKER}\n`)).toBe(0);
+      expect(count('redis.conf', `# ${ALLOW_MARKER}\n${REQUIREPASS} ${pw}\n`)).toBe(1);
+    });
+
+    it('hostile directive text is scanned in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const N = 20000;
+        const texts = [
+          'requirepass '.repeat(N), 'requirepass "' + 'a\\\\'.repeat(100000), 'requirepass \\n'.repeat(N), 'user x ' + '>a '.repeat(100000),
+          'user x on\\n'.repeat(N), 'sentinel auth-pass ' + 'a '.repeat(100000), ('a'.repeat(100) + ' ').repeat(3000),
+          ('password_a ' + 'b'.repeat(200) + '\\n').repeat(2000), 'userlist\\n' + 'user a '.repeat(N), 'proxy_set_header '.repeat(N),
+          'proxy_set_header ' + 'a'.repeat(200000), 'set $' + 'a'.repeat(200000), "ssl_passphrase_command = '" + 'echo '.repeat(N),
+          '{a,'.repeat(N) + '"', '{' + ' '.repeat(100000) + 'a', '<auth-user-pass>\\n' + 'a\\n'.repeat(N),
+          'echo ' + 'a:'.repeat(50000) + ' | chpasswd', 'chpasswd <<< ' + 'a:'.repeat(100000), 'docker login ' + '-p '.repeat(N),
+        ];
+        for (const file of ['a.md', 'a.sh', 'redis.conf', 'mosquitto.conf', 'haproxy.cfg', 'advanced.config', 'nginx.conf']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
     });
   });
 });
