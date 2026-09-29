@@ -126,6 +126,15 @@ export function createYieldShareFlow(initialDeps) {
   async function confirm() {
     const current = pending;
     if (!current || current.sending) return { ok: false };
+    // Never publish a row whose attribution the preview could not show: while
+    // the profile is loading or if loading failed, the server would still apply
+    // the stored show_on_page consent and could credit a name the user never saw.
+    if (current.attribution?.status !== 'ready') {
+      return {
+        ok: false,
+        error: 'We could not confirm how this row will be credited. Close this and try again.',
+      };
+    }
     const { item } = current;
     if (!item.serverId) {
       setPending(null);

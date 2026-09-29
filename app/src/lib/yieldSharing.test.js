@@ -111,6 +111,44 @@ describe('yield share confirmation flow', () => {
       .toEqual({ status: 'ready', contributor: 'Deckhand Dana', organization: 'Sitka Fishers' });
   });
 
+  it('refuses to share when the profile could not be loaded, so unseen attribution is never published', async () => {
+    const { flow, client } = makeFlow({ profileError: new Error('timeout') });
+    await flow.toggle(ITEM);
+    expect(flow.getPending().attribution.status).toBe('unavailable');
+
+    const result = await flow.confirm();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/could not confirm/i);
+    expect(client.shareUserDataRaw).not.toHaveBeenCalled();
+    expect(flow.getPending().item).toBe(ITEM); // preview stays open, nothing sent
+  });
+
+  it('refuses to share while attribution is still loading', async () => {
+    let resolveProfile;
+    const { flow, client } = makeFlow();
+    client.getContributorProfile.mockReturnValue(new Promise((r) => { resolveProfile = r; }));
+    const opening = flow.toggle(ITEM);
+    await Promise.resolve();
+    expect(flow.getPending().attribution.status).toBe('loading');
+
+    const result = await flow.confirm();
+
+    expect(result.ok).toBe(false);
+    expect(client.shareUserDataRaw).not.toHaveBeenCalled();
+    resolveProfile(null);
+    await opening;
+  });
+
+  it('a user with no profile at all (404 → null) can still share, anonymously', async () => {
+    const { flow, client } = makeFlow({ profile: null });
+    await flow.toggle(ITEM);
+    expect(flow.getPending().attribution.status).toBe('ready');
+    const result = await flow.confirm();
+    expect(result).toEqual({ ok: true, action: 'share' });
+    expect(client.shareUserDataRaw).toHaveBeenCalledTimes(1);
+  });
+
   it('marks attribution unavailable (not public) when the profile cannot be loaded', async () => {
     const { flow, client } = makeFlow({ profileError: new Error('offline') });
     await flow.request(ITEM);

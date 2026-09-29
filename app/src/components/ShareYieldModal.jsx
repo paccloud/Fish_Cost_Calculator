@@ -34,6 +34,7 @@ export default function ShareYieldModal({ pending, onConfirm, onCancel }) {
 
   const { attribution, sending } = pending;
   const loadingAttribution = attribution.status === 'loading';
+  const attributionUnavailable = attribution.status === 'unavailable';
 
   function handleKeyDown(e) {
     if (e.key === 'Escape') { if (!sending) onCancel(); return; }
@@ -56,8 +57,8 @@ export default function ShareYieldModal({ pending, onConfirm, onCancel }) {
   if (loadingAttribution) {
     contributorLabel = 'Checking…';
   } else if (attribution.status === 'unavailable') {
-    contributorLabel = 'Anonymous unless your profile is public';
-    attributionNote = 'We could not load your contributor profile. Your display name and organization are shown only if your profile has "Show on contributors page" turned on; otherwise the row is Anonymous.';
+    contributorLabel = 'Unknown';
+    attributionNote = 'We could not load your contributor profile, so we cannot show how this row would be credited. Sharing is paused. Close this and try again.';
   } else if (attribution.contributor || attribution.organization) {
     contributorLabel = attribution.contributor || 'Anonymous';
     attributionNote = 'Attributed from your public contributor profile. Turn off "Show on contributors page" to share anonymously.';
@@ -115,7 +116,7 @@ export default function ShareYieldModal({ pending, onConfirm, onCancel }) {
           </button>
           <button
             onClick={onConfirm}
-            disabled={sending || loadingAttribution}
+            disabled={sending || loadingAttribution || attributionUnavailable}
             className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-brand-teal text-white hover:bg-brand-teal/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Share2 size={14} />
