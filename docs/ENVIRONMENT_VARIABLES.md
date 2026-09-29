@@ -74,10 +74,11 @@ If protected endpoints return 401 after Firebase sign-in, check:
 
 ## Local Development Setup
 
-1. Copy `.env.example` to `.env.development`:
+1. Create an untracked local file from the template. Vite loads `app/.env.development.local` after `app/.env.development`, so its values win, and `.gitignore` keeps it out of git:
    ```bash
-   cp app/.env.example app/.env.development
+   cp app/.env.example app/.env.development.local
    ```
+   Do **not** copy the template over `app/.env.development` or `app/.env.production`. Those two files are tracked in git.
 
 2. Fill in your values **without quotes**:
    ```bash
@@ -87,10 +88,10 @@ If protected endpoints return 401 after Firebase sign-in, check:
    VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
    VITE_FIREBASE_APP_ID=your-firebase-web-app-id
    VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
-   DATABASE_URL=your-connection-string-here
    ```
+   The frontend never reads `DATABASE_URL`, so it does not belong in this file. For `vercel dev`, use the root `.env.local` that `vercel env pull` writes. For the scripts in `scripts/`, `export DATABASE_URL=...` in your shell. See "For new developers" in [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
 
-3. Never commit `.env`, `.env.development`, or `.env.production` files - they're gitignored for security.
+3. Never put a real value in a tracked file. `.gitignore` covers only `.env`, `.env.local` and the `.env*.local` files (such as `app/.env.development.local`). `app/.env.development`, `app/.env.production`, `app/.env.example` and `server/.env.example` are **tracked** and must stay placeholder-only; the `Secret scan` CI job fails if a real-looking credential lands in a tracked file. If one already did, follow [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
 
 4. For the local Express server (`server/server.js`), create `server/.env` (or `.env.local`) with `FIREBASE_PROJECT_ID`, `JWT_SECRET`, and `ALLOWED_ORIGINS` that match your dev URLs. See `server/.env.example` for defaults.
 

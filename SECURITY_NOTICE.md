@@ -1,85 +1,124 @@
-# Security Notice: Environment Variable Cleanup
+# Security Notice: Credential Exposure and Rotation
 
-## Actions Taken
+> **Status: OPEN. Rotation is NOT recorded as done.**
+>
+> Real credentials were committed to this public repository in December 2025 and are still readable in its git history. This notice stays open until the repository owner completes the checklist below, fills in every "done on" date and records the decision on git history (step 5.1). Nothing in this file says a credential has been rotated, revoked or confirmed dead. Until it does, treat the Neon database password and the Stack Auth secret server key as compromised.
+>
+> Tracking issue: #22. Only the owner can do the rotation (it needs the Neon, Stack Auth and Vercel dashboards). An agent or CI job cannot, and must never be given the old or new values.
 
-The following files have been secured by replacing real credentials with placeholder values:
+## What leaked
 
-### 1. `app/.env.development`
-- **Status**: Tracked in git, now contains only placeholders
-- **Local secrets moved to**: `app/.env.development.local` (gitignored)
+Found by scanning every commit on every ref of the public repository (356 commits, 49 branches, 73 pull request refs, 1 tag). Values are deliberately not reproduced anywhere in this file.
 
-### 2. `app/.env.production`
-- **Status**: Tracked in git, now contains only placeholders
-- **Local secrets moved to**: `app/.env.production.local` (gitignored)
+| Service | What | Secret? | Files | Introduced / removed from `main` | Action |
+|---|---|---|---|---|---|
+| Neon Postgres | Connection string containing the owner-role password | **Yes** | `app/.env.development`, `app/.env.production` | `1eef6e2` (2025-12-16) / `0d36e57` (2026-03-28) | Rotate: step 1 |
+| Stack Auth (retired) | Secret server key | **Yes** | same two files | same commits | Revoke: step 2 |
+| Stack Auth (retired) | Project ID and publishable client key | No, shipped to browsers by design | same two files, plus `docs/ENVIRONMENT_VARIABLES.md` | `1eef6e2` / files `0d36e57`, docs `32f7f12` (2026-08-06) | None; moot once the Stack project is revoked |
+| Legacy JWT login | Weak hardcoded fallback for `JWT_SECRET` in `server/server.js` (a guessable dev default, not a random production secret). The tag `v1.0.0` points at the introducing commit `9156730`, so it carries the fallback at its tip | Weak | `server/server.js` | `9156730` (2025-12-16) / `0d36e57` | Check the real value: step 3 |
+| Firebase | Web config. Only a project ID was ever committed | No, public by design | `docs/ENVIRONMENT_VARIABLES.md` | n/a | None |
 
-### Already Secure Files
-- `.env.local` - Already gitignored, contains Vercel-generated credentials
-- `app/.env` - Already gitignored, contains real credentials
-- `server/.env` - Already gitignored, contains configuration
+Also found and harmless: test constants and a synthetic test token in the test files, a dummy bcrypt hash in `shared/handlers/login.js`, and a truncated JWT header sample in `docs/API.md`. No AWS, GitHub, Slack, Stripe, Google or Gemini API key, private key, service-account file or full JWT was ever committed.
 
-## Exposed Credentials
+**How exposed.** The repository is public. On `main` the values were present from 2025-12-16 to 2026-03-28 (about 3.4 months). When scanned they were still retrievable: every branch contained the introducing commit, the values were at the tip of 8 branches (`docs/add-changelog`, `feature/custom-dropdown-options`, `feature/import-validation-ux`, `feature/pcs-maritime-ui-overhaul`, `fix/docs-env-vars`, `fix/neon-tuna-pdf-import`, `fix/oauth-authentication-config`, `vercel/set-up-vercel-web-analytics-in-qwrrs8`) and they appeared in 12 pull request refs (PRs 1 to 10, 12 and 73). Assume they were copied. The weak JWT fallback is also at the tip of the tag `v1.0.0` (the env files are not in that tag).
 
-The following credentials were previously committed to the repository and **MUST be rotated immediately**:
+**Current tree is clean.** At the current branch tip no tracked file contains a real credential; the four tracked env files hold placeholders only. Earlier notes (for example `AUDIT_REPORT.md` and the comments on #22) may name a different first commit, such as the oldest commit visible in a shallow clone. A shallow clone only holds the newest commits, so `git log` there will not show `1eef6e2`.
 
-### Previous Auth Provider Credentials
-- **Project ID / Client Keys**: [REDACTED - rotate immediately]
-- **Secret Server Key**: [REDACTED - rotate immediately]
-- **Action Required**: Revoke the retired Stack Auth credentials if they still exist, and configure Firebase Auth credentials for the active deployment.
+## Rotation checklist
 
-### Neon Database
-- **Database URL**: [REDACTED - reset password immediately]
-- **Username**: [REDACTED - reset password immediately]
-- **Password**: [REDACTED - reset password immediately]
-- **Action Required**: Reset database password in Neon dashboard at https://console.neon.tech
+Do these in order. Record the date you finish each one. Do not paste old or new values into issues, PRs, chat, tickets or an AI assistant.
 
-## Immediate Action Items
+### 1. Neon database (first, it is the most serious)
 
-1. **Revoke Retired Auth Credentials**
-   - Revoke any retired Stack Auth project keys
-   - Configure Firebase Auth for the active project
-   - Update `app/.env.development.local` and `app/.env.production.local`
-   - Update Vercel environment variables
+- [ ] 1.1 In the [Neon console](https://console.neon.tech), reset the password of the owner role named in the old connection string (or create a new role, move the app to it, then delete the old role). done on: ____
+- [ ] 1.2 Check every Neon branch of the project, especially any created before the reset. A branch forked from production may still carry the old role and password. Reset it there too, or delete the branch. done on: ____
+- [ ] 1.3 Set the new connection string as `DATABASE_URL` in Vercel for **Production, Preview and Development**. The Neon/Vercel integration may also have added variables holding the same password (`POSTGRES_*`, `PG*`, `DATABASE_URL_UNPOOLED`, `NEON_*`). Nothing in this repository reads them, so update or delete them. Remove stale duplicate Neon integrations (see `DEPLOYMENT.md` section 5.3). done on: ____
+- [ ] 1.4 Redeploy Production. A variable change only reaches new deployments. Older deployments keep the old value and will lose database access, so delete the ones you no longer need. done on: ____
+- [ ] 1.5 Smoke test the deployed site: sign in with Firebase email/password, sign in with Google, sign in with a legacy username, and open a page that reads or saves data (for example Saved calculations). Check the Vercel function logs for database authentication errors. done on: ____
+- [ ] 1.6 **Confirm the old credential is dead, yourself.** From your own machine, try to connect with the old connection string (for example `psql` with the old string) and confirm authentication is refused. The old string is in your own records or in commit `1eef6e2`; read it only in your own terminal. Do not give it to a script, a CI job or an agent, and clear it from your shell history afterwards. done on: ____
+- [ ] 1.7 Review Neon's connection and query history for unexpected clients or queries between 2025-12-16 and the reset date. What is available depends on your Neon plan. Note what you found: ____ done on: ____
+- [ ] 1.8 Replace local copies: re-run `vercel env pull` to refresh any root `.env.local`, and clean any shell profile or password manager entry that still holds the old string. done on: ____
 
-2. **Rotate Neon Database Password**
-   - Go to Neon console
-   - Reset the database owner password
-   - Update all `.env*.local` files with new connection string
-   - Update Vercel environment variables
-   - Update `.env.local` file
+Optional hardening: run the API as a role with only the table access it needs, and keep the owner credential for the schema and import scripts in `scripts/`. Today the API and the scripts use the same owner-level string.
 
-3. **Update Vercel Environment Variables**
-   - Go to Vercel dashboard → Settings → Environment Variables
-   - Update all rotated credentials
-   - Redeploy the application
+### 2. Stack Auth (retired provider)
 
-4. **Clean Git History (Optional but Recommended)**
-   - Consider using tools like `git filter-branch` or `BFG Repo-Cleaner` to remove exposed secrets from git history
-   - Note: This requires force-pushing and coordinating with all repository collaborators
+Nothing in `api/`, `app/src`, `server/`, `shared/` or `scripts/` reads a `STACK_*` variable any more. Auth moved to Firebase in PR #63 (`32f7f12`, 2026-08-06), so revoking the key has no effect on production as long as production runs that commit or a later one.
 
-## For New Developers
+- [ ] 2.1 In the Stack Auth dashboard, revoke the secret server key, or delete the retired project. If the project was created through the Neon Auth integration, look in the Neon console's Auth section instead. done on: ____
+- [ ] 2.2 Remove every `STACK_*`, `NEXT_PUBLIC_STACK_*` and `VITE_STACK_*` variable from Vercel (all environments). `DEPLOYMENT.md` section 5.3 covers removing the integration but does not say to revoke the key at the provider, so 2.1 is still needed. done on: ____
 
-When setting up this project locally:
+The project ID and publishable client key need no separate action.
 
-1. Copy template files to create local environment files:
-   ```bash
-   cp app/.env.development app/.env.development.local
-   cp app/.env.production app/.env.production.local
-   ```
+### 3. `JWT_SECRET` (legacy `/api/login`)
 
-2. Request the real credentials from a team lead and update the `.local` files
+No real `JWT_SECRET` value was ever committed. The only exposure is the weak fallback that existed in an old `server/server.js`, and it matters only if a deployment ran that server without `JWT_SECRET` set.
 
-3. **Never commit `.env*.local` files** - they are gitignored for security
+- [ ] 3.1 Check that `JWT_SECRET` in Vercel (Production, and Preview if legacy login is used there) is a long random value and not that old fallback. If you are not sure, set a new one and redeploy. Generate it with the command in `server/.env.example`: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`. done on: ____
 
-## Files Currently Gitignored
+Effect of changing it: every legacy token (issued by `/api/login` and kept in the browser's `localStorage` under `token`) stops working, and those users must sign in again. Firebase sessions are not affected. Do not delete the variable: with it unset, `/api/login` returns 500 and legacy bearer tokens are rejected, which locks out legacy username/password users.
 
-The following patterns are in `.gitignore` to protect credentials:
-- `.env`
-- `.env.local`
-- `.env.development.local`
-- `.env.test.local`
-- `.env.production.local`
-- `.env*.local` (catch-all)
+### 4. Anything else
 
-## Production Deployment
+- [ ] 4.1 `VITE_GEMINI_API_KEY`, `GEMINI_API_KEY` and `VITE_OCR_ENDPOINT` are documented in `docs/ENVIRONMENT_VARIABLES.md` and `app/.env.example`, but no code reads them, and no Google API key appears in history. If you ever created such keys, check Vercel and your machines, revoke them in the Google Cloud console and delete the variables. Anything prefixed `VITE_` is bundled into the browser. done on: ____
+- [ ] 4.2 Optional: restrict the Firebase web API key by HTTP referrer and API in the Google Cloud console, and consider Firebase App Check. The key is public by design, so this is hardening and not rotation. done on: ____
 
-For Vercel deployments, environment variables should be set in the Vercel dashboard, not in committed files. The `.env.production` file serves only as a template showing which variables are needed.
+### 5. Close out
+
+- [ ] 5.1 Decide what to do about git history (see "Git history" below) and record it here: accepted the risk after rotation, or scrubbed it. Which, and why: ____ done on: ____
+- [ ] 5.2 Change the status block at the top of this file to say what was rotated and when, using the dates above, and to state the history decision from 5.1. done on: ____
+- [ ] 5.3 Optional, after rotation: trim the parts of `AUDIT_REPORT.md` that spell out how to pull the values out of history (the `git log -p` command and commit range). Not needed if you scrubbed history. done on: ____
+- [ ] 5.4 Close issue #22 with the dates from steps 1.6 and 2.1 and the history decision from 5.1. done on: ____
+
+## Git history
+
+Rotating makes the leaked values worthless. The old commits stay readable either way, so you must choose what to do about them. This is your decision; nothing here does it automatically.
+
+- **Accept the risk once rotated (default).** After steps 1 and 2 the exposed Neon password and Stack key are dead, so history holds no working credential. No force-push, no coordination. Recommended unless you have a reason to scrub.
+- **Scrub history.** Use `git filter-repo` (or BFG Repo-Cleaner; the Git project itself discourages `git filter-branch`), rewrite every branch and tag, and force-push all of them. Every collaborator must re-clone, and open pull requests will break. Even then, GitHub keeps `refs/pull/*` (read-only) and can serve commits by SHA, so you would also have to ask GitHub Support to remove cached views and unreachable commits, and removal is not guaranteed. Scrubbing without rotating first protects nothing.
+
+Whichever you choose, write it down in step 5.1 ("accepted the risk" or "scrubbed", with the date). Issue #22 asks for that decision to be on record.
+
+To see exactly which commits carry which rule hits, run this on a **full** copy (a shallow clone is partial; the tool warns when it detects one):
+
+```bash
+git clone --mirror https://github.com/paccloud/Fish_Cost_Calculator.git fish-mirror.git
+cd fish-mirror.git
+node /path/to/your/checkout/scripts/check-secrets.mjs --history
+```
+
+It prints commit, file path, rule and a count, never the value. Hits are expected until history is scrubbed, which is why CI does not run this mode. It reads every added line on every ref, including UTF-16 files and lines a merge conflict resolution introduced. If `git log` itself fails it exits 2 and prints git's first error line; treat that as "not scanned", never as "clean".
+
+## Prevention
+
+- **CI secret scan.** The `Secret scan` job in `.github/workflows/ci.yml` runs `node scripts/check-secrets.mjs` (Node 20, no dependencies, 5-minute timeout) on every pull request targeting `main` and every push to `main`. It scans every git-tracked file and fails the build on a hit. Run the same command locally before you push.
+  - What it scans: file contents decide, not names. Only exact lockfile names (`package-lock.json`, `yarn.lock`, ...) and binary content are skipped; `.claude/skills/`, other `*.lock` files and text files with an image-like extension are scanned. UTF-16 files are decoded. The summary line says how many files were skipped and why. A tracked text file over 5 MB cannot be scanned and fails the build.
+  - Rules: URLs with an embedded real password (any scheme, plus `curl -u user:password`), PEM private keys, AWS access key IDs, Google API keys, GitHub tokens, Slack tokens, Stripe live keys, Neon API keys and role passwords (`napi_`, `npg_` prefixes), Stack Auth secret keys (`ssk_`), JWT-shaped tokens, SQL statements that set a role password to a literal, `jwt.sign`/`jwt.verify` called with a random-looking string literal, secret-like names assigned a literal (also `name:`/`value:` pairs split over two lines), and `process.env.<SECRET-like name> || "literal"` fallbacks (dot or bracket access, destructuring defaults, wrapped lines, Python `os.getenv`).
+  - How strict: a secret-like name is one that ends in `secret`, `password`/`pass`/`pwd`, `token` or a qualified `key` (`api_key`, `private_key`, `signing_key`, `encryption_key`, ...). In env, config and Markdown files such a name with any real-looking value of 8 or more characters is a finding, with no entropy test. In source code (JS, TS, Python, SQL, HTML, ...) only a quoted, random-looking literal counts, so ordinary identifiers and test fixtures do not trip it.
+  - Placeholders pass: `your_...`, `change-me`, `user:password@host`, `example`, `xxxx`, `<...>`, `REDACTED`, empty values, `process.env` / `import.meta.env` references, encrypted (`ENC[...]`) and hashed values, and a value cut off with a trailing `...`. A marker inside a longer value (`...`, `***`, `<x>`) only counts when it stands for most of the value. Hosts `example.com`/`.org`/`.net`, `*.example`, `*.test`, `*.invalid` and loopback may sit next to a password; a host that merely contains the word "example" may not. One documentation sample is allowed by exact value in `docs/API.md` only.
+  - The report prints file, line and rule name only, never the matched text.
+  - A false positive: use an obvious placeholder, or put `check-secrets:allow` in a comment on that line (for a match that spans lines, any of its lines). A real hit: remove the value **and rotate the credential**; deleting the line does not un-leak it.
+  - It is a heuristic over the checked-out files. It does not find a secret stored under a name that does not mention one (for example `DB_LOGIN=`), values built up in code, secrets inside binary or compressed files, or a raw `/` in a URL password. It does not read history unless you pass `--history`, and it does not replace GitHub's own scanning.
+  - Tests: `app/src/lib/__tests__/checkSecrets.test.js` (run by `cd app && npm test`). They include detection rates over generated secrets and scan-time limits on hostile input.
+- [ ] **Owner: enable GitHub secret scanning and push protection** in the repository's Settings, under Code security. Only the owner can. Push protection blocks a push that contains a recognised provider token before it lands. done on: ____
+- **Tracked env files are a footgun.** `app/.env.development` and `app/.env.production` are tracked, so a real value pasted into them gets committed. Keep them placeholder-only (CI checks). `app/.env.example`, `docs/ENVIRONMENT_VARIABLES.md` and `CLAUDE.md` now tell developers to work in the untracked `app/.env.development.local`. Untracking the two files in favour of `app/.env.example` is worth considering, but it is your call: `scripts/` reads `app/.env.development`, and Vite loads `app/.env.production` during `vite build`.
+
+## For new developers
+
+Real values go only in untracked files. Never commit them, and never ask for credentials in chat, issues or PRs.
+
+1. Frontend (Vite): `cp app/.env.example app/.env.development.local`. Vite loads that file after `app/.env.development` and it overrides that file; it is gitignored. The `VITE_FIREBASE_*` values come from Firebase Console, Project settings, your web app. They are public identifiers, not secrets. Never copy the template over the tracked `app/.env.development` or `app/.env.production`.
+2. Local Express server: create `server/.env` (see `server/.env.example`). It needs `FIREBASE_PROJECT_ID` (the same Firebase project as the frontend), `ALLOWED_ORIGINS`, and `JWT_SECRET` for legacy login.
+3. Vercel-based local testing (`vercel dev`): use a root `.env.local` created by `vercel env pull`.
+4. Database credentials come from the Neon console or from `vercel env pull`, not from a team lead's message. The scripts in `scripts/` (`import-fish-data-to-neon.js`, `migrate-sqlite-to-neon.js`) load only the tracked `app/.env.development`, and `dotenv` does not override variables already set in your shell. So `export DATABASE_URL=...` in your shell for that session instead of writing a real string into the tracked file.
+5. Auth is Firebase (email/password and Google). Do not configure Stack Auth; it is retired.
+
+### Gitignored files
+
+`.gitignore` covers `.env`, `.env.local`, `.env.development.local`, `.env.test.local`, `.env.production.local` and the catch-all `.env*.local`, plus `*.db`, `*.sqlite`, `uploads/` and `.vercel`.
+
+Tracked, placeholders only: `app/.env.development`, `app/.env.production`, `app/.env.example`, `server/.env.example`.
+
+## Production deployment
+
+Set environment variables in the Vercel dashboard (Production, Preview and Development), not in committed files. The secret-bearing ones are `DATABASE_URL` and `JWT_SECRET`; `FIREBASE_PROJECT_ID` and `ALLOWED_ORIGINS` are public configuration. Changes only reach new deployments, so redeploy. `app/.env.production` is a template, but Vite loads it during the build: a `VITE_*` variable missing from Vercel silently falls back to its placeholder and breaks auth without an error. Consider pointing Preview deployments at a separate Neon branch instead of the production data.

@@ -46,3 +46,26 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    # A normal run takes seconds. The cap keeps a pathological file from holding a runner for the default 6 hours.
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Scans git-tracked files only. The report lists file, line and rule name, never the matched text.
+      # The --history mode is deliberately not run here: the known leak in old commits would fail forever.
+      - name: Scan tracked files for secrets
+        run: node scripts/check-secrets.mjs

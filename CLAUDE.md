@@ -47,8 +47,9 @@ cd app && npm run build
 ```bash
 cd app && npm install
 cd ../server && npm install
-# Copy and configure env files (no quotes around values — Vite includes them literally)
-cp app/.env.example app/.env.development
+# Create your untracked local env file (no quotes around values — Vite includes them literally).
+# Never overwrite the tracked app/.env.development or app/.env.production; see SECURITY_NOTICE.md.
+cp app/.env.example app/.env.development.local
 ```
 
 ## Architecture
