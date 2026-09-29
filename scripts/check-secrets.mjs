@@ -509,8 +509,10 @@ const NUMBER_UNIT_WORDS = new Set([
 const plainWord = (piece) => (piece ?? '').replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '').toLowerCase();
 
 const MESSAGE_CATALOG_DIRS = /(?:^|\/)(?:i18n|l10n|locales?|_locales|lang|langs|languages?|messages?|translations?|intl|strings)(?:\/|$)/;
+// Segments are [A-Za-z0-9]+ after ONE separator char: the separator class and the segment class must not overlap,
+// or a hostile file name ('i18n-' + '--' x 30) backtracks exponentially (CodeQL js/redos; this runs on tracked paths).
 const MESSAGE_CATALOG_FILE =
-  /^(?:(?:messages?|strings|translations?|locales?|i18n|l10n|errors?)(?:[._-][\w-]+)*|[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?)\.(?:json|jsonc|json5|ya?ml|properties|po|pot|xlf|xliff|toml|ini|arb|resx|strings|xml)$/i;
+  /^(?:(?:messages?|strings|translations?|locales?|i18n|l10n|errors?)(?:[._-][A-Za-z0-9]+)*|[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?)\.(?:json|jsonc|json5|ya?ml|properties|po|pot|xlf|xliff|toml|ini|arb|resx|strings|xml)$/i;
 
 /** Is this path a message catalog (i18n, locales, messages, en.json, ...), where UI sentences under key names are normal? */
 function isMessageCatalogPath(filePath) {

@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   RULES,
   credentialFormats,
@@ -2458,6 +2458,77 @@ describe('review round 8', () => {
 // ---------------------------------------------------------------------------
 // Skip list and decoding
 // ---------------------------------------------------------------------------
+
+// A tracked file NAME is attacker-controlled (a pull request can add any name), and the scanner classifies every
+// path with regexes. CodeQL (js/redos) found one whose separator and segment classes overlapped: 'i18n-' plus
+// '--' x 22 took 10 to 16 s and doubled with every repeat. The content-based hostile-input tests above never
+// exercised this because they vary the file TEXT, not the file PATH.
+describe('hostile file paths are classified in linear time', () => {
+  // A backtracking regex blocks the JS thread, so Vitest's own timeout cannot interrupt it: if this bug ever came
+  // back, an in-process test would hang CI instead of failing. The hostile scans therefore run in a child process
+  // with a hard kill timeout, and the test fails cleanly (status null, signal SIGTERM) if the child is killed.
+  const CHILD_KILL_MS = 30_000;
+  const HOSTILE_PATH_LIMIT_MS = 2000;
+  const runHostile = (script) =>
+    spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      timeout: CHILD_KILL_MS,
+    });
+  const SCAN_IMPORT = `import { scanText } from ${JSON.stringify(pathToFileURL(SCANNER).href)};`;
+
+  it('the exact CodeQL shapes finish at once (each doubled per repeat before the fix)', SLOW, () => {
+    const result = runHostile(`${SCAN_IMPORT}
+      const body = 'MSG_TOKEN="This is the way."\\n';
+      const makers = [
+        (n) => 'i18n-' + '--'.repeat(n) + '!.json',
+        (n) => 'messages' + '__'.repeat(n) + '!.json',
+        (n) => 'errors' + '_-'.repeat(n) + '!.yaml',
+      ];
+      const started = performance.now();
+      for (const make of makers) { scanText(make(40), body); scanText(make(200), body); }
+      console.log(Math.round(performance.now() - started));`);
+    expect(result.error, 'the child was killed: a path regex is backtracking').toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(Number(result.stdout.trim())).toBeLessThan(HOSTILE_PATH_LIMIT_MS);
+  });
+
+  it('no known path shape backtracks: 3 KB paths built from every name, repeat unit and ending', SLOW, () => {
+    const result = runHostile(`${SCAN_IMPORT}
+      const body = 'MSG_TOKEN="This is the way."\\n';
+      const names = ['netrc', '.netrc', '_netrc', 'pgpass', '.pgpass', '.npmrc', '.yarnrc', '.pypirc', 'credentials',
+        'config', 'docker-config', 'kubeconfig', 'htpasswd', '.htpasswd', 'my.cnf', '.s3cfg', 'id_rsa', 'messages',
+        'errors', 'strings', 'en', 'locales', 'i18n', 'l10n', 'translations', '.env', 'secrets', 'terraform',
+        '.git-credentials', '.curlrc', '.wgetrc', '.vault-token', 'docs/API'];
+      const units = ['-', '_', '.', '--', '__', '..', '-_', '_-', '.-', '-.', ' ', 'a-', '.a', 'a_', '/', '/.'];
+      let worst = 0; let where = '';
+      for (const name of names) for (const unit of units) for (const tail of ['!', '.json', '/x.json']) {
+        const hostile = name + unit.repeat(Math.floor(3000 / unit.length)) + tail;
+        const started = performance.now(); scanText(hostile, body); const took = performance.now() - started;
+        if (took > worst) { worst = took; where = name + ' + ' + JSON.stringify(unit) + ' + ' + tail; }
+      }
+      console.log(JSON.stringify({ worst: Math.round(worst), where }));`);
+    expect(result.error, 'the child was killed: a path regex is backtracking').toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    const { worst, where } = JSON.parse(result.stdout.trim());
+    expect(worst, `slowest hostile path: ${where}`).toBeLessThan(HOSTILE_PATH_LIMIT_MS);
+  });
+
+  it('ordinary message-catalog file names are still recognised after the fix', () => {
+    const body = 'MSG_TOKEN="This is the way."\n';
+    // A sentence under a token-like name is only exempt inside a message catalog.
+    for (const file of [
+      'src/messages.en.json', 'errors_en-US.json', 'strings-fr.xml', 'en.json', 'pt-BR.json', 'locales/de/app.json',
+      'translations.es.yaml', 'i18n.zh-Hans.json',
+    ]) {
+      expect(scanText(file, body), file).toEqual([]);
+    }
+    // Same text in an ordinary config file is still a finding.
+    for (const file of ['config.json', 'app.env', 'settings.yaml']) {
+      expect(scanText(file, body).length, file).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe('shouldSkipPath', () => {
   it.each([
