@@ -10,9 +10,9 @@ sign-in systems, for about two accounts whose only jobs are keeping custom
 yields and saved calculations across devices and submitting custom yields. We
 chose Firebase Auth plus Cloud Firestore, reached directly from the browser:
 security rules decide who reads and writes what, and Firestore's offline cache
-replaces our sync engine. The static app is served from Firebase Hosting, so
-the whole app lives with one provider. Firebase Auth was already in use, so no
-one signs up again.
+replaces our sync engine. The static app is served from Firebase Hosting, so the
+whole app lives with one provider. Firebase Auth was already in use, so no one
+signs up again.
 
 ## Considered Options
 
@@ -34,12 +34,14 @@ one signs up again.
   yields are copied into a separate public collection holding only the public
   fields (species, conversion, yield, source, display name). The owner's user
   id, submission details and review note stay in the owner's private document.
-  The reviewer's approval writes both in one batch.
-- Our sync engine's revision check goes away: when the same record is edited
-  on two devices while one is offline, the later write wins. We accept this
-  because the accounts belong to one person; the conflict screen is dropped.
-- The community dataset can be downloaded as CSV/JSON from the Community page.
-  A stable file address for other tools comes with the versioned releases in
+  The reviewer's approval writes both in one batch. Editing or deleting an
+  approved yield deletes its public copy in the same batch, and the rules let an
+  owner delete the public copy of their own yield.
+- Our sync engine's revision check goes away: when the same record is edited on
+  two devices while one is offline, the later write wins. We accept this because
+  the accounts belong to one person; the conflict screen is dropped.
+- The community dataset can be downloaded as CSV/JSON from the Community page. A
+  stable file address for other tools comes with the versioned releases in
   ADR 0004.
 - The Firebase SDK makes the app download larger than today's REST calls.
 - Local development and CI use the Firebase emulators.
@@ -47,10 +49,16 @@ one signs up again.
   to an address, so a redirect cannot carry a guest's saved data or unsynced
   edits across. Before the redirect is switched on, the last version on the old
   address asks guests to sign in so their data reaches their account, and
-  finishes syncing signed-in users. Then the old API stops accepting writes
-  (it answers them with an error), so nothing changes in Neon while it is
-  copied. Only after the copy has been checked is Vercel reduced to a
-  redirect. Bookmarks follow the redirect; installed copies of the app need to
-  be installed again from the new address. PR previews come from Firebase
-  preview channels.
+  finishes syncing signed-in users. Then the old API stops accepting writes (it
+  answers them with an error), so nothing changes in Neon while it is copied.
+  The copy matches Neon accounts to Firebase users by their Firebase user id; an
+  account with only the legacy password login must first sign in on the old
+  address with Google or email using the same verified email, which links it,
+  and the copy stops rather than skip an account that holds data but has no
+  Firebase user. Neon custom yields record only the finished product, not the
+  starting form, so the copy leaves the starting form blank for the owner to
+  fill in. Only after the copy has been checked is Vercel reduced to a redirect.
+  Bookmarks follow the redirect; installed copies of the app need to be
+  installed again from the new address. PR previews come from Firebase preview
+  channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).

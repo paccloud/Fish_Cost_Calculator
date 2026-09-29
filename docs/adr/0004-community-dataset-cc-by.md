@@ -20,4 +20,5 @@ no fixed download address.
 - Yields shared before this consent existed enter the community dataset only
   with their owner's agreement to CC BY 4.0: the one-time copy from Neon marks
   them approved only for owners who have agreed, and leaves the rest private
-  for their owners to submit again.
+  for their owners to submit again. A copied yield whose starting form is
+  still blank stays private until its owner fills it in and submits it.
