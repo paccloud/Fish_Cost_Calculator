@@ -25,8 +25,11 @@ const Tooltip = ({ text, label, iconOnly = false, children }) => {
     if (!show || !bubble || !trigger) return;
     const gap = 8;
     const vv = window.visualViewport;
+    const viewportWidth = vv?.width ?? document.documentElement.clientWidth;
     const minX = (vv?.offsetLeft ?? 0) + gap;
-    const maxX = (vv?.offsetLeft ?? 0) + (vv?.width ?? document.documentElement.clientWidth) - gap;
+    const maxX = (vv?.offsetLeft ?? 0) + viewportWidth - gap;
+    // The CSS cap is in layout units; when zoomed in the visible area is narrower, so cap it here too
+    bubble.style.maxWidth = `${Math.min(parseFloat(getComputedStyle(bubble).maxWidth) || Infinity, maxX - minX)}px`;
     const t = trigger.getBoundingClientRect();
     const { width, height } = bubble.getBoundingClientRect();
     const left = Math.min(Math.max(t.left, minX), Math.max(minX, maxX - width));
@@ -169,6 +172,8 @@ const Calculator = () => {
   const [shipping, _setShipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
   const [result, setResult] = useState(null);
+  // Yield and target as they were when the result was computed, so the description never drifts from the number
+  const [resultMeta, setResultMeta] = useState(null);
   const resultRef = useRef(null);
   const [saveStatus, setSaveStatus] = useState('');
   const [useRangeMin, setUseRangeMin] = useState(false);
@@ -308,6 +313,7 @@ const Calculator = () => {
     if (mode === 'weight') {
       const target = parseFloat(targetWeight) || 0;
       setResult(y > 0 ? target / y : 0);
+      setResultMeta({ yieldPercent, targetWeight });
       setSaveStatus('');
       return;
     }
@@ -323,6 +329,7 @@ const Calculator = () => {
     baseRes += cold + ship;
 
     setResult(baseRes);
+    setResultMeta({ yieldPercent, targetWeight });
     setSaveStatus('');
   };
 
@@ -729,8 +736,8 @@ const Calculator = () => {
                   </p>
                   <p className="mt-2 text-base text-text-secondary">
                     {mode === 'cost'
-                      ? `At ${yieldPercent}% yield from ${fromState} to ${toState}`
-                      : `${result.toFixed(1)} lbs of ${fromState} makes ${targetWeight} lbs of ${toState}`
+                      ? `At ${resultMeta?.yieldPercent}% yield from ${fromState} to ${toState}`
+                      : `${result.toFixed(1)} lbs of ${fromState} makes ${resultMeta?.targetWeight} lbs of ${toState}`
                     }
                   </p>
                 </>
