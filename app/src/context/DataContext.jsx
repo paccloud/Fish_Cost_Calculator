@@ -302,6 +302,8 @@ export function DataProvider({ children }) {
   }, [repo, logout]);
 
   const handleSignOutDiscard = useCallback(async () => {
+    // Read-only for the move: unsent records are kept for the file export, never discarded.
+    if (isAppReadOnly) return;
     signingOutRef.current = true;
     clearTimeout(syncTimeoutRef.current);
     try {
@@ -662,7 +664,7 @@ export function DataProvider({ children }) {
           calcs={signOutGuardState.calcs}
           yields={signOutGuardState.yields}
           onKeep={handleSignOutKeep}
-          onDiscard={handleSignOutDiscard}
+          onDiscard={isAppReadOnly ? undefined : handleSignOutDiscard}
           onCancel={handleSignOutCancel}
         />
       )}
