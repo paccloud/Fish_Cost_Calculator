@@ -52,7 +52,10 @@
  *   'incoming' — processingCost is divided by yield (applied to Round lbs)
  *   'outgoing' — processingCost is added directly (applied to finished-product lbs)
  * @property {number|string} [coldStorage=0]   $/lb cold-storage addend (finished-product basis)
- * @property {number|string} [shipping=0]      $/lb shipping addend (finished-product basis)
+ * @property {number|string} [shipping=0]      $/lb shipping charge, applied to either incoming or outgoing weight.
+ * @property {'incoming'|'outgoing'} [shippingWeightType='outgoing']
+ *   'incoming' — shipping the starting fish; divided by yield like incoming processing
+ *   'outgoing' — shipping the finished product; added directly
  *
  * @property {boolean} [showTimeTracking=false]
  *   When true, labor costs from processingSteps are summed and added per lb.
@@ -74,6 +77,9 @@
  *   weight mode: lbs of Round needed
  * @property {number} appliedDiscount
  *   Percentage discount applied (0 when none). Always 0 in weight mode.
+ * @property {{fish: number, processing: number, shipping: number, coldStorage: number, labor: number}|null} breakdown
+ *   What each part adds per lb of finished product, before any discount (the parts sum to the
+ *   undiscounted result). null in weight mode.
  */
 
 /**
@@ -92,6 +98,7 @@ export function calculate(inputs) {
     weightType = 'incoming',
     coldStorage = 0,
     shipping = 0,
+    shippingWeightType = 'outgoing',
     showTimeTracking = false,
     processingSteps = [],
     showEconomyOfScale = false,
@@ -109,6 +116,7 @@ export function calculate(inputs) {
     return {
       result: y > 0 ? target / y : 0,
       appliedDiscount: 0,
+      breakdown: null,
     };
   }
 
@@ -118,29 +126,28 @@ export function calculate(inputs) {
   const cold = parseFloat(coldStorage) || 0;
   const ship = parseFloat(shipping) || 0;
 
-  // Base cost: raw $/lb divided by yield fraction
-  let baseRes = c / y;
-
-  // Processing cost: incoming weight → divide by yield; outgoing → add directly
-  if (weightType === 'incoming') {
-    baseRes += proc / y;
-  } else {
-    baseRes += proc;
-  }
-
-  // Cold storage and shipping are per-lb addends on the finished-product basis
-  baseRes += cold + ship;
+  // A per-lb charge on incoming (starting) weight is spread over fewer finished pounds, so it is
+  // divided by yield; a charge on outgoing (finished) weight is added as-is.
+  const perFinishedLb = (amount, basis) => (basis === 'incoming' ? amount / y : amount);
 
   // Labor / time-tracking costs: summed across steps, added per lb
+  let labor = 0;
   if (showTimeTracking) {
-    let totalTimeCost = 0;
     processingSteps.forEach(step => {
       const time = parseFloat(step.timeMinutes) || 0;
       const laborRate = parseFloat(step.laborCostPerHour) || 0;
-      totalTimeCost += (time / 60) * laborRate;
+      labor += (time / 60) * laborRate;
     });
-    baseRes += totalTimeCost;
   }
+
+  const breakdown = {
+    fish: c / y,
+    processing: perFinishedLb(proc, weightType),
+    shipping: perFinishedLb(ship, shippingWeightType),
+    coldStorage: cold, // finished-product basis
+    labor,
+  };
+  let baseRes = breakdown.fish + breakdown.processing + breakdown.shipping + breakdown.coldStorage + breakdown.labor;
 
   // Economy-of-scale discount: find highest qualifying tier
   let appliedDiscount = 0;
@@ -159,5 +166,5 @@ export function calculate(inputs) {
     baseRes = baseRes * (1 - appliedDiscount / 100);
   }
 
-  return { result: baseRes, appliedDiscount };
+  return { result: baseRes, appliedDiscount, breakdown };
 }
