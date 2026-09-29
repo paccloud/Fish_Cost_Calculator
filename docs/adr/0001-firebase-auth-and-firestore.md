@@ -40,7 +40,8 @@ one signs up again.
   address asks guests to sign in so their data reaches their account, and
   finishes syncing signed-in users. Then the old API stops accepting writes
   (it answers them with an error), so nothing changes in Neon while it is
-  copied. Only after the copy has been checked is Vercel reduced to a redirect. Bookmarks follow the redirect; installed copies of the app
-  need to be installed again from the new address. PR previews come from
-  Firebase preview channels.
+  copied. Only after the copy has been checked is Vercel reduced to a
+  redirect. Bookmarks follow the redirect; installed copies of the app need to
+  be installed again from the new address. PR previews come from Firebase
+  preview channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).
