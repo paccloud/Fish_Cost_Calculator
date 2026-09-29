@@ -76,7 +76,7 @@ If protected endpoints return 401 after Firebase sign-in, check:
 
 1. Create an untracked local file from the template. Vite loads `app/.env.development.local` after `app/.env.development`, so its values win, and `.gitignore` keeps it out of git:
    ```bash
-   cp app/.env.example app/.env.development.local
+   [ -e app/.env.development.local ] || cp app/.env.example app/.env.development.local
    ```
    Do **not** copy the template over `app/.env.development` or `app/.env.production`. Those two files are tracked in git.
 
@@ -89,7 +89,7 @@ If protected endpoints return 401 after Firebase sign-in, check:
    VITE_FIREBASE_APP_ID=your-firebase-web-app-id
    VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
    ```
-   The frontend never reads `DATABASE_URL`, so it does not belong in this file. For `vercel dev`, use the root `.env.local` that `vercel env pull` writes. For the scripts in `scripts/`, `export DATABASE_URL=...` in your shell. See "For new developers" in [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
+   The frontend never reads `DATABASE_URL`, so it does not belong in this file. For `vercel dev`, run `vercel pull`, which stores the project settings and environment variables under `.vercel/`. For the scripts in `scripts/`, `export DATABASE_URL=...` in your shell. See "For new developers" in [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
 
 3. Never put a real value in a tracked file. `.gitignore` covers only `.env`, `.env.local` and the `.env*.local` files (such as `app/.env.development.local`). `app/.env.development`, `app/.env.production`, `app/.env.example` and `server/.env.example` are **tracked** and must stay placeholder-only; the `Secret scan` CI job fails if a real-looking credential lands in a tracked file. If one already did, follow [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
 

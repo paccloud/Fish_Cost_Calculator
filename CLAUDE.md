@@ -49,7 +49,7 @@ cd app && npm install
 cd ../server && npm install
 # Create your untracked local env file (no quotes around values — Vite includes them literally).
 # Never overwrite the tracked app/.env.development or app/.env.production; see SECURITY_NOTICE.md.
-cp app/.env.example app/.env.development.local
+[ -e app/.env.development.local ] || cp app/.env.example app/.env.development.local
 ```
 
 ## Architecture

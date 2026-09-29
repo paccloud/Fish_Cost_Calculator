@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   lint-test-build:
     name: Lint · Test · Build
@@ -57,8 +60,13 @@ jobs:
       contents: read
 
     steps:
+      # Full history (not the default depth 1): the range scan below needs the base and head commits of the change and
+      # everything between them. No credentials are kept in the checkout, since nothing here pushes.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -69,3 +77,41 @@ jobs:
       # The --history mode is deliberately not run here: the known leak in old commits would fail forever.
       - name: Scan tracked files for secrets
         run: node scripts/check-secrets.mjs
+
+      # The tip scan cannot see a secret that was committed and then removed by a later commit of the same pull request or
+      # push, and that value is still in the pushed history. This step scans the ADDED lines of every commit in the range:
+      #   pull_request  base.sha..head.sha (commits reachable from the PR head and not from its base; a fork's head commit
+      #                 arrives through the PR merge commit that checkout fetches, and is present with fetch-depth 0)
+      #   push          before..sha (a new branch has an all-zero "before": only the pushed tip commit is scanned)
+      # A commit that is not in the clone (a force-push removed the old tip, a fetch was partial) or a shallow clone fails the
+      # step with exit code 2 and a message. It never passes silently and never falls back to the full-history audit.
+      # Event values reach the script only through env vars, are checked to be plain commit ids, and are quoted.
+      - name: Scan commits in this change for secrets
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              base="$PR_BASE_SHA"
+              head="$PR_HEAD_SHA"
+              ;;
+            push)
+              base="$PUSH_BEFORE_SHA"
+              head="$PUSH_AFTER_SHA"
+              ;;
+            *)
+              echo "No commit range for a '$EVENT_NAME' run: only the tracked-file scan above applies."
+              exit 0
+              ;;
+          esac
+          id_pattern='^([0-9a-f]{40}|[0-9a-f]{64})$'
+          if ! [[ "$base" =~ $id_pattern && "$head" =~ $id_pattern ]]; then
+            echo "::error::The event did not give plain base and head commit ids, so the commits in this change cannot be scanned."
+            exit 2
+          fi
+          node scripts/check-secrets.mjs --range "$base..$head"

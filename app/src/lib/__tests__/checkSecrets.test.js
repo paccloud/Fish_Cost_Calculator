@@ -30,7 +30,9 @@ import {
   isPlaceholder,
   scanText,
   secretNameKind,
-  shouldSkipPath,
+  isLockfile,
+  isXmlConfigPath,
+  sanitizeLockfile,
 } from '../../../../scripts/check-secrets.mjs';
 
 // Generous, but still meaningful, wall-clock limits. Hostile-input tests guard against catastrophic (quadratic or worse)
@@ -46,6 +48,23 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '../../../..');
 const SCANNER = path.join(REPO_ROOT, 'scripts', 'check-secrets.mjs');
 const THIS_FILE_REL = 'app/src/lib/__tests__/checkSecrets.test.js';
+
+// A backtracking regex blocks the JS thread, and Vitest's own timeout cannot interrupt it: an in-process hostile-input test
+// would hang the worker instead of failing. Hostile scans therefore run in a child process with a hard kill timeout (the
+// test then fails cleanly with a null status), and the child reports the time of each case.
+const CHILD_KILL_MS = 100_000;
+const SCAN_MODULE_IMPORT = `import { scanText } from ${JSON.stringify(pathToFileURL(SCANNER).href)};`;
+function timeInChild(body) {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `${SCAN_MODULE_IMPORT}\nconst timings = [];\n${body}\nconsole.log(JSON.stringify(timings));`], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    timeout: CHILD_KILL_MS,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  expect(result.error, 'the child was killed: a scan is backtracking').toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  return JSON.parse(result.stdout.trim());
+}
 
 // ---------------------------------------------------------------------------
 // Runtime fixture builders
@@ -77,6 +96,70 @@ const base64url = (value) =>
   btoa(JSON.stringify(value)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
 const secretName = (...parts) => parts.join('');
+
+// Provider token families, one entry per shape (review round 9). Each value is assembled at runtime from a prefix and
+// generated characters, so this file holds no token-shaped literal. `rule` is the scanner rule that must report it.
+const B64URL = `${ALNUM}_-`;
+const PROVIDER_TOKENS = (() => {
+  const r = (n, seed, alphabet = ALNUM) => randomString(n, seed, alphabet);
+  const digits = (n, seed) => r(n, seed, DIGITS);
+  return [
+    ['slack-token', 'Slack app-level (xapp-)', () => ['xapp', '-1-A', digits(10, 1001), '-', digits(13, 1002), '-', r(64, 1003, HEX)].join('')],
+    ['slack-token', 'Slack configuration (xoxe.xoxp-)', () => ['xoxe', '.xoxp-1-', r(120, 1004, `${ALNUM}-`)].join('')],
+    ['slack-token', 'Slack refresh (xoxe-)', () => ['xoxe', '-1-', r(100, 1005, `${ALNUM}-`)].join('')],
+    ['slack-token', 'Slack legacy workspace (xoxa-2)', () => ['xox', 'a-2-', digits(12, 1006), '-', r(24, 1007)].join('')],
+    ['slack-token', 'Slack legacy (xoxr-)', () => ['xox', 'r-', digits(12, 1008), '-', r(24, 1009)].join('')],
+    ['slack-token', 'Slack legacy (xoxo-)', () => ['xox', 'o-', digits(12, 1010), '-', digits(12, 1011), '-', digits(12, 1054), '-', r(32, 1055, HEX)].join('')],
+    ['gitlab-token', 'GitLab personal (glpat-)', () => ['gl', 'pat-', r(26, 1012, B64URL)].join('')],
+    ['gitlab-token', 'GitLab deploy (gldt-)', () => ['gl', 'dt-', r(26, 1013, B64URL)].join('')],
+    ['gitlab-token', 'GitLab runner (glrt-)', () => ['gl', 'rt-', r(26, 1014, B64URL)].join('')],
+    ['npm-token', 'npm (npm_)', () => ['npm', '_', r(36, 1015)].join('')],
+    ['pypi-token', 'PyPI', () => ['pypi', '-AgEIcHlwaS5vcmc', r(70, 1016, B64URL)].join('')],
+    ['stripe-webhook-secret', 'Stripe webhook secret', () => ['whsec', '_', r(32, 1017)].join('')],
+    ['twilio-api-key', 'Twilio API key SID', () => ['S', 'K', r(32, 1018, HEX)].join('')],
+    ['sendgrid-api-key', 'SendGrid', () => ['SG', '.', r(22, 1019, B64URL), '.', r(43, 1020, B64URL)].join('')],
+    ['mailgun-api-key', 'Mailgun', () => ['key', '-', r(32, 1021, HEX)].join('')],
+    ['shopify-token', 'Shopify admin (shpat_)', () => ['shp', 'at_', r(32, 1022, HEX)].join('')],
+    ['shopify-token', 'Shopify custom app (shpca_)', () => ['shp', 'ca_', r(32, 1023, HEX)].join('')],
+    ['shopify-token', 'Shopify partner (shppa_)', () => ['shp', 'pa_', r(32, 1024, HEX)].join('')],
+    ['digitalocean-token', 'DigitalOcean (dop_v1_)', () => ['do', 'p_v1_', r(64, 1025, HEX)].join('')],
+    ['huggingface-token', 'Hugging Face (hf_)', () => ['hf', '_', r(34, 1026)].join('')],
+    ['openai-api-key', 'OpenAI project (sk-proj-)', () => ['sk', '-proj-', r(60, 1027, B64URL)].join('')],
+    ['openai-api-key', 'OpenAI legacy (sk-)', () => ['sk', '-', r(48, 1028)].join('')],
+    ['anthropic-api-key', 'Anthropic (sk-ant-)', () => ['sk', '-ant-api03-', r(80, 1029, B64URL)].join('')],
+    ['google-oauth-secret', 'Google OAuth access token (ya29.)', () => ['ya', '29.', r(60, 1030, B64URL)].join('')],
+    ['google-oauth-secret', 'Google OAuth client secret (GOCSPX-)', () => ['GOC', 'SPX-', r(28, 1031, B64URL)].join('')],
+    ['azure-storage-key', 'Azure storage connection string', () => ['DefaultEndpointsProtocol=https;AccountName=acct;Account', 'Key=', r(86, 1032, BASE64), '==;EndpointSuffix=core.windows.net'].join(''), (t) => t.match(/Key=([^;]+)/)[1]],
+    ['azure-storage-key', 'Azure SAS URL', () => ['https://acct.blob.core.windows.net/c/b?sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2030-01-01T00%3A00%3A00Z&s', 'ig=', r(43, 1033), '%3D'].join(''), (t) => t.match(/sig=(.+)$/)[1]],
+    ['heroku-api-key', 'Heroku authorization token (HRKU-)', () => ['HR', 'KU-', r(60, 1034, B64URL)].join('')],
+    ['datadog-api-key', 'Datadog API key on a DD_API_KEY name', () => ['DD_API', '_KEY: "', r(32, 1035, HEX), '"'].join(''), (t) => t.slice(-33, -1)],
+    ['sentry-token', 'Sentry org auth token (sntrys_)', () => ['sntr', 'ys_', r(60, 1036, B64URL)].join('')],
+    ['sentry-token', 'Sentry DSN with its secret half', () => ['https://', r(32, 1037, HEX), ':', r(32, 1056, HEX), '@o123.ingest.sen', 'try.io/456'].join(''), (t) => t.slice(41, 73)],
+    ['doppler-token', 'Doppler service token', () => ['dp', '.st.dev.', r(44, 1038)].join('')],
+    ['vault-token', 'Vault service token (hvs.)', () => ['hv', 's.', r(90, 1039, B64URL)].join('')],
+    ['linear-api-key', 'Linear (lin_api_)', () => ['lin', '_api_', r(40, 1040)].join('')],
+    ['notion-token', 'Notion (ntn_)', () => ['nt', 'n_', r(46, 1041)].join('')],
+    ['notion-token', 'Notion legacy (secret_)', () => ['sec', 'ret_', r(43, 1042)].join('')],
+    ['atlassian-token', 'Atlassian API token (ATATT3)', () => ['AT', 'ATT3', r(70, 1043, `${ALNUM}_=-`)].join('')],
+    ['telegram-bot-token', 'Telegram bot token', () => [digits(9, 1057), ':A', 'A', r(33, 1058, B64URL)].join('')],
+    ['mapbox-secret-token', 'Mapbox secret token', () => ['sk', '.ey', 'J', r(40, 1059, B64URL), '.', r(22, 1060, B64URL)].join('')],
+    ['square-token', 'Square access token (sq0atp-)', () => ['sq0', 'atp-', r(22, 1061, B64URL)].join('')],
+    ['square-token', 'Square OAuth secret (sq0csp-)', () => ['sq0', 'csp-', r(43, 1062, B64URL)].join('')],
+    ['firebase-fcm-server-key', 'Firebase FCM legacy server key', () => ['AAAA', r(7, 1063, B64URL), ':APA', '91b', r(140, 1064, B64URL)].join('')],
+    ['newrelic-key', 'New Relic user key (NRAK-)', () => ['NR', 'AK-', r(27, 1065, UPPER_ALNUM)].join('')],
+    ['newrelic-key', 'New Relic ingest key (NRII-)', () => ['NR', 'II-', r(32, 1066, B64URL)].join('')],
+    ['cloudflare-token', 'Cloudflare API token (cfut_)', () => ['cf', 'ut_', r(48, 1067)].join('')],
+    ['discord-bot-token', 'Discord bot token', () => ['M', r(24, 1068, B64URL), '.', r(6, 1069, B64URL), '.', r(30, 1070, B64URL), '7A'].join('')],
+    ['other-provider-token', 'Databricks (dapi)', () => ['da', 'pi', r(32, 1044, HEX)].join('')],
+    ['other-provider-token', 'Grafana service account (glsa_)', () => ['gl', 'sa_', r(32, 1045), '_', r(8, 1046, HEX)].join('')],
+    ['other-provider-token', 'Supabase (sbp_)', () => ['sb', 'p_', r(40, 1047, HEX)].join('')],
+    ['other-provider-token', 'PlanetScale', () => ['psc', 'ale_tkn_', r(40, 1048, B64URL)].join('')],
+    ['other-provider-token', 'Docker Hub PAT', () => ['dckr', '_pat_', r(30, 1049, B64URL)].join('')],
+    ['other-provider-token', 'RubyGems', () => ['ruby', 'gems_', r(48, 1050, HEX)].join('')],
+    ['other-provider-token', 'Terraform Cloud', () => [r(14, 1051), '.atlas', 'v1.', r(70, 1052, B64URL)].join('')],
+    ['other-provider-token', 'age secret key', () => ['AGE-SECRET', '-KEY-1', r(58, 1053, 'QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L')].join('')],
+  ];
+})();
 
 // Each case: which rule must fire, in what kind of file, and the secret part
 // that must never appear in a report. `text` is the full file content.
@@ -605,6 +688,17 @@ const SECRET_CASES = (() => {
       secret: pairValue,
       text: `gh secret set ${['JWT_', 'SECRET'].join('')} --body ${pairValue}\n`,
     },
+    {
+      name: 'token as the user name in a lockfile dependency URL',
+      rule: 'lockfile-credential',
+      path: 'package-lock.json',
+      secret: dbPassword,
+      text: `{"packages":{"node_modules/x":{"resolved":"https://${dbPassword}@registry.internal/x/-/x-1.0.0.tgz"}}}\n`,
+    },
+    ...PROVIDER_TOKENS.map(([rule, label, build, secretPart], index) => {
+      const token = build();
+      return { name: `provider token: ${label}`, rule, path: index % 2 ? 'notes/findings.md' : 'src/data.json', secret: secretPart ? secretPart(token) : token, text: `${index % 2 ? 'see ' : '{"note":"'}${token}${index % 2 ? '' : '"}'}\n` };
+    }),
   ];
 })();
 
@@ -2498,7 +2592,7 @@ describe('hostile file paths are classified in linear time', () => {
       const body = 'MSG_TOKEN="This is the way."\\n';
       const names = ['netrc', '.netrc', '_netrc', 'pgpass', '.pgpass', '.npmrc', '.yarnrc', '.pypirc', 'credentials',
         'config', 'docker-config', 'kubeconfig', 'htpasswd', '.htpasswd', 'my.cnf', '.s3cfg', 'id_rsa', 'messages',
-        'errors', 'strings', 'en', 'locales', 'i18n', 'l10n', 'translations', '.env', 'secrets', 'terraform',
+        'errors', 'strings', 'en', 'locales', 'res/values', 'settings.xml', 'pom.xml', 'strings.xml', 'package-lock.json', 'yarn.lock', 'Cargo.lock', 'go.sum', 'i18n', 'l10n', 'translations', '.env', 'secrets', 'terraform',
         '.git-credentials', '.curlrc', '.wgetrc', '.vault-token', 'docs/API'];
       const units = ['-', '_', '.', '--', '__', '..', '-_', '_-', '.-', '-.', ' ', 'a-', '.a', 'a_', '/', '/.'];
       let worst = 0; let where = '';
@@ -2530,17 +2624,23 @@ describe('hostile file paths are classified in linear time', () => {
   });
 });
 
-describe('shouldSkipPath', () => {
+describe('isLockfile', () => {
   it.each([
     'package-lock.json',
     'app/package-lock.json',
     'server/package-lock.json',
+    'npm-shrinkwrap.json',
     'yarn.lock',
     'pnpm-lock.yaml',
     'Cargo.lock',
+    'Gemfile.lock',
+    'poetry.lock',
+    'composer.lock',
+    'Pipfile.lock',
+    'bun.lock',
     'go.sum',
-  ])('skips the lockfile %s', (p) => {
-    expect(shouldSkipPath(p)).toBe(true);
+  ])('%s is a lockfile (scanned with the lockfile rules, not skipped)', (p) => {
+    expect(isLockfile(p)).toBe(true);
   });
 
   it.each([
@@ -2557,8 +2657,8 @@ describe('shouldSkipPath', () => {
     'fonts/x.woff2',
     'secrets.lock',
     'notes/my.lock',
-  ])('does not skip %s (content decides, not name or extension)', (p) => {
-    expect(shouldSkipPath(p)).toBe(false);
+  ])('%s is scanned with every rule (content decides, not name or extension)', (p) => {
+    expect(isLockfile(p)).toBe(false);
   });
 });
 
@@ -2630,6 +2730,7 @@ describe('this repository', () => {
     const result = spawnSync(process.execPath, ['scripts/check-secrets.mjs'], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
+      timeout: SLOW_TEST_MS,
     });
     expect(result.stderr).toBe('');
     expect(result.stdout).toMatch(/^check-secrets: OK \(\d+ files scanned, \d+ skipped/);
@@ -2647,7 +2748,7 @@ describe('CLI', () => {
     while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
   });
 
-  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8' });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS });
   const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
   const git = (cwd, ...args) =>
     run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
@@ -2678,7 +2779,8 @@ describe('CLI', () => {
     const dir = makeRepo();
     write(dir, '.env', `FOO=1\n${assignment}`);
     write(dir, 'README.md', 'nothing here\n');
-    // Skipped on purpose: lockfile and real binary content.
+    // Skipped on purpose: real binary content. A lockfile is scanned with the lockfile rules only, so a generic name=value
+    // (which would be an integrity-hash false positive) is not reported there.
     write(dir, 'package-lock.json', assignment);
     write(dir, 'blob.dat', Buffer.concat([PNG_HEAD, Buffer.from(assignment)]));
     run('git', ['add', '-A'], dir);
@@ -2724,8 +2826,8 @@ describe('CLI', () => {
     run('git', ['add', '-A'], dir);
     const result = scan(dir);
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/1 files scanned, 2 skipped: /);
-    expect(result.stdout).toContain('1 lockfile');
+    expect(result.stdout).toMatch(/2 files scanned, 1 skipped: /);
+    expect(result.stdout).not.toContain('lockfile'); // lockfiles are scanned now, not skipped
     expect(result.stdout).toContain('1 binary');
   });
 
@@ -3321,6 +3423,948 @@ describe('CLI', () => {
     const bad = scan(REPO_ROOT, '--values');
     expect(bad.status).toBe(2);
     expect(bad.stderr).toContain('unknown argument');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Review round 9: lockfiles, commit ranges in CI, XML configuration, provider token families
+//
+// (1) Lockfiles were skipped by name, so a credential in a dependency URL or an auth field was never seen. They are now
+//     scanned with targeted rules (URL credentials, auth fields, provider tokens, webhooks, private keys) after ordinary
+//     integrity digests are blanked. Siblings: package-lock.json, npm-shrinkwrap.json, yarn.lock (v1 and berry),
+//     pnpm-lock.yaml, Cargo.lock, Gemfile.lock, poetry.lock, composer.lock, go.sum, Pipfile.lock, bun.lock; the fields
+//     resolved / tarball / url / source / remote / registry; URL password, token as user name, credential query parameter,
+//     _authToken / _auth / _password fields; and --history / --range, which read lockfile versions the same way.
+// (2) --range <base>..<head>, which CI runs so a secret committed and removed inside a pull request is still found.
+// (3) XML configuration files were scanned in code mode (a passphrase with spaces was not a finding). .xml, .config,
+//     MSBuild, .plist, .resx, .wsdl and the Maven, Ant, Tomcat and Android files get configuration-value semantics; SVG
+//     and HTML stay markup.
+// (4) The provider token list: the whole Slack family and the other current families (see PROVIDER_TOKENS).
+// ---------------------------------------------------------------------------
+
+const PREFIX_FLOOD_LIMIT_MS = 30_000;
+const ALL_HOSTILE_PREFIXES = ['xapp-', 'xoxe.xoxe.', 'xoxo-', 'xoxe-1-', 'xoxb-', 'glpat-', 'sk-', 'sk-ant-', 'sk-proj-', 'hf_', 'secret_', 'ntn_', 'whsec_', 'AccountKey=', 'sig=', 'https://a', 'dp.st.', 'hvs.', 'ATATT3', 'ATBB', 'SG.', 'ya29.', 'GOCSPX-', 'key-', 'lin_api_', 'HEROKU_API_KEY=', 'DD_API_KEY:', 'a.atlasv1.', 'cfut_', 'sq0csp-', 'sk.eyJ', 'NRII-', 'APA91b', 'AAAA1234567:APA91b', '123456789:AA', 'M', 'shpat_', 'npm_', 'github_pat_', 'pypi-AgEIcHlwaS5vcmc', 'sntrys_'];
+
+describe('review round 9', () => {
+  const rulesOf = (file, text) => scanText(file, text).map((f) => f.rule);
+  const NAME = ['JWT_', 'SECRET'].join('');
+  const PASSWORD = ['pass', 'word'].join('');
+  const passphrase = 'correct horse battery staple';
+  const random = randomString(24, 2001);
+  const scheme = ['https', '://'].join('');
+  const sha512 = (seed) => `sha512-${randomString(86, seed, `${ALNUM}+/`)}==`;
+  const sha1 = (seed) => `sha1-${randomString(27, seed, `${ALNUM}+/`)}=`;
+  const hex = (n, seed) => randomString(n, seed, HEX);
+
+  describe('(1) lockfiles', () => {
+    // Ordinary content of every lockfile format, integrity hashes included. None of it may be reported.
+    const ORDINARY = [
+      ['package-lock.json', JSON.stringify({ name: 'x', lockfileVersion: 3, packages: { '': { dependencies: { password: '^1.0.0', token: 'latest', secret: 'npm:other@1' } }, 'node_modules/pkg': { version: '1.0.0', resolved: `${scheme}registry.npmjs.org/pkg/-/pkg-1.0.0.tgz`, integrity: sha512(2101) }, 'node_modules/git-dep': { version: '1.0.0', resolved: `git+ssh://git@github.com/org/repo.git#${hex(40, 2102)}` } } }, null, 2)],
+      ['npm-shrinkwrap.json', JSON.stringify({ dependencies: { a: { version: '1.0.0', resolved: `${scheme}registry.npmjs.org/a/-/a-1.0.0.tgz?cache=1`, integrity: sha512(2103) } } }, null, 2)],
+      ['yarn.lock', `"a@^1.0.0":\n  version "1.0.0"\n  resolved "${scheme}registry.yarnpkg.com/a/-/a-1.0.0.tgz#${hex(40, 2104)}"\n  integrity ${sha512(2105)}\n\n"b@^2":\n  version "2.0.0"\n  resolved "${scheme}registry.yarnpkg.com/b/-/b-2.0.0.tgz#${hex(40, 2106)}"\n  integrity ${sha1(2107)}\n`],
+      ['yarn.lock', `__metadata:\n  version: 8\n"a@npm:^1.0.0":\n  version: 1.0.0\n  resolution: "a@npm:1.0.0"\n  checksum: 10c0/${hex(128, 2108)}\n  languageName: node\n  linkType: hard\n`],
+      ['pnpm-lock.yaml', `lockfileVersion: '9.0'\npackages:\n  a@1.0.0:\n    resolution: {integrity: ${sha512(2109)}, tarball: ${scheme}registry.npmjs.org/a/-/a-1.0.0.tgz}\n`],
+      ['Cargo.lock', `[[package]]\nname = "a"\nversion = "1.0.0"\nsource = "registry+${scheme}github.com/rust-lang/crates.io-index"\nchecksum = "${hex(64, 2110)}"\n\n[[package]]\nname = "b"\nversion = "0.1.0"\nsource = "git+${scheme}github.com/org/b#${hex(40, 2111)}"\n`],
+      ['Gemfile.lock', `GEM\n  remote: ${scheme}rubygems.org/\n  specs:\n    rake (13.0.6)\n\nCHECKSUMS\n  rake (13.0.6) sha256=${hex(64, 2112)}\n`],
+      ['poetry.lock', `[[package]]\nname = "requests"\nversion = "2.31.0"\n[package.source]\ntype = "legacy"\nurl = "${scheme}pypi.org/simple"\n[[package.files]]\nfile = "requests-2.31.0.tar.gz"\nhash = "sha256:${hex(64, 2113)}"\n`],
+      ['composer.lock', JSON.stringify({ packages: [{ name: 'a/b', version: '1.0.0', source: { type: 'git', url: `${scheme}github.com/a/b.git`, reference: hex(40, 2114) }, dist: { type: 'zip', url: `${scheme}api.github.com/repos/a/b/zipball/${hex(40, 2115)}`, shasum: '' } }] }, null, 2)],
+      ['go.sum', `example.com/a v1.0.0 h1:${randomString(43, 2116, `${ALNUM}+/`)}=\nexample.com/a v1.0.0/go.mod h1:${randomString(43, 2117, `${ALNUM}+/`)}=\n`],
+      ['Pipfile.lock', JSON.stringify({ default: { requests: { hashes: [`sha256:${hex(64, 2118)}`], index: 'pypi', version: '==2.31.0' } } }, null, 2)],
+      ['bun.lock', `{\n  "lockfileVersion": 1,\n  "packages": {\n    "a": ["a@1.0.0", "", {}, "${sha512(2119)}"],\n  }\n}\n`],
+    ];
+    it.each(ORDINARY)('an ordinary %s (integrity hashes, git dependency, registry URLs) is clean', (file, text) => {
+      expect(scanText(file, text)).toEqual([]);
+    });
+
+    it('the four real lockfiles of this repository are clean', () => {
+      for (const file of ['package-lock.json', 'app/package-lock.json', 'server/package-lock.json', 'shared/package-lock.json']) {
+        expect(scanText(file, readFileSync(path.join(REPO_ROOT, file), 'utf8')), file).toEqual([]);
+      }
+    });
+
+    // The credential shapes, in the form each lockfile format writes its resolved URL.
+    const URL_LOCATIONS = [
+      ['package-lock.json', (u) => `{"packages":{"node_modules/x":{"resolved":"${u}","integrity":"${sha512(2120)}"}}}\n`],
+      ['npm-shrinkwrap.json', (u) => `{"dependencies":{"x":{"version":"1.0.0","resolved":"${u}"}}}\n`],
+      ['yarn.lock', (u) => `"x@^1":\n  version "1.0.0"\n  resolved "${u}#${hex(40, 2121)}"\n`],
+      ['pnpm-lock.yaml', (u) => `packages:\n  x@1.0.0:\n    resolution: {tarball: ${u}}\n`],
+      ['Cargo.lock', (u) => `[[package]]\nname = "x"\nsource = "registry+${u}"\n`],
+      ['Gemfile.lock', (u) => `GEM\n  remote: ${u}\n  specs:\n    x (1.0.0)\n`],
+      ['poetry.lock', (u) => `[package.source]\ntype = "legacy"\nurl = "${u}"\n`],
+      ['composer.lock', (u) => `{"packages":[{"dist":{"type":"zip","url":"${u}"}}]}\n`],
+      ['Pipfile.lock', (u) => `{"_meta":{"sources":[{"name":"internal","url":"${u}"}]}}\n`],
+      ['bun.lock', (u) => `{"packages":{"x":["x@${u}","",{}]}}\n`],
+    ];
+    const SHAPES = [
+      ['password', `${scheme}user:${random}@registry.internal/x/-/x-1.0.0.tgz`, ['url-password', 'lockfile-credential']],
+      ['hex password', `${scheme}user:${hex(64, 2122)}@registry.internal/x/-/x-1.0.0.tgz`, ['url-password']],
+      ['token as the user name', `${scheme}${random}@registry.internal/x/-/x-1.0.0.tgz`, ['lockfile-credential']],
+      ['token query parameter', `${scheme}registry.internal/x/-/x-1.0.0.tgz?token=${random}`, ['lockfile-credential']],
+      ['_authToken query parameter', `${scheme}registry.internal/x/-/x-1.0.0.tgz?_authToken=${random}`, ['lockfile-credential']],
+      ['signed URL', `${scheme}registry.internal/x/-/x-1.0.0.tgz?sig=${random}`, ['lockfile-credential']],
+    ];
+    describe.each(URL_LOCATIONS)('%s', (file, place) => {
+      it.each(SHAPES)('finds a credential in a dependency URL: %s', (_label, url, expected) => {
+        const found = rulesOf(file, place(url));
+        expect(found.some((rule) => expected.includes(rule)), `${file}: ${found.join(',')}`).toBe(true);
+      });
+    });
+
+    it.each([
+      ['a JSON _authToken field', 'package-lock.json', `{"registries":{"//registry.internal/:_authToken":"${random}"},"_authToken":"${random}"}\n`],
+      ['an ini _authToken line', 'yarn.lock', `//registry.internal/:_authToken=${random}\n`],
+      ['an _auth line', 'yarn.lock', `_auth = ${Buffer.from(`u:${random}`).toString('base64')}\n`],
+      ['a _password field', 'package-lock.json', `{"_password":"${random}"}\n`],
+      ['a yarn berry npmAuthToken', 'yarn.lock', `npmAuthToken: ${random}\n`],
+      ['a password field in TOML', 'poetry.lock', `password = "${random}"\n`],
+      ['a bare token field in YAML', 'pnpm-lock.yaml', `token: ${random}\n`],
+    ])('finds %s', (_label, file, text) => {
+      expect(rulesOf(file, text)).toContain('lockfile-credential');
+    });
+
+    it('a placeholder, an environment reference or a dependency specifier in an auth-like field is not a finding', () => {
+      for (const value of ['${NPM_TOKEN}', '<your token>', 'your_token_here', '^1.2.3', 'npm:other@1', 'link:../password', 'workspace:*', 'latest', '']) {
+        expect(rulesOf('package-lock.json', `{"_authToken":"${value}","password":"${value}"}\n`), value).toEqual([]);
+      }
+    });
+
+    it('a provider token, a private key block and a webhook URL in a lockfile are found', () => {
+      const token = PROVIDER_TOKENS.find(([rule]) => rule === 'github-token' || rule === 'gitlab-token')[2]();
+      expect(rulesOf('yarn.lock', `# ${token}\n`)).toContain('gitlab-token');
+      const pem = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
+      expect(rulesOf('package-lock.json', `{"note":"${pem}\\n${randomString(60, 2123, BASE64)}"}\n`)).toContain('private-key-block');
+      const hook = `${scheme}hooks.slack.com/services/T0123ABCD/B0123ABCD/${randomString(24, 2124)}`;
+      expect(rulesOf('Cargo.lock', `source = "${hook}"\n`)).toContain('webhook-url');
+    });
+
+    it('the generic rules do not run on a lockfile: a hash-like value under a secret-like name is not reported', () => {
+      expect(rulesOf('package-lock.json', `{"apiKeyHash":"${hex(64, 2125)}","secretToken":"${random}"}\n`)).toEqual([]);
+    });
+
+    it('blanking a digest keeps the text length and the line structure, and leaves a hex password in a URL visible', () => {
+      const text = `a ${sha512(2126)} b\nchecksum = "${hex(64, 2127)}"\nx: ${scheme}u:${hex(64, 2128)}@h/y\n`;
+      const cleaned = sanitizeLockfile(text);
+      expect(cleaned.length).toBe(text.length);
+      expect(cleaned.split('\n').length).toBe(text.split('\n').length);
+      expect(cleaned).not.toContain('sha512-');
+      expect(cleaned.split('\n')[2]).toBe(text.split('\n')[2]);
+      expect(cleaned.split('\n')[1]).toBe(`checksum = "${' '.repeat(64)}"`);
+    });
+
+    it('the allow marker works on a lockfile line', () => {
+      const line = `{"resolved":"${scheme}${random}@registry.internal/x.tgz"} // ${ALLOW_MARKER}\n`;
+      expect(scanText('package-lock.json', line)).toEqual([]);
+    });
+
+    it('the hostile-input limit holds on lockfile-shaped input (2 MB each)', SLOW, () => {
+      const timings = timeInChild(`
+        const repeat = (unit) => unit.repeat(Math.ceil((2 * 1024 * 1024) / unit.length));
+        for (const text of [repeat('https://a:'), repeat('sha512-'), repeat('_authToken='), repeat('checksum = "a'), repeat('password: '), repeat('git+ssh://a@'), repeat('a://b@c?token='), repeat('password: 1 '), repeat('token=' + ' '.repeat(50))]) {
+          const started = performance.now();
+          scanText('package-lock.json', text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  describe('(3) XML configuration files', () => {
+    const XML_FILES = [
+      'settings.xml', 'pom.xml', 'conf/server.xml', 'web.config', 'app.config', 'App.csproj', 'Directory.Build.props', 'x.targets',
+      'Info.plist', 'Strings.resx', 'service.wsdl', 'app/src/main/res/values/strings.xml', 'build.xml',
+      'App.vbproj', 'App.fsproj', 'pkg.nuspec', 'Profile.pubxml', 'Settings.settings',
+    ];
+    it.each(XML_FILES)('%s is classified as configuration', (file) => {
+      expect(fileMode(file)).toBe('config');
+      expect(isXmlConfigPath(file)).toBe(true);
+    });
+    it.each(['logo.svg', 'index.html', 'page.htm', 'doc.xhtml', 'notes.md', 'app.js'])('%s stays out of the XML class', (file) => {
+      expect(isXmlConfigPath(file)).toBe(false);
+      expect(fileMode(file)).not.toBe('config');
+    });
+
+    const SHAPES = [
+      ['property/name/value', (v) => `<configuration><property><name>${NAME}</name><value>${v}</value></property></configuration>`],
+      ['multi-line property', (v) => `<property>\n  <name>${NAME}</name>\n  <value>${v}</value>\n</property>`],
+      ['add key/value', (v) => `<appSettings><add key="${NAME}" value="${v}" /></appSettings>`],
+      ['attribute', (v) => `<Resource name="jdbc/db" ${PASSWORD}="${v}" />`],
+      ['Maven server password', (v) => `<settings><servers><server><id>repo</id><username>bob</username><${PASSWORD}>${v}</${PASSWORD}></server></servers></settings>`],
+      ['Maven proxy passphrase element', (v) => `<proxy><${['pass', 'phrase'].join('')}>${v}</${['pass', 'phrase'].join('')}></proxy>`],
+      ['Ant property', (v) => `<property name="db.${PASSWORD}" value="${v}"/>`],
+      ['Tomcat connector', (v) => `<Connector port="8443" keystorePass="${v}" />`],
+      ['plist key/string', (v) => `<dict><key>API_SECRET</key><string>${v}</string></dict>`],
+      ['Android string', (v) => `<resources><string name="api_key">${v}</string></resources>`],
+      ['resx data', (v) => `<data name="ApiToken" xml:space="preserve"><value>${v}</value></data>`],
+    ];
+    describe.each(XML_FILES)('in %s', (file) => {
+      it.each(SHAPES)('a passphrase with spaces is found: %s', (_label, shape) => {
+        expect(scanText(file, `${shape(passphrase)}\n`).length).toBeGreaterThan(0);
+      });
+      it.each(SHAPES)('a random value is found: %s', (_label, shape) => {
+        expect(scanText(file, `${shape(random)}\n`).length).toBeGreaterThan(0);
+      });
+    });
+
+    it('the reported case: JWT_SECRET in settings.xml is found exactly like in a .config file', () => {
+      const text = `<property><name>${NAME}</name><value>${passphrase}</value></property>\n`;
+      expect(rulesOf('settings.xml', text)).toEqual(rulesOf('a.config', text));
+      expect(rulesOf('settings.xml', text)).toContain('secret-name-value-pair');
+    });
+
+    it('svg and html keep code-mode semantics: markup is not noisy', () => {
+      const markup = `<input type="${PASSWORD}" name="${PASSWORD}" placeholder="Your ${PASSWORD}"><label>Enter your ${PASSWORD} here</label>\n<${PASSWORD}>${passphrase}</${PASSWORD}>`;
+      expect(scanText('form.html', markup)).toEqual([]);
+      expect(scanText('icon.svg', `<svg><text id="token">the token is shown here</text><${PASSWORD}>${passphrase}</${PASSWORD}></svg>`)).toEqual([]);
+    });
+
+    it.each([
+      ['a pom.xml without credentials', 'pom.xml', '<project><dependencies><dependency><groupId>org.x</groupId><artifactId>y</artifactId><version>1.0.0</version></dependency></dependencies><description>Reads the token from the environment</description></project>'],
+      ['Maven environment references', 'settings.xml', `<server><id>x</id><${PASSWORD}>\${env.REPO_PASSWORD}</${PASSWORD}></server>`],
+      ['a Maven-encrypted password', 'settings.xml', `<server><${PASSWORD}>{${randomString(44, 2201, `${ALNUM}+/=`)}}</${PASSWORD}></server>`],
+      ['a placeholder', 'settings.xml', `<server><${PASSWORD}>changeme</${PASSWORD}><${PASSWORD}>your_password_here</${PASSWORD}><${PASSWORD}></${PASSWORD}></server>`],
+      ['an Android layout', 'res/layout/login.xml', `<EditText android:id="@+id/${PASSWORD}" android:inputType="text${PASSWORD[0].toUpperCase()}${PASSWORD.slice(1)}" android:hint="Enter your ${PASSWORD}"/>`],
+      ['Android UI strings', 'app/src/main/res/values/strings.xml', `<resources><string name="reset_${PASSWORD}">Reset your ${PASSWORD}</string><string name="${PASSWORD}_hint">Enter your ${PASSWORD}</string><string name="${PASSWORD}_mismatch">Passwords do not match</string></resources>`],
+      ['a sitemap', 'sitemap.xml', '<urlset><url><loc>https://example.com/a</loc><lastmod>2024-01-01</lastmod></url></urlset>'],
+      ['an SVG-like .xml image', 'icon.xml', '<svg viewBox="0 0 10 10"><path d="M0 0h10v10z" fill="#123abc"/></svg>'],
+      ['a web.config with connection string references', 'web.config', `<connectionStrings><add name="Db" connectionString="Server=.;Database=app;Integrated Security=true" /></connectionStrings>`],
+      ['a plist with ordinary keys', 'Info.plist', '<dict><key>CFBundleName</key><string>Local Catch</string><key>NSCameraUsageDescription</key><string>Scan a label with the camera</string></dict>'],
+    ])('%s is clean', (_label, file, text) => {
+      expect(scanText(file, `${text}\n`)).toEqual([]);
+    });
+
+    it('scans XML in linear time (element matcher on 1 MB)', SLOW, () => {
+      const timings = timeInChild(`
+        const P = ${JSON.stringify(PASSWORD)};
+        const cases = [' '.repeat(1024 * 1024), '<p>'.repeat(300_000), ('<' + P + '>').repeat(150_000), ('<' + P + ' ' + 'a=1 '.repeat(75) + '>').repeat(2000), ('<a ' + 'x'.repeat(2000)).repeat(500),
+          ('<wsse:' + P + '><![CDATA[').repeat(80_000), ('<a><![CDATA[').repeat(80_000), ('<a name="' + P + '">').repeat(100_000), ('<entry key="x" value="y"/>' + '<' + 'x:'.repeat(30) + 'a>').repeat(20_000)];
+        for (const text of cases) {
+          for (const file of ['settings.xml', 'a.vcxproj', 'a.xml.template']) {
+            const started = performance.now();
+            scanText(file, text);
+            timings.push(Math.round(performance.now() - started));
+          }
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  describe('(4) provider token families', () => {
+    it.each(PROVIDER_TOKENS)('%s: %s is found in JSON, Markdown, source, env and YAML under a non-secret name', (rule, _label, build) => {
+      const token = build();
+      for (const [file, text] of [
+        ['data.json', `{"note":"${token}"}\n`],
+        ['notes.md', `Use ${token} for the job.\n`],
+        ['src/app.js', `const banner = "${token}";\n`],
+        ['app.env', `SOMETHING_ELSE=${token}\n`],
+        ['ci.yaml', `description: ${token}\n`],
+      ]) {
+        expect(rulesOf(file, text), `${file} ${_label}`).toContain(rule);
+      }
+    });
+
+    it('nothing but path, line and rule is reported for a provider token', () => {
+      for (const [, , build, secretPart] of PROVIDER_TOKENS) {
+        const token = build();
+        const report = formatReport(scanText('notes.md', `x ${token}\n`));
+        for (const piece of windows(secretPart ? secretPart(token) : token.slice(4), 10).slice(0, 6)) expect(report).not.toContain(piece);
+      }
+    });
+
+    it('the rest of the GitHub and Stripe families is found too', () => {
+      const r = (n, seed) => randomString(n, seed);
+      for (const token of [
+        ['gh', 'u_', r(36, 2301)].join(''),
+        ['gh', 's_', r(36, 2302)].join(''),
+        ['gh', 'r_', r(36, 2303)].join(''),
+        ['gh', 'o_', r(36, 2304)].join(''),
+        ['github', '_pat_', r(22, 2305), '_', r(59, 2306)].join(''),
+        ['r', 'k_live_', r(24, 2307)].join(''),
+        ['s', 'k_live_', r(24, 2308)].join(''),
+      ]) {
+        expect(rulesOf('notes.md', `x ${token}\n`).length, 'a provider token').toBeGreaterThan(0);
+      }
+    });
+
+    it('the reported case: an app-level Slack token in JSON, Markdown and source', () => {
+      const token = PROVIDER_TOKENS.find(([, label]) => label.startsWith('Slack app-level'))[2]();
+      expect(rulesOf('a.json', `{"note":"${token}"}\n`)).toContain('slack-token');
+      expect(rulesOf('a.md', `token ${token}\n`)).toContain('slack-token');
+      expect(rulesOf('a.js', `const t = "${token}";\n`)).toContain('slack-token');
+    });
+
+    const pad = (prefix, n, ch = 'x') => `${prefix}${ch.repeat(n)}`;
+    const PLACEHOLDERS = [
+      pad(['xapp', '-1-A0000000000-0000000000000-'].join(''), 40),
+      pad(['xox', 'b-000000000000-'].join(''), 24),
+      pad(['xoxe', '.xoxp-1-'].join(''), 40),
+      pad(['gl', 'pat-'].join(''), 24),
+      pad(['npm', '_'].join(''), 36),
+      pad(['pypi', '-AgEIcHlwaS5vcmc'].join(''), 60),
+      pad(['whsec', '_'].join(''), 32),
+      pad(['S', 'K'].join(''), 32, '0'),
+      pad(['key', '-'].join(''), 32, '0'),
+      pad(['shp', 'at_'].join(''), 32, '0'),
+      pad(['do', 'p_v1_'].join(''), 64, '0'),
+      pad(['hf', '_'].join(''), 34),
+      pad(['sk', '-proj-'].join(''), 48),
+      pad(['sk', '-ant-api03-'].join(''), 60),
+      pad(['sk', '-'].join(''), 48),
+      pad(['ya', '29.'].join(''), 40),
+      pad(['GOC', 'SPX-'].join(''), 28),
+      pad(['HR', 'KU-'].join(''), 40),
+      pad(['sntr', 'ys_'].join(''), 60),
+      pad(['dp', '.st.dev.'].join(''), 44),
+      pad(['hv', 's.'].join(''), 40),
+      pad(['lin', '_api_'].join(''), 40),
+      pad(['nt', 'n_'].join(''), 46),
+      pad(['AT', 'ATT3'].join(''), 60),
+      ['xapp', '-your-slack-app-token-goes-here'].join(''),
+      ['glpat', '-<your-token>'].join(''),
+      ['sk', '-ant-...'].join(''),
+      `${['xapp', '-1-'].join('')}\${SLACK_APP_TOKEN}`,
+    ];
+    it.each(PLACEHOLDERS.map((v) => [v.slice(0, 14), v]))('placeholder %s... passes', (_label, value) => {
+      for (const [file, text] of [['a.json', `{"note":"${value}"}\n`], ['a.md', `token ${value}\n`], ['a.js', `const t = "${value}";\n`], ['.env', `X=${value}\n`]]) {
+        expect(rulesOf(file, text).filter((rule) => PROVIDER_TOKENS.some(([known]) => known === rule)), `${file}: ${_label}`).toEqual([]);
+      }
+    });
+
+    it.each([
+      'Slack app-level tokens start with xapp- and bot tokens with xoxb-, see the Slack docs.',
+      'A GitLab token starts with glpat- and a Hugging Face token with hf_.',
+      'Set ntn_ or secret_ as the prefix; Vault uses hvs. for service tokens and Doppler dp.st. for service tokens.',
+      'Use the sk-ant- prefix check and the whsec_ prefix check in the validator.',
+      'xoxo-love-and-hugs-from-the-team-to-you',
+      'the key-value store and the key-value-config-option-name-that-is-long',
+      'const cache = process.env.npm_config_cache; const v = process.env.npm_package_version_number_x;',
+      'from huggingface_hub import hf_hub_download, hf_hub_url',
+      'secret_key_base: use a long value; secret_santa_gift_exchange_names_for_the_office',
+      'pip install scikit-learn sk-learn skeleton-key-ring ASK-THE-TEAM',
+      'ATATT and ATBB are the token prefixes Atlassian uses.',
+      'A DSN looks like https://public@sentry.example.com/1 in the docs.',
+      'DD_API_KEY is set from the environment; DD-API-KEY: <your key>',
+      'Endpoint=sb://x.servicebus.windows.net/;SharedAccessKeyName=root;SharedAccessKey=<key>',
+      'https://acct.blob.core.windows.net/c/b?sv=2022-11-02&sp=r&sig=<signature>',
+      'HEROKU_API_KEY=<your-key>',
+    ])('ordinary prose and code pass: %s', (text) => {
+      for (const file of ['a.md', 'a.js', 'a.json', 'docs/setup.txt']) {
+        const body = file === 'a.json' ? JSON.stringify({ note: text }) : text;
+        expect(rulesOf(file, `${body}\n`).filter((rule) => PROVIDER_TOKENS.some(([known]) => known === rule)), file).toEqual([]);
+      }
+    });
+
+    it('the repository tree has no provider-token false positive', SLOW, () => {
+      const result = spawnSync(process.execPath, [SCANNER], { cwd: REPO_ROOT, encoding: 'utf8', timeout: SLOW_TEST_MS });
+      expect(result.status, result.stderr).toBe(0);
+    });
+
+    it('scans a megabyte of provider prefixes in linear time', SLOW, () => {
+      // Catastrophic backtracking takes minutes on these inputs; the limit is generous because a few of the generic rules
+      // (AccountKey=, DD_API_KEY:) legitimately take seconds on a megabyte of one repeated prefix, more on a busy runner.
+      const timings = timeInChild(`
+        const prefixes = ${JSON.stringify(ALL_HOSTILE_PREFIXES)};
+        for (const prefix of prefixes) {
+          const text = prefix.repeat(Math.ceil((1024 * 1024) / prefix.length));
+          const started = performance.now();
+          scanText('a.md', text);
+          timings.push([prefix, Math.round(performance.now() - started)]);
+        }`);
+      for (const [prefix, ms] of timings) expect(ms, prefix).toBeLessThan(PREFIX_FLOOD_LIMIT_MS);
+    });
+
+    it('an all-uppercase or single-character token body after every unbounded prefix is linear (was quadratic)', SLOW, () => {
+      const timings = timeInChild(`
+        const prefixes = ${JSON.stringify(ALL_HOSTILE_PREFIXES)};
+        for (const prefix of prefixes) {
+          for (const body of ['A', 'ATBB', 'AbC']) {
+            const text = prefix + body.repeat(Math.ceil((256 * 1024) / body.length));
+            for (const file of ['a.md', 'package-lock.json', 'settings.xml']) {
+              const started = performance.now();
+              scanText(file, text);
+              timings.push([prefix + ' ' + body + ' ' + file, Math.round(performance.now() - started)]);
+            }
+          }
+        }`);
+      for (const [label, ms] of timings) expect(ms, label).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  describe('(2) --range and the CI workflow', () => {
+    const dirs = [];
+    afterEach(() => {
+      while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+    });
+    const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS });
+    const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
+    const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+    const write = (dir, file, content) => {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    };
+    const commit = (dir, message, files = {}) => {
+      for (const [file, content] of Object.entries(files)) write(dir, file, content);
+      git(dir, 'add', '-A');
+      expect(git(dir, 'commit', '-q', '-m', message).status).toBe(0);
+      return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+    };
+    const makeRepo = () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-range-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      return dir;
+    };
+    const value = randomString(28, 2401);
+    const leak = `${['API_', 'KEY'].join('')}=${value}\n`;
+    const clean = `${['API_', 'KEY'].join('')}=your_api_key_here\n`;
+    const noValue = (result) => {
+      const output = `${result.stdout}${result.stderr}`;
+      for (const piece of windows(value)) expect(output).not.toContain(piece);
+    };
+
+    it.skipIf(!hasGit())('finds a secret committed and removed again inside the range, which the tip scan cannot see', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'base.txt': 'base\n' });
+      const leaked = commit(dir, 'add key', { 'x.env': leak });
+      const head = commit(dir, 'remove key', { 'x.env': clean });
+      expect(scan(dir).status).toBe(0); // the reported gap: the tip is clean
+      const result = scan(dir, '--range', `${base}..${head}`);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`${leaked.slice(0, 7)}  x.env  secret-assignment  x1`);
+      expect(result.stderr).toContain('--range');
+      noValue(result);
+    });
+
+    it.skipIf(!hasGit())('accepts --range=<base>..<head> and branch names', SLOW, () => {
+      const dir = makeRepo();
+      commit(dir, 'base', { 'base.txt': 'base\n' });
+      git(dir, 'checkout', '-q', '-b', 'feature');
+      commit(dir, 'add key', { 'x.env': leak });
+      expect(scan(dir, '--range=main..feature').status).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('exits 0 on a clean range and on a range without commits', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'base.txt': 'base\n' });
+      const head = commit(dir, 'more', { 'x.env': clean });
+      const ok = scan(dir, '--range', `${base}..${head}`);
+      expect(ok.status).toBe(0);
+      expect(ok.stdout).toContain('no hits in 1 commit');
+      const empty = scan(dir, '--range', `${head}..${head}`);
+      expect(empty.status).toBe(0);
+      expect(empty.stdout).toContain('no commits');
+      const behind = scan(dir, '--range', `${head}..${base}`); // head is an ancestor of base: nothing new
+      expect(behind.status).toBe(0);
+    });
+
+    it.skipIf(!hasGit())('reads only the range: a secret in an earlier commit is not blamed, and the walk is as long as the range', SLOW, () => {
+      const dir = makeRepo();
+      commit(dir, 'old leak', { 'old.env': leak });
+      commit(dir, 'old fix', { 'old.env': clean });
+      for (let i = 0; i < 40; i += 1) commit(dir, `filler ${i}`, { [`f${i}.txt`]: `${i}\n` });
+      const base = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+      const head = commit(dir, 'new', { 'new.txt': 'new\n' });
+      const result = scan(dir, '--range', `${base}..${head}`);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('no hits in 1 commit ');
+      expect(scan(dir, '--history').status).toBe(1); // the full audit still finds the old leak
+    });
+
+    it.skipIf(!hasGit())('handles a merge commit inside the range (both sides are scanned, once)', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'base.txt': 'base\n' });
+      git(dir, 'checkout', '-q', '-b', 'feature');
+      const leaked = commit(dir, 'add key', { 'x.env': leak });
+      git(dir, 'checkout', '-q', 'main');
+      commit(dir, 'main moves', { 'main.txt': 'm\n' });
+      git(dir, 'checkout', '-q', 'feature');
+      expect(git(dir, 'merge', '-q', '--no-ff', '-m', 'merge main', 'main').status).toBe(0);
+      const head = commit(dir, 'remove key', { 'x.env': clean });
+      const result = scan(dir, '--range', `${base}..${head}`);
+      expect(result.status).toBe(1);
+      expect(result.stderr.match(new RegExp(`${leaked.slice(0, 7)}  x.env`, 'g'))).toHaveLength(1);
+    });
+
+    it.skipIf(!hasGit())('a secret only a merge conflict resolution introduced is found in the range', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'x.env': 'A=1\n' });
+      git(dir, 'checkout', '-q', '-b', 'feature');
+      commit(dir, 'feature edit', { 'x.env': 'A=2\n' });
+      git(dir, 'checkout', '-q', 'main');
+      commit(dir, 'main edit', { 'x.env': 'A=3\n' });
+      git(dir, 'checkout', '-q', 'feature');
+      expect(git(dir, 'merge', '-q', 'main').status).not.toBe(0);
+      write(dir, 'x.env', `A=4\n${leak}`);
+      git(dir, 'add', '-A');
+      expect(git(dir, 'commit', '-q', '-m', 'resolve').status).toBe(0);
+      const head = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+      const result = scan(dir, '--range', `${base}..${head}`);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('x.env  secret-assignment');
+    });
+
+    it.skipIf(!hasGit())('uses merge-base semantics: commits only on the base side are not blamed when the base is not an ancestor', SLOW, () => {
+      const dir = makeRepo();
+      commit(dir, 'root', { 'root.txt': 'r\n' });
+      git(dir, 'checkout', '-q', '-b', 'feature');
+      const feature = commit(dir, 'feature work', { 'f.txt': 'f\n' });
+      git(dir, 'checkout', '-q', 'main');
+      const mainLeak = commit(dir, 'main leak', { 'm.env': leak });
+      const result = scan(dir, '--range', `${mainLeak}..${feature}`);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('no hits in 1 commit');
+    });
+
+    it.skipIf(!hasGit())('sees a PR head that a fork provides only through the merge commit (checkout of refs/pull/N/merge)', SLOW, () => {
+      const upstream = makeRepo();
+      const base = commit(upstream, 'base', { 'base.txt': 'base\n' });
+      git(upstream, 'checkout', '-q', '-b', 'fork-work');
+      commit(upstream, 'add key', { 'x.env': leak });
+      const head = commit(upstream, 'remove key', { 'x.env': clean });
+      git(upstream, 'checkout', '-q', 'main');
+      git(upstream, 'merge', '-q', '--no-ff', '-m', 'PR merge', head);
+      git(upstream, 'update-ref', 'refs/pull/1/merge', 'HEAD');
+      git(upstream, 'reset', '-q', '--hard', base);
+      git(upstream, 'branch', '-q', '-D', 'fork-work');
+      const runner = mkdtempSync(path.join(tmpdir(), 'check-secrets-range-'));
+      dirs.push(runner);
+      expect(run('git', ['clone', '-q', upstream, runner], tmpdir()).status).toBe(0);
+      expect(git(runner, 'fetch', '-q', 'origin', 'refs/pull/1/merge').status).toBe(0);
+      git(runner, 'checkout', '-q', 'FETCH_HEAD');
+      expect(scan(runner, '--range', `${base}..${head}`).status).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('a shallow clone that holds BOTH commits (a depth-1 fetch of each) still fails closed, never "no hits"', SLOW, () => {
+      const upstream = makeRepo();
+      const base = commit(upstream, 'base', { 'base.txt': 'base\n' });
+      commit(upstream, 'add key', { 'x.env': leak });
+      const head = commit(upstream, 'remove key', { 'x.env': clean });
+      const shallow = mkdtempSync(path.join(tmpdir(), 'check-secrets-range-'));
+      dirs.push(shallow);
+      expect(run('git', ['init', '-q'], shallow).status).toBe(0);
+      expect(run('git', ['fetch', '-q', '--depth=1', `file://${upstream}`, head], shallow).status).toBe(0);
+      expect(run('git', ['fetch', '-q', '--depth=1', `file://${upstream}`, base], shallow).status).toBe(0);
+      expect(run('git', ['rev-parse', '--is-shallow-repository'], shallow).stdout.trim()).toBe('true');
+      expect(run('git', ['cat-file', '-t', base], shallow).stdout.trim()).toBe('commit'); // both ends are present
+      const result = scan(shallow, '--range', `${base}..${head}`);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('shallow');
+      expect(result.stdout).not.toContain('no hits');
+    });
+
+    it.skipIf(!hasGit())('rejects malformed range specs before git sees them (exit 2, nothing scanned)', SLOW, () => {
+      const dir = makeRepo();
+      const head = commit(dir, 'base', { 'base.txt': 'base\n' });
+      for (const spec of ['--output=/tmp/x..HEAD', `${head}..--all`, `${head}...${head}`, `..${head}`, `${head}..`, 'a..b..c', `${head}`, `${head} ..${head}`, '-x..HEAD', 'HEAD..-x']) {
+        const result = scan(dir, '--range', spec);
+        expect(result.status, spec).toBe(2);
+        expect(result.stderr, spec).toContain('expected <base>..<head>');
+        expect(result.stdout, spec).toBe('');
+      }
+    });
+
+    it.skipIf(!hasGit())('an unreachable base (force-push, partial fetch) or head fails closed with exit 2 and a message', SLOW, () => {
+      const dir = makeRepo();
+      const head = commit(dir, 'base', { 'base.txt': 'base\n' });
+      const missing = '1'.repeat(40);
+      const noBase = scan(dir, '--range', `${missing}..${head}`);
+      expect(noBase.status).toBe(2);
+      expect(noBase.stderr).toContain('INCOMPLETE');
+      expect(noBase.stderr).toContain('not in this repository');
+      expect(noBase.stdout).not.toContain('no hits');
+      const noHead = scan(dir, '--range', `${head}..${missing}`);
+      expect(noHead.status).toBe(2);
+      expect(noHead.stderr).toContain('INCOMPLETE');
+    });
+
+    it.skipIf(!hasGit())('a shallow clone fails closed (exit 2), never "no hits"', SLOW, () => {
+      const upstream = makeRepo();
+      const base = commit(upstream, 'base', { 'base.txt': 'base\n' });
+      const head = commit(upstream, 'add key', { 'x.env': leak });
+      const shallow = mkdtempSync(path.join(tmpdir(), 'check-secrets-range-'));
+      dirs.push(shallow);
+      expect(run('git', ['clone', '-q', '--depth', '1', `file://${upstream}`, shallow], tmpdir()).status).toBe(0);
+      const result = scan(shallow, '--range', `${base}..${head}`);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('shallow');
+      expect(`${result.stdout}${result.stderr}`).not.toContain('no hits');
+    });
+
+    it.skipIf(!hasGit())('an all-zero base (a new branch) scans the tip commit only, and says so', SLOW, () => {
+      const dir = makeRepo();
+      commit(dir, 'first', { 'old.env': leak });
+      const head = commit(dir, 'tip', { 'new.txt': 'n\n' });
+      const zero = '0'.repeat(40);
+      const clean1 = scan(dir, '--range', `${zero}..${head}`);
+      expect(clean1.status).toBe(0);
+      expect(clean1.stdout).toContain('tip commit only');
+      const leakyTip = commit(dir, 'leaky tip', { 'y.env': leak });
+      expect(scan(dir, '--range', `${zero}..${leakyTip}`).status).toBe(1);
+      // The root commit has no parent: still scanned.
+      const root = git(dir, 'rev-list', '--max-parents=0', 'HEAD').stdout.trim();
+      expect(scan(dir, '--range', `${zero}..${root}`).status).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('rejects malformed and option-like ranges (exit 2) and never runs shell text', SLOW, () => {
+      const dir = makeRepo();
+      const head = commit(dir, 'base', { 'base.txt': 'base\n' });
+      for (const spec of [`${head}...${head}`, `-x..${head}`, `${head}..--output=x`, `${head}`, '..', `..${head}`, `${head}..`, `a b..${head}`]) {
+        const result = scan(dir, '--range', spec);
+        expect(result.status, spec).toBe(2);
+      }
+      expect(scan(dir, '--range').status).toBe(2);
+      expect(scan(dir, '--range', `${head}..${head}`, '--history').status).toBe(2);
+      expect(scan(dir, '--range', `${head}..${head}`, '--range', `${head}..${head}`).status).toBe(2);
+      const inject = scan(dir, '--range', `$(touch pwned)..${head}`);
+      expect(inject.status).toBe(2);
+      const injectHead = scan(dir, '--range', `${head}..\`touch pwned\``);
+      expect(injectHead.status).toBe(2);
+      expect(run('ls', [], dir).stdout).not.toContain('pwned');
+    });
+
+    it.skipIf(!hasGit())('applies the lockfile rules and the split-pair context to added lines', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'yarn.lock': '# base\n', 'k.yaml': `- name: ${NAME}\n  type: secret\n` });
+      const url = `${scheme}${value}@registry.internal/x/-/x-1.0.0.tgz`;
+      const withUrl = commit(dir, 'add dependency', { 'yarn.lock': `# base\n"x@^1":\n  version "1.0.0"\n  resolved "${url}"\n` });
+      commit(dir, 'drop dependency', { 'yarn.lock': '# base\n' });
+      const withValue = commit(dir, 'add the value under the unchanged name', { 'k.yaml': `- name: ${NAME}\n  value: ${value}\n  type: secret\n` });
+      commit(dir, 'remove the value', { 'k.yaml': `- name: ${NAME}\n  value: your_value_here\n  type: secret\n` });
+      const result = scan(dir, '--range', `${base}..HEAD`);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`${withUrl.slice(0, 7)}  yarn.lock  lockfile-credential`);
+      expect(result.stderr).toContain(`${withValue.slice(0, 7)}  k.yaml`);
+      noValue(result);
+    });
+
+    it.skipIf(!hasGit())('an ordinary lockfile change in the range passes', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'package-lock.json': '{}\n' });
+      const head = commit(dir, 'update deps', { 'package-lock.json': `${JSON.stringify({ packages: { 'node_modules/a': { resolved: `${scheme}registry.npmjs.org/a/-/a-1.0.0.tgz`, integrity: sha512(2402) } } }, null, 2)}\n` });
+      expect(scan(dir, '--range', `${base}..${head}`).status).toBe(0);
+    });
+
+    it.skipIf(!hasGit())('an added file version too large to scan makes the range INCOMPLETE (exit 2)', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, 'base', { 'base.txt': 'base\n' });
+      const head = commit(dir, 'big', { 'big.json': `${`${'x'.repeat(1023)}\n`.repeat(5 * 1024 + 8)}` });
+      const result = scan(dir, '--range', `${base}..${head}`);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('INCOMPLETE');
+      expect(result.stdout).not.toContain('no hits');
+    });
+
+    it.skipIf(!hasGit())('a lockfile over 5 MB but under the lockfile limit is scanned, not failed', SLOW, () => {
+      const dir = makeRepo();
+      write(dir, 'package-lock.json', `${`{"a":"${'x'.repeat(1000)}"}\n`.repeat(6 * 1024)}`);
+      git(dir, 'add', '-A');
+      const result = scan(dir);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('1 files scanned');
+    });
+
+    it.skipIf(!hasGit())('a credential in a tracked lockfile fails the tree scan and prints only path, line and rule', SLOW, () => {
+      const dir = makeRepo();
+      write(dir, 'package-lock.json', `{\n  "resolved": "${scheme}user:${value}@registry.internal/x.tgz"\n}\n`);
+      git(dir, 'add', '-A');
+      const result = scan(dir);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('package-lock.json:2  url-password');
+      noValue(result);
+    });
+
+    // The workflow is a security control, so its shape is tested: the range step, full history, least privilege, and no
+    // event value interpolated into a shell script.
+    describe('the CI workflow', () => {
+      const workflow = readFileSync(path.join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf8');
+      const jobBlock = workflow.slice(workflow.indexOf('  secret-scan:'));
+      const runScripts = () => {
+        const lines = workflow.split('\n');
+        const scripts = [];
+        for (let i = 0; i < lines.length; i += 1) {
+          const match = /^(\s*)(?:- )?run:\s*(.*)$/.exec(lines[i]);
+          if (!match) continue;
+          const indent = match[1].length;
+          let body = match[2];
+          if (body === '|' || body === '>') {
+            body = '';
+            for (let j = i + 1; j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > indent); j += 1) body += `${lines[j]}\n`;
+          }
+          scripts.push(body);
+        }
+        return scripts;
+      };
+
+      it('scans the full history range in addition to the tip', () => {
+        expect(jobBlock).toContain('fetch-depth: 0');
+        expect(jobBlock).toContain('node scripts/check-secrets.mjs\n');
+        expect(jobBlock).toContain('node scripts/check-secrets.mjs --range "$base..$head"');
+        expect(jobBlock).toContain('github.event.pull_request.base.sha');
+        expect(jobBlock).toContain('github.event.pull_request.head.sha');
+        expect(jobBlock).toContain('github.event.before');
+      });
+      it('never runs the full-history audit in CI', () => {
+        expect(runScripts().join('\n')).not.toContain('--history');
+      });
+      it('passes event values through env vars and never interpolates an expression into a run script', () => {
+        for (const script of runScripts()) expect(script, script).not.toContain('${{');
+        expect(jobBlock).toContain('PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}');
+      });
+      it('refuses an event value that is not a plain commit id (exit 2) before it reaches the scanner', () => {
+        const step = jobBlock.slice(jobBlock.indexOf('Scan commits in this change'));
+        expect(step).toContain("id_pattern='^([0-9a-f]{40}|[0-9a-f]{64})$'");
+        expect(step).toMatch(/if ! \[\[ "\$base" =~ \$id_pattern && "\$head" =~ \$id_pattern \]\]; then[\s\S]*?exit 2\s+fi/);
+        expect(step.indexOf('id_pattern')).toBeLessThan(step.indexOf('node scripts/check-secrets.mjs --range'));
+      });
+      it('keeps least privilege and does not use pull_request_target', () => {
+        expect(jobBlock).toMatch(/permissions:\n\s+contents: read/);
+        expect(workflow).not.toContain('pull_request_target');
+        expect(jobBlock).toContain('persist-credentials: false');
+      });
+      it('is valid enough to parse: every "run:" block is well-formed and the env names the script reads are all defined', () => {
+        const step = jobBlock.slice(jobBlock.indexOf('Scan commits in this change'));
+        for (const name of ['EVENT_NAME', 'PR_BASE_SHA', 'PR_HEAD_SHA', 'PUSH_BEFORE_SHA', 'PUSH_AFTER_SHA']) {
+          expect(step.match(new RegExp(`${name}: `, 'g')), name).toHaveLength(1);
+          expect(step.includes(`"$${name}"`), name).toBe(true);
+        }
+      });
+    });
+  });
+});
+
+describe('review round 10', () => {
+  const rulesOf = (file, text) => scanText(file, text).map((f) => f.rule);
+  const PASSWORD = ['pass', 'word'].join('');
+  const NAME = ['JWT_', 'SECRET'].join('');
+  const passphrase = 'correct horse battery staple';
+  const random = randomString(24, 3001);
+  const scheme = ['https', '://'].join('');
+
+  describe('lockfile auth fields are judged by the shape of the whole value, not its first character', () => {
+    const LOCK_SHAPES = [
+      ['package-lock.json password', 'package-lock.json', (v) => `{"a":{"version":"1.0.0","${PASSWORD}":"${v}"}}\n`],
+      ['npm-shrinkwrap.json password', 'npm-shrinkwrap.json', (v) => `{"a":{"version":"1.0.0","${PASSWORD}":"${v}"}}\n`],
+      ['yarn.lock _authToken', 'yarn.lock', (v) => `//registry.corp.net/:_authToken=${v}\n`],
+      ['pnpm-lock.yaml token', 'pnpm-lock.yaml', (v) => `settings:\n  ${['to', 'ken'].join('')}: ${v}\n`],
+      ['Pipfile.lock _password', 'Pipfile.lock', (v) => `{"_meta":{"sources":[{"_${PASSWORD}":"${v}"}]}}\n`],
+    ];
+    describe.each(LOCK_SHAPES)('%s', (_label, file, shape) => {
+      it.each(['x', 'X', 'v', 'V', '3', '0', '9', 'q', 'K', '^', '~', '*', '='])('a credential starting with %s is found', (first) => {
+        for (let i = 0; i < 6; i += 1) {
+          const value = first + randomString(28, 3100 + i * 7 + first.charCodeAt(0));
+          expect(rulesOf(file, shape(value)), `${file} ${first}${i}`).toContain('lockfile-credential');
+        }
+      });
+    });
+
+    it.each(['1.0.0', '^1.2.3', '~1.2', '>=1.0.0 <2.0.0', '^1.0.0 || ^2.0.0', '1.x', '1.2.x', 'x', 'X', '*', '^*', 'v2.0.0', '3', '1.0.0-beta.2', '1.0.0-rc1', '1.0.0 - 2.0.0', 'latest', 'next', 'npm:other@1', 'workspace:*', 'link:../x', 'file:../x', './local', '../local', '/abs/path/pkg', 'true', 'catalog:'])('the dependency specifier %s is not a credential', (spec) => {
+      expect(scanText('package-lock.json', `{"a":{"${PASSWORD}":"${spec}"}}\n`), spec).toEqual([]);
+      expect(scanText('yarn.lock', `${PASSWORD} "${spec}"\n`), spec).toEqual([]);
+    });
+
+    it('prose in free-text package metadata is not an auth field', () => {
+      for (const [file, text] of [
+        ['composer.lock', '"description": "CSRF token: generation and validation for forms",\n'],
+        ['composer.lock', '"description": "Store a secret: encrypt at rest",\n'],
+        ['poetry.lock', 'description = "Utilities for token: parsing and secret: rotation"\n'],
+        ['package-lock.json', '"description": "Token: bucket rate limiter with password: optional",\n'],
+        ['yarn.lock', '  summary "The secret: to a good token: cache"\n'],
+      ]) {
+        expect(scanText(file, text), text).toEqual([]);
+      }
+    });
+
+    it('a cache-key or sort-key query parameter is an identifier; a credential-qualified key is not', () => {
+      const url = (query) => `{"resolved":"${scheme}r.example.org/a.tgz?${query}"}\n`;
+      expect(scanText('package-lock.json', url('cache-key=1234567890abcdef'))).toEqual([]);
+      expect(scanText('package-lock.json', url('sort-key=1234567890abcdef'))).toEqual([]);
+      for (const name of ['api_key', 'access-key', 'sig', 'token']) {
+        expect(rulesOf('package-lock.json', url(`${name}=${random}`)), name).toContain('lockfile-credential');
+      }
+    });
+
+    it('a provider token hidden in an integrity digest is ignored only because digests are blanked', () => {
+      // "+" before the prefix satisfies the token's boundary. The same text in a non-lockfile is a finding.
+      const digest = `sha512-${randomString(51, 3201, ALNUM)}+${['AT', 'BB'].join('')}${randomString(30, 3202, ALNUM)}==`;
+      const line = `{"packages":{"node_modules/x":{"version":"1.0.0","integrity":"${digest}"}}}\n`;
+      expect(scanText('package-lock.json', line)).toEqual([]);
+      expect(rulesOf('data.json', line)).toContain('atlassian-token');
+    });
+  });
+
+  describe('XML: namespaced, CDATA and attribute-named elements', () => {
+    const CONFIG_XML = [
+      'settings.xml', 'pom.xml', 'conf/server.xml', 'web.config', 'app.config', 'App.csproj', 'App.vcxproj', 'x.props', 'x.targets',
+      'Info.plist', 'Strings.resx', 'service.wsdl', 'strings.xml', 'gradle.properties.xml', 'App.pubxml',
+    ];
+    const ELEMENTS = [
+      ['CDATA', (v) => `<server><${PASSWORD}><![CDATA[${v}]]></${PASSWORD}></server>`],
+      ['CDATA with margins', (v) => `<${PASSWORD}>\n  <![CDATA[${v}]]>\n</${PASSWORD}>`],
+      ['WS-Security PasswordText', (v) => `<wsse:Password Type="PasswordText">${v}</wsse:Password>`],
+      ['namespace prefix with a declaration', (v) => `<ns:${PASSWORD} xmlns:ns="urn:x">${v}</ns:${PASSWORD}>`],
+      ['prefixed CDATA', (v) => `<s:Secret><![CDATA[${v}]]></s:Secret>`],
+      ['entry key attribute', (v) => `<entry key="secret">${v}</entry>`],
+      ['item name attribute', (v) => `<item name="${PASSWORD}">${v}</item>`],
+      ['env name attribute', (v) => `<env name="SECRET_KEY">${v}</env>`],
+      ['entry key attribute, single quotes, CDATA', (v) => `<entry key='${PASSWORD}'><![CDATA[${v}]]></entry>`],
+    ];
+    describe.each(CONFIG_XML)('in %s', (file) => {
+      it.each(ELEMENTS)('a random value is found: %s', (_label, shape) => {
+        expect(scanText(file, `${shape(random)}\n`).length).toBeGreaterThan(0);
+      });
+      it.each(ELEMENTS)('a passphrase with spaces is found: %s', (_label, shape) => {
+        expect(scanText(file, `${shape(passphrase)}\n`).length).toBeGreaterThan(0);
+      });
+    });
+
+    it.each([
+      ['a placeholder in CDATA', `<${PASSWORD}><![CDATA[your_${PASSWORD}_here]]></${PASSWORD}>`],
+      ['an environment reference in CDATA', `<${PASSWORD}><![CDATA[\${env.DB_PASSWORD}]]></${PASSWORD}>`],
+      ['an empty prefixed element', `<wsse:Password Type="PasswordText"></wsse:Password>`],
+      ['a non-secret attribute-named entry', `<entry key="timeout">${random}</entry>`],
+      ['mismatched closing tag', `<${PASSWORD}><![CDATA[${random}]]></other>`],
+      ['a CDATA section that never closes', `<${PASSWORD}><![CDATA[${random}</${PASSWORD}>`],
+    ])('%s is clean', (_label, text) => {
+      expect(scanText('settings.xml', `${text}\n`)).toEqual([]);
+    });
+  });
+
+  describe('XML-family files outside the first extension list, and template or backup suffixes', () => {
+    const CONFIG_EXTENSIONS_AND_NAMES = [
+      'App.vcxproj', 'App.sqlproj', 'App.wixproj', 'build.proj', 'App.ccproj', 'App.dcproj', 'App.jsproj', 'App.projitems', 'ServiceConfiguration.cscfg',
+      'ServiceDefinition.csdef', 'plan.jmx', 'wifi.mobileconfig', 'app.entitlements', 'module.iml', 'run.launch', 'rules.ruleset',
+      'Package.appxmanifest', 'setup.wxs', 'lib-1.0.pom', 'app.jnlp',
+      'settings.xml.template', 'settings.xml.dist', 'settings.xml.sample', 'settings.xml.example', 'settings.xml.erb', 'settings.xml.j2',
+      'settings.xml.jinja2', 'settings.xml.tpl', 'settings.xml.tmpl', 'settings.xml.bak', 'settings.xml.orig', 'settings.xml.default', 'settings.xml.in',
+      'web.config.template', 'App.csproj.erb', 'conf/server.xml.dist.bak',
+    ];
+    it.each(CONFIG_EXTENSIONS_AND_NAMES)('%s is XML configuration', (file) => {
+      expect(isXmlConfigPath(file)).toBe(true);
+      expect(fileMode(file)).toBe('config');
+      for (const shape of [`<${PASSWORD}>${random}</${PASSWORD}>`, `<${PASSWORD}>${passphrase}</${PASSWORD}>`, `<add key="ApiKey" value="${random}"/>`]) {
+        expect(scanText(file, `${shape}\n`).length, `${file}: ${shape}`).toBeGreaterThan(0);
+      }
+    });
+
+    it('the plist-like Apple profile form <key>Password</key><string>V</string> is found', () => {
+      expect(scanText('wifi.mobileconfig', `<dict><key>${['Pass', 'word'].join('')}</key><string>${random}</string></dict>\n`).length).toBeGreaterThan(0);
+    });
+
+    it.each(['icon.svg', 'index.html', 'page.htm', 'page.xhtml', 'style.xsl', 'style.xslt', 'View.xaml', 'schema.xsd', 'feed.rss', 'feed.atom', 'map.kml'])('%s stays in code mode (markup and schema, not settings): a form label or a passphrase-like text is not noisy', (file) => {
+      expect(isXmlConfigPath(file)).toBe(false);
+      expect(fileMode(file)).toBe('code');
+      const text = `<${PASSWORD}>${passphrase}</${PASSWORD}>\n<label>Enter your ${PASSWORD} here</label>\n<input type="${PASSWORD}" name="${PASSWORD}" placeholder="Your ${PASSWORD}">\n`;
+      expect(scanText(file, text), file).toEqual([]);
+    });
+
+    it.each(['notes.md', 'app.js', 'app.js.template', 'x.py.bak'])('%s is not XML configuration', (file) => {
+      expect(isXmlConfigPath(file)).toBe(false);
+    });
+
+    it('a suffix-only name is not stripped to nothing', () => {
+      expect(isXmlConfigPath('.template')).toBe(false);
+      expect(isXmlConfigPath('.bak')).toBe(false);
+    });
+  });
+
+  describe('common non-secret XML is not noisy', () => {
+    it.each([
+      ['an Android Maps key as a resource reference', 'AndroidManifest.xml', '<meta-data android:name="com.google.android.geo.API_KEY" android:value="@string/maps_key"/>'],
+      ['the same tag split over three lines', 'AndroidManifest.xml', '<meta-data\n  android:name="com.google.android.geo.API_KEY"\n  android:value="@string/maps_key"/>'],
+      ['a color and an attr reference', 'app/src/main/res/values/styles.xml', '<item name="secretColor">@color/red</item><item name="tokenBg">?attr/colorPrimary</item>'],
+      ['an @token@ substitution', 'build.xml', `<${PASSWORD}>@${PASSWORD}@</${PASSWORD}>`],
+      ['a #{token} substitution', 'pom.xml', `<${PASSWORD}>#{${PASSWORD}}</${PASSWORD}>`],
+      ['a %%TOKEN%% substitution', 'settings.xml', `<${PASSWORD}>%%${PASSWORD.toUpperCase()}%%</${PASSWORD}>`],
+      ['a D-Bus interface', 'org.example.Home.xml', '<property name="Foo" type="s" access="read">\n  <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>\n</property>\n<method name="Activate">\n  <arg type="s" name="secret" direction="in"/>\n</method>'],
+      ['a D-Bus interface with an entry-like tag before', 'org.example.Home.xml', '<property name="A" type="s" access="read"><annotation name="X" value="invalidates"/></property><item><arg type="s" name="secret" direction="in"/></item>'],
+      ['Maven reference example blocks', 'conf/settings.xml', `<proxy><id>example-proxy</id><host>proxy.example.com</host><username>proxyuser</username><${PASSWORD}>proxypass</${PASSWORD}></proxy>\n<server><id>siteServer</id><privateKey>/path/to/private/key</privateKey><passphrase>optional; leave empty if not used.</passphrase></server>`],
+    ])('%s is clean', (_label, file, text) => {
+      expect(scanText(file, `${text}\n`), text).toEqual([]);
+    });
+
+    it('a real value is still found next to those examples', () => {
+      expect(scanText('AndroidManifest.xml', `<meta-data android:name="com.google.android.geo.API_KEY" android:value="${random}"/>\n`).length).toBeGreaterThan(0);
+      expect(scanText('settings.xml', `<server><privateKey>${random}</privateKey></server>\n`).length).toBeGreaterThan(0);
+      expect(scanText('settings.xml', `<server><${PASSWORD}>${passphrase}</${PASSWORD}></server>\n`).length).toBeGreaterThan(0);
+      expect(scanText('settings.xml', `<property name="Foo" type="s"><annotation name="X" value="y"/></property>\n<add key="${NAME}" value="${random}"/>\n`).length).toBeGreaterThan(0);
+    });
+
+    it('an Android res/values sentence under a password-like name is a message, but the same text elsewhere is a passphrase', () => {
+      // Not strings.xml: that name is already a message catalog by its file name, so only the res/values directory rule counts here.
+      const text = `<resources><string name="${PASSWORD}">This is the way</string></resources>\n`;
+      expect(scanText('app/src/main/res/values/auth.xml', text)).toEqual([]);
+      expect(scanText('app/src/main/res/values-fr/auth.xml', text)).toEqual([]);
+      expect(scanText('settings.xml', text).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('provider tokens: Slack, SendGrid and Sentry shapes', () => {
+    const digits = (n, seed) => randomString(n, seed, DIGITS);
+    it.each([
+      'xoxo-love-and-kisses-2026',
+      'xoxo-team-2026-Q1-kickoff-notes',
+      'xoxe-1-planning-2026-notes-for-the-quarter-review-meeting-agenda-items-list',
+      `${['xapp', '-1-A0000000000-0000000000000-'].join('')}${'0'.repeat(64)}`,
+      `${['xox', 'b-000000000000-000000000000-'].join('')}${'x'.repeat(24)}`,
+      `${['xox', 'o-'].join('')}${'0'.repeat(12)}-${'0'.repeat(12)}-${'0'.repeat(12)}-${'0'.repeat(32)}`,
+      `${['S', 'G.'].join('')}${'x'.repeat(22)}.${'y'.repeat(43)}`,
+      `${['S', 'G.'].join('')}${'a'.repeat(22)}.${'b'.repeat(43)}`,
+    ])('%s is not a token', (text) => {
+      for (const file of ['a.md', 'a.json', 'a.js']) expect(scanText(file, `see ${text} here\n`), file).toEqual([]);
+    });
+
+    it('the documented xoxo and xoxe shapes are found', () => {
+      const xoxo = `${['xox', 'o-'].join('')}${digits(12, 3301)}-${digits(12, 3302)}-${digits(12, 3303)}-${randomString(32, 3304, HEX)}`;
+      const xoxe = `${['xox', 'e-1-'].join('')}${randomString(100, 3305, `${ALNUM}_-`)}`;
+      for (const token of [xoxo, xoxe]) for (const file of ['a.md', 'a.json', 'a.js']) expect(rulesOf(file, `see ${token} here\n`)).toContain('slack-token');
+    });
+
+    it('a Sentry DSN is reported only when it carries the deprecated secret half', () => {
+      const key = randomString(32, 3401, HEX);
+      const secret = randomString(32, 3402, HEX);
+      const publicDsn = `${scheme}${key}@o123.ingest.sentry.io/456`;
+      const secretDsn = `${scheme}${key}:${secret}@o123.ingest.sentry.io/456`;
+      for (const file of ['a.js', 'a.json', 'a.md']) {
+        expect(rulesOf(file, `Sentry.init({ dsn: '${publicDsn}' });\n`), file).not.toContain('sentry-token');
+        expect(rulesOf(file, `Sentry.init({ dsn: '${secretDsn}' });\n`), file).toContain('sentry-token');
+      }
+    });
+  });
+
+  describe('placeholders for the added provider families pass', () => {
+    const pad = (prefix, n, ch = 'x') => `${prefix}${ch.repeat(n)}`;
+    it.each([
+      pad('123456789:A' + 'A', 33),
+      pad(['sk', '.eyJ'].join(''), 40) + '.' + 'x'.repeat(22),
+      pad(['sq0', 'atp-'].join(''), 22),
+      pad(['sq0', 'csp-'].join(''), 43),
+      pad(['NR', 'AK-'].join(''), 27, 'X'),
+      pad(['cf', 'ut_'].join(''), 48),
+      pad(['xox', 'e-1-'].join(''), 100, '0'),
+      `M${'x'.repeat(24)}.${'x'.repeat(6)}.${'x'.repeat(30)}`,
+    ])('%s... passes', (value) => {
+      for (const [file, text] of [['a.json', `{"note":"${value}"}\n`], ['a.md', `token ${value}\n`], ['a.js', `const t = "${value}";\n`]]) {
+        expect(rulesOf(file, text), file).toEqual([]);
+      }
+    });
+  });
+
+  describe('the quadratic all-uppercase body is gone', () => {
+    it('nameWords-driven placeholder checks stay fast on a long all-uppercase token body (killable child)', SLOW, () => {
+      const timings = timeInChild(`
+        for (const [label, file, text] of [
+          ['ATBB x4096', 'package-lock.json', 'ATBB'.repeat(16 * 256)],
+          ['ATBB x64k', 'a.md', 'ATBB'.repeat(16 * 1024)],
+          ['glpat A 64k', 'a.md', 'glpat-' + 'A'.repeat(64 * 1024)],
+          ['sk-ant A 64k', 'settings.xml', 'sk-ant-' + 'A'.repeat(64 * 1024)],
+          ['upper name 64k', 'a.env', 'API_' + 'KEY'.repeat(20000) + '=x'],
+        ]) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push([label, Math.round(performance.now() - started)]);
+        }`);
+      for (const [label, ms] of timings) expect(ms, label).toBeLessThan(2000);
+    });
   });
 });
 

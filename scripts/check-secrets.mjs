@@ -5,13 +5,14 @@
  * Usage (from anywhere inside the repository):
  *   node scripts/check-secrets.mjs             scan every git-tracked text file (this is what CI runs)
  *   node scripts/check-secrets.mjs --history   scan the ADDED lines of every commit on every ref
+ *   node scripts/check-secrets.mjs --range <base>..<head>   scan the ADDED lines of the commits in that range (CI)
  *   node scripts/check-secrets.mjs --help
  *
  * Exit codes: 0 = clean, 1 = potential secret found (or a tracked file that could not be scanned:
- * text over the size limit, unreadable), 2 = usage or git error, or a --history audit that did
- * not look at everything (version over the size limit, shallow clone).
+ * text over the size limit, unreadable), 2 = usage or git error, or a --history / --range audit that did
+ * not look at everything (version over the size limit, shallow clone, a commit that is not present).
  *
- * Fail closed: the only content skipped on purpose is lockfiles (exact names), gitlinks (submodule
+ * Fail closed: the only content skipped on purpose is gitlinks (submodule
  * pointers) and verified-binary files (a NUL byte in the first 8 KB AND a known binary signature such as PNG,
  * ZIP or PDF; a stray NUL alone never exempts a file), and the OK line counts them. Everything else that cannot
  * be examined makes the run fail with a message; nothing is skipped quietly.
@@ -71,25 +72,57 @@ const ALLOW_MARKER = 'check-secrets:allow';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const SNIFF_BYTES = 8000;
 
-// Lockfiles are full of integrity hashes that look like high-entropy secrets. Exact names
-// only: other *.lock files and everything else is scanned.
+// Lockfiles are full of integrity hashes that look like high-entropy secrets, so the generic entropy and secret-name
+// rules do not run on them. They are NOT skipped: a dependency URL can carry a credential (https://user:<password>@registry/...),
+// and a lockfile can hold an auth field. Only rules flagged `lockfile: true` (URL passwords, private keys, provider-shaped
+// tokens, webhook URLs) and the targeted `lockfile-credential` rule run on them, after ordinary digests are blanked
+// (sanitizeLockfile). Exact names only: other *.lock files are scanned with every rule.
 const LOCKFILE_NAMES = new Set([
   'package-lock.json',
   'npm-shrinkwrap.json',
   'yarn.lock',
   'pnpm-lock.yaml',
   'bun.lockb',
+  'bun.lock',
   'composer.lock',
   'gemfile.lock',
   'cargo.lock',
   'poetry.lock',
+  'pipfile.lock',
   'go.sum',
 ]);
 
-/** True for lockfiles. Nothing else is skipped by name or extension: content decides. */
-export function shouldSkipPath(filePath) {
+/** True for lockfiles (exact base names). They are scanned with the lockfile rules only, not skipped. */
+export function isLockfile(filePath) {
   const base = path.posix.basename(filePath.split(path.sep).join('/')).toLowerCase();
   return LOCKFILE_NAMES.has(base);
+}
+
+// A lockfile is machine-generated and can be far larger than a source file; it gets a higher (still fail-closed) limit.
+const MAX_LOCKFILE_BYTES = 16 * 1024 * 1024;
+const sizeLimit = (filePath) => (isLockfile(filePath) ? MAX_LOCKFILE_BYTES : MAX_FILE_BYTES);
+
+// Ordinary digests, blanked (same length, so line numbers stay) before the lockfile rules run. Every quantifier is a
+// fixed count or a bounded class run, so this is linear. Only digests of the exact size of their algorithm are blanked:
+// a longer or shorter string after "sha512-" is not an integrity value and stays visible to the token rules.
+const LOCKFILE_DIGESTS = [
+  /sha512-[A-Za-z0-9+/]{86}={0,2}/g,
+  /sha384-[A-Za-z0-9+/]{64}={0,2}/g,
+  /sha256-[A-Za-z0-9+/]{43}={0,2}/g,
+  /sha1-[A-Za-z0-9+/]{27}={0,2}/g,
+  /\bh1:[A-Za-z0-9+/]{43}=/g, // go.sum
+  /(?<![A-Za-z0-9])(?:sha(?:1|224|256|384|512)|md5)[:=][0-9a-fA-F]{32,128}(?![0-9A-Za-z])/g, // poetry, Pipfile.lock, Gemfile CHECKSUMS
+];
+// A hex digest is blanked only after a checksum-like key (Cargo `checksum = "..."`, composer `"shasum": "..."`, yarn berry
+// `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment).
+const LOCKFILE_HEX_DIGEST =
+  /((?:checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+
+/** The lockfile text with ordinary integrity digests blanked. Offsets and line breaks are unchanged. */
+export function sanitizeLockfile(text) {
+  let out = text;
+  for (const pattern of LOCKFILE_DIGESTS) out = out.replace(pattern, (m) => ' '.repeat(m.length));
+  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex) => lead + ' '.repeat(hex.length));
 }
 
 // Leading bytes of common binary formats. A file is "verified binary" only when it has a NUL byte in its first
@@ -231,7 +264,7 @@ export function decodeText(buffer) {
 function nameWords(name) {
   return String(name)
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([A-Z])(?=[A-Z][a-z])/g, '$1 ')
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
     .map((w) => w.toLowerCase());
@@ -282,9 +315,10 @@ const MARKER_SPANS = /<[^<>\n]{1,80}>|\[[A-Za-z][A-Za-z _-]{0,60}\]|\.{3,}|…|\
 
 // Template and environment references. Interpolation syntax is unambiguous, so it counts anywhere;
 // a bare $NAME counts only when the WHOLE value is that shape, so `$` + random letters does not.
-const INTERPOLATION = /\$\{|\{\{|^\$\(|^`/;
+const INTERPOLATION = /\$\{|\{\{|#\{|^\$\(|^`/;
 const WHOLE_REFERENCE =
-  /^(?:\$[A-Z_][A-Z0-9_]*|\$[a-z][a-z0-9]*_[a-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)$/;
+  /^(?:\$[A-Z_][A-Z0-9_]*|\$[a-z][a-z0-9]*_[a-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|%%[A-Za-z_][A-Za-z0-9_.-]*%%|@[A-Za-z_][A-Za-z0-9_.-]*@|[@?]\+?(?:[a-z]+:)?[a-z]+\/[A-Za-z0-9_.]+)$/;
+// (%%NAME%% and @NAME@ are build-time substitution tokens (Ant, Maven filtering, autoconf); @string/name and ?attr/name are Android resource references.)
 const CODE_REFERENCE = /process\.env|import\.meta\.env|os\.environ|\bgetenv|\bENV\[/;
 // Encrypted or hashed forms are not plaintext credentials.
 const NON_SECRET_FORMS = /^(?:ENC\[|\$ANSIBLE_VAULT|\$2[abxy]?\$\d{2}\$|\$argon2|\$pbkdf2|\$scrypt|\$apr1\$|\{SHA\})/;
@@ -508,7 +542,7 @@ const NUMBER_UNIT_WORDS = new Set([
 ]);
 const plainWord = (piece) => (piece ?? '').replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '').toLowerCase();
 
-const MESSAGE_CATALOG_DIRS = /(?:^|\/)(?:i18n|l10n|locales?|_locales|lang|langs|languages?|messages?|translations?|intl|strings)(?:\/|$)/;
+const MESSAGE_CATALOG_DIRS = /(?:^|\/)(?:i18n|l10n|locales?|_locales|lang|langs|languages?|messages?|translations?|intl|strings|res\/values(?:-[A-Za-z0-9]+)*)(?:\/|$)/;
 // Segments are [A-Za-z0-9]+ after ONE separator char: the separator class and the segment class must not overlap,
 // or a hostile file name ('i18n-' + '--' x 30) backtracks exponentially (CodeQL js/redos; this runs on tracked paths).
 const MESSAGE_CATALOG_FILE =
@@ -849,6 +883,36 @@ const CONFIG_EXTENSIONS = new Set([
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.tf', '.tfvars', '.hcl', '.example', '.sample', '.template',
   '.dist', '.cnf', '.tfstate', '.kubeconfig',
 ]);
+// XML configuration formats: Maven settings.xml and pom.xml, Ant, Tomcat server.xml, Android strings.xml, .NET
+// web.config / app.config (.config is above), MSBuild (.csproj, .props, .targets), .plist, .resx, .wsdl. These hold settings
+// the same way an ini or YAML file does, so they get configuration-value semantics (a quoted value with spaces or a
+// passphrase is a secret, not text). .svg, .html and .xhtml stay in code mode: they are markup, not settings.
+const XML_CONFIG_EXTENSIONS = new Set([
+  '.xml', '.csproj', '.vbproj', '.fsproj', '.props', '.targets', '.plist', '.resx', '.wsdl', '.nuspec', '.pubxml', '.settings',
+  // MSBuild siblings (any *proj is added by isXmlConfigPath), Azure service configuration, JMeter, Apple profiles and
+  // entitlements, IDE and analyser settings, Windows packaging, Maven POM files.
+  '.projitems', '.cscfg', '.csdef', '.jmx', '.mobileconfig', '.entitlements', '.iml', '.launch', '.ruleset', '.appxmanifest',
+  '.wxs', '.wxi', '.pom', '.jnlp',
+]);
+// Markup and schema formats stay in code mode on purpose: .svg .html .htm .xhtml .xsl .xslt .xaml .xsd .rss .atom .kml hold
+// content, styling or structure, not settings, and a <password> label or a form field there is not a credential.
+// A template or backup suffix (settings.xml.template, web.xml.erb, pom.xml.bak) does not change what the file is.
+const TEMPLATE_SUFFIX = /\.(?:template|dist|sample|example|erb|j2|jinja2?|tpl|tmpl|bak|orig|old|default|in)$/i;
+
+/** The file name without trailing template or backup suffixes (at most two), lower-cased. */
+function baseWithoutTemplateSuffix(base) {
+  let name = base.toLowerCase();
+  for (let i = 0; i < 2 && TEMPLATE_SUFFIX.test(name) && name.replace(TEMPLATE_SUFFIX, '') !== ''; i += 1) name = name.replace(TEMPLATE_SUFFIX, '');
+  return name;
+}
+
+/** True for XML configuration files (see XML_CONFIG_EXTENSIONS) and .NET *.config files. */
+export function isXmlConfigPath(filePath) {
+  const base = path.posix.basename(filePath.split(path.sep).join('/'));
+  const ext = path.posix.extname(baseWithoutTemplateSuffix(base));
+  return XML_CONFIG_EXTENSIONS.has(ext) || ext === '.config' || /^\.[a-z]*proj$/.test(ext);
+}
+
 const CONFIG_BASENAMES = new Set([
   '.npmrc', '.yarnrc', '.netrc', '.pgpass', '.envrc', 'makefile', 'gnumakefile', 'procfile', 'credentials', 'config',
 ]);
@@ -914,6 +978,9 @@ export function fileMode(filePath) {
     base.startsWith('dockerfile') ||
     CONFIG_BASENAMES.has(base) ||
     CONFIG_EXTENSIONS.has(ext) ||
+    XML_CONFIG_EXTENSIONS.has(ext) ||
+    isXmlConfigPath(filePath) ||
+    CONFIG_EXTENSIONS.has(path.posix.extname(baseWithoutTemplateSuffix(base))) ||
     credentialFormats(filePath).size > 0
   ) {
     return 'config';
@@ -1158,6 +1225,8 @@ function yamlBlockWindow(input, index) {
 // <property><name/><value/></property>, <entry key=>V</entry>.
 const XML_ENTRY_TAG = /<(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)(?![A-Za-z0-9_-])/gi;
 
+const XML_ENTRY_CLOSE = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/gi;
+const XML_ENTRY_CLOSE_ONCE = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/i;
 /**
  * The XML entry around `index`: from the nearest opening entry tag before it (or the tag that holds it) to the end of that
  * entry (`/>`, or its closing tag, or the start of the next entry), at most PAIR_XML_CHARS. Null when `index` is not in XML.
@@ -1169,11 +1238,22 @@ function xmlWindow(input, index) {
   let start = -1;
   for (const tag of back.matchAll(XML_ENTRY_TAG)) start = from + tag.index;
   if (start === -1) start = from + back.lastIndexOf('<');
+  // An entry that already ended before `index` (a "/>" or a closing entry tag between its start and `index`) is a different
+  // element: the window starts at the first tag after that end, so its value= is never paired with a later name=.
+  const between = input.slice(start, index);
+  let ended = between.lastIndexOf('/>');
+  if (ended !== -1) ended += 2;
+  for (const close of between.matchAll(XML_ENTRY_CLOSE)) ended = Math.max(ended, close.index + close[0].length);
+  if (ended > 0) {
+    const nextTag = between.indexOf('<', ended);
+    // No tag between the end and `index`: `index` is in text after the entry, nothing pairs with it.
+    start = nextTag === -1 ? index : start + nextTag;
+  }
   const forward = input.slice(index, Math.min(input.length, index + PAIR_XML_CHARS));
   let end = forward.length;
   const selfClose = forward.indexOf('/>');
   if (selfClose !== -1) end = Math.min(end, selfClose + 2);
-  const closing = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)\s*>/i.exec(forward);
+  const closing = XML_ENTRY_CLOSE_ONCE.exec(forward);
   if (closing) end = Math.min(end, closing.index + closing[0].length);
   XML_ENTRY_TAG.lastIndex = 0;
   const next = XML_ENTRY_TAG.exec(forward);
@@ -1442,9 +1522,334 @@ const isSecretLikeName = (name) => secretNameKind(name) !== null;
  * ctx is { path, mode, formats, strict, minStrong }. accept() returns false for placeholders and other non-secrets.
  * Every quantifier that can meet attacker-shaped text is bounded, so scan time stays linear.
  */
+
+// Provider-specific token shapes. Each is recognised by its fixed prefix and length wherever it appears (any file, any
+// name), so a token under a non-secret name or in prose is found. Boundaries use lookbehind and a class that cannot
+// overlap the prefix, so each match attempt is bounded and the scan stays linear. `lockfile: true`: these also run on
+// lockfiles. A value that is a documentation placeholder (xxxx, your_..., <...>) passes.
+// Long token bodies are judged by their head and tail (a placeholder marker is at the ends), so the cost of the placeholder
+// check does not grow with an attacker-sized match.
+const placeholderOf = (text) => isPlaceholder(text.length > 512 ? text.slice(0, 256) + text.slice(-256) : text);
+const notPlaceholder = (m) => !placeholderOf(m[0]);
+const mixedCase = (text) => /[A-Z]/.test(text) && /[a-z]/.test(text);
+// A run of one or two repeated characters (000000...) is a placeholder, not a hex token.
+const varied = (text) => new Set(text).size >= 8;
+const hasDigitAndLetter = (text) => /\d/.test(text) && /[A-Za-z]/.test(text);
+const tokenRule = (id, description, hint, patterns, accept = notPlaceholder) => ({
+  id,
+  description,
+  lockfile: true,
+  hint,
+  matchers: (Array.isArray(patterns) ? patterns : [patterns]).map((pattern) => ({ pattern, accept })),
+});
+const PROVIDER_RULES = [
+  tokenRule(
+    'gitlab-token',
+    'GitLab personal, deploy, runner, trigger, feed or agent token (glpat-, gldt-, glrt-, ...)',
+    /gl[a-z]{2,6}-/,
+    /(?<![A-Za-z0-9_-])(?:glpat|gldt|glrt|glptt|glft|glimt|glagent|glcbt|glsoat|gloas|glffct)-[A-Za-z0-9_.-]{20,}/g,
+  ),
+  tokenRule('npm-token', 'npm access token (npm_ prefix)', /npm_/, /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9_])/g, (m) => !placeholderOf(m[0]) && hasDigitAndLetter(m[0].slice(4))),
+  tokenRule('pypi-token', 'PyPI API token (pypi- prefix)', /pypi-/, /(?<![A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}/g),
+  tokenRule('stripe-webhook-secret', 'Stripe webhook signing secret (whsec_ prefix)', /whsec_/, /(?<![A-Za-z0-9_])whsec_[A-Za-z0-9+/=]{24,}/g),
+  tokenRule('twilio-api-key', 'Twilio API key SID (SK + 32 hex)', /SK[0-9a-f]{32}/, /(?<![A-Za-z0-9])SK[0-9a-f]{32}(?![A-Za-z0-9])/g, (m) => !placeholderOf(m[0]) && varied(m[0])),
+  tokenRule(
+    'sendgrid-api-key',
+    'SendGrid API key (SG. prefix)',
+    /SG\./,
+    /(?<![A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g,
+    (m) => !placeholderOf(m[0]) && varied(m[0].slice(3)),
+  ),
+  tokenRule('mailgun-api-key', 'Mailgun private API key (key- + 32 hex)', /key-[0-9a-f]{32}/, /(?<![A-Za-z0-9_-])key-[0-9a-f]{32}(?![A-Za-z0-9_-])/g, (m) => !placeholderOf(m[0]) && varied(m[0])),
+  tokenRule(
+    'shopify-token',
+    'Shopify access token (shpat_, shpca_, shppa_, shpss_)',
+    /shp(?:at|ca|pa|ss)_/,
+    /(?<![A-Za-z0-9_])shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}(?![A-Za-z0-9_])/g,
+    (m) => !placeholderOf(m[0]) && varied(m[0]),
+  ),
+  tokenRule(
+    'digitalocean-token',
+    'DigitalOcean token (dop_v1_, doo_v1_, dor_v1_)',
+    /do[opr]_v1_/,
+    /(?<![A-Za-z0-9_])do[opr]_v1_[a-f0-9]{64}(?![A-Za-z0-9_])/g,
+    (m) => !placeholderOf(m[0]) && varied(m[0]),
+  ),
+  tokenRule(
+    'huggingface-token',
+    'Hugging Face access token (hf_ prefix)',
+    /hf_|api_org_/,
+    /(?<![A-Za-z0-9_])(?:hf|api_org)_[A-Za-z0-9]{30,}(?![A-Za-z0-9_])/g,
+    (m) => !placeholderOf(m[0]) && mixedCase(m[0]),
+  ),
+  tokenRule(
+    'openai-api-key',
+    'OpenAI API key (project, service-account, admin and legacy keys)',
+    /sk-/,
+    [
+      /(?<![A-Za-z0-9_-])sk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{32,}/g,
+      /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}(?![A-Za-z0-9_-])/g,
+      /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{48}(?![A-Za-z0-9_-])/g,
+    ],
+    (m) => !placeholderOf(m[0]) && (m[0].includes('-proj-') || m[0].includes('-svcacct-') || m[0].includes('-admin-') || (mixedCase(m[0]) && /\d/.test(m[0]))),
+  ),
+  tokenRule('anthropic-api-key', 'Anthropic API key (sk-ant- prefix)', /sk-ant-/, /(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{40,}/g),
+  tokenRule(
+    'google-oauth-secret',
+    'Google OAuth access token (ya29.) or client secret (GOCSPX-)',
+    /ya29\.|GOCSPX-/,
+    /(?<![A-Za-z0-9_-])(?:ya29\.[A-Za-z0-9_-]{30,}|GOCSPX-[A-Za-z0-9_-]{20,})/g,
+  ),
+  {
+    id: 'azure-storage-key',
+    description: 'Azure storage, Service Bus or Event Hubs shared key in a connection string, or a shared-access signature in a SAS URL',
+    lockfile: true,
+    hint: /AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey|sig=/i,
+    matchers: [
+      {
+        pattern: /(?<![A-Za-z0-9_])(?:AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey)[ \t]*=[ \t]*([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])/gi,
+        accept: (m) => !placeholderOf(m[1]) && /\d/.test(m[1]) && mixedCase(m[1]),
+      },
+      {
+        // A SAS URL: ...?sv=2022-11-02&ss=b&srt=sco&sp=rwl&se=2030-01-01T00:00:00Z&sig=<base64, URL-encoded>
+        pattern: /[?&;]sig=([A-Za-z0-9%+/_-]{40,})/g,
+        accept: (m) => {
+          const around = m.input.slice(Math.max(0, m.index - 400), m.index + 400);
+          return /[?&;](?:sv|se|sp|srt|ss|spr)=/.test(around) && !placeholderOf(m[1]);
+        },
+      },
+    ],
+  },
+  {
+    id: 'heroku-api-key',
+    description: 'Heroku authorization token (HRKU- prefix) or HEROKU_API_KEY set to a UUID',
+    lockfile: true,
+    hint: /HRKU-|HEROKU/i,
+    matchers: [
+      { pattern: /(?<![A-Za-z0-9_-])HRKU-[A-Za-z0-9_-]{30,}/g, accept: notPlaceholder },
+      {
+        pattern: /(?<![A-Za-z0-9_])HEROKU[_-]?API[_-]?KEY["']?[ \t]*[:=][ \t]*["']?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?![0-9a-f-])/gi,
+        accept: (m) => !placeholderOf(m[1]) && new Set(m[1]).size > 6,
+      },
+    ],
+  },
+  {
+    id: 'datadog-api-key',
+    description: 'Datadog API or application key (32 or 40 hex) set on a Datadog key name',
+    lockfile: true,
+    hint: /(?:DD|DATADOG)[_-](?:API|APP)/i,
+    matchers: [
+      {
+        pattern: /(?<![A-Za-z0-9_])(?:DD|DATADOG)[_-](?:API|APP|APPLICATION)[_-]KEY["']?[ \t]*[:=][ \t]*["']?([0-9a-f]{40}|[0-9a-f]{32})(?![0-9a-f])/gi,
+        accept: (m) => !placeholderOf(m[1]) && new Set(m[1].toLowerCase()).size > 6,
+      },
+    ],
+  },
+  {
+    id: 'sentry-token',
+    description: 'Sentry auth token (sntrys_, sntryu_) or a DSN carrying its secret half (key:secret@)',
+    lockfile: true,
+    hint: /sntry|sentry/i,
+    matchers: [
+      { pattern: /(?<![A-Za-z0-9_])sntrys_[A-Za-z0-9+/=_-]{40,}/g, accept: notPlaceholder },
+      { pattern: /(?<![A-Za-z0-9_])sntryu_[a-f0-9]{64}(?![A-Za-z0-9_])/g, accept: notPlaceholder },
+      {
+        // https://<32 hex key>:<32 hex secret>@o123.ingest.sentry.io/456. Only a DSN that still carries the deprecated SECRET
+        // half is a credential: the public key of a modern DSN ships in every browser bundle and is safe to expose by design.
+        pattern: /(?<![A-Za-z0-9])https?:\/\/[0-9a-f]{32}:([0-9a-f]{32})@[A-Za-z0-9.-]{0,80}sentry[A-Za-z0-9.-]{0,80}\/\d{1,12}/g,
+        accept: (m) => !placeholderOf(m[1]) && new Set(m[1]).size > 6,
+      },
+    ],
+  },
+  tokenRule(
+    'doppler-token',
+    'Doppler token (dp.st., dp.pt., dp.ct., dp.sa., ...)',
+    /dp\./,
+    /(?<![A-Za-z0-9_.])dp\.(?:st|pt|ct|scim|audit|sa)\.(?:[A-Za-z0-9_-]{1,40}\.)?[A-Za-z0-9]{40,}/g,
+  ),
+  tokenRule(
+    'vault-token',
+    'HashiCorp Vault token (hvs., hvb., hvr.)',
+    /hv[sbr]\./,
+    /(?<![A-Za-z0-9_.-])hv[sbr]\.[A-Za-z0-9_-]{24,}/g,
+    (m) => !placeholderOf(m[0]) && hasDigitAndLetter(m[0].slice(4)),
+  ),
+  tokenRule('linear-api-key', 'Linear API key or OAuth token', /lin_/, /(?<![A-Za-z0-9_])lin_(?:api|oauth)_[A-Za-z0-9]{32,}/g),
+  tokenRule(
+    'notion-token',
+    'Notion integration secret (ntn_ or secret_ prefix)',
+    /ntn_|secret_/,
+    [/(?<![A-Za-z0-9_])ntn_[A-Za-z0-9]{40,}/g, /(?<![A-Za-z0-9_])secret_[A-Za-z0-9]{43}(?![A-Za-z0-9_])/g],
+    (m) => !placeholderOf(m[0]) && (m[0].startsWith('ntn_') || (hasDigitAndLetter(m[0].slice(7)) && mixedCase(m[0].slice(7)))),
+  ),
+  tokenRule(
+    'atlassian-token',
+    'Atlassian API token (ATATT) or Bitbucket app password (ATBB)',
+    /ATATT|ATBB/,
+    /(?<![A-Za-z0-9_-])(?:ATATT3[A-Za-z0-9_=-]{50,}|ATBB[A-Za-z0-9_=-]{30,})/g,
+  ),
+  tokenRule(
+    'telegram-bot-token',
+    'Telegram bot token (<bot id>:AA + 33 characters)',
+    /:AA/,
+    /(?<![A-Za-z0-9_:])\d{8,10}:AA[A-Za-z0-9_-]{33}(?![A-Za-z0-9_-])/g,
+    (m) => !placeholderOf(m[0]) && varied(m[0].slice(m[0].indexOf(':') + 1)),
+  ),
+  tokenRule(
+    'mapbox-secret-token',
+    'Mapbox secret access token (sk.eyJ...)',
+    /sk\.eyJ/,
+    /(?<![A-Za-z0-9_.-])sk\.eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])/g,
+  ),
+  tokenRule(
+    'square-token',
+    'Square access token or OAuth secret (sq0atp-, sq0csp-)',
+    /sq0/,
+    [/(?<![A-Za-z0-9_-])sq0atp-[A-Za-z0-9_-]{22}(?![A-Za-z0-9_-])/g, /(?<![A-Za-z0-9_-])sq0csp-[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g],
+    (m) => !placeholderOf(m[0]) && varied(m[0].slice(7)),
+  ),
+  tokenRule(
+    'firebase-fcm-server-key',
+    'Firebase Cloud Messaging legacy server key (AAAA...:APA91b...)',
+    /APA91b/,
+    /(?<![A-Za-z0-9_-])AAAA[A-Za-z0-9_-]{7}:APA91b[A-Za-z0-9_-]{100,}/g,
+  ),
+  tokenRule(
+    'newrelic-key',
+    'New Relic user API key (NRAK-) or ingest key (NRII-)',
+    /NR(?:AK|II)-/,
+    [/(?<![A-Za-z0-9_-])NRAK-[A-Z0-9]{27}(?![A-Za-z0-9_-])/g, /(?<![A-Za-z0-9_-])NRII-[A-Za-z0-9_-]{32}(?![A-Za-z0-9_-])/g],
+    (m) => !placeholderOf(m[0]) && varied(m[0].slice(5)),
+  ),
+  tokenRule(
+    'cloudflare-token',
+    'Cloudflare API token (cfut_, cfat_, cfk_ prefix)',
+    /cf(?:ut|at|k)_/,
+    /(?<![A-Za-z0-9_])cf(?:ut|at|k)_[A-Za-z0-9]{40,}(?![A-Za-z0-9_])/g,
+    (m) => !placeholderOf(m[0]) && varied(m[0].slice(5)),
+  ),
+  tokenRule(
+    'discord-bot-token',
+    'Discord bot token (<base64 id>.<timestamp>.<hmac>)',
+    /\.[A-Za-z0-9_-]{6}\./,
+    /(?<![A-Za-z0-9_.-])[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38}(?![A-Za-z0-9_.-])/g,
+    (m) => !placeholderOf(m[0]) && mixedCase(m[0]) && /\d/.test(m[0]) && varied(m[0]),
+  ),
+  tokenRule(
+    'other-provider-token',
+    'Other provider token (Databricks, Grafana, Supabase, PlanetScale, Docker Hub, RubyGems, Terraform Cloud, age secret key)',
+    /dapi|glsa_|sbp_|pscale_|dckr_pat_|rubygems_|atlasv1|AGE-SECRET-KEY/,
+    [
+      /(?<![A-Za-z0-9_])dapi[a-f0-9]{32}(?:-\d)?(?![A-Za-z0-9_])/g,
+      /(?<![A-Za-z0-9_])glsa_[A-Za-z0-9]{32}_[a-f0-9]{8}(?![A-Za-z0-9_])/g,
+      /(?<![A-Za-z0-9_])sbp_[a-f0-9]{40}(?![A-Za-z0-9_])/g,
+      /(?<![A-Za-z0-9_])pscale_(?:tkn|pw|oauth)_[A-Za-z0-9_.-]{32,}/g,
+      /(?<![A-Za-z0-9_])dckr_pat_[A-Za-z0-9_-]{27,}/g,
+      /(?<![A-Za-z0-9_])rubygems_[a-f0-9]{48}(?![A-Za-z0-9_])/g,
+      /(?<![A-Za-z0-9])[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{60,}/g,
+      /(?<![A-Za-z0-9-])AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}(?![A-Za-z0-9])/g,
+    ],
+    (m) => !placeholderOf(m[0]) && varied(m[0]),
+  ),
+];
+
+// Lockfile fields that can hold a credential. The generic secret-name rules do not run on lockfiles (integrity hashes), so
+// this rule looks only at URLs (userinfo token, credential-named query parameter) and at auth-like FIELD names.
+const LOCKFILE_URL = /(?<![A-Za-z0-9+.-])[a-z][a-z0-9+.-]{1,30}:\/\/[^\s"'`<>\\]{1,2000}/gi;
+const LOCKFILE_AUTH_FIELD =
+  /(?<![A-Za-z0-9])(?:_authToken|_auth|_password|npmAuthToken|npmAuthIdent|authToken|auth_token|accessToken|access_token|client_secret|clientSecret|api_key|apiKey|secret_key|secretKey|private_key|privateKey|password|passwd|token|secret)(["']?)[ \t]*[:=][ \t]*(?:"([^"\n]{1,4096})"|'([^'\n]{1,4096})'|([^\s,;{}"']{1,4096}))/g;
+// A dependency specifier or version, not a credential. The WHOLE value must have that shape ("^1.2.3", ">=1 <2", "1.x", "*",
+// "npm:x@1", "workspace:*", "link:../x", "latest"): a first character that merely looks like one (a digit, x, v) exempts nothing.
+const SPEC_VERSION = String.raw`[\^~<>=]{0,2}[ \t]?v?\d{1,8}(?:\.[\dxX*]{1,12}){0,3}(?:-(?:alpha|beta|rc|dev|next|canary|pre|preview|nightly|snapshot|experimental)(?:[.-]?\d{1,4}){0,4})?`;
+const LOCKFILE_SPEC_VALUE = new RegExp(
+  String.raw`^(?:${SPEC_VERSION}(?:(?:[ \t]*(?:\|\||-|,)[ \t]*|[ \t]+)${SPEC_VERSION}){0,4}|[\^~<>=]{0,2}[ \t]?[xX*]|(?:\.{1,2}|~)?(?:\/[A-Za-z0-9._@-]{1,64}){1,12}\/?|\.{1,2}|(?:npm|file|link|workspace|git|github|gitlab|bitbucket|patch|portal|catalog|resolution):[^\s]{0,256}|(?:latest|next|beta|alpha|canary|rc|true|false|null|none|undefined))$`,
+);
+// A bare "key" is not listed: cache-key, sort-key and the like are identifiers; only credential-qualified keys are.
+const LOCKFILE_CREDENTIAL_PARAM = /(?:sig|signature|token|secret|(?:api|access|secret|private|auth|signing)[-_.]?key|password|passwd|pwd|auth|authorization|jwt|bearer|sas)$/i;
+
+/** Does a URL in a lockfile carry a credential of its own: a token as the user name, or a credential-named query parameter? */
+function lockfileUrlCarriesCredential(url) {
+  const rest = url.replace(URL_PREFIX, '');
+  const authorityEnd = rest.search(/[/?#]/);
+  const authority = authorityEnd === -1 ? rest : rest.slice(0, authorityEnd);
+  const at = authority.lastIndexOf('@');
+  if (at > 0) {
+    const user = authority.slice(0, authority.indexOf(':') === -1 || authority.indexOf(':') > at ? at : authority.indexOf(':'));
+    // ssh://git@host, https://user@host and token-style names are ordinary; a long random user name is a token.
+    if (user.length >= 16 && !isTemplateSegment(user) && !isWordIdentifier(user) && looksRandom(user, { minLength: 16, minEntropy: 3.2 })) return true;
+  }
+  if (authorityEnd === -1) return false;
+  const afterAuthority = rest.slice(authorityEnd);
+  const queryAt = afterAuthority.indexOf('?');
+  if (queryAt === -1) return false;
+  const hashAt = afterAuthority.indexOf('#', queryAt);
+  const query = afterAuthority.slice(queryAt + 1, hashAt === -1 ? undefined : hashAt);
+  for (const pair of query.split(/[&;]/)) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const name = safeDecode(pair.slice(0, eq));
+    const value = safeDecode(pair.slice(eq + 1));
+    if (LOCKFILE_CREDENTIAL_PARAM.test(name) && value.length >= 8 && !isTemplateSegment(value) && !isWordIdentifier(value)) return true;
+  }
+  return false;
+}
+
+const LOCKFILE_RULE = {
+  id: 'lockfile-credential',
+  description:
+    'credential inside a lockfile: a token or password in a dependency URL (resolved, tarball, url, source, registry) or an auth field such as _authToken, _auth, _password',
+  lockfile: true,
+  appliesTo: (ctx) => ctx.lockfile,
+  matchers: [
+    // A YAML flow mapping or a JSON array can end right after the URL: {tarball: https://h/x?sig=V} is the URL without the brace.
+    { pattern: LOCKFILE_URL, accept: (m) => lockfileUrlCarriesCredential(m[0].replace(/[)}\],;]+$/, '')) },
+    {
+      pattern: LOCKFILE_AUTH_FIELD,
+      accept: (m, ctx) => {
+        // The name must be a whole key: a word before it on the line makes it prose ("CSRF token: generation and ...").
+        const before = m.input.slice(ctx.lineStart(m.index), m.index).trimEnd();
+        if (/[A-Za-z0-9]$/.test(before)) return false;
+        // Free-text package metadata (composer.lock, poetry.lock) is not an auth field.
+        if (/^[ \t]*["']?(?:description|summary|homepage|title|readme|keywords|notes?)["']?[ \t]*[:=]/i.test(before)) return false;
+        const value = (m[2] ?? m[3] ?? m[4]).trim();
+        if (value.length < 4 || LOCKFILE_SPEC_VALUE.test(value) || URL_PREFIX.test(value)) return false; // a URL value is judged by the URL matcher
+        return !isPlaceholder(value);
+      },
+    },
+  ],
+};
+
+// The attribute that names an entry: <entry key="secret">V</entry>, <item name="password">V</item>.
+const XML_NAME_ATTRIBUTE = /(?:^|[ \t\r\n])(?:name|key)[ \t]*=[ \t]*(?:"([^"]{1,200})"|'([^']{1,200})')/i;
+// A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key.
+const PATH_VALUE = /^(?:\.{1,2}|~)?(?:\/[A-Za-z0-9._@-]{1,64}){2,12}\/?$/;
+// Example values Maven's reference settings.xml documents; they are sample text, not credentials.
+const XML_EXAMPLE_VALUES = new Set(['proxypass']);
+
+/** Is the text of this XML element (name, start-tag attributes, text) a secret? See the element matchers in RULES. */
+function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
+  const name = qualifiedName.slice(qualifiedName.lastIndexOf(':') + 1);
+  let kind = nameKindFor(name, ctx);
+  if (kind === null) {
+    const attribute = XML_NAME_ATTRIBUTE.exec(attributes);
+    if (attribute !== null) kind = nameKindFor(attribute[1] ?? attribute[2], ctx);
+  }
+  if (kind === null) return false;
+  const value = text.trim();
+  if (value === '') return false;
+  // A Maven-encrypted password ({base64}) is not a plaintext credential: it is unreadable without the master key.
+  if (/^\{[A-Za-z0-9+/=]{20,}\}$/.test(value)) return false;
+  if (PATH_VALUE.test(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
+  // A hint written as a sentence ("optional; leave empty if not used.") is text. A passphrase is words only, so a value with
+  // sentence punctuation after a word is prose.
+  if (/\s/.test(value) && /[A-Za-z][;:,.!?)]/.test(value) && value.split(/\s+/).length >= 3) return false;
+  return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+}
+
 export const RULES = [
   {
     id: 'url-password',
+    lockfile: true,
     description: 'URL (or curl -u) with an embedded non-placeholder password: database, broker, HTTP basic auth, ...',
     matchers: [
       {
@@ -1464,6 +1869,7 @@ export const RULES = [
   },
   {
     id: 'private-key-block',
+    lockfile: true,
     description: 'PEM private key block (header followed by key material)',
     matchers: [
       {
@@ -1475,102 +1881,124 @@ export const RULES = [
             String.raw`)*([A-Za-z0-9+/=]{20,}[^\n]*)`,
           'g',
         ),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
     ],
   },
   {
     id: 'aws-access-key-id',
+    lockfile: true,
     description: 'AWS access key ID',
     matchers: [
       {
         pattern: /(?<![A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Z0-9])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'google-api-key',
+    lockfile: true,
     description: 'Google API key (also matches Firebase web API keys)',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'github-token',
+    lockfile: true,
     description: 'GitHub personal access, OAuth, app or fine-grained token',
     matchers: [
       {
         pattern:
           /(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})(?![A-Za-z0-9_])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'slack-token',
-    description: 'Slack API token',
+    lockfile: true,
+    description: 'Slack API token (bot, user, legacy, app-level xapp-, configuration and refresh tokens)',
     matchers: [
       {
-        pattern: /(?<![A-Za-z0-9])xox[baprs]-[0-9A-Za-z-]{10,}/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        // Bot/user/legacy/workspace/client tokens (xoxb xoxp xoxa xoxr xoxs xoxc xoxd), the rotating-token wrappers
+        // (xoxe.xoxp-, xoxe.xoxb-) and app-level tokens (xapp-). A real token always has digits (team and app ids); the
+        // lookahead is bounded, and the class after it cannot overlap the prefix, so a hostile run of "xoxb-xoxb-..." stays
+        // linear. A repeated-character body (xoxb-000000000000-...-xxxxxxxx) is a placeholder.
+        pattern: /(?<![A-Za-z0-9])(?:(?:xoxe\.)?xox[bparsc]|xoxd|xapp)-(?=[0-9A-Za-z%+/=-]{0,200}\d)[0-9A-Za-z%+/=-]{10,}/g,
+        accept: (m) => !placeholderOf(m[0]) && varied(m[0]),
+      },
+      {
+        // Documented shapes only, so prose slugs ("xoxo-love-and-kisses-2026") are not tokens: Enterprise Grid xoxo-<digits>-
+        // <digits>-<digits>-<hex>, and configuration / refresh tokens xoxe-<digit>-<long base64url body>.
+        pattern: /(?<![A-Za-z0-9])(?:xoxo-\d{6,}-\d{6,}(?:-\d{6,})?-[0-9a-f]{16,}|xoxe-\d-[A-Za-z0-9_-]{60,})(?![A-Za-z0-9])/g,
+        // A refresh token body is mixed-case base64url with digits; a hyphenated lower-case slug is prose.
+        accept: (m) => !placeholderOf(m[0]) && varied(m[0]) && (m[0].startsWith('xoxo-') || (mixedCase(m[0].slice(7)) && /\d/.test(m[0].slice(7)))),
       },
     ],
   },
   {
     id: 'stripe-live-key',
+    lockfile: true,
     description: 'Stripe live secret or restricted key',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9_])[sr]k_live_[0-9A-Za-z]{16,}/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'neon-api-key',
+    lockfile: true,
     description: 'Neon API key (napi_ prefix)',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9_])napi_[A-Za-z0-9]{32,}(?![A-Za-z0-9_])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'neon-role-password',
+    lockfile: true,
     description: 'Neon role password (npg_ prefix)',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9_])npg_[A-Za-z0-9]{10,}(?![A-Za-z0-9_])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'stack-auth-secret-key',
+    lockfile: true,
     description: 'Stack Auth secret server key (ssk_ prefix)',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9_])ssk_[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])/g,
-        accept: (m) => !isPlaceholder(m[0]),
+        accept: (m) => !placeholderOf(m[0]),
       },
     ],
   },
   {
     id: 'jwt-token',
+    lockfile: true,
     description: 'JWT-shaped token with a long signature',
     matchers: [
       {
         pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.([A-Za-z0-9_-]{20,})/g,
         // Header and payload are public; only the signature decides whether this is a real token.
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
     ],
   },
+  ...PROVIDER_RULES,
+  LOCKFILE_RULE,
   {
     id: 'sql-password-literal',
     description: "SQL statement that sets a role or user password to a literal (ALTER ROLE ... PASSWORD '...')",
@@ -1581,13 +2009,14 @@ export const RULES = [
         accept: (m, ctx) => {
           // A bare `password '...'` is only SQL in a .sql file; elsewhere it is prose.
           if (/^password/i.test(m[0]) && !ctx.path.toLowerCase().endsWith('.sql')) return false;
-          return !isPlaceholder(m[1].replace(/''/g, "'"));
+          return !placeholderOf(m[1].replace(/''/g, "'"));
         },
       },
     ],
   },
   {
     id: 'webhook-url',
+    lockfile: true,
     description:
       'webhook URL whose path or query is a secret token (Slack, Discord, Microsoft Teams / Power Automate, Zapier, IFTTT, PagerDuty, Telegram bot): anyone holding the URL can post',
     hint: /hooks\.slack|discord|webhook\.office|outlook\.office|logic\.azure|zapier|ifttt|api\.telegram|pagerduty/i,
@@ -1603,7 +2032,7 @@ export const RULES = [
       {
         // https://discord.com/api/webhooks/<id>/<token>
         pattern: new RegExp(String.raw`discord(?:app)?\.com${SLASH}api(?:${SLASH}v\d{1,2})?${SLASH}webhooks${SLASH}\d{5,25}${SLASH}([A-Za-z0-9_-]{16,})`, 'gi'),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // https://<tenant>.webhook.office.com/webhookb2/<guid>@<guid>/IncomingWebhook/<32 hex>/<guid>  (and outlook.office.com/webhook/...)
@@ -1611,7 +2040,7 @@ export const RULES = [
           String.raw`(?:outlook\.office(?:365)?\.com${SLASH}webhook|[a-z0-9.-]{1,80}\.webhook\.office\.com${SLASH}webhook[a-z0-9]{0,3})${SLASH}[^\s"'<>]{0,300}?IncomingWebhook${SLASH}([A-Za-z0-9]{20,})`,
           'gi',
         ),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // Power Automate / Logic Apps HTTP trigger: https://prod-00.region.logic.azure.com/workflows/<id>/triggers/manual/paths/invoke?...&sig=<signature>
@@ -1619,27 +2048,27 @@ export const RULES = [
           String.raw`\.logic\.azure\.com(?::\d{1,5})?${SLASH}workflows${SLASH}[^\s"'<>]{0,300}?(?:[?&]|\\u0026|&amp;)sig=([A-Za-z0-9_%-]{16,})`,
           'gi',
         ),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // https://hooks.zapier.com/hooks/catch/<id>/<code>
         pattern: new RegExp(String.raw`hooks\.zapier\.com${SLASH}hooks${SLASH}catch${SLASH}\d{3,}${SLASH}([A-Za-z0-9]{5,})`, 'gi'),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // https://maker.ifttt.com/trigger/<event>/with/key/<key>
         pattern: new RegExp(String.raw`maker\.ifttt\.com${SLASH}trigger${SLASH}[A-Za-z0-9_-]{1,100}${SLASH}(?:json${SLASH})?with${SLASH}key${SLASH}([A-Za-z0-9_-]{16,})`, 'gi'),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // https://events.pagerduty.com/integration/<32 character integration key>/enqueue
         pattern: new RegExp(String.raw`events\.pagerduty\.com${SLASH}integration${SLASH}([A-Za-z0-9]{20,})${SLASH}enqueue`, 'gi'),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
       {
         // https://api.telegram.org/bot<bot id>:<token>/sendMessage
         pattern: new RegExp(String.raw`api\.telegram\.org${SLASH}bot(\d{6,}:[A-Za-z0-9_-]{30,})`, 'gi'),
-        accept: (m) => !isPlaceholder(m[1]),
+        accept: (m) => !placeholderOf(m[1]),
       },
     ],
   },
@@ -1717,6 +2146,26 @@ export const RULES = [
           if (!kind || m[2].startsWith('=')) return false;
           return isSecretValue({ kind, value: stripQuotes(m[2].replace(/\r$/, '')), quoted: true, separator: '=', mode: ctx.mode, catalog: ctx.catalog });
         },
+      },
+      {
+        // XML element whose NAME is the secret-like word: Maven <server><password>V</password>, <apiKey>V</apiKey>,
+        // <keystorePass>V</keystorePass>, <Secret>V</Secret>, a prefixed WS-Security <wsse:Password Type="PasswordText">V</...>,
+        // or an entry named by an attribute: <entry key="secret">V</entry>, <env name="SECRET_KEY">V</env>. XML configuration
+        // files only (an HTML page or SVG has <password> markup, not settings). The text is a bounded [^<>] run and the closing
+        // tag must repeat the name, so each start costs at most the text length and the scan stays linear.
+        // group 1 = qualified element name, 2 = start-tag attributes, 3 = text
+        hint: /<\//,
+        appliesTo: (ctx) => ctx.xml,
+        pattern: /<((?:[A-Za-z_][A-Za-z0-9_.-]{0,50}:)?[A-Za-z_][A-Za-z0-9_.-]{0,100})((?:[ \t\r\n][^<>]{0,300})?)>([^<>]{1,4096})<\/\1[ \t\r\n]*>/g,
+        accept: (m, ctx) => xmlElementIsSecret(m[1], m[2], m[3], ctx),
+      },
+      {
+        // The same element with its text in a CDATA section: <password><![CDATA[V]]></password>. The section body is a run of
+        // non-"]" characters and "]" not followed by "]>", so every character has one reading and the cost per start is bounded.
+        hint: /<!\[CDATA\[/,
+        appliesTo: (ctx) => ctx.xml,
+        pattern: /<((?:[A-Za-z_][A-Za-z0-9_.-]{0,50}:)?[A-Za-z_][A-Za-z0-9_.-]{0,100})((?:[ \t\r\n][^<>]{0,300})?)>[ \t\r\n]{0,64}<!\[CDATA\[((?:[^\]]|\](?!\]>)){1,1024})\]\]>[ \t\r\n]{0,64}<\/\1[ \t\r\n]*>/g,
+        accept: (m, ctx) => xmlElementIsSecret(m[1], m[2], m[3], ctx),
       },
     ],
   },
@@ -2051,6 +2500,8 @@ function scanRanges(filePath, text) {
   const findings = [];
   const seen = new Set();
   const markerCache = new Map();
+  const lockfile = isLockfile(filePath);
+  if (lockfile) text = sanitizeLockfile(text); // ordinary integrity digests are not scanned
   const formats = credentialFormats(filePath);
   const strict = STRICT_CREDENTIAL_FORMATS.some((tag) => formats.has(tag));
   let newlines = null;
@@ -2061,6 +2512,8 @@ function scanRanges(filePath, text) {
     mode: fileMode(filePath),
     formats,
     strict,
+    lockfile,
+    xml: isXmlConfigPath(filePath),
     minStrong: strict ? CREDENTIAL_FILE_MIN_LENGTH : MIN_STRONG_CONFIG_LENGTH,
     runsToEndOfLine: valueRunsToEndOfLine(filePath),
     catalog: isMessageCatalogPath(filePath),
@@ -2094,6 +2547,7 @@ function scanRanges(filePath, text) {
     },
   };
   for (const rule of RULES) {
+    if (lockfile && !rule.lockfile) continue; // lockfiles: targeted rules only (see LOCKFILE_NAMES)
     if (rule.appliesTo && !rule.appliesTo(ctx)) continue;
     // The name hint is a speed-up for ordinary files; a credential file is always scanned in full.
     if (rule.hint && !strict && !rule.hint.test(text)) continue;
@@ -2191,7 +2645,7 @@ function blobId(bytes, referenceId) {
 /**
  * The content of several blobs from the index, in two `git cat-file --batch*` calls in total: sizes first (so a blob
  * over the size limit is never read into memory), then the contents.
- * @returns {Map<string, {size: number, bytes: Buffer | null}>} bytes is null for a blob over MAX_FILE_BYTES; a blob git
+ * @returns {Map<string, {size: number, bytes: Buffer | null}>} bytes is null for a blob over MAX_LOCKFILE_BYTES (the callers apply the per-path limit); a blob git
  *   could not produce is missing from the map (the caller treats that as unreadable)
  */
 function readIndexBlobs(root, shas) {
@@ -2207,9 +2661,9 @@ function readIndexBlobs(root, shas) {
     const parts = line.split(' ');
     if (parts.length === 3 && parts[1] === 'blob' && /^\d+$/.test(parts[2])) sizes.set(parts[0], Number(parts[2]));
   }
-  const readable = shas.filter((sha) => sizes.has(sha) && sizes.get(sha) <= MAX_FILE_BYTES);
+  const readable = shas.filter((sha) => sizes.has(sha) && sizes.get(sha) <= MAX_LOCKFILE_BYTES);
   for (const sha of shas) {
-    if (sizes.has(sha) && sizes.get(sha) > MAX_FILE_BYTES) result.set(sha, { size: sizes.get(sha), bytes: null });
+    if (sizes.has(sha) && sizes.get(sha) > MAX_LOCKFILE_BYTES) result.set(sha, { size: sizes.get(sha), bytes: null });
   }
   if (readable.length === 0) return result;
   const stdout = request('--batch', readable);
@@ -2233,8 +2687,8 @@ function readIndexBlobs(root, shas) {
  * the index whenever the two differ, so a secret cannot be staged and then swapped for a placeholder in the working
  * tree before the commit. The two are compared by git blob id (one hash of bytes already read); only files that
  * differ cost an extra read, batched into one `git cat-file --batch`. A CI checkout has none.
- *  - lockfiles (exact names), gitlinks (submodule commit pointers: no content here) and files with binary
- *    content are skipped on purpose, and counted in `skipped`;
+ *  - gitlinks (submodule commit pointers: no content here) and files with binary content are skipped on purpose,
+ *    and counted in `skipped`; lockfiles are scanned with the lockfile rules (see isLockfile);
  *  - a symlink is scanned as its link target;
  *  - a file the index lists but the working tree no longer has (deleted, or skip-worktree) is scanned from the
  *    index blob instead, so nothing tracked goes unexamined (`fromIndex` names them);
@@ -2259,10 +2713,6 @@ export function scanTree(root) {
   const pending = []; // index versions still to read: { file, sha, missing }
   for (const { raw, mode, sha, shas } of listTracked(root)) {
     const file = displayPath(raw);
-    if (shouldSkipPath(file)) {
-      skip('lockfile');
-      continue;
-    }
     if (mode === '160000') {
       skip('submodule');
       continue;
@@ -2277,7 +2727,7 @@ export function scanTree(root) {
         bytes = readlinkSync(absolute, 'buffer');
       } else {
         if (!stat.isFile()) throw new Error('not a regular file');
-        if (stat.size > MAX_FILE_BYTES) {
+        if (stat.size > sizeLimit(file)) {
           if (isBinaryContent(readHead(absolute))) skip('binary');
           else oversize.push(file);
           continue;
@@ -2329,7 +2779,7 @@ export function scanTree(root) {
         reported.add(`${file}\0u`);
         continue;
       }
-      if (blob.bytes === null || blob.size > MAX_FILE_BYTES) {
+      if (blob.bytes === null || blob.size > sizeLimit(file)) {
         if (!reported.has(`${file}\0o`)) oversize.push(file);
         reported.add(`${file}\0o`);
         continue;
@@ -2388,14 +2838,17 @@ const HISTORY_CONTEXT = 2;
  * (conflict resolutions) are scanned; everything else was added by a parent and is reported there.
  * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, unscanned: number}>}
  * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
+ * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
+ * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an unknown base).
  */
-async function scanHistory(root) {
+async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}) {
   const child = spawn(
     'git',
     [
       '-c', 'core.quotepath=false',
-      'log', '--all', '--no-color', '--no-ext-diff', '--no-renames', '--text',
+      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-renames', '--text',
       '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H',
+      ...revisions, '--',
     ],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -2422,11 +2875,11 @@ async function scanHistory(root) {
   const flush = () => {
     if (commit && !file && addedLines.size > 0) {
       unscanned += 1; // added lines under a header this parser could not attribute to a path
-    } else if (commit && file && addedLines.size > 0 && !shouldSkipPath(file)) {
+    } else if (commit && file && addedLines.size > 0) {
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
       if (text.includes('\u0000')) text = text.replace(/[\u0000�]/g, '');
-      if (text.length > MAX_FILE_BYTES) {
+      if (text.length > sizeLimit(file)) {
         oversize += 1;
         unscanned += 1;
       } else {
@@ -2547,7 +3000,7 @@ export function formatUnreadableReport(paths) {
 }
 
 /** Format history-scan hits: commit, path, rule and counts only. */
-export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize } = {}) {
+export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history' } = {}) {
   const lines = [];
   if (shallow) {
     lines.push(
@@ -2559,7 +3012,7 @@ export function formatHistoryReport(hits, { commits = 0, shallow = false, oversi
   if (unscanned > 0) lines.push(`warning: ${describeUnscanned(unscanned, oversize)}`, '');
   const distinctCommits = new Set(hits.map((h) => h.commit)).size;
   lines.push(
-    `check-secrets --history: ${hits.length} hit${hits.length === 1 ? '' : 's'} in ${distinctCommits} of ${commits} commit${commits === 1 ? '' : 's'} (values are never printed)`,
+    `check-secrets ${label}: ${hits.length} hit${hits.length === 1 ? '' : 's'} in ${distinctCommits} of ${commits} commit${commits === 1 ? '' : 's'} (values are never printed)`,
     '',
   );
   for (const h of hits) {
@@ -2582,14 +3035,102 @@ const describeSkipped = (skipped) => {
 // CLI
 // ---------------------------------------------------------------------------
 
-const USAGE = `Usage: node scripts/check-secrets.mjs [--history]
+const USAGE = `Usage: node scripts/check-secrets.mjs [--history | --range <base>..<head>]
 
   (no flags)  scan all git-tracked text files; exit 1 on any finding
   --history   scan added lines of every commit on every ref (owner-run, not for CI)
+  --range     scan added lines of the commits reachable from <head> but not from <base> (what CI runs on a pull
+              request or push: catches a secret committed and removed again inside the range). Needs full history:
+              a shallow clone or a commit that is not present exits 2. An all-zero <base> (a new branch) scans the
+              <head> commit only.
   --help      show this message
 
 The report lists file path, line number and rule name only. Matched text is never printed.
 `;
+
+/** Parse the command line: at most one of --history and --range <base>..<head> (or --range=<base>..<head>). */
+function parseArguments(argv) {
+  let history = false;
+  let range = null;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--history') history = true;
+    else if (arg === '--range' || arg.startsWith('--range=')) {
+      const value = arg === '--range' ? argv[(i += 1)] : arg.slice('--range='.length);
+      if (range !== null) return { error: '--range given twice' };
+      if (value === undefined) return { error: '--range needs a <base>..<head> value' };
+      range = value;
+    } else return { error: 'unknown argument' };
+  }
+  if (history && range !== null) return { error: '--history and --range cannot be combined' };
+  return { history, range, error: null };
+}
+
+const ZERO_ID = /^0{40}(?:0{24})?$/;
+
+/** Resolve a revision to a full commit id, or null. The value is never an option: it is passed after --end-of-options. */
+function resolveCommit(root, revision) {
+  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', '--end-of-options', `${revision}^{commit}`], { cwd: root });
+  if (result.error || result.status !== 0) return null;
+  const id = result.stdout.toString('utf8').trim();
+  return /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(id) ? id : null;
+}
+
+/**
+ * --range <base>..<head>: scan the added lines of the commits reachable from head and not from base (`git log head --not base`,
+ * so base need not be an ancestor: a pull request is judged by what it adds, wherever its base has moved to). Same reader
+ * as --history (added-line logic, split-pair context, lockfile rules, --cc for merges) and the same fail-closed semantics:
+ * hits exit 1; an unresolvable revision, a shallow clone or an unscanned file version exit 2; a range without commits is clean.
+ * The output holds commit short ids, paths, rule names and counts, never matched text.
+ */
+async function runRange(spec, { cwd, stdout, stderr }) {
+  const parts = /^([^\s.][^\s]*?)\.\.([^\s.][^\s]*)$/.exec(spec);
+  if (!parts || parts[1].startsWith('-') || parts[1].endsWith('.') || parts[2].startsWith('-') || parts[1].includes('..') || parts[2].includes('..')) {
+    stderr.write('check-secrets --range: expected <base>..<head> (two dots; a three-dot range is not accepted)\n');
+    return 2;
+  }
+  const [, baseRevision, headRevision] = parts;
+  const root = findRepoRoot(cwd);
+  if (git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true') {
+    stderr.write(
+      'check-secrets --range: INCOMPLETE, not a clean result. This is a shallow clone, so the commits in the range cannot be told apart from the\n' +
+        'truncated history. Fetch full history (actions/checkout fetch-depth: 0, or "git fetch --unshallow") and run again.\n',
+    );
+    return 2;
+  }
+  const head = resolveCommit(root, headRevision);
+  if (head === null) {
+    stderr.write(`check-secrets --range: INCOMPLETE. The head commit ${printable(headRevision).slice(0, 80)} is not in this repository (not fetched?), so nothing was scanned.\n`);
+    return 2;
+  }
+  const newRef = ZERO_ID.test(baseRevision);
+  let base = null;
+  if (!newRef) {
+    base = resolveCommit(root, baseRevision);
+    if (base === null) {
+      stderr.write(
+        `check-secrets --range: INCOMPLETE. The base commit ${printable(baseRevision).slice(0, 80)} is not in this repository. After a force-push the old tip is gone, and a shallow or partial fetch may not\n` +
+          'have it. Nothing was scanned, and this is not a clean result. Fetch the missing commits or check the pushed commits by hand.\n',
+      );
+      return 2;
+    }
+  }
+  const { hits, commits, oversize, unscanned } = await scanHistory(
+    root,
+    newRef ? { revisions: [head], maxCount: 1 } : { revisions: [head, '--not', base] },
+  );
+  const scope = newRef ? 'the new branch\'s tip commit only (the base is all zeros, so no earlier commit is known)' : `${commits} commit${commits === 1 ? '' : 's'} in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}`;
+  if (hits.length > 0) {
+    stderr.write(`${formatHistoryReport(hits, { commits, oversize, unscanned, label: '--range' })}\n`);
+    return 1;
+  }
+  if (unscanned > 0) {
+    stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize)}\n`);
+    return 2;
+  }
+  stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}\n`);
+  return 0;
+}
 
 /**
  * @param {string[]} argv arguments after the script name
@@ -2603,14 +3144,15 @@ export async function main(
     stdout.write(USAGE);
     return 0;
   }
-  const unknown = argv.filter((arg) => arg !== '--history');
-  if (unknown.length > 0) {
-    stderr.write(`check-secrets: unknown argument\n\n${USAGE}`);
+  const parsed = parseArguments(argv);
+  if (parsed.error) {
+    stderr.write(`check-secrets: ${parsed.error}\n\n${USAGE}`);
     return 2;
   }
 
   try {
-    if (argv.includes('--history')) {
+    if (parsed.range !== null) return await runRange(parsed.range, { cwd, stdout, stderr });
+    if (parsed.history) {
       // Works in bare clones (git clone --mirror) too, which have no work tree.
       let root = cwd;
       try {
