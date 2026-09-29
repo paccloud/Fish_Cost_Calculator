@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -13,7 +14,19 @@ export default function MoveNotice() {
   const { user } = useAuth();
   const { readOnly, accountUnsentCount, unsentCount, saveUnsentChanges, savedCalcs, customYields, dataLoaded } = useData();
 
+  const [exportError, setExportError] = useState(null);
+
   if (!isMoveNoticeOn) return null;
+
+  const handleSave = async () => {
+    setExportError(null);
+    try {
+      await saveUnsentChanges();
+    } catch (err) {
+      console.warn('Saving unsent changes failed:', err);
+      setExportError('Your unsent changes couldn’t be saved to a file. Please try again.');
+    }
+  };
 
   const guestRecords = user ? 0 : savedCalcs.length + customYields.length;
   const newAddress = NEW_APP_URL ? (
@@ -56,10 +69,13 @@ export default function MoveNotice() {
               {plural(unsentCount, 'change', 'changes')} on this device {unsentCount === 1 ? 'hasn’t' : 'haven’t'} reached
               the server. Save {unsentCount === 1 ? 'it' : 'them'} to a file you can import into the new app.
             </span>
-            <button type="button" onClick={saveUnsentChanges} className="btn-secondary">
+            <button type="button" onClick={handleSave} className="btn-secondary">
               Save my unsent changes
             </button>
           </p>
+        )}
+        {exportError && (
+          <p role="alert" className="font-semibold text-danger">{exportError}</p>
         )}
       </div>
     </section>
