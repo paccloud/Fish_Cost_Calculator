@@ -1101,7 +1101,7 @@ function braceWindow(input, index) {
       nextClose = forward.indexOf('}', nextClose + 1);
     }
   }
-  return { text: input.slice(open, end), cost: end - open };
+  return { text: input.slice(open, end), start: open, cost: end - open };
 }
 
 /**
@@ -1156,7 +1156,7 @@ function stringAwareWindow(input, index) {
   let end = index + forward.length;
   const hit = scanBrackets(forward, index, ahead, openChar === '{' ? '}' : ')');
   if (hit !== -1) end = index + hit + 1;
-  return { text: input.slice(open, end), cost: index - from + (end - index) };
+  return { text: input.slice(open, end), start: open, cost: index - from + (end - index) };
 }
 
 /**
@@ -1164,7 +1164,30 @@ function stringAwareWindow(input, index) {
  * and its sibling keys, in either direction, up to PAIR_YAML_LINES lines each way. An item ends at the next `- ` at
  * or left of it, a dedent, or a document marker. Returns null when the key is not at the start of its line.
  * Every search for a line break is bounded to PAIR_LINE_CHARS, so a huge single line costs a constant amount.
+ * Returns { text, lines } where `lines` are the [start offset in input, text offset] of each line, for locating a match.
  */
+/** Join lines ({ text, start }) with "\n" into a window that remembers where each line came from. */
+function joinLines(lines) {
+  let offset = 0;
+  const parts = lines.map((line) => {
+    const part = { start: line.start, at: offset };
+    offset += line.text.length + 1;
+    return part;
+  });
+  return { text: lines.map((line) => line.text).join('\n'), parts };
+}
+
+/** The offset in the scanned input of `index` in a window's text (a window is one run of input, or a run per line). */
+function inputOffset(window, index) {
+  if (window.parts === undefined) return window.start + index;
+  let found = window.parts[0];
+  for (const part of window.parts) {
+    if (part.at > index) break;
+    found = part;
+  }
+  return found.start + (index - found.at);
+}
+
 function yamlBlockWindow(input, index) {
   // Start of the line holding `at`, or -1 when the line is longer than PAIR_LINE_CHARS (not a YAML block line).
   const startOfLine = (at) => {
@@ -1176,8 +1199,8 @@ function yamlBlockWindow(input, index) {
   const lineFrom = (start) => {
     const chunk = input.slice(start, start + PAIR_LINE_CHARS + 1);
     const newline = chunk.indexOf('\n');
-    if (newline === -1) return { text: chunk.replace(/\r$/, ''), next: input.length + 1 };
-    return { text: chunk.slice(0, newline).replace(/\r$/, ''), next: start + newline + 1 };
+    if (newline === -1) return { text: chunk.replace(/\r$/, ''), start, next: input.length + 1 };
+    return { text: chunk.slice(0, newline).replace(/\r$/, ''), start, next: start + newline + 1 };
   };
   const indentOf = (text) => /^[ \t]*/.exec(text)[0].length;
   const isDash = (text) => /^[ \t]*-(?:[ \t]|$)/.test(text);
@@ -1200,11 +1223,11 @@ function yamlBlockWindow(input, index) {
       cursor = previousStart;
       if (line.text.trim() === '' || isMarker(line.text)) break;
       if (isDash(line.text) && /^[ \t]*-[ \t]+/.exec(line.text)[0].length === keyCol) {
-        above.push(line.text);
+        above.push(line);
         break;
       }
       if (indentOf(line.text) < keyCol || (isDash(line.text) && indentOf(line.text) <= keyCol)) break;
-      above.push(line.text);
+      above.push(line);
     }
   }
   const below = [];
@@ -1216,9 +1239,9 @@ function yamlBlockWindow(input, index) {
     if (isMarker(line.text)) break;
     const indent = indentOf(line.text);
     if (indent < keyCol || (isDash(line.text) && indent === keyCol && !ownItem)) break;
-    below.push(line.text);
+    below.push(line);
   }
-  return [...above.reverse(), own.text, ...below].join('\n');
+  return joinLines([...above.reverse(), own, ...below]);
 }
 
 // The entry tags of XML/properties-style configuration: <add key= value=/>, <setting name=><value/></setting>,
@@ -1259,7 +1282,7 @@ function xmlWindow(input, index) {
   const next = XML_ENTRY_TAG.exec(forward);
   if (next && next.index > 0) end = Math.min(end, next.index);
   XML_ENTRY_TAG.lastIndex = 0;
-  return input.slice(start, index + end);
+  return { text: input.slice(start, index + end), start };
 }
 
 // The value-carrying field of a name/value object. `valueFrom`, `values` and other longer names do not match. A YAML tag
@@ -1270,8 +1293,12 @@ const PAIR_VALUE_FIELD =
 const PAIR_XML_VALUE = /<(?:value|val|secret|content|data|default|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
 
 /** Is any value field (either order) in the window text a non-placeholder secret? */
-function windowHoldsSecretValue(text, kind, ctx, escaped) {
+function windowHoldsSecretValue(window, kind, ctx, escaped) {
+  const text = window.text;
   const unescaped = escaped ? text.replace(/\\(["'])/g, '$1') : text;
+  // Where the offending value sits (offset and length in the window's text). An escaped window changes its length, so the
+  // whole window stands for it then.
+  const at = (field) => (escaped ? { index: 0, length: text.length } : { index: field.index, length: field[0].length });
   for (const field of unescaped.matchAll(PAIR_VALUE_FIELD)) {
     const quotedValue = field[2] ?? field[3];
     const quoted = quotedValue !== undefined;
@@ -1286,15 +1313,33 @@ function windowHoldsSecretValue(text, kind, ctx, escaped) {
         catalog: ctx.catalog,
       })
     ) {
-      return true;
+      return at(field);
     }
   }
   if (unescaped.includes('</')) {
     for (const field of unescaped.matchAll(PAIR_XML_VALUE)) {
-      if (isSecretValue({ kind, value: field[1], quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog })) return true;
+      if (isSecretValue({ kind, value: field[1], quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog })) return at(field);
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * Record on the match where the VALUE field sits (the name field is the match itself), which can be lines away from the
+ * name. --history and --range report a finding when the commit added a line of the match or a line of the value, not a
+ * line in between (the reported line and `spanEnd` are untouched, so the tree report and the inline allow marker behave as before).
+ */
+function attributeTo(m, window, found) {
+  const first = inputOffset(window, found.index);
+  const last = inputOffset(window, found.index + Math.max(found.length - 1, 0));
+  m.attrStart = first;
+  m.attrEnd = last + 1;
+}
+
+/** The window search ran out of budget: the finding rests on the whole file (a history scan blames any added line). */
+function attributeToFile(m) {
+  m.attrStart = 0;
+  m.attrEnd = m.input.length;
 }
 
 /**
@@ -1305,30 +1350,38 @@ function windowHoldsSecretValue(text, kind, ctx, escaped) {
 function pairValueIsSecret(m, kind, ctx) {
   if (ctx.pairExhausted) return false; // already reported for this file, and nothing more is read
   ctx.pairBudget ??= PAIR_BUDGET_CHARS;
-  const windows = [];
+  const windows = []; // { text, start } for one run of the input, { text, parts } for a run per line
   const brace = braceWindow(m.input, m.index);
   ctx.pairBudget -= brace.cost;
-  if (brace.text !== null) windows.push(brace.text);
+  if (brace.text !== null) windows.push(brace);
   const aware = stringAwareWindow(m.input, m.index);
   ctx.pairBudget -= aware.cost;
-  if (aware.text !== null && aware.text !== brace.text) windows.push(aware.text);
+  if (aware.text !== null && aware.text !== brace.text) windows.push(aware);
   const yaml = yamlBlockWindow(m.input, m.index);
   if (yaml !== null) {
-    ctx.pairBudget -= yaml.length;
+    ctx.pairBudget -= yaml.text.length;
     windows.push(yaml);
   }
   const xml = xmlWindow(m.input, m.index);
   if (xml !== null) {
-    ctx.pairBudget -= xml.length;
+    ctx.pairBudget -= xml.text.length;
     windows.push(xml);
   }
   if (ctx.pairBudget < 0) {
     // Out of budget: the file is too dense with secret-like names to verify. Report it (once: one finding fails the run).
     ctx.pairExhausted = true;
+    attributeToFile(m);
     return true;
   }
   const escaped = m[1].startsWith('\\'); // a JSON document stored as a string: {\"key\":\"X\",\"value\":\"Y\"}
-  return windows.some((window) => windowHoldsSecretValue(window, kind, ctx, escaped));
+  for (const window of windows) {
+    const found = windowHoldsSecretValue(window, kind, ctx, escaped);
+    if (found !== null) {
+      attributeTo(m, window, found);
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Value fields inside the child block or object that belongs to a name: `NAME:` followed by indented lines, or `NAME: {`. */
@@ -1337,12 +1390,12 @@ function childHoldsSecretValue(m, kind, ctx, keyIndent) {
   ctx.pairBudget ??= PAIR_BUDGET_CHARS;
   const input = m.input;
   const after = m.index + m[0].length;
-  let text;
+  let window;
   if (input[after] === '{') {
     const forward = input.slice(after + 1, Math.min(input.length, after + 1 + PAIR_FORWARD_CHARS));
     const state = { braces: [], parens: [] };
     const hit = scanBrackets(forward, after + 1, state, '}');
-    text = forward.slice(0, hit === -1 ? forward.length : hit);
+    window = { text: forward.slice(0, hit === -1 ? forward.length : hit), start: after + 1 };
   } else {
     const lines = [];
     // `after` sits at the end of the name line (or a comment before its line break): the children are the following,
@@ -1358,16 +1411,20 @@ function childHoldsSecretValue(m, kind, ctx, keyIndent) {
       const indent = /^[ \t]*/.exec(line)[0].length;
       if (/^(?:---|\.\.\.)[ \t]*$/.test(line) || indent <= keyIndent) break;
       if (childIndent === -1) childIndent = indent;
-      if (indent === childIndent) lines.push(line);
+      if (indent === childIndent) lines.push({ text: line, start: from });
     }
-    text = lines.join('\n');
+    window = joinLines(lines);
   }
-  ctx.pairBudget -= text.length + 64;
+  ctx.pairBudget -= window.text.length + 64;
   if (ctx.pairBudget < 0) {
     ctx.pairExhausted = true;
+    attributeToFile(m);
     return true;
   }
-  return windowHoldsSecretValue(text, kind, ctx, false);
+  const found = windowHoldsSecretValue(window, kind, ctx, false);
+  if (found === null) return false;
+  attributeTo(m, window, found);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -2218,12 +2275,16 @@ export const RULES = [
           const kind = nameKindFor(m[2], ctx);
           if (kind === null) return false;
           const window = xmlWindow(m.input, m.index);
-          ctx.pairBudget = (ctx.pairBudget ?? PAIR_BUDGET_CHARS) - (window?.length ?? 0) - 64;
+          ctx.pairBudget = (ctx.pairBudget ?? PAIR_BUDGET_CHARS) - (window?.text.length ?? 0) - 64;
           if (ctx.pairBudget < 0) {
             ctx.pairExhausted = true;
+            attributeToFile(m);
             return true;
           }
-          return window !== null && windowHoldsSecretValue(window, kind, ctx, false);
+          const found = window === null ? null : windowHoldsSecretValue(window, kind, ctx, false);
+          if (found === null) return false;
+          attributeTo(m, window, found);
+          return true;
         },
       },
       {
@@ -2495,7 +2556,7 @@ export function scanText(filePath, text) {
   return scanRanges(filePath, text).map(({ path: p, line, rule }) => ({ path: p, line, rule }));
 }
 
-/** Like scanText, but each finding also carries `lastLine`, the last line its match spans. */
+/** Like scanText, but each finding also carries `lastLine`, the last line its match spans, and valueFirst..valueLast, the line(s) of a separate value field. */
 function scanRanges(filePath, text) {
   const findings = [];
   const seen = new Set();
@@ -2567,7 +2628,11 @@ function scanRanges(filePath, text) {
         for (let l = line; l <= lastLine && !allowed; l += 1) allowed = lineHasAllowMarker(text, newlines, l, markerCache);
         if (allowed) continue;
         seen.add(key);
-        findings.push({ path: filePath, line, lastLine, rule: rule.id });
+        // The lines the finding rests on (--history and --range blame a commit that added one of them): the match, plus the
+        // separate value of a name/value pair (valueFirst..valueLast; the match itself when there is none).
+        const valueFirst = match.attrStart === undefined ? line : lineAt(newlines, match.attrStart);
+        const valueLast = match.attrEnd === undefined ? lastLine : lineAt(newlines, Math.max(match.attrEnd - 1, 0));
+        findings.push({ path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id });
       }
     }
   }
@@ -2640,6 +2705,29 @@ function listTracked(root) {
 function blobId(bytes, referenceId) {
   const algorithm = referenceId.length === 64 ? 'sha256' : 'sha1';
   return createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+}
+
+/**
+ * The git blob id of a file, hashed in 1 MB chunks so a file over the size limit is never held in memory. `size` is the size
+ * lstat reported; a file that changed size while it was read gets an id that matches nothing (the caller then treats the
+ * index versions as differing, which is the safe direction). Throws when the file cannot be read.
+ */
+function streamBlobId(absolute, size, referenceId) {
+  const hash = createHash(referenceId.length === 64 ? 'sha256' : 'sha1').update(`blob ${size}\0`);
+  const fd = openSync(absolute, 'r');
+  try {
+    const chunk = Buffer.allocUnsafe(1024 * 1024);
+    let total = 0;
+    for (;;) {
+      const n = readSync(fd, chunk, 0, chunk.length, null);
+      if (n === 0) break;
+      hash.update(chunk.subarray(0, n));
+      total += n;
+    }
+    return total === size ? hash.digest('hex') : '';
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -2728,6 +2816,14 @@ export function scanTree(root) {
       } else {
         if (!stat.isFile()) throw new Error('not a regular file');
         if (stat.size > sizeLimit(file)) {
+          // Too large to read into memory here, but the staged version is still checked first: the working-tree copy
+          // (a big binary, or an oversize text file) must not hide a differing index blob. The copy is hashed in chunks.
+          const workingId = streamBlobId(absolute, stat.size, sha);
+          const otherVersions = shas.filter((blob) => blob !== workingId);
+          if (otherVersions.length > 0) {
+            differing.push(file);
+            for (const blob of otherVersions) pending.push({ file, sha: blob, missing: false });
+          }
           if (isBinaryContent(readHead(absolute))) skip('binary');
           else oversize.push(file);
           continue;
@@ -2780,7 +2876,7 @@ export function scanTree(root) {
         continue;
       }
       if (blob.bytes === null || blob.size > sizeLimit(file)) {
-        if (!reported.has(`${file}\0o`)) oversize.push(file);
+        if (!reported.has(`${file}\0o`) && !oversize.includes(file)) oversize.push(file);
         reported.add(`${file}\0o`);
         continue;
       }
@@ -2826,9 +2922,19 @@ function summarizeStderr(stderr) {
   return first === '' ? '' : `: ${printable(first).slice(0, 200)}`;
 }
 
-// Lines of unchanged context kept around each change, so a split "name: X / value: Y" pair whose
-// name line did not change can still be recognised. Context lines are never reported by themselves.
-const HISTORY_CONTEXT = 2;
+// Lines of unchanged context read around each change, so a split "name: X / value: Y" pair whose name line did not
+// change can still be recognised. Context lines are never reported by themselves. It is derived from the constants the
+// pair matcher (and the other multi-line rules: PEM headers, netrc tokens, mapping keys) look back and forward with, so
+// the two cannot drift apart: the YAML window counts lines; the brace and XML windows count characters, and a line
+// that holds a name or a value is at least HISTORY_MIN_LINE_CHARS long, so that many characters span at most this many lines.
+const HISTORY_MIN_LINE_CHARS = 4;
+export const HISTORY_CONTEXT = Math.max(
+  PAIR_YAML_LINES,
+  Math.ceil(Math.max(PAIR_BACK_CHARS, PAIR_FORWARD_CHARS, PAIR_XML_CHARS) / HISTORY_MIN_LINE_CHARS),
+);
+// A lockfile is scanned with single-line rules only (no name/value pairing), so a bump that touches a big lockfile in
+// many places must not drag hundreds of unchanged lines around every change into the text that is size-checked and scanned.
+const HISTORY_LOCKFILE_CONTEXT = 2;
 
 /**
  * Scan every commit reachable from any ref, reporting only matches that touch a line the commit ADDED.
@@ -2836,7 +2942,7 @@ const HISTORY_CONTEXT = 2;
  * name next to a new value) but a match made only of context lines belongs to an earlier commit.
  * Merge commits are shown as combined diffs (--cc), so only lines that the merge itself introduced
  * (conflict resolutions) are scanned; everything else was added by a parent and is reported there.
- * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, unscanned: number}>}
+ * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, oversizeLimits: Map<number, number>, unscanned: number}>}
  * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
  * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
  * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an unknown base).
@@ -2864,13 +2970,25 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   const hits = new Map();
   let commits = 0;
   let oversize = 0;
+  const oversizeLimits = new Map(); // size limit in bytes -> file versions over it (the limit differs per path)
   let unscanned = 0; // file versions whose added lines were NOT examined, for any reason (oversize included)
   let commit = null;
   let file = null;
   let inHunk = false;
   let parents = 1;
-  let lines = []; // added and context lines of the current file, hunks separated by a blank line
+  let lines = []; // added lines and the context around them (see contextFor) of the current file; gaps are a blank line
   let addedLines = new Set(); // 1-based indexes into `lines` of the lines this commit added
+  let textChars = 0; // characters held in `lines`
+  let overflow = false; // the retained text passed the file's size limit: stop collecting, report it as oversize
+  let recent = []; // context lines seen since the last kept line, at most contextFor(file) of them
+  let dropped = false; // context lines were left out since the last kept line
+  let after = 0; // context lines still to keep after the last added line
+  const contextFor = (path) => (isLockfile(path) ? HISTORY_LOCKFILE_CONTEXT : HISTORY_CONTEXT);
+  const keep = (line) => {
+    textChars += line.length + 1;
+    if (file !== null && textChars > sizeLimit(file)) overflow = true;
+    if (!overflow) lines.push(line);
+  };
 
   const flush = () => {
     if (commit && !file && addedLines.size > 0) {
@@ -2879,13 +2997,15 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
       if (text.includes('\u0000')) text = text.replace(/[\u0000�]/g, '');
-      if (text.length > sizeLimit(file)) {
+      if (overflow || text.length > sizeLimit(file)) {
         oversize += 1;
         unscanned += 1;
+        oversizeLimits.set(sizeLimit(file), (oversizeLimits.get(sizeLimit(file)) ?? 0) + 1);
       } else {
         for (const finding of scanRanges(file, text)) {
           let touchesAddedLine = false;
           for (let l = finding.line; l <= finding.lastLine && !touchesAddedLine; l += 1) touchesAddedLine = addedLines.has(l);
+          for (let l = finding.valueFirst; l <= finding.valueLast && !touchesAddedLine; l += 1) touchesAddedLine = addedLines.has(l);
           if (!touchesAddedLine) continue;
           const key = `${commit}\t${file}\t${finding.rule}`;
           const entry = hits.get(key) ?? { commit, path: file, rule: finding.rule, count: 0 };
@@ -2896,6 +3016,11 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     }
     lines = [];
     addedLines = new Set();
+    textChars = 0;
+    overflow = false;
+    recent = [];
+    dropped = false;
+    after = 0;
   };
 
   const onLine = (line) => {
@@ -2915,7 +3040,10 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     } else if (line.startsWith('@@')) {
       inHunk = true;
       parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
-      if (lines.length > 0) lines.push(''); // keep lines from different hunks from looking adjacent
+      if (lines.length > 0) keep(''); // keep lines from different hunks from looking adjacent
+      recent = [];
+      dropped = false;
+      after = 0;
     } else if (!inHunk) {
       if (line.startsWith('+++ ')) {
         const raw = line.slice(4);
@@ -2925,8 +3053,26 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     } else if (line.length >= parents && !line.startsWith('\\')) {
       const marks = line.slice(0, parents);
       if (marks.includes('-')) return; // gone from the result
-      lines.push(line.slice(parents));
-      if (marks === '+'.repeat(parents)) addedLines.add(lines.length);
+      const content = line.slice(parents);
+      if (marks === '+'.repeat(parents)) {
+        // An added line: the context before it (up to the window), then the line itself, then the window after it.
+        if (dropped && lines.length > 0) keep('');
+        for (const held of recent) keep(held);
+        recent = [];
+        dropped = false;
+        keep(content);
+        if (!overflow) addedLines.add(lines.length);
+        after = contextFor(file ?? '');
+      } else if (after > 0) {
+        keep(content);
+        after -= 1;
+      } else {
+        recent.push(content);
+        if (recent.length > contextFor(file ?? '')) {
+          recent.shift();
+          dropped = true;
+        }
+      }
     }
   };
 
@@ -2949,7 +3095,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
 
   const code = await exited;
   if (code !== 0) throw new Error(`git log failed with exit code ${code}${summarizeStderr(stderr)}`);
-  return { hits: [...hits.values()], commits, oversize, unscanned };
+  return { hits: [...hits.values()], commits, oversize, oversizeLimits, unscanned };
 }
 
 // ---------------------------------------------------------------------------
@@ -2976,19 +3122,36 @@ export function formatReport(findings) {
   return lines.join('\n');
 }
 
-/** Format the text files that were too large to scan. */
+const MB = 1024 * 1024;
+/** The size limit applied to a limit value, and the constant that sets it (a lockfile has its own). */
+const limitName = (bytes) => (bytes === MAX_LOCKFILE_BYTES ? 'MAX_LOCKFILE_BYTES' : 'MAX_FILE_BYTES');
+
+/** Format the text files that were too large to scan. Each path is reported against the limit that was applied to IT. */
 export function formatOversizeReport(paths) {
+  const limits = [...new Set(paths.map((p) => sizeLimit(p)))].sort((a, b) => a - b);
+  const names = limits.map(limitName);
+  const single = limits.length === 1 ? `${limits[0] / MB} MB` : 'their size limit';
   return [
-    `check-secrets: ${paths.length} tracked text file${paths.length === 1 ? '' : 's'} over ${MAX_FILE_BYTES / (1024 * 1024)} MB NOT scanned:`,
-    ...paths.map((p) => `  ${printable(p)}`),
-    'A file this size cannot be checked for secrets. Split it, move it out of git, or review it by hand and raise MAX_FILE_BYTES.',
+    `check-secrets: ${paths.length} tracked text file${paths.length === 1 ? '' : 's'} over ${single} NOT scanned:`,
+    ...paths.map((p) => `  ${printable(p)}  (over ${sizeLimit(p) / MB} MB, ${limitName(sizeLimit(p))})`),
+    `A file this size cannot be checked for secrets. Split it, move it out of git, or review it by hand and raise ${names.join(' / ')}.`,
   ].join('\n');
 }
 
-const describeUnscanned = (unscanned, oversize) =>
-  `${unscanned} file version${unscanned === 1 ? '' : 's'} NOT scanned` +
-  (oversize > 0 ? ` (${oversize} over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit)` : '') +
-  ', so this audit is incomplete.';
+/** `oversizeLimits`: Map of size limit in bytes to the number of file versions over it. */
+const describeUnscanned = (unscanned, oversize, oversizeLimits = new Map()) => {
+  const entries = [...oversizeLimits].sort((a, b) => a[0] - b[0]);
+  const detail = entries.length === 0
+    ? `${oversize} over the ${MAX_FILE_BYTES / MB} MB limit`
+    : entries.map(([bytes, n]) => `${n} over the ${bytes / MB} MB ${bytes === MAX_LOCKFILE_BYTES ? 'lockfile ' : ''}limit`).join(', ');
+  const names = entries.map(([bytes]) => limitName(bytes));
+  return (
+    `${unscanned} file version${unscanned === 1 ? '' : 's'} NOT scanned` +
+    (oversize > 0 ? ` (${detail})` : '') +
+    ', so this audit is incomplete.' +
+    (oversize > 0 ? ` The size limit${names.length === 1 ? ' is' : 's are'} ${(names.length === 0 ? ['MAX_FILE_BYTES'] : names).join(' and ')}.` : '')
+  );
+};
 
 /** Format the tracked files that could not be read. */
 export function formatUnreadableReport(paths) {
@@ -3000,7 +3163,7 @@ export function formatUnreadableReport(paths) {
 }
 
 /** Format history-scan hits: commit, path, rule and counts only. */
-export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history' } = {}) {
+export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history', oversizeLimits = undefined } = {}) {
   const lines = [];
   if (shallow) {
     lines.push(
@@ -3009,7 +3172,7 @@ export function formatHistoryReport(hits, { commits = 0, shallow = false, oversi
       '',
     );
   }
-  if (unscanned > 0) lines.push(`warning: ${describeUnscanned(unscanned, oversize)}`, '');
+  if (unscanned > 0) lines.push(`warning: ${describeUnscanned(unscanned, oversize, oversizeLimits)}`, '');
   const distinctCommits = new Set(hits.map((h) => h.commit)).size;
   lines.push(
     `check-secrets ${label}: ${hits.length} hit${hits.length === 1 ? '' : 's'} in ${distinctCommits} of ${commits} commit${commits === 1 ? '' : 's'} (values are never printed)`,
@@ -3115,17 +3278,17 @@ async function runRange(spec, { cwd, stdout, stderr }) {
       return 2;
     }
   }
-  const { hits, commits, oversize, unscanned } = await scanHistory(
+  const { hits, commits, oversize, oversizeLimits, unscanned } = await scanHistory(
     root,
     newRef ? { revisions: [head], maxCount: 1 } : { revisions: [head, '--not', base] },
   );
   const scope = newRef ? 'the new branch\'s tip commit only (the base is all zeros, so no earlier commit is known)' : `${commits} commit${commits === 1 ? '' : 's'} in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}`;
   if (hits.length > 0) {
-    stderr.write(`${formatHistoryReport(hits, { commits, oversize, unscanned, label: '--range' })}\n`);
+    stderr.write(`${formatHistoryReport(hits, { commits, oversize, oversizeLimits, unscanned, label: '--range' })}\n`);
     return 1;
   }
   if (unscanned > 0) {
-    stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize)}\n`);
+    stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize, oversizeLimits)}\n`);
     return 2;
   }
   stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}\n`);
@@ -3161,14 +3324,14 @@ export async function main(
         git(['rev-parse', '--git-dir'], cwd);
       }
       const shallow = git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true';
-      const { hits, commits, oversize, unscanned } = await scanHistory(root);
+      const { hits, commits, oversize, oversizeLimits, unscanned } = await scanHistory(root);
       if (hits.length > 0) {
-        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, unscanned })}\n`);
+        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned })}\n`);
         return 1;
       }
       // An audit that did not look at everything is never reported as clean.
       const gaps = [];
-      if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize));
+      if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize, oversizeLimits));
       if (shallow) gaps.push('this is a shallow clone, so only part of the history was available. Run "git fetch --unshallow" or scan a full clone.');
       if (gaps.length > 0) {
         stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);

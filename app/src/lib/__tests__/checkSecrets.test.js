@@ -26,6 +26,7 @@ import {
   formatOversizeReport,
   formatReport,
   formatUnreadableReport,
+  HISTORY_CONTEXT,
   isBinaryContent,
   isPlaceholder,
   scanText,
@@ -3066,6 +3067,217 @@ describe('CLI', () => {
     expect(result.stdout).toContain('no hits in 3 commits');
   });
 
+
+  // ---- review round 8: --history/--range context, size-limit wording, staged blob versus an oversize working copy ----
+
+  // Class: a split name/value pair whose name and value are lines apart (the pair matcher reads YAML/config mappings up to
+  // PAIR_YAML_LINES lines each way, and JSON/HCL/XML objects up to a few hundred characters). The history reader must keep
+  // as much unchanged context as the matcher looks across, and blame the commit that added the VALUE line.
+  const pairName = ['JWT_', 'SECRET'].join('');
+  const filler = (count, make) => Array.from({ length: count }, (_, i) => make(i)).join('');
+  const SPLIT_LAYOUTS = [
+    ['a YAML item, value 10 lines below its name', 'deploy.yaml', (v) => `env:\n  - name: ${pairName}\n${filler(9, (i) => `    note${i}: ok\n`)}    value: ${v}\n`],
+    ['a YAML item, value above its name', 'deploy.yaml', (v) => `env:\n  - value: ${v}\n${filler(9, (i) => `    note${i}: ok\n`)}    name: ${pairName}\n`],
+    ['a JSON object, value 40 short lines below its name', 'vars.json', (v) => `{\n  "name": "${pairName}",\n${filler(40, (i) => `  "n${i}": 1,\n`)}  "value": "${v}"\n}\n`],
+    ['a JSON object, value 40 short lines above its name', 'vars.json', (v) => `{\n  "value": "${v}",\n${filler(40, (i) => `  "n${i}": 1,\n`)}  "name": "${pairName}"\n}\n`],
+    ['a mapping key with the value 10 children down', 'secrets.yaml', (v) => `secrets:\n  ${pairName}:\n${filler(9, (i) => `    note${i}: ok\n`)}    value: ${v}\n`],
+  ];
+
+  it.each(SPLIT_LAYOUTS)('--history and --range catch a value added far from an unchanged name (%s)', SLOW, (_label, file, layout) => {
+    const dir = makeRepo();
+    const value = randomString(24, 81);
+    const save = (v, message) => {
+      write(dir, file, layout(v));
+      run('git', ['add', '-A'], dir);
+      expect(commit(dir, message).status).toBe(0);
+      return run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    };
+    const first = save('changeme', 'placeholder');
+    const leaking = save(value, 'leak');
+    const removed = save('changeme', 'remove');
+    expect(scan(dir).status).toBe(0);
+    const firstFull = run('git', ['rev-parse', first], dir).stdout.trim();
+    for (const args of [['--history'], ['--range', `${firstFull}..HEAD`]]) {
+      const result = scan(dir, ...args);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`${leaking}  ${file}  secret-name-value-pair  x1`);
+      expect(result.stderr).not.toContain(removed);
+      for (const piece of windows(value)) expect(output).not.toContain(piece);
+    }
+  });
+
+  it.skipIf(!hasGit())('--history does not blame a later commit that adds an unrelated line inside the pair window', SLOW, () => {
+    const dir = makeRepo();
+    const value = randomString(24, 82);
+    const layout = (extra) => `env:\n  - name: ${pairName}\n${filler(4, (i) => `    note${i}: ok\n`)}${extra}    value: ${value}\n`;
+    write(dir, 'deploy.yaml', layout(''));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    const leaking = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    write(dir, 'deploy.yaml', layout('    extra: 1\n'));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'unrelated line').status).toBe(0);
+    const later = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(leaking);
+    expect(result.stderr).not.toContain(later);
+  });
+
+  it.skipIf(!hasGit())('--history still reads a lockfile edited in many places without treating it as oversize', SLOW, () => {
+    const dir = makeRepo();
+    const body = (v) => filler(3000, (i) => `    "dep${i}": { "version": "${v}.${i}" },\n`);
+    write(dir, 'package-lock.json', `{\n${body(1)}}\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'lock').status).toBe(0);
+    write(dir, 'package-lock.json', `{\n${body(2)}}\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'bump').status).toBe(0);
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('no hits in 2 commits');
+  });
+
+  it('the history context is derived from the pair matcher, not a separate number', () => {
+    // 12 lines is the YAML window; the character windows (1500 back or forward) need more lines than that when a line is short.
+    expect(HISTORY_CONTEXT).toBeGreaterThanOrEqual(12);
+    expect(HISTORY_CONTEXT * 4).toBeGreaterThanOrEqual(1500);
+  });
+
+  // Class: the size limit differs by path (5 MB, 16 MB for a lockfile) and the message must name the one that was applied.
+  it('the oversize report gives each path the limit and the constant that applies to it', () => {
+    const only = formatOversizeReport(['data/big.json']);
+    expect(only).toContain('over 5 MB NOT scanned');
+    expect(only).toContain('(over 5 MB, MAX_FILE_BYTES)');
+    expect(only).not.toContain('16 MB');
+    const lock = formatOversizeReport(['package-lock.json']);
+    expect(lock).toContain('over 16 MB NOT scanned');
+    expect(lock).toContain('(over 16 MB, MAX_LOCKFILE_BYTES)');
+    expect(lock).toContain('raise MAX_LOCKFILE_BYTES.');
+    expect(lock).not.toContain('5 MB');
+    const both = formatOversizeReport(['data/big.json', 'sub/yarn.lock']);
+    expect(both).toContain('data/big.json  (over 5 MB, MAX_FILE_BYTES)');
+    expect(both).toContain('sub/yarn.lock  (over 16 MB, MAX_LOCKFILE_BYTES)');
+    expect(both).toContain('raise MAX_FILE_BYTES / MAX_LOCKFILE_BYTES.');
+  });
+
+  it('the history report gives the limit of each kind of oversize version', () => {
+    const report = formatHistoryReport([], {
+      commits: 4,
+      oversize: 3,
+      unscanned: 3,
+      oversizeLimits: new Map([[5 * 1024 * 1024, 1], [16 * 1024 * 1024, 2]]),
+    });
+    expect(report).toContain('3 file versions NOT scanned (1 over the 5 MB limit, 2 over the 16 MB lockfile limit)');
+    expect(report).toContain('MAX_FILE_BYTES and MAX_LOCKFILE_BYTES');
+    const lockOnly = formatHistoryReport([], { commits: 1, oversize: 1, unscanned: 1, oversizeLimits: new Map([[16 * 1024 * 1024, 1]]) });
+    expect(lockOnly).toContain('(1 over the 16 MB lockfile limit)');
+    expect(lockOnly).not.toContain('5 MB');
+  });
+
+  const LOCK_OVER = 16 * 1024 * 1024 + 4096;
+  const bigLockfile = () => `{\n${`${'x'.repeat(1023)}\n`.repeat(Math.ceil(LOCK_OVER / 1024))}}\n`;
+
+  it.skipIf(!hasGit())('an oversize lockfile is reported against the lockfile limit, in the tree scan and in --history/--range', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'package-lock.json', bigLockfile());
+    run('git', ['add', '-A'], dir);
+    const tree = scan(dir);
+    expect(tree.status).toBe(1);
+    expect(tree.stderr).toContain('package-lock.json  (over 16 MB, MAX_LOCKFILE_BYTES)');
+    expect(tree.stderr).not.toContain('5 MB');
+    expect(commit(dir, 'big lockfile').status).toBe(0);
+    const head = run('git', ['rev-parse', 'HEAD'], dir).stdout.trim();
+    for (const args of [['--history'], ['--range', `${'0'.repeat(40)}..${head}`]]) {
+      const result = scan(dir, ...args);
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain('1 over the 16 MB lockfile limit');
+      expect(result.stderr).toContain('MAX_LOCKFILE_BYTES');
+      expect(result.stderr).not.toContain('5 MB');
+    }
+  });
+
+  it.skipIf(!hasGit())('an ordinary oversize file is still reported against MAX_FILE_BYTES in --history', SLOW, () => {
+    const dir = makeBigVersionRepo();
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('1 over the 5 MB limit');
+    expect(result.stderr).toContain('MAX_FILE_BYTES');
+    expect(result.stderr).not.toContain('MAX_LOCKFILE_BYTES');
+  });
+
+  // Class: the staged (index) blob must be compared with the working tree BEFORE any size/binary shortcut, on every path
+  // that skips reading the working copy (oversize binary, oversize text, oversize lockfile).
+  const bigBinary = (extra = 4096) => Buffer.concat([PNG_HEAD, Buffer.alloc(5 * 1024 * 1024 + extra, 1)]);
+
+  it.skipIf(!hasGit())('a staged secret is still found when the working copy becomes a binary over the size limit', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'x.env', assignment);
+    run('git', ['add', '-A'], dir);
+    write(dir, 'x.env', bigBinary());
+    const result = scan(dir);
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('x.env:1  secret-assignment  (index)');
+    expect(output).not.toContain('OK (');
+    for (const piece of windows(secret)) expect(output).not.toContain(piece);
+  });
+
+  it.skipIf(!hasGit())('an unchanged binary over the size limit is still skipped, counted and clean', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'big.bin', bigBinary());
+    write(dir, 'ok.txt', 'hello\n');
+    run('git', ['add', '-A'], dir);
+    const result = scan(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('OK (1 files scanned, 1 skipped: 1 binary)');
+  });
+
+  it.skipIf(!hasGit())('a clean staged text file under an oversize binary working copy passes and says the versions differ', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'x.txt', 'hello\n');
+    run('git', ['add', '-A'], dir);
+    write(dir, 'x.txt', bigBinary());
+    const result = scan(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('1 with a staged version that differs from the working tree');
+  });
+
+  it.skipIf(!hasGit())('fails closed when the staged blob under an oversize binary working copy is itself oversize', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'big.env', overLimitText(assignment));
+    run('git', ['add', '-A'], dir);
+    write(dir, 'big.env', bigBinary());
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('big.env  (over 5 MB, MAX_FILE_BYTES)');
+  });
+
+  it.skipIf(!hasGit())('a staged secret is found under an oversize TEXT working copy too, and the oversize file is still reported once', SLOW, () => {
+    const dir = makeRepo();
+    write(dir, 'x.env', assignment);
+    run('git', ['add', '-A'], dir);
+    write(dir, 'x.env', overLimitText());
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('x.env:1  secret-assignment  (index)');
+    expect(result.stderr.split('x.env  (over 5 MB, MAX_FILE_BYTES)').length - 1).toBe(1);
+  });
+
+  it.skipIf(!hasGit())('a staged lockfile credential is found when the working copy becomes a binary over the lockfile limit', SLOW, () => {
+    const dir = makeRepo();
+    const password = randomString(24, 83);
+    write(dir, 'package-lock.json', `{\n "x": {\n  "_authToken": "${password}"\n }\n}\n`);
+    run('git', ['add', '-A'], dir);
+    expect(scan(dir).status).toBe(1); // the fixture is a finding on its own
+    write(dir, 'package-lock.json', Buffer.concat([PNG_HEAD, Buffer.alloc(LOCK_OVER, 1)]));
+    const result = scan(dir);
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('package-lock.json:3  lockfile-credential  (index)');
+    for (const piece of windows(password)) expect(output).not.toContain(piece);
+  });
 
   // ---- review round 5: nothing tracked may go unexamined ----
 
