@@ -68,7 +68,7 @@ async function readError(res, fallback) {
  *
  * Pending state emitted through onPendingChange is either null (no preview
  * open) or:
- *   { item, attribution: { status: 'loading'|'ready'|'unavailable', contributor, organization }, sending }
+ *   { item, attribution: { status: 'loading'|'ready'|'unavailable', contributor, organization }, sending, error? }
  *
  * @param {Object} initialDeps
  * @param {{shareUserDataRaw: Function, unshareUserDataRaw: Function, getContributorProfile: Function}} initialDeps.client
@@ -112,8 +112,10 @@ export function createYieldShareFlow(initialDeps) {
     } catch {
       attribution = { status: 'unavailable', contributor: null, organization: null };
     }
-    // Ignore a late profile response if the preview was closed or replaced.
-    if (pending?.item !== item) return;
+    // Ignore a late profile response unless THIS exact preview is still the
+    // open one. Comparing the row is not enough: closing and reopening the same
+    // row creates a new preview, and an older response must not mark it ready.
+    if (pending !== opened) return;
     setPending({ ...pending, attribution });
   }
 
@@ -145,15 +147,18 @@ export function createYieldShareFlow(initialDeps) {
       const res = await deps.client.shareUserDataRaw(item.serverId, await headers());
       if (!res.ok) {
         const error = await readError(res, 'Failed to update sharing.');
-        if (pending?.item === item) setPending({ ...pending, sending: false });
+        // Keep the failure on the pending state so the open dialog can show it
+        // (a page-level banner would render behind the modal).
+        if (pending?.item === item) setPending({ ...pending, sending: false, error });
         return { ok: false, error };
       }
       deps.onSharingChanged?.(item, true);
       setPending(null);
       return { ok: true, action: 'share' };
     } catch {
-      if (pending?.item === item) setPending({ ...pending, sending: false });
-      return { ok: false, error: 'Network error occurred.' };
+      const error = 'Network error occurred.';
+      if (pending?.item === item) setPending({ ...pending, sending: false, error });
+      return { ok: false, error };
     }
   }
 

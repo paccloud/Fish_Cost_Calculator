@@ -3,7 +3,9 @@ import { Share2, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { buildSharePreviewFields } from '../lib/yieldSharing';
 
-const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+// Disabled controls cannot take focus, so they must not count as the first/last
+// stop of the trap (otherwise Tab escapes the dialog when Share is disabled).
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * Confirmation shown before a custom yield row is shared with the public
@@ -32,7 +34,7 @@ export default function ShareYieldModal({ pending, onConfirm, onCancel }) {
 
   if (!item) return null;
 
-  const { attribution, sending } = pending;
+  const { attribution, sending, error } = pending;
   const loadingAttribution = attribution.status === 'loading';
   const attributionUnavailable = attribution.status === 'unavailable';
 
@@ -103,6 +105,12 @@ export default function ShareYieldModal({ pending, onConfirm, onCancel }) {
           <p className="text-xs text-text-muted mb-5">
             {attributionNote}{' '}
             <Link to="/profile" onClick={onCancel} className="text-brand-teal hover:underline">Edit profile</Link>
+          </p>
+        )}
+
+        {error && (
+          <p role="alert" className="mb-3 text-sm text-red-600">
+            {error}
           </p>
         )}
 

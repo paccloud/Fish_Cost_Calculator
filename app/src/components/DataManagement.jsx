@@ -51,7 +51,10 @@ const DataManagement = () => {
   };
 
   const handleConfirmShare = async () => {
-    reportShareResult(await shareFlow.confirm());
+    const result = await shareFlow.confirm();
+    // A failure with the dialog still open is shown inside the dialog; a
+    // page-level banner would render behind it.
+    if (result.ok || !shareFlow.getPending()) reportShareResult(result);
   };
 
   const handleSubmit = async (e) => {

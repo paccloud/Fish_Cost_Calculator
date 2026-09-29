@@ -87,6 +87,50 @@ describe('yield share confirmation flow', () => {
     expect(result).toEqual({ ok: false, error: 'Not found' });
     expect(onSharingChanged).not.toHaveBeenCalled();
     expect(flow.getPending().sending).toBe(false);
+    // The dialog is still open, so the error is carried on the pending state.
+    expect(flow.getPending().error).toBe('Not found');
+  });
+
+  it('keeps a network failure on the pending state so the open dialog can show it', async () => {
+    const { flow, client } = makeFlow();
+    client.shareUserDataRaw.mockRejectedValue(new Error('offline'));
+    await flow.toggle(ITEM);
+
+    const result = await flow.confirm();
+
+    expect(result).toEqual({ ok: false, error: 'Network error occurred.' });
+    expect(flow.getPending().error).toBe('Network error occurred.');
+    expect(flow.getPending().sending).toBe(false);
+  });
+
+  it('ignores a late profile response from a closed preview when the same row is reopened', async () => {
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+    const { flow, client } = makeFlow();
+    let resolveFirst;
+    let resolveSecond;
+    client.getContributorProfile
+      .mockReturnValueOnce(new Promise((r) => { resolveFirst = r; }))
+      .mockReturnValueOnce(new Promise((r) => { resolveSecond = r; }));
+
+    const first = flow.toggle(ITEM);
+    await tick();
+    flow.cancel();
+    const second = flow.toggle(ITEM); // same row object, new preview
+    await tick();
+
+    // The first (stale) request now answers with an opted-in profile.
+    resolveFirst({ display_name: 'Old Name', organization: 'Old Org', show_on_page: true });
+    await first;
+
+    // The new preview must still be waiting for its own answer.
+    expect(flow.getPending().attribution.status).toBe('loading');
+    expect((await flow.confirm()).ok).toBe(false);
+    expect(client.shareUserDataRaw).not.toHaveBeenCalled();
+
+    // Its own (current) answer is the one that counts: no profile → anonymous.
+    resolveSecond(null);
+    await second;
+    expect(flow.getPending().attribution).toEqual({ status: 'ready', contributor: null, organization: null });
   });
 
   it('unsharing needs no confirmation', async () => {
