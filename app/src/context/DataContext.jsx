@@ -5,7 +5,7 @@ import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
-import { migrateLegacyRecords, getRecoveryCounts, assignRecoveryToAccount, discardRecovery } from '../lib/legacyMigration';
+import { migrateLegacyRecords, getRecoveryCounts, assignRecoveryToAccount, discardRecovery, recoveryScope } from '../lib/legacyMigration';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
 import SignOutGuardModal from '../components/SignOutGuardModal';
 import ConflictResolutionModal from '../components/ConflictResolutionModal';
@@ -554,16 +554,26 @@ export function DataProvider({ children }) {
   // ---- The move to Firebase (issue #130) ----
 
   // Everything on this device that never reached the server: the signed-in
-  // user's pending changes plus anything saved here as a guest.
+  // user's pending changes, anything saved here as a guest, and legacy records
+  // waiting in the recovery scope (exported with the guest ones, as unowned).
   const collectUnsentParts = useCallback(async () => {
     const guestRepo = uid ? createRepository(guestScope()) : repo;
-    const [pending, accountConflicts, guestCalcs, guestYields] = await Promise.all([
+    const recoveryRepo = createRepository(recoveryScope());
+    const [pending, accountConflicts, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
       uid ? repo.getPendingSync() : { calcs: [], yields: [] },
       uid ? repo.getConflictedYields() : [],
       guestRepo.getCalcs(),
       guestRepo.getYields(),
+      recoveryRepo.getCalcs(),
+      recoveryRepo.getYields(),
     ]);
-    return { accountCalcs: pending.calcs, accountYields: pending.yields, accountConflicts, guestCalcs, guestYields };
+    return {
+      accountCalcs: pending.calcs,
+      accountYields: pending.yields,
+      accountConflicts,
+      guestCalcs: [...guestCalcs, ...recoveryCalcs],
+      guestYields: [...guestYields, ...recoveryYields],
+    };
   }, [uid, repo]);
 
   const collectUnsentChanges = useCallback(
@@ -588,7 +598,7 @@ export function DataProvider({ children }) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [collectUnsentParts, dataLoaded, pendingCount, savedCalcs, customYields, conflictedYields]);
+  }, [collectUnsentParts, dataLoaded, pendingCount, savedCalcs, customYields, conflictedYields, recoveryCounts]);
 
   const saveUnsentChanges = useCallback(async () => {
     downloadUnsentChanges(await collectUnsentChanges());
@@ -668,7 +678,10 @@ export function DataProvider({ children }) {
           onCancel={handleSignOutCancel}
         />
       )}
-      {conflictedYields.length > 0 && (
+      {/* Read-only for the move: resolving a conflict would change records the
+          server can no longer take, and the modal can't be closed, so skip it
+          and let the conflicts be saved to the unsent-changes file instead. */}
+      {conflictedYields.length > 0 && !isAppReadOnly && (
         <ConflictResolutionModal
           conflicts={conflictedYields}
           onUseLocal={handleConflictUseLocal}
