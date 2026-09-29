@@ -237,10 +237,17 @@ export function isPlaceholder(raw) {
 
 // Exact sample values that appear in documentation, scoped to the file that shows them.
 // Keep this tiny: each entry silences one string in one file, never a pattern or a whole file.
+// The sample must be the ENTIRE assigned value (optionally quoted): "password": "<sample>" is exempt,
+// PASSWORD=<sample>!more or PASSWORD=prefix-<sample> is not.
 const PATH_SAMPLES = [
   // Sample registration/login request body for the example user "fisherman_joe".
-  { path: 'docs/API.md', pattern: /(?<![A-Za-z0-9])securePassword123(?![A-Za-z0-9])/ },
-];
+  { path: 'docs/API.md', value: 'securePassword123' },
+].map((sample) => ({
+  ...sample,
+  pattern: new RegExp(
+    String.raw`^[\x22'\x60]?[\w$.-]{1,81}[\x22'\x60]?[ \t]*(?:=>|:=|=|:)[ \t]*[\x22'\x60]?${sample.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\x22'\x60]?$`,
+  ),
+}));
 
 const isPathSample = (filePath, matchedText) =>
   PATH_SAMPLES.some((sample) => sample.path === filePath && sample.pattern.test(matchedText));
@@ -330,6 +337,32 @@ const GATES = {
 };
 const MIN_STRONG_CONFIG_LENGTH = 8;
 
+// Words that make a multi-word quoted value a sentence ("Invalid or expired token", "Passwords do not match")
+// and not a passphrase. Message catalogs (en.json, messages.yml) use keys such as password/token/apiKey a lot.
+const PROSE_WORDS = new Set([
+  'is', 'are', 'was', 'be', 'been', 'not', 'no', 'do', 'does', 'did', 'the', 'a', 'an', 'or', 'and', 'of', 'to',
+  'for', 'in', 'on', 'at', 'by', 'as', 'if', 'it', 'its', 'this', 'that', 'these', 'those', 'your', 'you', 'my',
+  'please', 'must', 'should', 'cannot', 'can', 'will', 'has', 'have', 'least', 'most', 'than', 'below', 'above',
+  'enter', 'choose', 'select', 'type', 'invalid', 'expired', 'missing', 'required', 'incorrect', 'match',
+  'matches', 'characters', 'forgot', 'reset', 'confirm', 'wrong', 'empty', 'too', 'short', 'long', 'weak',
+]);
+
+/**
+ * A value with whitespace in it (a quoted passphrase, or the rest of a YAML/ini line). It is a finding when a
+ * word in it is random-looking, or, for a strong name, when it is not a sentence and is long enough.
+ */
+function isPhraseSecret({ kind, text }) {
+  const words = text
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^A-Za-z0-9]+|[.,;:!?)]+$/g, ''))
+    .filter(Boolean);
+  if (words.some((w) => looksRandom(w, GATES.configWeak))) return true;
+  if (words.some((w) => PROSE_WORDS.has(w.toLowerCase()))) return false;
+  return kind === 'strong' && text.length >= MIN_STRONG_CONFIG_LENGTH;
+}
+
+const stripQuotes = (text) => text.trim().replace(/^["'`]+|["'`]+$/g, '');
+
 /**
  * Decide whether a value assigned to a secret-like name is a finding.
  * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string}} input
@@ -340,13 +373,155 @@ function isSecretValue({ kind, value, quoted, separator, mode }) {
     if (mode === 'code') return false; // a bare token in source code is an expression, not a literal
     if (looksLikeExpression(text)) return false;
     if (mode === 'prose') text = text.replace(/[`*)>\].,;:!?]+$/, '');
+  } else {
+    text = text.trim(); // a quoted value is the whole quoted string, spaces included
   }
-  if (text === '' || /\s/.test(text) || URL_PREFIX.test(text) || isPlaceholder(text)) return false;
+  // Shell/Compose/env files: ${VAR:-literal} hides a real default inside the expansion, and a literal can sit
+  // right next to a reference (${A}literal). Operands are judged as whole strings.
+  if (mode === 'config' && text.includes('${')) {
+    const operand = (literal) =>
+      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode });
+    if (expansionLiterals(text).some(operand)) return true;
+    const glued = stripQuotes(withoutExpansions(text));
+    return glued !== '' && looksRandom(glued, GATES.configWeak);
+  }
+  if (text === '' || URL_PREFIX.test(text) || isPlaceholder(text)) return false;
+  if (/\s/.test(text)) {
+    // Only a quoted value (or a whole-line value) may contain spaces; in code a spaced string is text.
+    return quoted && mode !== 'code' && isPhraseSecret({ kind, text });
+  }
   if (mode === 'code') return looksRandom(text, kind === 'strong' ? GATES.codeStrong : GATES.codeWeak);
   // Prose such as "Token: something" is common, so an unquoted `name: word` needs a random-looking word.
   const proseColon = mode === 'prose' && !quoted && separator !== '=';
   if (kind === 'strong' && !proseColon) return text.length >= MIN_STRONG_CONFIG_LENGTH;
   return looksRandom(text, GATES.configWeak);
+}
+
+/** Index of the "}" that closes the "${" at `open`, or -1. Nesting-aware, linear. */
+function closingBrace(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === '$' && text[i + 1] === '{') {
+      depth += 1;
+      i += 1;
+    } else if (text[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** `text` with every ${...} removed. An unbalanced one is dropped up to the end of the text (its operand is judged separately). */
+function withoutExpansions(text) {
+  let out = '';
+  let i = 0;
+  for (let open = text.indexOf('${'); open !== -1; open = text.indexOf('${', i)) {
+    const end = closingBrace(text, open);
+    out += text.slice(i, open);
+    if (end === -1) return out;
+    i = end + 1;
+  }
+  return out + text.slice(i);
+}
+
+const MAX_EXPANSION_DEPTH = 8;
+
+/**
+ * Literal default/alternate operands of shell parameter expansions (:- - := = :+ +), nested ones included.
+ * A pure ${VAR}, $VAR or ${VAR:?message} has none, so it is never a candidate secret.
+ * Fails closed: past the depth cap, or in an unterminated expansion, the remaining literal text is a candidate.
+ */
+function expansionLiterals(text, depth = 0) {
+  const literals = [];
+  if (depth > MAX_EXPANSION_DEPTH) {
+    const flat = text.replace(/\$\{[A-Za-z_][A-Za-z0-9_]{0,80}(?::?[-=+?])?|\}/g, '').trim();
+    if (flat !== '') literals.push(flat);
+    return literals;
+  }
+  let i = 0;
+  for (let open = text.indexOf('${', i); open !== -1; open = text.indexOf('${', i)) {
+    const end = closingBrace(text, open);
+    const inner = text.slice(open + 2, end === -1 ? text.length : end);
+    const operation = /^[A-Za-z_][A-Za-z0-9_]{0,80}:?[-=+]([\s\S]*)$/.exec(inner);
+    if (operation) {
+      const literal = withoutExpansions(operation[1]).trim();
+      if (literal !== '') literals.push(literal);
+      literals.push(...expansionLiterals(operation[1], depth + 1));
+    }
+    if (end === -1) break;
+    i = end + 1;
+  }
+  return literals;
+}
+
+// End (exclusive) of a shell word starting at `start`: stops at whitespace outside any ${...}, or at the end of the line.
+function bareShellWordEnd(input, start) {
+  let depth = 0;
+  let i = start;
+  for (; i < input.length && i - start < 8192; i += 1) {
+    const ch = input[i];
+    if (ch === '\n') break;
+    if (ch === '$' && input[i + 1] === '{') {
+      depth += 1;
+      i += 1;
+    } else if (ch === '}' && depth > 0) {
+      depth -= 1;
+    } else if (depth === 0 && (ch === ' ' || ch === '\t' || ch === '\r')) {
+      break;
+    }
+  }
+  return i;
+}
+
+// Files whose unquoted values run to the end of the line (YAML plain scalars, ini, properties, dotenv).
+const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env']);
+function valueRunsToEndOfLine(filePath) {
+  const base = path.posix.basename(filePath).toLowerCase();
+  return REST_OF_LINE_EXTENSIONS.has(path.posix.extname(base)) || base === '.env' || base.startsWith('.env.') || base.endsWith('.env');
+}
+
+/**
+ * Extra candidate values for an unquoted `name: value` / `name = value`, where the first whitespace-free token
+ * (the regex capture) is not the whole value. Returns [{ value, end }] with `end` the index the value reaches.
+ *  - the rest of the line, comment removed (a plain scalar or ini value with spaces)
+ *  - the indented lines of a YAML block scalar (`|`, `>`, `|-`, `>-`, ...)
+ */
+function unquotedContinuations(m, token, filePath) {
+  const input = m.input;
+  const tokenEnd = m.index + m[0].length;
+  let lineEnd = input.indexOf('\n', tokenEnd);
+  if (lineEnd === -1) lineEnd = input.length;
+  const results = [];
+  if (/^[|>][-+0-9]*$/.test(token)) {
+    const lineStart = input.lastIndexOf('\n', m.index - 1) + 1;
+    const keyIndent = /^[ \t]*/.exec(input.slice(lineStart, m.index + 1))[0].length;
+    let cursor = lineEnd + 1;
+    const collected = [];
+    let end = lineEnd;
+    for (let n = 0; n < 60 && cursor <= input.length; n += 1) {
+      let next = input.indexOf('\n', cursor);
+      if (next === -1) next = input.length;
+      const line = input.slice(cursor, next).replace(/\r$/, '');
+      if (line.trim() !== '') {
+        if (/^[ \t]*/.exec(line)[0].length <= keyIndent) break;
+        collected.push(line.trim());
+        end = next;
+      }
+      if (next >= input.length) break;
+      cursor = next + 1;
+    }
+    for (const line of collected) results.push({ value: line, end });
+    if (collected.length > 1) results.push({ value: collected.join(' '), end });
+    return results;
+  }
+  if (!valueRunsToEndOfLine(filePath) || /^[!&*'"`{[]/.test(token) || token.endsWith(',')) return results;
+  const rest = input.slice(tokenEnd, Math.min(lineEnd, tokenEnd + 400));
+  if (!/^[ \t]+[^\s#]/.test(rest)) return results;
+  const whole = (token + rest).replace(/\r$/, '').replace(/[ \t]+#.*$/, '').trim();
+  if (/[{}[\]]/.test(whole)) return results;
+  results.push({ value: whole, end: tokenEnd + rest.length });
+  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +591,9 @@ function nearbyLineText(m) {
   const lineBreak = after.indexOf('\n');
   return before.slice(before.lastIndexOf('\n') + 1) + m[0] + (lineBreak === -1 ? after : after.slice(0, lineBreak));
 }
+
+/** Undo backslash escapes inside a quoted value (\" \\ \'), so an escaped quote cannot hide the rest of the string. */
+const unescapeQuoted = (text) => text.replace(/\\(.)/g, '$1');
 
 /** Any secret-like environment variable name, strong or weak. */
 const isSecretLikeName = (name) => secretNameKind(name) !== null;
@@ -576,16 +754,42 @@ export const RULES = [
     hint: SECRET_HINT,
     matchers: [
       {
-        // group 2 = name, 3 = separator, 4/5/6 = "quoted"/'quoted'/`quoted`, 7 = bare value
+        // group 2 = name, 3 = separator, 4/5/6 = "quoted"/'quoted'/`quoted` (with backslash escapes), 7 = bare value
         pattern:
-          /(?<![A-Za-z0-9_$.-])(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,80})\1(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40})?[ \t]*(:=|=>|=|:(?!:))[ \t]*(?:"([^"\n]{0,4096})"|'([^'\n]{0,4096})'|`([^`\n]{0,4096})`|(\S{1,4096}))/g,
+          /(?<![A-Za-z0-9_$.-])(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,80})\1(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40})?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|`((?:[^`\\\n]|\\.){0,4096})`|(\S{1,4096}))/g,
         accept: (m, ctx) => {
           const kind = secretNameKind(m[2]);
           if (!kind) return false;
           const quotedValue = m[4] ?? m[5] ?? m[6];
           const quoted = quotedValue !== undefined;
-          const value = quoted ? quotedValue : m[7].replace(/^["'`]+/, '');
-          return isSecretValue({ kind, value, quoted, separator: m[3], mode: ctx.mode });
+          const check = (value, isQuoted) =>
+            isSecretValue({ kind, value, quoted: isQuoted, separator: m[3], mode: ctx.mode });
+          if (quoted) return check(unescapeQuoted(quotedValue), true);
+          let token = m[7].replace(/^["'`]+/, '');
+          if (ctx.mode === 'config' && m[7].includes('${')) {
+            // The value is the whole shell word, so ${A:-two words} and ${A}suffix stay in one piece.
+            const start = m.index + m[0].length - m[7].length;
+            token = m.input.slice(start, bareShellWordEnd(m.input, start));
+          }
+          if (check(token, false)) return true;
+          if (ctx.mode !== 'config') return false;
+          for (const extra of unquotedContinuations(m, m[7], ctx.path)) {
+            if (check(extra.value, true)) {
+              m.spanEnd = extra.end;
+              return true;
+            }
+          }
+          return false;
+        },
+      },
+      {
+        // Dockerfile "ENV NAME value" / "ARG NAME value" (space-separated; NAME=value is handled above)
+        pattern: /^[ \t]*(?:ENV|ARG)[ \t]+([A-Za-z_][A-Za-z0-9_]{0,80})[ \t]+([^\n]{1,4096})$/gim,
+        accept: (m, ctx) => {
+          if (!/(?:^|\/)(?:[^/]*dockerfile[^/]*|containerfile[^/]*)$/i.test(ctx.path)) return false;
+          const kind = secretNameKind(m[1]);
+          if (!kind || m[2].startsWith('=')) return false;
+          return isSecretValue({ kind, value: stripQuotes(m[2].replace(/\r$/, '')), quoted: true, separator: '=', mode: ctx.mode });
         },
       },
     ],
@@ -600,7 +804,7 @@ export const RULES = [
       {
         // group 3 = variable name, 5/6 = quoted value, 7 = bare value
         pattern:
-          /(?<![A-Za-z0-9_$.-])(["']?)(?:name|key)\1[ \t]*:[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,80})\2[ \t]*,?[ \t]*(?:\r?\n[ \t-]*)?["']?value["']?[ \t]*:[ \t]*(?:"([^"\n]{0,4096})"|'([^'\n]{0,4096})'|([^\s,}]{1,4096}))/gi,
+          /(?<![A-Za-z0-9_$.-])(["']?)(?:name|key)\1[ \t]*:[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,80})\2[ \t]*,?[ \t]*(?:\r?\n[ \t-]*)?["']?value["']?[ \t]*:[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}]{1,4096}))/gi,
         accept: (m, ctx) => {
           const kind = secretNameKind(m[3]);
           if (!kind) return false;
@@ -608,7 +812,7 @@ export const RULES = [
           const quoted = quotedValue !== undefined;
           return isSecretValue({
             kind,
-            value: quoted ? quotedValue : m[6],
+            value: quoted ? unescapeQuoted(quotedValue) : m[6],
             quoted,
             separator: ':',
             mode: ctx.mode,
@@ -702,6 +906,11 @@ function lineHasAllowMarker(text, newlines, line, cache) {
  * @returns {{path: string, line: number, rule: string}[]} findings, never the matched text
  */
 export function scanText(filePath, text) {
+  return scanRanges(filePath, text).map(({ path: p, line, rule }) => ({ path: p, line, rule }));
+}
+
+/** Like scanText, but each finding also carries `lastLine`, the last line its match spans. */
+function scanRanges(filePath, text) {
   const findings = [];
   const seen = new Set();
   const markerCache = new Map();
@@ -719,12 +928,12 @@ export function scanText(filePath, text) {
         const key = `${rule.id}:${line}`;
         if (seen.has(key)) continue;
         // The marker may sit on any line the match spans (a match can run across lines).
-        const lastLine = lineAt(newlines, match.index + Math.max(match[0].length - 1, 0));
+        const lastLine = lineAt(newlines, match.index + Math.max((match.spanEnd ?? match.index + match[0].length) - match.index - 1, 0));
         let allowed = false;
         for (let l = line; l <= lastLine && !allowed; l += 1) allowed = lineHasAllowMarker(text, newlines, l, markerCache);
         if (allowed) continue;
         seen.add(key);
-        findings.push({ path: filePath, line, rule: rule.id });
+        findings.push({ path: filePath, line, lastLine, rule: rule.id });
       }
     }
   }
@@ -801,6 +1010,28 @@ export function scanTree(root) {
   return { findings, scanned, skipped, oversize };
 }
 
+/** Decode a path git printed C-style quoted ("b/we\"ird/a.env", octal escapes for control bytes). */
+function unquoteGitPath(quoted) {
+  const escapes = { a: 7, b: 8, f: 12, n: 10, r: 13, t: 9, v: 11, '\\': 92, '"': 34 };
+  const bytes = [];
+  const body = quoted.slice(1);
+  for (let i = 0; i < body.length; i += 1) {
+    const ch = body[i];
+    if (ch === '"') break;
+    if (ch !== '\\') {
+      bytes.push(...Buffer.from(ch, 'utf8'));
+    } else if (/[0-7]/.test(body[i + 1] ?? '')) {
+      const octal = /^[0-7]{1,3}/.exec(body.slice(i + 1))[0];
+      bytes.push(parseInt(octal, 8) & 0xff);
+      i += octal.length;
+    } else {
+      bytes.push(escapes[body[i + 1]] ?? body[i + 1].charCodeAt(0));
+      i += 1;
+    }
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
 const printable = (p) => String(p).replace(/[\u0000-\u001f\u007f]/g, '?');
 
 /** First line of git's stderr, cleaned. In the failure modes seen so far it names refs and objects, never file content. */
@@ -809,8 +1040,14 @@ function summarizeStderr(stderr) {
   return first === '' ? '' : `: ${printable(first).slice(0, 200)}`;
 }
 
+// Lines of unchanged context kept around each change, so a split "name: X / value: Y" pair whose
+// name line did not change can still be recognised. Context lines are never reported by themselves.
+const HISTORY_CONTEXT = 2;
+
 /**
- * Scan the added lines of every commit reachable from any ref.
+ * Scan every commit reachable from any ref, reporting only matches that touch a line the commit ADDED.
+ * Unchanged context lines are scanned together with the added ones (so multi-line rules can see the
+ * name next to a new value) but a match made only of context lines belongs to an earlier commit.
  * Merge commits are shown as combined diffs (--cc), so only lines that the merge itself introduced
  * (conflict resolutions) are scanned; everything else was added by a parent and is reported there.
  * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number}>}
@@ -821,7 +1058,7 @@ async function scanHistory(root) {
     [
       '-c', 'core.quotepath=false',
       'log', '--all', '--no-color', '--no-ext-diff', '--no-renames', '--text',
-      '-p', '--cc', '-U0', '--format=commit %H',
+      '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H',
     ],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -841,17 +1078,21 @@ async function scanHistory(root) {
   let file = null;
   let inHunk = false;
   let parents = 1;
-  let added = [];
+  let lines = []; // added and context lines of the current file, hunks separated by a blank line
+  let addedLines = new Set(); // 1-based indexes into `lines` of the lines this commit added
 
   const flush = () => {
-    if (commit && file && added.length > 0 && !shouldSkipPath(file)) {
-      let text = added.join('\n');
+    if (commit && file && addedLines.size > 0 && !shouldSkipPath(file)) {
+      let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
       if (text.includes('\u0000')) text = text.replace(/[\u0000�]/g, '');
       if (text.length > MAX_FILE_BYTES) {
         oversize += 1;
       } else {
-        for (const finding of scanText(file, text)) {
+        for (const finding of scanRanges(file, text)) {
+          let touchesAddedLine = false;
+          for (let l = finding.line; l <= finding.lastLine && !touchesAddedLine; l += 1) touchesAddedLine = addedLines.has(l);
+          if (!touchesAddedLine) continue;
           const key = `${commit}\t${file}\t${finding.rule}`;
           const entry = hits.get(key) ?? { commit, path: file, rule: finding.rule, count: 0 };
           entry.count += 1;
@@ -859,7 +1100,8 @@ async function scanHistory(root) {
         }
       }
     }
-    added = [];
+    lines = [];
+    addedLines = new Set();
   };
 
   const onLine = (line) => {
@@ -874,16 +1116,21 @@ async function scanHistory(root) {
       file = null;
       inHunk = false;
       parents = 1;
+    } else if (line.startsWith('@@')) {
+      inHunk = true;
+      parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
+      if (lines.length > 0) lines.push(''); // keep lines from different hunks from looking adjacent
     } else if (!inHunk) {
       if (line.startsWith('+++ ')) {
-        const target = line.slice(4).replace(/\t.*$/, '');
+        const raw = line.slice(4);
+        const target = raw.startsWith('"') ? unquoteGitPath(raw) : raw.replace(/\t.*$/, '');
         file = target === '/dev/null' ? null : target.replace(/^b\//, '');
-      } else if (line.startsWith('@@')) {
-        inHunk = true;
-        parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
       }
-    } else if (line.startsWith('+'.repeat(parents))) {
-      added.push(line.slice(parents));
+    } else if (line.length >= parents && !line.startsWith('\\')) {
+      const marks = line.slice(0, parents);
+      if (marks.includes('-')) return; // gone from the result
+      lines.push(line.slice(parents));
+      if (marks === '+'.repeat(parents)) addedLines.add(lines.length);
     }
   };
 

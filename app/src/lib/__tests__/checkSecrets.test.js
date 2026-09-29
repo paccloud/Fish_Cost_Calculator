@@ -1013,6 +1013,202 @@ describe('sample values are scoped to the file that shows them', () => {
   });
 });
 
+describe('quoted values with whitespace', () => {
+  const name = ['JWT_', 'SECRET'].join('');
+  const value = randomString(16, 71);
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+
+  it('flags a quoted passphrase that contains spaces (double, single and backtick quotes)', () => {
+    for (const q of ['"', "'", '`']) {
+      expect(rules('app/.env.x', `${name}=${q}random long password ${value}!${q}\n`), q).toEqual(['secret-assignment']);
+    }
+    expect(rules('deploy.yaml', `${name}: "random long password ${value}!"\n`)).toEqual(['secret-assignment']);
+  });
+
+  it('trims whitespace inside the quotes before judging the value', () => {
+    expect(rules('app/.env.x', `${name}="   ${value}   "\n`)).toEqual(['secret-assignment']);
+    expect(rules('app/.env.x', `${name}="    "\n`)).toEqual([]);
+  });
+
+  it('still flags a quoted value without spaces', () => {
+    expect(rules('app/.env.x', `${name}="${value}"\n`)).toEqual(['secret-assignment']);
+  });
+
+  it('an UNQUOTED value with spaces runs to the end of the line in dotenv, YAML and ini, but not in shell scripts', () => {
+    expect(rules('app/.env.x', `${name}=random long password ${value}\n`)).toEqual(['secret-assignment']);
+    expect(rules('c.yml', `${name.toLowerCase()}: random long password ${value}\n`)).toEqual(['secret-assignment']);
+    expect(rules('c.ini', `${name.toLowerCase()} = random long password ${value}\n`)).toEqual(['secret-assignment']);
+    // In a shell script the words after the first are a command, not part of the value.
+    expect(rules('run.sh', `${name}=random long password ${value}\n`)).toEqual([]);
+  });
+
+  it('quoted placeholders with spaces still pass', () => {
+    expect(rules('app/.env.x', `${name}="your secret goes here"\n`)).toEqual([]);
+    expect(rules('app/.env.x', `${name}="change me to something long"\n`)).toEqual([]);
+  });
+});
+
+describe('shell parameter expansions in config files', () => {
+  const name = ['JWT_', 'SECRET'].join('');
+  const weak = ['APP_', 'TOKEN'].join('');
+  const value = randomString(16, 72);
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+  const ops = [':-', '-', ':=', '=', ':+', '+'];
+
+  it('flags a literal default or alternate operand for every operator', () => {
+    for (const op of ops) {
+      expect(rules('docker.env', `${name}=\${${name}${op}${value}}\n`), op).toEqual(['secret-assignment']);
+      expect(rules('docker-compose.yml', `      - ${name}=\${${name}${op}${value}}\n`), `compose ${op}`).toEqual(['secret-assignment']);
+    }
+    expect(rules('docker.env', `${name}="\${${name}:-${value}}"\n`)).toEqual(['secret-assignment']);
+    expect(rules('docker.env', `${weak}=\${${weak}:-${value}}\n`)).toEqual(['secret-assignment']);
+  });
+
+  it('flags a literal hidden inside a nested expansion', () => {
+    expect(rules('docker.env', `${name}=\${OUTER:-\${${name}:-${value}}}\n`)).toEqual(['secret-assignment']);
+    expect(rules('docker.env', `${name}=\${OUTER:-\${INNER}}\n`)).toEqual([]);
+  });
+
+  it('does not flag pure substitutions or placeholder/variable operands', () => {
+    for (const text of [
+      `\${${name}}`,
+      `$${name}`,
+      `\${${name}:?set ${name} in the environment}`,
+      `\${${name}:-}`,
+      `\${${name}:-changeme}`,
+      `\${${name}:-your_secret_here}`,
+      `\${${name}:-\${OTHER_SECRET}}`,
+      `\${${name}:-$OTHER_SECRET}`,
+      `\${${name}:-\${A:-\${B}}}`,
+    ]) {
+      expect(rules('docker.env', `${name}=${text}\n`), text).toEqual([]);
+    }
+  });
+
+  it('checks the operand of an unbalanced expansion and stays fast on hostile nesting', () => {
+    expect(rules('docker.env', `${name}=\${${name}:-${value}\n`)).toEqual(['secret-assignment']);
+    expect(rules('docker.env', `${name}=\${${name}:-\${OTHER}\n`)).toEqual([]);
+    const hostile = `${name}=${'${A:-'.repeat(20000)}\n`;
+    const started = Date.now();
+    scanText('docker.env', hostile);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('is limited to config files: a JS template literal is still not a secret', () => {
+    expect(rules('app.js', `const ${name} = \`\${${name}:-${value}}\`;\n`)).toEqual([]);
+  });
+});
+
+describe('review round 3: expansions, phrases, continuations and escapes', () => {
+  const name = ['JWT_', 'SECRET'].join('');
+  const lower = name.toLowerCase();
+  const token = randomString(16, 91);
+  const phrase = ['correct', 'horse', 'battery', 'staple'].join(' ');
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+  const HIT = ['secret-assignment'];
+
+  it('a passphrase with spaces behind a :- default is a finding, quoted or bare', () => {
+    expect(rules('a.sh', `${name}="\${A:-${phrase}}"\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}=\${A:-${phrase}}\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}=\${A:-"${phrase}"}\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}="${phrase}"\n`)).toEqual(HIT);
+  });
+
+  it('a literal glued to an expansion is a finding, a file path built from one is not', () => {
+    expect(rules('a.env', `${name}=\${A}${token}\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}=${token}\${SUFFIX}\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}=\${A}${token}\${B}\n`)).toEqual(HIT);
+    expect(rules('a.env', `${name}=/run/secrets/\${NAME}\n`)).toEqual([]);
+    expect(rules('a.env', `${name}=\${A} # note about it\n`)).toEqual([]);
+  });
+
+  it('fails closed past the nesting cap and for an unterminated expansion', () => {
+    for (const depth of [9, 10, 20]) {
+      const nested = Array.from({ length: depth }, (_, i) => `\${V${i}:-`).join('') + token + '}'.repeat(depth);
+      expect(rules('a.env', `${name}=${nested}\n`), `depth ${depth}`).toEqual(HIT);
+    }
+    expect(rules('a.env', `${name}=\${A:-${token}\n`)).toEqual(HIT);
+  });
+
+  it('message-catalog sentences under secret-like keys are not findings', () => {
+    for (const [file, text] of [
+      ['en.json', '{"token": "Invalid or expired token"}'],
+      ['en.json', '{"apiKey": "API key is missing"}'],
+      ['en.json', '{"password": "Please choose a password"}'],
+      ['en.json', '{"secret": "Secret is invalid"}'],
+      ['en.json', '{"password": "Password must be at least 8 characters"}'],
+      ['en.yml', 'password: "Passwords do not match"'],
+      ['en.yml', 'password: Password is required'],
+      ['messages.yml', 'password: "Password is required"'],
+    ]) {
+      expect(rules(file, `${text}\n`), text).toEqual([]);
+    }
+    // A random-looking word inside a phrase still counts.
+    expect(rules('en.json', `{"password": "the code is ${token}"}\n`)).toEqual(HIT);
+  });
+
+  it('unquoted passphrases in YAML and ini, and YAML block scalars, are findings', () => {
+    expect(rules('c.yml', `${lower}: ${phrase}\n`)).toEqual(HIT);
+    expect(rules('c.ini', `${lower} = ${phrase}\n`)).toEqual(HIT);
+    expect(rules('c.yml', `${lower}: ${phrase} # not a comment part\n`)).toEqual(HIT);
+    for (const indicator of ['|', '>', '|-', '>-']) {
+      expect(rules('c.yml', `${lower}: ${indicator}\n  ${token}${token}\nother: 1\n`), indicator).toEqual(HIT);
+    }
+    expect(rules('c.yml', `${lower}: |\n  Passwords do not match\nother: 1\n`)).toEqual([]);
+    expect(rules('c.yml', `${lower}: |\nother: ${token}${token}\n`)).toEqual([]);
+    expect(rules('c.yml', `${lower}: !vault |\n`)).toEqual([]);
+  });
+
+  it('an escaped quote near the start of a quoted value does not hide the rest', () => {
+    for (const text of [`{"${lower}": "a\\"${token}${token}"}`, `${lower} = 'a\\'${token}${token}'`]) {
+      expect(rules('c.json', `${text}\n`), text).toEqual(HIT);
+    }
+  });
+
+  it('Makefile ?= and +=, and Dockerfile ENV/ARG with a space, are recognised', () => {
+    expect(rules('Makefile', `${name} ?= ${token}\n`)).toEqual(HIT);
+    expect(rules('Makefile', `${name} += ${token}\n`)).toEqual(HIT);
+    expect(rules('Dockerfile', `ENV ${name} ${token}\n`)).toEqual(HIT);
+    expect(rules('Dockerfile', `ARG ${name} ${token}\n`)).toEqual(HIT);
+    expect(rules('Dockerfile', `ENV ${name} \${X:-${token}}\n`)).toEqual(HIT);
+    expect(rules('Dockerfile', `ENV ${name} changeme\n`)).toEqual([]);
+    expect(rules('Dockerfile', `ENV ${name} \${${name}}\n`)).toEqual([]);
+    expect(rules('app.js', `ENV ${name} ${token}\n`)).toEqual([]);
+  });
+});
+
+describe('documentation sample is compared as the whole value', () => {
+  const sample = ['secure', 'Password', '123'].join('');
+  const real = randomString(16, 73);
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+
+  it('the exact sample passes in docs/API.md in every quoting style', () => {
+    expect(rules('docs/API.md', `  "password": "${sample}"\n`)).toEqual([]);
+    expect(rules('docs/API.md', `-d '{"username":"fisherman_joe","password":"${sample}"}'\n`)).toEqual([]);
+    expect(rules('docs/API.md', `PASSWORD=${sample}\n`)).toEqual([]);
+    expect(rules('docs/API.md', `password: '${sample}'\n`)).toEqual([]);
+  });
+
+  it('the sample glued to other text is still a finding', () => {
+    for (const text of [
+      `PASSWORD=${sample}!${real}`,
+      `PASSWORD=prefix-${sample}-suffix`,
+      `PASSWORD=${real}=${sample}`,
+      `PASSWORD=${real}:${sample}`,
+      `"password": "prefix ${sample}"`,
+      `"password": "${sample} ${real}"`,
+      `PASSWORD=${sample}${real}`,
+    ]) {
+      expect(rules('docs/API.md', `${text}\n`), text).toEqual(['secret-assignment']);
+    }
+  });
+
+  it('the exact sample is not exempt in any other file', () => {
+    expect(rules('docs/OTHER.md', `PASSWORD=${sample}\n`)).toEqual(['secret-assignment']);
+    expect(rules('app/docs/API.md', `PASSWORD=${sample}\n`)).toEqual(['secret-assignment']);
+  });
+});
+
 describe('isPlaceholder', () => {
   it.each([
     '',
@@ -1500,6 +1696,96 @@ describe('CLI', () => {
     // The parents' commits added nothing secret-like, so exactly one commit is reported.
     expect(result.stderr).toContain('in 1 of 4 commits');
     for (const piece of windows(secret)) expect(`${result.stdout}${result.stderr}`).not.toContain(piece);
+  });
+
+  it.skipIf(!hasGit())('--history catches a value added on its own line under an unchanged secret-like name', () => {
+    const dir = makeRepo();
+    const name = ['JWT_', 'SECRET'].join('');
+    const value = randomString(24, 74);
+    const manifest = (v) => `env:\n  - name: ${name}\n    value: ${v}\n  - name: PORT\n    value: "3000"\n`;
+    write(dir, 'deploy.yaml', manifest('changeme'));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'add manifest').status).toBe(0);
+    write(dir, 'deploy.yaml', manifest(value));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    const leakingCommit = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    write(dir, 'deploy.yaml', manifest('changeme'));
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'remove').status).toBe(0);
+    const cleanCommit = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+
+    expect(scan(dir).status).toBe(0);
+    const result = scan(dir, '--history');
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`${leakingCommit}  deploy.yaml  secret-name-value-pair  x1`);
+    expect(result.stderr).toContain('in 1 of 3 commits');
+    expect(result.stderr).not.toContain(cleanCommit);
+    for (const piece of windows(value)) expect(output).not.toContain(piece);
+  });
+
+  it.skipIf(!hasGit())('--history does not blame a later commit for an old value that only appears as context', () => {
+    const dir = makeRepo();
+    const name = ['JWT_', 'SECRET'].join('');
+    const value = randomString(24, 75);
+    write(dir, 'deploy.yaml', `- name: ${name}\n  value: ${value}\nport: 3000\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    const leakingCommit = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    // Only the line right under the pair changes; the pair stays as unchanged context inside the same hunk.
+    write(dir, 'deploy.yaml', `- name: ${name}\n  value: ${value}\nport: 8080\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'change port').status).toBe(0);
+    const laterCommit = run('git', ['rev-parse', '--short=7', 'HEAD'], dir).stdout.trim();
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(leakingCommit);
+    expect(result.stderr).not.toContain(laterCommit);
+    expect(result.stderr).toContain('in 1 of 2 commits');
+  });
+
+  it.skipIf(!hasGit())('--history reads a path that git C-quotes (a double quote in the name) in the right file mode', () => {
+    const dir = makeRepo();
+    const token = randomString(16, 92);
+    mkdirSync(path.join(dir, 'we"ird'), { recursive: true });
+    write(dir, 'we"ird/a.env', `${['JWT_', 'SECRET'].join('')}=${token}\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'quoted path').status).toBe(0);
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('secret-assignment');
+    for (const piece of windows(token)) expect(`${result.stdout}${result.stderr}`).not.toContain(piece);
+  });
+
+  it.skipIf(!hasGit())('--history finds a block scalar value added under an unchanged key', () => {
+    const dir = makeRepo();
+    const key = ['jwt_', 'secret'].join('');
+    const token = randomString(32, 93);
+    write(dir, 'c.yml', `${key}: >-\n  changeme\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'a').status).toBe(0);
+    write(dir, 'c.yml', `${key}: >-\n  ${token}\n`);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'leak').status).toBe(0);
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('c.yml  secret-assignment  x1');
+    expect(result.stderr).toContain('in 1 of 2 commits');
+  });
+
+  it.skipIf(!hasGit())('--history exits 0 when the split configuration never held a real value', () => {
+    const dir = makeRepo();
+    const name = ['JWT_', 'SECRET'].join('');
+    const manifest = (v) => `env:\n  - name: ${name}\n    value: ${v}\n`;
+    for (const [v, message] of [['changeme', 'a'], ['your_jwt_secret_here', 'b'], ['changeme', 'c']]) {
+      write(dir, 'deploy.yaml', manifest(v));
+      run('git', ['add', '-A'], dir);
+      expect(commit(dir, message).status).toBe(0);
+    }
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('no hits in 3 commits');
   });
 
   it('--help exits 0 and unknown arguments exit 2', () => {
