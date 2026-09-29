@@ -448,12 +448,12 @@ export function DataProvider({ children }) {
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
     if (!calc?.serverId) return;
-    const queueForRetry = async () => {
+    const queueForRetry = async ({ sync = true } = {}) => {
       await repo.queueUnpublish(calc.id);
       setSavedCalcs((prev) =>
         prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
       );
-      debouncedSync();
+      if (sync) debouncedSync();
     };
 
     let authHeaders;
@@ -462,10 +462,11 @@ export function DataProvider({ children }) {
     } catch {
       // The session has ended, so nothing reached the server and the
       // calculation is still public. Say so, and queue the change for when
-      // this account signs in again.
+      // this account signs in again. Skip the sync, which would replace the
+      // error badge with "pending" and cannot succeed without a session.
+      await queueForRetry({ sync: false });
       setSyncError('auth');
       setSyncStatus('error');
-      await queueForRetry();
       return;
     }
 
