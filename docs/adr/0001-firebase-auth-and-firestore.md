@@ -32,11 +32,14 @@ provider. Firebase Auth was already in use, so no one signs up again.
 - Excel/CSV import parses in the browser.
 - Security rules cannot hide single fields of a readable document, so approved
   yields are copied into a separate public collection holding only the public
-  fields (species, conversion, yield, source, display name). The owner's user
-  id, submission details and review note stay in the owner's private document.
-  The reviewer's approval writes both in one batch. Editing or deleting an
-  approved yield deletes its public copy in the same batch, and the rules let an
-  owner delete the public copy of their own yield.
+  fields (species, conversion, yield, display name). The owner's user id, the
+  free-text source note, submission details and review note stay in the owner's
+  private document. The reviewer's approval writes both in one batch. Editing or
+  deleting an approved yield deletes its public copy in the same batch, and the
+  rules let an owner delete the public copy of their own yield.
+- Firestore's persistent cache keeps private data in the browser after sign-out,
+  so signing out first sends pending writes (or, if offline, asks whether to
+  wait or discard them) and then clears the local cache.
 - Our sync engine's revision check goes away: when the same record is edited on
   two devices while one is offline, the later write wins. We accept this because
   the accounts belong to one person; the conflict screen is dropped.
@@ -51,15 +54,18 @@ provider. Firebase Auth was already in use, so no one signs up again.
   address asks guests to sign in so their data reaches their account, and
   finishes syncing signed-in users. A later release makes the old app read-only
   too: it stops accepting new edits, still pushes what is pending, and shows a
-  banner about the move. Once pending changes have drained, the old API stops
-  accepting writes (it answers them with an error), so nothing changes in Neon
-  while it is copied. The copy uses a written list that maps each Neon account
-  holding data to its Firebase user id, checked by hand (there are about two
-  accounts); it stops if an account with data is missing from the list, appears
-  twice, or two accounts map to one Firebase user. Neon custom yields record
-  only the finished product, not the starting form, so the copy leaves the
-  starting form blank for the owner to fill in. Only after the copy has been
-  checked is Vercel reduced to a redirect. Bookmarks follow the redirect;
-  installed copies of the app need to be installed again from the new address.
-  PR previews come from Firebase preview channels.
+  banner about the move. An old copy that was offline through all this can't be
+  seen from the server, so the read-only app also lets anyone save their unsent
+  changes as a file, which the new app's import accepts. After a waiting period
+  for devices to come online, the old API stops accepting writes (it answers
+  them with an error), so nothing changes in Neon while it is copied. The copy
+  uses a written list that maps each Neon account holding data to its Firebase
+  user id, checked by hand (there are about two accounts); it stops if an
+  account with data is missing from the list, appears twice, or two accounts map
+  to one Firebase user. Neon custom yields record only the finished product, not
+  the starting form, so the copy leaves the starting form blank for the owner to
+  fill in. Only after the copy has been checked is Vercel reduced to a redirect.
+  Bookmarks follow the redirect; installed copies of the app need to be
+  installed again from the new address. PR previews come from Firebase preview
+  channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).

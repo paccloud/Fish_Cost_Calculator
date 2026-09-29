@@ -34,6 +34,10 @@ Firestore once sign-in succeeds.
   user's custom yields and saved calculations along with the user.
 - Anonymous users can write to Firestore without a verified account, so the app
   uses App Check, and the rules cap the size and number of each user's records.
-  A budget alert on the Firebase project flags unusual use.
+  Those caps are per user, so the project-wide limits are App Check, Firebase
+  Auth's limit on new anonymous sign-ups from one IP address (kept low), and the
+  free plan's hard quotas, which stop writes instead of billing. A bot could
+  still exhaust the free quota and block saves until it resets; we accept that
+  for an app of this size and revisit it if it happens.
 - Only a non-anonymous account can submit yields to the community dataset, so
   every submitted yield has a real owner.
