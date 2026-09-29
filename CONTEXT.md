@@ -45,7 +45,8 @@ _Avoid_: anonymous user
 
 **Submitted yield**:
 A custom yield its owner has asked to add to the community dataset. It stays
-private until a reviewer approves it.
+private until a reviewer approves it. Editing an approved yield takes it out of
+the dataset and submits it again.
 _Avoid_: shared yield, published yield, contribution
 
 **Reviewer**:
