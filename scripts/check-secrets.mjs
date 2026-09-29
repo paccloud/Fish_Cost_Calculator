@@ -24,7 +24,8 @@
  * xxxx, <...>, ..., REDACTED, empty values and process.env / import.meta.env
  * references are ignored (see isPlaceholder). To silence a single false positive,
  * put `check-secrets:allow` in a comment on the same line (any line of a multi-line
- * match works); it stays visible in review.
+ * match works, and so does the value line of a name/value pair split across lines);
+ * it stays visible in review.
  *
  * How name = value assignments are judged (rule `secret-assignment`):
  *   - The NAME is split into words (JWT_SECRET, jwtSecret, jwt-secret). A name that ENDS in
@@ -1039,10 +1040,106 @@ const unescapeQuoted = (text) => text.replace(/\\(.)/g, '$1');
  * (${DB_PASSWORD:-hunter2}) or literal text next to a reference (${A}suffix) is a candidate password.
  */
 function urlPasswordIsSecret(password) {
-  if (!password.includes('${')) return !isPlaceholder(password);
+  if (!password.includes('${')) {
+    if (isPlaceholder(password)) return false;
+    // A quoted password may hold spaces (a curl user argument written as one quoted string). The whole argument is judged like a
+    // quoted passphrase: a placeholder-like first word does not hide the rest, and documentation about a password passes.
+    return /\s/.test(password) ? isPhraseSecret({ kind: 'strong', text: password }) : true;
+  }
   if (expansionLiterals(password).some((literal) => !isPlaceholder(stripQuotes(literal)))) return true;
   const glued = stripQuotes(withoutExpansions(password));
   return glued !== '' && !isPlaceholder(glued);
+}
+
+/**
+ * The first shell word at `start` (quotes honoured, at most one line and 4096 characters read).
+ * @returns {{text: string, length: number, quoted: boolean} | null} `length` is how much input the word's source covers
+ */
+function shellArgument(input, start) {
+  let end = input.indexOf('\n', start);
+  if (end === -1 || end - start > 4096) end = Math.min(input.length, start + 4096);
+  let source = input.slice(start, end);
+  // The word's source ends at the first unquoted blank.
+  let quote = null;
+  let openedAt = -1;
+  let i = 0;
+  for (; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quote !== null) {
+      if (ch === '\\' && (quote === '"' || quote === "'") && i + 1 < source.length) i += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      openedAt = i;
+    } else if (ch === '\\') i += 1;
+    else if (ch === ' ' || ch === '\t' || ch === '\r') break;
+  }
+  // A quote that never closes on the line is not a quoted argument: the text stands in a string of the surrounding code
+  // ('curl -u user:pass', "..."), so the word ends at that quote character.
+  if (quote !== null) {
+    source = source.slice(0, openedAt);
+    i = openedAt;
+  }
+  const words = shellWords(source);
+  if (words.length === 0) return null;
+  return { text: words[0], length: Math.min(i, source.length), quoted: /["']/.test(source.slice(0, i)) };
+}
+
+// Commands that take a password on their command line, and the rest of that line (see cliPasswordArguments).
+const CLI_PASSWORD_COMMAND =
+  /(?<![A-Za-z0-9_.-])(?:curl|wget2?|mysql(?:dump|admin|pump|import|show|check|slap)?|mariadb(?:-dump|-admin)?|mongo(?:sh|dump|restore|export|import|stat|top)?|redis6?-cli|valkey-cli|sshpass|smbclient|xhs?|https?|ldap(?:search|modify|add|delete|passwd|compare|whoami))(?=[ \t])[^\n]{0,600}/g;
+
+/** The password arguments of one command line for the tools in CLI_PASSWORD_COMMAND (`words` are its shell words, tool first). */
+function cliPasswordArguments(allWords) {
+  // A quote that never closes on the line belongs to the code around the command (`'wget --password', ...`): the word it
+  // swallowed is not an argument.
+  const words = allWords.open ? allWords.slice(0, -1) : allWords;
+  if (words.length === 0) return [];
+  const tool = words[0].replace(/[0-9]+$/, '');
+  const found = [];
+  const next = (i) => (i + 1 < words.length && !words[i + 1].startsWith('-') ? words[i + 1] : null);
+  const auth = (value) => {
+    // user:password; a value without a colon is a bearer token only when the command says so.
+    const colon = value.indexOf(':');
+    if (colon !== -1) found.push(value.slice(colon + 1));
+    else if (words.some((w, k) => /^(?:-A|--auth-type)(?:=|$)/.test(w) && /bearer/i.test(w.includes('=') ? w : (words[k + 1] ?? '')))) found.push(value);
+  };
+  for (let i = 1; i < words.length; i += 1) {
+    const word = words[i];
+    const eq = word.indexOf('=');
+    const flag = eq === -1 ? word : word.slice(0, eq);
+    const inline = eq === -1 ? null : word.slice(eq + 1);
+    const value = () => inline ?? next(i);
+    if (tool === 'curl') {
+      if (flag === '--pass' || flag === '--proxy-pass') found.push(value() ?? '');
+    } else if (tool.startsWith('wget')) {
+      if (/^--(?:http-|ftp-|proxy-)?password$/.test(flag)) found.push(value() ?? '');
+    } else if (/^(?:mysql|mariadb)/.test(tool)) {
+      if (flag === '--password' && inline !== null) found.push(inline);
+      else if (/^-p./.test(word) && !word.startsWith('--')) found.push(word.slice(2)); // `-p` alone prompts
+    } else if (tool.startsWith('mongo')) {
+      if (flag === '--password') found.push(value() ?? '');
+      else if (word === '-p') found.push(next(i) ?? '');
+      else if (/^-p./.test(word) && !word.startsWith('--')) found.push(word.slice(2));
+    } else if (tool === 'redis-cli' || tool === 'redis6-cli' || tool === 'valkey-cli') {
+      if (word === '-a' || flag === '--pass') found.push(value() ?? '');
+    } else if (tool === 'sshpass') {
+      if (word === '-p') found.push(next(i) ?? '');
+      else if (/^-p./.test(word)) found.push(word.slice(2));
+    } else if (tool === 'xh' || tool === 'xhs' || tool === 'http' || tool === 'https') {
+      if (word === '-a' || flag === '--auth') auth(value() ?? '');
+      else if (/^-a./.test(word) && !word.startsWith('--')) auth(word.slice(2));
+    } else if (tool === 'smbclient') {
+      if (word === '-U' || flag === '--user') {
+        const login = value() ?? ''; // user%password
+        if (login.includes('%')) found.push(login.slice(login.indexOf('%') + 1));
+      }
+    } else if (tool.startsWith('ldap')) {
+      if (word === '-w') found.push(next(i) ?? '');
+      else if (/^-w./.test(word)) found.push(word.slice(2));
+    }
+  }
+  return found.filter((password) => password !== '');
 }
 
 // ---------------------------------------------------------------------------
@@ -1329,17 +1426,21 @@ function windowHoldsSecretValue(window, kind, ctx, escaped) {
  * name. --history and --range report a finding when the commit added a line of the match or a line of the value, not a
  * line in between (the reported line and `spanEnd` are untouched, so the tree report and the inline allow marker behave as before).
  */
-function attributeTo(m, window, found) {
+function attributeTo(m, window, found, coarse = false) {
   const first = inputOffset(window, found.index);
   const last = inputOffset(window, found.index + Math.max(found.length - 1, 0));
   m.attrStart = first;
   m.attrEnd = last + 1;
+  // A coarse range (a whole escaped window, the whole file) does not say which line holds the value, so an allow marker
+  // on a line of it must not suppress the finding.
+  m.attrCoarse = coarse;
 }
 
 /** The window search ran out of budget: the finding rests on the whole file (a history scan blames any added line). */
 function attributeToFile(m) {
   m.attrStart = 0;
   m.attrEnd = m.input.length;
+  m.attrCoarse = true;
 }
 
 /**
@@ -1377,7 +1478,7 @@ function pairValueIsSecret(m, kind, ctx) {
   for (const window of windows) {
     const found = windowHoldsSecretValue(window, kind, ctx, escaped);
     if (found !== null) {
-      attributeTo(m, window, found);
+      attributeTo(m, window, found, escaped);
       return true;
     }
   }
@@ -1446,6 +1547,7 @@ function shellWords(line) {
   const words = [];
   let word = null;
   let quote = null;
+  let ansi = false; // inside $'...': backslash escapes work there
   const push = () => {
     if (word !== null) words.push(word);
     word = null;
@@ -1453,11 +1555,18 @@ function shellWords(line) {
   for (let i = 0; i < line.length; i += 1) {
     const ch = line[i];
     if (quote !== null) {
-      if (ch === '\\' && quote === '"' && i + 1 < line.length) {
+      if (ch === '\\' && (quote === '"' || ansi) && i + 1 < line.length) {
         word += line[i + 1];
         i += 1;
-      } else if (ch === quote) quote = null;
-      else word += ch;
+      } else if (ch === quote) {
+        quote = null;
+        ansi = false;
+      } else word += ch;
+    } else if (ch === '$' && (line[i + 1] === "'" || line[i + 1] === '"')) {
+      quote = line[i + 1]; // $'...' (ANSI-C) and $"..." (locale) quote like '...' and "..."; the $ is not part of the word
+      ansi = quote === "'";
+      word ??= '';
+      i += 1;
     } else if (ch === '"' || ch === "'") {
       quote = ch;
       word ??= '';
@@ -1477,6 +1586,7 @@ function shellWords(line) {
     }
   }
   push();
+  words.open = quote !== null; // the line ended inside a quote: the last word is cut off (usually a string in surrounding code)
   return words;
 }
 
@@ -1498,6 +1608,10 @@ function cliPairs(words, { positionalValue, assignments }, piped) {
       i += 1;
     } else if (word.startsWith('<<<') && word.length > 3) {
       hereString = word.slice(3);
+    } else if (word.startsWith('<<')) {
+      if (word === '<<' || word === '<<-') i += 1; // a heredoc delimiter, not a positional; its body is read separately
+    } else if (word === '<') {
+      i += 1; // a redirect from a file
     } else if (word.startsWith('--from-literal=')) {
       const eq = word.indexOf('=', 15);
       if (eq !== -1) pairs.push([word.slice(15, eq), word.slice(eq + 1)]);
@@ -1524,6 +1638,99 @@ function cliPairs(words, { positionalValue, assignments }, piped) {
   const value = flagValue ?? hereString ?? (positionalValue ? positional[1] : null) ?? piped;
   if (name !== null && value !== null && value !== undefined && !name.includes('=')) pairs.push([name, value]);
   return pairs;
+}
+
+// A pipeline stage between the source of a value and the CLI that leaves the text as it is (or close enough to still be the secret).
+const PIPE_FILTER = /^(?:cat|tee|tr|head|tail|sed|awk|cut|base64|paste|rev|iconv)(?![A-Za-z0-9_-])/;
+
+/** Index of the first unquoted single `|` in `text`, or -1 when a `;`, `&`, `||` or the end comes first. */
+function firstPipe(text) {
+  let quote = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === '\\' && quote === '"') i += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '\\') i += 1;
+    else if (ch === '|') return text[i + 1] === '|' ? -1 : i;
+    else if (ch === ';' || ch === '&') return -1;
+  }
+  return -1;
+}
+
+/**
+ * Is the text after a pipe a run of value-preserving filters followed by the stage that holds the CLI (a wrapper such as
+ * `sudo`, `env A=1`, `time`, `sh -c "`)? A stage that chains another command (`;`, `&&`, `||`) is not.
+ */
+function pipeTailReachesCli(tail) {
+  const stages = tail.split('|');
+  const last = stages.pop();
+  return stages.every((stage) => PIPE_FILTER.test(stage.trim())) && /^[^;&<>]{0,200}$/.test(last);
+}
+
+/** The lines of a heredoc body that starts after `from`, up to its delimiter (at most 50 lines, blank ones dropped). */
+function heredocLines(input, from, word, stripTabs) {
+  const lines = [];
+  let at = from;
+  for (let n = 0; n < 50 && at <= input.length; n += 1) {
+    const end = input.indexOf('\n', at);
+    let line = input.slice(at, end === -1 ? input.length : Math.min(end, at + 4096)).replace(/\r$/, '');
+    if (stripTabs) line = line.replace(/^\t+/, '');
+    if (line.trim() === word) break;
+    // A secret piped in is one token; a line with blanks in it is the code or text around a heredoc that is not one.
+    if (line.trim() !== '' && !/\s/.test(line.trim())) lines.push(line.trim());
+    if (end === -1) break;
+    at = end + 1;
+  }
+  return lines;
+}
+
+/**
+ * The values a CLI match receives on standard input, from the same command line: `echo V | cli`, `printf '%s' V | cli`
+ * (also mid-line after any `;`, `&&`, `||`, `|`, `(`, `then`, `do`, `sudo`, `env A=1`, a `bash -c "` quote or a YAML `run:`;
+ * the source only has to be the word `echo`/`printf` before the pipe, so indentation, tabs, CRLF and list prefixes do not
+ * matter), through value-preserving filters (`| tr -d '\n' |`), across a `\` or `|` line continuation, and heredocs
+ * (`cat <<EOF | cli`, `cli <<EOF`, the body being the value).
+ */
+function stdinValues(m, ctx) {
+  const input = m.input;
+  const lineStart = ctx.lineStart(m.index);
+  let before = input.slice(Math.max(lineStart, m.index - 400), m.index);
+  // The source can sit on the previous line(s) of a continuation: `echo V | \` / `echo V |` newline `cli`.
+  for (let hops = 0, start = lineStart; hops < 3 && start > 0 && !before.includes('|'); hops += 1) {
+    const prevEnd = start - 1;
+    const prevStart = input.lastIndexOf('\n', prevEnd - 1) + 1;
+    const previous = input.slice(Math.max(prevStart, prevEnd - 400), prevEnd).replace(/\r$/, '');
+    if (!/(?:\\|\|)[ \t]*$/.test(previous)) break;
+    before = `${previous.replace(/\\[ \t]*$/, '')} ${before}`;
+    start = prevStart;
+  }
+  const values = [];
+  // echo / printf: the last usable source before the pipe.
+  const sources = [...before.matchAll(/(?<![A-Za-z0-9_$.-])(echo|printf)(?![A-Za-z0-9_-])/g)];
+  for (let k = sources.length - 1; k >= 0 && k >= sources.length - 4 && values.length === 0; k -= 1) {
+    const rest = before.slice(sources[k].index + sources[k][0].length);
+    const pipe = firstPipe(rest);
+    if (pipe === -1 || !pipeTailReachesCli(rest.slice(pipe + 1))) continue;
+    const words = shellWords(rest.slice(0, pipe));
+    while (words.length > 0 && /^(?:-[A-Za-z]+|--)$/.test(words[0])) words.shift();
+    if (words.length === 0) continue;
+    if (sources[k][1] === 'echo') values.push(words.join(' '));
+    else if (/%[-+ #0-9.]*[sbqdi]/.test(words[0])) values.push(...words.slice(1)); // printf FORMAT ARGS: the arguments
+    else values.push(words[0].replace(/(?:\\[nr])+$/, '')); // printf 'V\n'
+  }
+  // Heredocs: the body starts on the line after the one holding the CLI.
+  const bodyStart = ctx.lineEnd(m.index) + 1;
+  const opener = /(?<!<)<<(-?)[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+  const piped = [...before.matchAll(opener)].pop();
+  if (piped !== undefined && /^[ \t]*\|/.test(before.slice(piped.index + piped[0].length))) {
+    const tail = before.slice(piped.index + piped[0].length).replace(/^[ \t]*\|/, '');
+    if (pipeTailReachesCli(tail)) values.push(...heredocLines(input, bodyStart, piped[3], piped[1] === '-'));
+  }
+  const attached = new RegExp(opener.source).exec(m[0]);
+  if (attached !== null) values.push(...heredocLines(input, bodyStart, attached[3], attached[1] === '-'));
+  return values;
 }
 
 const CLI_TOOLS = [
@@ -1916,11 +2123,27 @@ export const RULES = [
         accept: (m) => urlPasswordIsSecret(m[2]) && !isDocumentationHost(m[3]),
       },
       {
-        // curl -u user:password https://...   (also --user)
-        pattern: /(?<![A-Za-z0-9_-])(?:-u|--user)(?:[ \t]+|=)["']?([^\s:"'`]+):([^\s"'`]+)/g,
+        // curl -u user:password https://...   (also --user, --proxy-user, -U, a flag cluster such as -sSu, and the attached
+        // forms -uuser:password and --user=user:password). The argument is read as one shell word, so a quoted
+        // "user:pass phrase" is judged whole (double, single and $'...' quotes, escaped spaces).
+        pattern: /(?<![A-Za-z0-9_-])(?:(?:--user|--proxy-user)(?:=|[ \t]+)|-[A-Za-z]{0,8}[uU](?:=|[ \t]{0,32}))(?=\S)/g,
         // `-u root:root` is also docker's uid:gid, so the same line must mention an HTTP client or URL.
-        accept: (m) =>
-          /curl|wget|https?:\/\//i.test(nearbyLineText(m)) && urlPasswordIsSecret(m[2].replace(/[,;)]+$/, '')),
+        accept: (m) => {
+          if (!/curl|wget|https?:\/\//i.test(nearbyLineText(m))) return false;
+          const argument = shellArgument(m.input, m.index + m[0].length);
+          if (argument === null) return false;
+          const colon = argument.text.indexOf(':');
+          if (colon < 1) return false;
+          m.spanEnd = m.index + m[0].length + argument.length;
+          const password = argument.text.slice(colon + 1);
+          return urlPasswordIsSecret(argument.quoted ? password : password.replace(/[,;)]+$/, ''));
+        },
+      },
+      {
+        // Other tools that take a password as a flag argument: wget, mysql, mongosh, redis-cli, httpie and xh, sshpass,
+        // ldapsearch, curl --pass. The whole argument is judged, quoted or not.
+        pattern: CLI_PASSWORD_COMMAND,
+        accept: (m) => cliPasswordArguments(shellWords(m[0])).some((password) => urlPasswordIsSecret(password.replace(/[,;)]+$/, ''))),
       },
     ],
   },
@@ -2339,15 +2562,16 @@ export const RULES = [
         accept: (m, ctx) => {
           const tool = CLI_TOOLS.find(([re]) => re.test(m[0]));
           if (!tool) return false;
-          // `echo V | vercel env add NAME`: the value comes from the text before the command on the same line.
-          const before = m.input.slice(Math.max(ctx.lineStart(m.index), m.index - 400), m.index);
-          const piped = /(?:^|[;&][ \t]*)(?:echo|printf)(?:[ \t]+-[A-Za-z]+)*[ \t]+(?:%s[ \t]+)?(?:"([^"\n]*)"|'([^'\n]*)'|([^\s"'|]+))[ \t]*\|[ \t]*$/.exec(before);
-          const pipedValue = piped ? (piped[1] ?? piped[2] ?? piped[3]) : null;
+          // `echo V | vercel env add NAME`, `cat <<EOF | vercel ...`, `vercel ... <<EOF`: the value arrives on stdin.
+          const stdin = stdinValues(m, ctx);
           const options = { positionalValue: tool[1].positionalValue ?? false, assignments: ctx.mode === 'code' };
-          return cliPairs(shellWords(m[0].slice(tool[0].exec(m[0])[0].length)), options, pipedValue).some(([name, value]) => {
-            const kind = secretNameKind(name);
-            return kind !== null && isSecretValue({ kind, value: value.trim(), quoted: true, separator: '=', mode: 'config', catalog: false });
-          });
+          const words = shellWords(m[0].slice(tool[0].exec(m[0])[0].length));
+          return (stdin.length === 0 ? [null] : stdin).some((piped) =>
+            cliPairs(words, options, piped).some(([name, value]) => {
+              const kind = secretNameKind(name);
+              return kind !== null && isSecretValue({ kind, value: value.trim(), quoted: true, separator: '=', mode: 'config', catalog: false });
+            }),
+          );
         },
       },
     ],
@@ -2622,16 +2846,20 @@ function scanRanges(filePath, text) {
         if (seen.has(key)) continue; // already reported for this line: nothing to decide, and it keeps a hostile line cheap
         if (matcher.accept && !matcher.accept(match, ctx)) continue;
         if (isPathSample(ctx.path, text.slice(match.index, match.spanEnd ?? match.index + match[0].length))) continue;
-        // The marker may sit on any line the match spans (a match can run across lines).
         const lastLine = lineAt(newlines, match.index + Math.max((match.spanEnd ?? match.index + match[0].length) - match.index - 1, 0));
-        let allowed = false;
-        for (let l = line; l <= lastLine && !allowed; l += 1) allowed = lineHasAllowMarker(text, newlines, l, markerCache);
-        if (allowed) continue;
-        seen.add(key);
         // The lines the finding rests on (--history and --range blame a commit that added one of them): the match, plus the
         // separate value of a name/value pair (valueFirst..valueLast; the match itself when there is none).
         const valueFirst = match.attrStart === undefined ? line : lineAt(newlines, match.attrStart);
         const valueLast = match.attrEnd === undefined ? lastLine : lineAt(newlines, Math.max(match.attrEnd - 1, 0));
+        // The marker may sit on any line the match spans (a match can run across lines), or on a line of the separate value
+        // of a name/value pair, in either order. A marker on an unrelated line between the two does not count.
+        let allowed = false;
+        for (let l = line; l <= lastLine && !allowed; l += 1) allowed = lineHasAllowMarker(text, newlines, l, markerCache);
+        if (!allowed && match.attrStart !== undefined && !match.attrCoarse) {
+          for (let l = valueFirst; l <= valueLast && !allowed; l += 1) allowed = lineHasAllowMarker(text, newlines, l, markerCache);
+        }
+        if (allowed) continue;
+        seen.add(key);
         findings.push({ path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id });
       }
     }
@@ -2676,8 +2904,9 @@ function displayPath(raw) {
 /**
  * Every tracked path from `git ls-files -s -z`, as raw bytes. The list is NUL-delimited and never decoded as a
  * whole: a file name may hold bytes that are not UTF-8 (allowed on Unix), and a lossy decode would name a file
- * that does not exist. Unmerged paths appear once per stage: they are listed once, with every distinct blob.
- * @returns {{raw: Buffer, mode: string, sha: string, shas: string[]}[]} `sha` is the first blob, `shas` all distinct ones
+ * that does not exist. Unmerged paths appear once per stage: they are listed once, with every distinct object and the
+ * mode it has in its own stage (the stages of one path can differ: a gitlink in one, a regular file in another).
+ * @returns {{raw: Buffer, objects: {mode: string, sha: string}[]}[]} every distinct (mode, object id) of the path
  */
 function listTracked(root) {
   const out = git(['ls-files', '-s', '-z'], root);
@@ -2695,8 +2924,8 @@ function listTracked(root) {
     const raw = Buffer.from(record.subarray(tab + 1));
     const key = raw.toString('latin1');
     const known = entries.get(key);
-    if (!known) entries.set(key, { raw, mode, sha, shas: [sha] });
-    else if (!known.shas.includes(sha)) known.shas.push(sha);
+    if (!known) entries.set(key, { raw, objects: [{ mode, sha }] });
+    else if (!known.objects.some((o) => o.mode === mode && o.sha === sha)) known.objects.push({ mode, sha });
   }
   return [...entries.values()];
 }
@@ -2799,22 +3028,27 @@ export function scanTree(root) {
   };
   const rootBytes = Buffer.from(root);
   const pending = []; // index versions still to read: { file, sha, missing }
-  for (const { raw, mode, sha, shas } of listTracked(root)) {
+  for (const { raw, objects } of listTracked(root)) {
     const file = displayPath(raw);
-    if (mode === '160000') {
-      skip('submodule');
-      continue;
-    }
+    // Only a gitlink (a submodule commit pointer, no content here) is skipped, and only its own stage: every other
+    // stage of an unmerged path is a file and is scanned, whatever mode the gitlink stage has.
+    const files = objects.filter((o) => o.mode !== '160000');
+    if (files.length < objects.length) skip('submodule');
+    if (files.length === 0) continue;
+    const sha = files[0].sha;
+    const shas = [...new Set(files.map((o) => o.sha))];
+    const hasLink = files.some((o) => o.mode === '120000');
+    const hasFile = files.some((o) => o.mode !== '120000');
     const absolute = Buffer.concat([rootBytes, Buffer.from(path.sep), raw]);
     let bytes;
     let missing = false;
     try {
       const stat = lstatSync(absolute);
-      if (mode === '120000') {
-        if (!stat.isSymbolicLink()) throw new Error('not a symlink');
+      if (stat.isSymbolicLink()) {
+        if (!hasLink) throw new Error('not a regular file');
         bytes = readlinkSync(absolute, 'buffer');
       } else {
-        if (!stat.isFile()) throw new Error('not a regular file');
+        if (!stat.isFile() || !hasFile) throw new Error(hasFile ? 'not a regular file' : 'not a symlink');
         if (stat.size > sizeLimit(file)) {
           // Too large to read into memory here, but the staged version is still checked first: the working-tree copy
           // (a big binary, or an oversize text file) must not hide a differing index blob. The copy is hashed in chunks.
@@ -2833,6 +3067,8 @@ export function scanTree(root) {
     } catch (error) {
       if (error?.code !== 'ENOENT') {
         unreadable.push(file);
+        // The working-tree entry cannot be read, but the staged versions still can: they are scanned too.
+        for (const blob of shas) pending.push({ file, sha: blob, missing: false });
         continue;
       }
       missing = true;

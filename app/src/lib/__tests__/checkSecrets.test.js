@@ -4580,6 +4580,299 @@ describe('review round 10', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Audit round: command-start anchors, unmerged index modes, markers on separated value lines, whole curl -u arguments.
+// Every credential below is fake and built at runtime, so no literal in this file is secret-shaped.
+// ---------------------------------------------------------------------------
+describe('secret-cli-command: the value source may sit anywhere before the pipe', () => {
+  const NAME = secretName('JWT_', 'SECRET');
+  const value = randomString(24, 8101);
+  const rules = (text, file = 'deploy.sh') => scanText(file, text).map((f) => f.rule);
+
+  const positives = [
+    ['indented echo', `  echo ${value} | vercel env add ${NAME} production\n`],
+    ['tab-indented echo', `\techo ${value} | vercel env add ${NAME}\n`],
+    ['CRLF line ending', `  echo ${value} | vercel env add ${NAME}\r\n`],
+    ['YAML run block', `jobs:\n  deploy:\n    steps:\n      - run: |\n          echo ${value} | vercel env add ${NAME}\n`],
+    ['YAML inline run', `      - run: echo ${value} | vercel env add ${NAME}\n`],
+    ['shell function body', `deploy() {\n    echo ${value} | vercel env add ${NAME}\n}\n`],
+    ['after &&', `cd app && echo ${value} | vercel env add ${NAME}\n`],
+    ['after ||', `cd app || echo ${value} | vercel env add ${NAME}\n`],
+    ['after a pipe', `cat x | echo ${value} | vercel env add ${NAME}\n`],
+    ['subshell', `(echo ${value} | vercel env add ${NAME})\n`],
+    ['command substitution', `$(echo ${value} | vercel env add ${NAME})\n`],
+    ['then', `if x; then echo ${value} | vercel env add ${NAME}; fi\n`],
+    ['then on its own line', `  then echo ${value} | vercel env add ${NAME}\n`],
+    ['do', `for e in a b; do echo ${value} | vercel env add ${NAME}; done\n`],
+    ['else', `else echo ${value} | vercel env add ${NAME}\n`],
+    ['brace group', `{ echo ${value} | vercel env add ${NAME}; }\n`],
+    ['negation', `! echo ${value} | vercel env add ${NAME}\n`],
+    ['time prefix', `time echo ${value} | vercel env add ${NAME}\n`],
+    ['prompt prefix', `$ echo ${value} | vercel env add ${NAME}\n`],
+    ['markdown list item', `- echo ${value} | vercel env add ${NAME}\n`],
+    ['/bin/echo', `/bin/echo ${value} | vercel env add ${NAME}\n`],
+    ['command echo', `command echo ${value} | vercel env add ${NAME}\n`],
+    ['echo -n', `  echo -n ${value} | vercel env add ${NAME}\n`],
+    ['echo -n quoted', `  echo -n "${value}" | vercel env add ${NAME}\n`],
+    ['no spaces around the pipe', `true &&echo ${value}|vercel env add ${NAME}\n`],
+    ['sudo on the CLI', `echo ${value} | sudo vercel env add ${NAME}\n`],
+    ['env prefix on the CLI', `echo ${value} | env FOO=1 vercel env add ${NAME}\n`],
+    ['bash -c', `bash -c "echo ${value} | vercel env add ${NAME}"\n`],
+    ['sh -c single quotes', `sh -c 'echo ${value} | vercel env add ${NAME}'\n`],
+    ['value-preserving filter', `  echo ${value} | tr -d '\\n' | vercel env add ${NAME}\n`],
+    ['printf %s', `  printf '%s' "${value}" | vercel env add ${NAME}\n`],
+    ['printf %s\\n', `  printf '%s\\n' ${value} | vercel env add ${NAME}\n`],
+    ['printf with the value as format', `  printf ${value} | vercel env add ${NAME}\n`],
+    ['pipe at the end of the previous line', `  echo ${value} |\n    vercel env add ${NAME}\n`],
+    ['backslash continuation', `  echo ${value} | \\\n    sudo vercel env add ${NAME}\n`],
+    ['gh secret set', `  echo ${value} | gh secret set ${NAME}\n`],
+    ['netlify positional', `  echo ${value} | netlify env:set ${NAME}\n`],
+    ['here-string, indented', `  vercel env add ${NAME} <<< ${value}\n`],
+    ['here-string after sudo', `  sudo vercel env add ${NAME} <<< "${value}"\n`],
+    ['cat heredoc into the CLI', `cat <<'EOF' | vercel env add ${NAME}\n${value}\nEOF\n`],
+    ['indented cat heredoc', `  cat <<EOF | sudo vercel env add ${NAME}\n${value}\nEOF\n`],
+    ['heredoc on the CLI', `vercel env add ${NAME} <<EOF\n${value}\nEOF\n`],
+    ['tab-stripping heredoc', `\tvercel env add ${NAME} <<-EOF\n\t\t${value}\n\tEOF\n`],
+    ['netlify heredoc', `netlify env:set ${NAME} <<EOF\n${value}\nEOF\n`],
+  ];
+  it.each(positives)('finds a literal secret: %s', (_label, text) => {
+    expect(rules(text)).toContain('secret-cli-command');
+  });
+
+  const negatives = [
+    ['placeholder value', `  echo your_jwt_secret_here | vercel env add ${NAME}\n`],
+    ['environment reference', `  echo "$JWT_VALUE" | vercel env add ${NAME}\n`],
+    ['braced reference', `  echo "\${JWT_VALUE}" | vercel env add ${NAME}\n`],
+    ['non-secret variable name', `  echo ${value} | vercel env add PUBLIC_URL\n`],
+    ['echo feeds a different command, then a separate one runs', `echo ${value} | tee log; vercel env add ${NAME} </dev/null\n`],
+    ['echo feeds a command that is followed by &&', `echo ${value} | cat && vercel env add ${NAME}\n`],
+    ['echo on an earlier line, no pipe', `echo ${value}\nvercel env add ${NAME}\n`],
+    ['heredoc placeholder', `cat <<EOF | vercel env add ${NAME}\nyour_secret_here\nEOF\n`],
+    ['heredoc reference', `vercel env add ${NAME} <<EOF\n\${JWT_VALUE}\nEOF\n`],
+    ['redirect from a file', `netlify env:set ${NAME} < secret.txt\n`],
+  ];
+  it.each(negatives)('passes: %s', (_label, text) => {
+    expect(rules(text)).toEqual([]);
+  });
+
+  it('stays fast on a long line of echo words', SLOW, () => {
+    const started = performance.now();
+    scanText('a.sh', `${'echo | '.repeat(20000)}vercel env add ${NAME} x\n`);
+    scanText('a.sh', `${'echo '.repeat(20000)}| vercel env add ${NAME} x\n`);
+    expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+  });
+});
+
+describe('unmerged index entries: only a gitlink stage is skipped', () => {
+  const NAME = secretName('JWT_', 'SECRET');
+  const value = randomString(28, 8203);
+  const gitlinkId = 'a'.repeat(40);
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+
+  const run = (cmd, args, cwd, input) => spawnSync(cmd, args, { cwd, encoding: 'utf8', input, timeout: SLOW_TEST_MS });
+
+  /** stages: [stage, mode, content | null]; a null content is a gitlink. `working`: what the working tree holds. */
+  function scenario(stages, working) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-'));
+    dirs.push(dir);
+    expect(run('git', ['init', '-q'], dir).status).toBe(0);
+    const lines = stages.map(([stage, mode, content]) => {
+      const id = content === null ? gitlinkId : run('git', ['hash-object', '-w', '--stdin'], dir, content).stdout.trim();
+      return `${mode} ${id} ${stage}\tapp.env\n`;
+    });
+    expect(run('git', ['update-index', '--index-info'], dir, lines.join('')).status).toBe(0);
+    if (working === 'file') writeFileSync(path.join(dir, 'app.env'), `${NAME}=changeme\n`);
+    if (working === 'symlink') symlinkSync('target.txt', path.join(dir, 'app.env'));
+    if (working === 'directory') {
+      mkdirSync(path.join(dir, 'app.env'));
+      writeFileSync(path.join(dir, 'app.env', 'x.txt'), 'x\n');
+    }
+    const result = run(process.execPath, [SCANNER], dir);
+    return { result, output: `${result.stdout}\n${result.stderr}` };
+  }
+
+  const leaky = `${NAME}=${value}\n`;
+  const clean = `${NAME}=changeme\n`;
+  const cases = [
+    ['gitlink stage 1 hides a regular stage 2', [[1, '160000', null], [2, '100644', leaky]], 'none'],
+    ['... with a regular working file', [[1, '160000', null], [2, '100644', leaky]], 'file'],
+    ['... with a directory in the working tree', [[1, '160000', null], [2, '100644', leaky]], 'directory'],
+    ['gitlink stage 2, executable stage 3', [[2, '160000', null], [3, '100755', leaky]], 'none'],
+    ['gitlink stage 3 after a leaky stage 2', [[2, '100644', leaky], [3, '160000', null]], 'file'],
+    ['symlink stage 1, regular stage 2', [[1, '120000', 'target.txt'], [2, '100644', leaky]], 'file'],
+    ['symlink stage 1, regular stage 2, nothing in the working tree', [[1, '120000', 'target.txt'], [2, '100644', leaky]], 'none'],
+    ['executable stage 1, symlink stage 2, symlink in the working tree', [[1, '100755', leaky], [2, '120000', 'target.txt']], 'symlink'],
+    ['leaky symlink stage 1, clean regular stage 2', [[1, '120000', leaky], [2, '100644', clean]], 'symlink'],
+    ['three stages, three modes', [[1, '160000', null], [2, '120000', 'target.txt'], [3, '100755', leaky]], 'none'],
+  ];
+  it.skipIf(!hasGit()).each(cases)('%s is reported and leaks nothing', SLOW, (_label, stages, working) => {
+    const { result, output } = scenario(stages, working);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('app.env:1  secret-assignment');
+    for (const piece of windows(value)) expect(output).not.toContain(piece);
+  });
+
+  it.skipIf(!hasGit())('a path that is a gitlink in every stage is still skipped and counted', SLOW, () => {
+    const { result } = scenario([[1, '160000', null], [2, '160000', null]], 'none');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('1 skipped: 1 submodule');
+  });
+
+  it.skipIf(!hasGit())('clean stages of mixed modes pass', SLOW, () => {
+    const { result } = scenario([[1, '100755', clean], [2, '100644', clean]], 'file');
+    expect(result.status).toBe(0);
+  });
+});
+
+describe('allow marker on the value line of a separated name/value pair', () => {
+  const NAME = secretName('JWT_', 'SECRET');
+  const value = randomString(26, 8307);
+  const M = ALLOW_MARKER;
+  const count = (file, text) => scanText(file, text).length;
+
+  const suppressed = [
+    ['YAML list item, adjacent', 'd.yaml', `- name: ${NAME}\n  value: ${value} # ${M}\n`],
+    ['YAML list item, other fields between', 'd.yaml', `- name: ${NAME}\n  type: plain\n  note: x\n  value: ${value} # ${M}\n`],
+    ['YAML list item, value first', 'd.yaml', `- value: ${value} # ${M}\n  type: plain\n  name: ${NAME}\n`],
+    ['Kubernetes env entry', 'd.yaml', `env:\n  - name: ${NAME}\n    value: ${value} # ${M}\n`],
+    ['JSON object, value last', 'd.json', `{\n  "key": "${NAME}",\n  "type": "plain",\n  "value": "${value}" // ${M}\n}\n`],
+    ['JSON object, value first', 'd.json', `{\n  "value": "${value}", // ${M}\n  "type": "plain",\n  "key": "${NAME}"\n}\n`],
+    ['XML property, value last', 'd.xml', `<property>\n<name>${NAME}</name>\n<description>d</description>\n<value>${value}</value> <!-- ${M} -->\n</property>\n`],
+    ['XML property, value first', 'd.xml', `<property>\n<value>${value}</value> <!-- ${M} -->\n<description>d</description>\n<name>${NAME}</name>\n</property>\n`],
+    ['mapping key with a nested value', 'd.yaml', `${NAME}:\n  description: x\n  value: ${value} # ${M}\n`],
+    ['HCL block', 'main.tf', `variable "x" {\n  name = "${NAME}"\n  description = "d"\n  value = "${value}" # ${M}\n}\n`],
+  ];
+  it.each(suppressed)('a marker on the value line suppresses: %s', (_label, file, text) => {
+    expect(count(file, text)).toBe(0);
+    // the same document without the marker is a finding (the fixture is real)
+    expect(count(file, text.replaceAll(M, 'note'))).toBe(1);
+  });
+
+  const notSuppressed = [
+    ['YAML list item', 'd.yaml', `- name: ${NAME}\n  type: plain # ${M}\n  value: ${value}\n`],
+    ['YAML list item, value first', 'd.yaml', `- value: ${value}\n  type: plain # ${M}\n  name: ${NAME}\n`],
+    ['JSON object', 'd.json', `{\n  "key": "${NAME}",\n  "type": "plain", // ${M}\n  "value": "${value}"\n}\n`],
+    ['mapping key with a nested value', 'd.yaml', `${NAME}:\n  description: x # ${M}\n  value: ${value}\n`],
+    ['HCL block', 'main.tf', `variable "x" {\n  name = "${NAME}"\n  description = "d" # ${M}\n  value = "${value}"\n}\n`],
+  ];
+  it.each(notSuppressed)('a marker on an unrelated line in between does not suppress: %s', (_label, file, text) => {
+    expect(count(file, text)).toBe(1);
+  });
+
+  it('a marker on one pair does not hide the next pair', () => {
+    const other = randomString(26, 8309);
+    const text = `- name: ${NAME}\n  value: ${value} # ${M}\n- name: ${secretName('API_', 'TOKEN')}\n  value: ${other}\n`;
+    const found = scanText('d.yaml', text);
+    expect(found).toHaveLength(1);
+    expect(found[0].line).toBe(3);
+  });
+
+  it('a marker elsewhere in the file does not suppress a finding whose value range is the whole window', () => {
+    const escaped = `{"a":"{\\"key\\":\\"${NAME}\\",\\"value\\":\\"${value}\\"}",\n"b":"x"}\n# ${M}\n`;
+    expect(count('d.json', escaped)).toBe(1);
+  });
+});
+
+describe('curl -u and the other password flags judge the whole argument', () => {
+  const host = 'https://api.internal.corp/v1';
+  const first = ['pass', 'word'].join(''); // a placeholder-like first word
+  const phrase = `${first} ${['correct', 'horse', 'battery'].join(' ')} 123!`;
+  const token = randomString(20, 8419);
+  const rules = (text, file = 'run.sh') => scanText(file, text).map((f) => f.rule);
+  const escapedPhrase = phrase.replaceAll(' ', '\\ ');
+
+  const positives = [
+    ['double quotes', `curl -u "admin:${phrase}" ${host}\n`],
+    ['single quotes', `curl -u 'admin:${phrase}' ${host}\n`],
+    ['ANSI-C quotes', `curl -u $'admin:${phrase}' ${host}\n`],
+    ['escaped spaces', `curl -u admin:${escapedPhrase} ${host}\n`],
+    ['--user', `curl --user "admin:${phrase}" ${host}\n`],
+    ['--user=', `curl --user="admin:${phrase}" ${host}\n`],
+    ['-u attached to its quote', `curl -u"admin:${phrase}" ${host}\n`],
+    ['-u attached to a bare value', `curl -uadmin:${token} ${host}\n`],
+    ['a flag cluster ending in u', `curl -sSu "admin:${phrase}" ${host}\n`],
+    ['--proxy-user', `curl --proxy-user "admin:${phrase}" ${host}\n`],
+    ['--proxy-user, bare', `curl --proxy-user admin:${token} ${host}\n`],
+    ['-U', `curl -U "admin:${phrase}" ${host}\n`],
+    ['-U, bare', `curl -U admin:${token} ${host}\n`],
+    ['a reference plus literal words', `curl -u "admin:\${API_PASS} extra words here 9" ${host}\n`], // check-secrets:allow
+    ['curl --pass phrase', `curl --cert c.pem --pass "${phrase}" ${host}\n`],
+    ['wget --password', `wget --user=admin --password "${phrase}" ${host}\n`],
+    ['wget --password=', `wget --password="${phrase}" ${host}\n`],
+    ['wget --http-password', `wget --http-password='${phrase}' ${host}\n`],
+    ['wget --ftp-password', `wget --ftp-password ${token} ftp://h/x\n`],
+    ['wget --proxy-password', `wget --proxy-password=${token} ${host}\n`],
+    ['httpie -a', `http -a "admin:${phrase}" ${host}\n`],
+    ['httpie --auth', `http --auth 'admin:${phrase}' ${host}\n`],
+    ['httpie -a, bare', `http -a admin:${token} ${host}\n`],
+    ['https -a', `https -a admin:${token} api.internal.corp/x\n`],
+    ['xh -a', `xh -a admin:${token} ${host}\n`],
+    ['httpie bearer token', `http -A bearer -a ${token} ${host}\n`],
+    ['mysql -p attached', `mysql -u root -p${token} db\n`],
+    ['mysql -p quoted', `mysql -u root -p'${phrase}' db\n`],
+    ['mysql --password=', `mysql --password="${phrase}" db\n`],
+    ['mysqldump -p', `mysqldump -u root -p${token} db\n`],
+    ['mongosh --password', `mongosh --username u --password "${phrase}"\n`],
+    ['mongosh -p', `mongosh -u u -p ${token}\n`],
+    ['redis-cli -a', `redis-cli -a ${token} ping\n`],
+    ['redis-cli -a quoted', `redis-cli -a "${phrase}" ping\n`],
+    ['redis-cli --pass', `redis-cli --pass ${token} ping\n`],
+    ['sshpass -p', `sshpass -p ${token} ssh u@h\n`],
+    ['sshpass -p quoted', `sshpass -p "${phrase}" ssh u@h\n`],
+    ['smbclient -U user%password', `smbclient -U 'admin%${token}' //h/s\n`],
+    ['ldapsearch -w', `ldapsearch -D cn=x -w ${token}\n`],
+  ];
+  it.each(positives)('finds the password: %s', (_label, text) => {
+    expect(rules(text)).toContain('url-password');
+  });
+
+  const negatives = [
+    ['placeholder password', `curl -u admin:${first} ${host}\n`],
+    ['placeholder in quotes', `curl -u "admin:your_password_here" ${host}\n`],
+    ['angle-bracket placeholder', `curl -u "admin:<password>" ${host}\n`],
+    ['environment reference', `curl -u "admin:$API_PASS" ${host}\n`],
+    ['braced reference', `curl -u "admin:\${API_PASS}" ${host}\n`],
+    ['user only (prompts)', `curl -u admin ${host}\n`],
+    ['docker -u uid', 'docker run -u root:root img\n'],
+    ['documentation about the password', `curl -u "user:the password you chose during setup" ${host}\n`],
+    ['an unterminated quote belongs to the surrounding string', `x: 'curl -u user:${first}', ${host}\n`],
+    ['mysql -p prompts', 'mysql -u root -p db\n'],
+    ['mysql --password without a value', 'mysql --password db\n'],
+    ['httpie -a placeholder', `http -a user:${first} ${host}\n`],
+    ['httpie -a without a password', `http -a admin ${host}\n`],
+    ['redis-cli reference', 'redis-cli -a "$REDIS_PASS" ping\n'],
+    ['wget reference', 'wget --password="$FTP_PASS" ftp://h/x\n'],
+    ['sshpass reference', 'sshpass -p "${SSH_PASS}" ssh u@h\n'],
+  ];
+  it.each(negatives)('passes: %s', (_label, text) => {
+    expect(rules(text)).toEqual([]);
+  });
+
+  it('never prints or stores the password, whole or in part', () => {
+    const found = scanText('run.sh', `curl -u "admin:${phrase}" ${host}\n`);
+    expect(JSON.stringify(found)).not.toContain('battery');
+    expect(Object.keys(found[0]).sort()).toEqual(['line', 'path', 'rule']);
+  });
+
+  it('stays fast on hostile flag lines', SLOW, () => {
+    const started = performance.now();
+    for (const text of [
+      `curl ${'-u '.repeat(30000)}\n`,
+      `curl -u${' '.repeat(100000)}x\n`,
+      `curl -u "${'a:'.repeat(50000)}\n`,
+      `${'wget --password '.repeat(5000)}\n`,
+      `${'mysql -p'.repeat(20000)}\n`,
+      `${'http '.repeat(50000)}-a\n`,
+    ]) {
+      scanText('a.sh', text);
+    }
+    expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+  });
+});
+
 function hasGit() {
   return spawnSync('git', ['--version']).status === 0;
 }
