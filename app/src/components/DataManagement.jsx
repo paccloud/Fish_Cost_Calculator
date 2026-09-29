@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff, Globe, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
-import { apiUrl } from '../config/api';
+import { apiClient } from '../lib/apiClient';
+import { createYieldShareFlow } from '../lib/yieldSharing';
+import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
@@ -20,24 +22,39 @@ const DataManagement = () => {
     source: 'User Input',
   });
 
-  const handleToggleShare = async (item) => {
-    const action = item.is_shared ? 'unshare' : 'share';
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(apiUrl(`/api/user-data/${item.serverId ?? item.id}/${action}`), {
-        method: 'POST',
-        headers,
-      });
-      if (res.ok) {
-        updateYieldLocalOnly(item.id, { is_shared: !item.is_shared });
-        setStatus({ type: 'success', message: action === 'share' ? 'Shared with community!' : 'Removed from community.' });
-      } else {
-        const err = await res.json();
-        setStatus({ type: 'error', message: err.error || 'Failed to update sharing.' });
-      }
-    } catch {
-      setStatus({ type: 'error', message: 'Network error occurred.' });
+  // Share-with-community confirmation (issue #26): sharing opens a preview of
+  // the public fields + attribution; only confirming calls the share API.
+  const [sharePending, setSharePending] = useState(null);
+  const [shareFlow] = useState(() => createYieldShareFlow({
+    client: apiClient,
+    onPendingChange: setSharePending,
+  }));
+  useEffect(() => {
+    shareFlow.configure({
+      getHeaders: () => getAuthHeaders(),
+      onSharingChanged: (item, isShared) => updateYieldLocalOnly(item.id, { is_shared: isShared }),
+    });
+  }, [shareFlow, getAuthHeaders, updateYieldLocalOnly]);
+
+  const reportShareResult = (result) => {
+    if (result.ok && result.action === 'share') {
+      setStatus({ type: 'success', message: 'Shared with community!' });
+    } else if (result.ok && result.action === 'unshare') {
+      setStatus({ type: 'success', message: 'Removed from community.' });
+    } else if (!result.ok && result.error) {
+      setStatus({ type: 'error', message: result.error });
     }
+  };
+
+  const handleToggleShare = async (item) => {
+    reportShareResult(await shareFlow.toggle(item));
+  };
+
+  const handleConfirmShare = async () => {
+    const result = await shareFlow.confirm();
+    // A failure with the dialog still open is shown inside the dialog; a
+    // page-level banner would render behind it.
+    if (result.ok || !shareFlow.getPending()) reportShareResult(result);
   };
 
   const handleSubmit = async (e) => {
@@ -99,7 +116,7 @@ const DataManagement = () => {
         <div className="bg-surface p-8 rounded-full">
           <Database size={40} className="text-text-secondary" />
         </div>
-        <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+        <h2 className="text-xl font-bold text-accent">Login Required</h2>
         <p className="text-text-secondary max-w-md text-sm">
           You need to be logged in to manage your custom yield data.
         </p>
@@ -114,13 +131,13 @@ const DataManagement = () => {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-            <Database className="text-brand-terracotta" size={22} />
+          <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
+            <Database className="text-link" size={22} />
             Manage Your Data
           </h1>
           <p className="text-text-secondary mt-1 text-sm">
             Add, edit, or delete your custom yield data •{' '}
-            <Link to="/profile" className="text-brand-terracotta hover:underline">Edit Contributor Profile</Link>
+            <Link to="/profile" className="text-link hover:underline">Edit Contributor Profile</Link>
           </p>
         </div>
 
@@ -165,7 +182,7 @@ const DataManagement = () => {
       {/* Add/Edit Form */}
       {showForm && (
         <div className="card p-6 mb-8">
-          <h2 className="text-lg font-semibold text-brand-teal mb-4">
+          <h2 className="text-lg font-semibold text-accent mb-4">
             {editingId ? 'Edit Entry' : 'Add New Entry'}
           </h2>
 
@@ -246,7 +263,7 @@ const DataManagement = () => {
       {/* Saved Calculations */}
       <div className="card overflow-hidden mb-8">
         <div className="p-4 border-b border-line">
-          <h2 className="text-base font-semibold text-brand-teal">Saved Calculations</h2>
+          <h2 className="text-base font-semibold text-accent">Saved Calculations</h2>
           <p className="text-xs text-text-secondary mt-0.5">
             Publish a calculation to share it anonymously on the community feed.
           </p>
@@ -267,7 +284,7 @@ const DataManagement = () => {
                   <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
                     {calc.name || `${calc.species} — ${calc.product}`}
                     {calc.is_private === false ? (
-                      <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="text-xs bg-brand-teal/10 text-accent border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <Globe size={10} />Public
                       </span>
                     ) : (
@@ -277,7 +294,7 @@ const DataManagement = () => {
                     )}
                   </p>
                   <p className="text-sm text-text-secondary">
-                    {calc.species} · {calc.product} → <span className="text-brand-teal font-medium">${Number(calc.result).toFixed(2)}/lb</span>
+                    {calc.species} · {calc.product} → <span className="text-accent font-medium">${Number(calc.result).toFixed(2)}/lb</span>
                   </p>
                 </div>
                 <div className="flex gap-1">
@@ -294,7 +311,7 @@ const DataManagement = () => {
                     ) : (
                       <button
                         onClick={() => requestPublish(calc)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-brand-teal hover:bg-brand-teal/10 transition"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-accent hover:bg-brand-teal/10 transition"
                         title="Publish to community feed"
                       >
                         <Globe size={13} />
@@ -312,7 +329,7 @@ const DataManagement = () => {
       {/* Data List */}
       <div className="card overflow-hidden">
         <div className="p-4 border-b border-line">
-          <h2 className="text-base font-semibold text-brand-teal">Your Custom Data</h2>
+          <h2 className="text-base font-semibold text-accent">Your Custom Data</h2>
         </div>
 
         {!dataLoaded ? (
@@ -330,7 +347,7 @@ const DataManagement = () => {
                   <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
                     {item.species}
                     {item.is_shared ? (
-                      <span className="text-xs bg-brand-teal/10 text-brand-teal border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
+                      <span className="text-xs bg-brand-teal/10 text-accent border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
                     ) : null}
                     {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
                       <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full">
@@ -339,7 +356,7 @@ const DataManagement = () => {
                     ) : null}
                   </p>
                   <p className="text-sm text-text-secondary">
-                    {item.product} → <span className="text-brand-teal font-medium">{item.yield}%</span>
+                    {item.product} → <span className="text-accent font-medium">{item.yield}%</span>
                     {item.source && <span className="ml-2 text-text-muted">({item.source})</span>}
                   </p>
                 </div>
@@ -347,7 +364,7 @@ const DataManagement = () => {
                   {item.serverId && (
                     <button
                       onClick={() => handleToggleShare(item)}
-                      className={`p-2 rounded transition ${item.is_shared ? 'text-brand-teal hover:text-text-secondary' : 'text-text-secondary hover:text-brand-teal'}`}
+                      className={`p-2 rounded transition ${item.is_shared ? 'text-accent hover:text-text-secondary' : 'text-text-secondary hover:text-accent'}`}
                       title={item.is_shared ? 'Remove from community' : 'Share with community'}
                     >
                       {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
@@ -355,14 +372,14 @@ const DataManagement = () => {
                   )}
                   <button
                     onClick={() => handleEdit(item)}
-                    className="p-2 rounded text-text-secondary hover:text-brand-teal transition"
+                    className="p-2 rounded text-text-secondary hover:text-accent transition"
                     title="Edit"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="p-2 rounded text-text-secondary hover:text-red-500 transition"
+                    className="p-2 rounded text-text-secondary hover:text-danger transition"
                     title="Delete"
                   >
                     <Trash2 size={16} />
@@ -373,6 +390,14 @@ const DataManagement = () => {
           </div>
         )}
       </div>
+
+      {sharePending && (
+        <ShareYieldModal
+          pending={sharePending}
+          onConfirm={handleConfirmShare}
+          onCancel={shareFlow.cancel}
+        />
+      )}
     </div>
   );
 };

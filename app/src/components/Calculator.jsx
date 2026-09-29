@@ -1,74 +1,233 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useId } from 'react';
+import { Link } from 'react-router-dom';
 import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
-import { Info, Calculator as CalcIcon, Save, HelpCircle, Download, ChevronRight } from 'lucide-react';
+import { Calculator as CalcIcon, Save, HelpCircle, Download, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
+import { calculate } from '../lib/calcEngine';
+import { parseAmount } from '../lib/numberInput';
 
-const Tooltip = ({ text, children }) => {
+/**
+ * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
+ * Hover-only tooltips are invisible on phones, which is where most people use this.
+ *
+ * The bubble is `position: fixed` and placed from the trigger's rect. Fixed elements never add
+ * scrollable overflow, so a bubble near the screen edge can't widen the page on mobile.
+ */
+const Tooltip = ({ text, label, iconOnly = false, children }) => {
   const [show, setShow] = useState(false);
+  const bubbleId = useId();
+  const wrapperRef = useRef(null);
+  const bubbleRef = useRef(null);
+  const lastPointer = useRef('mouse');
+
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current;
+    const trigger = wrapperRef.current;
+    if (!show || !bubble || !trigger) return;
+    const gap = 8;
+    const vv = window.visualViewport;
+    const viewportWidth = vv?.width ?? document.documentElement.clientWidth;
+    const minX = (vv?.offsetLeft ?? 0) + gap;
+    const maxX = (vv?.offsetLeft ?? 0) + viewportWidth - gap;
+    // The CSS cap is in layout units; when zoomed in the visible area is narrower, so cap it here too
+    bubble.style.maxWidth = `${Math.min(parseFloat(getComputedStyle(bubble).maxWidth) || Infinity, maxX - minX)}px`;
+    const t = trigger.getBoundingClientRect();
+    const { width, height } = bubble.getBoundingClientRect();
+    const left = Math.min(Math.max(t.left, minX), Math.max(minX, maxX - width));
+    // Prefer above the trigger; drop below when it would slide under the 56px sticky navbar
+    const fitsAbove = t.top - height - gap >= (vv?.offsetTop ?? 0) + 64;
+    bubble.style.left = `${left}px`;
+    bubble.style.top = `${fitsAbove ? t.top - height - gap : t.bottom + gap}px`;
+  }, [show]);
+
+  // Tapping elsewhere closes it (iOS never blurs a tapped button); scrolling would detach it
+  useEffect(() => {
+    if (!show) return undefined;
+    const close = (e) => {
+      if (e.type === 'scroll' || !wrapperRef.current?.contains(e.target)) setShow(false);
+    };
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [show]);
+
   return (
-    <span
-      className="relative inline-block cursor-help"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {children}
+    <span ref={wrapperRef} className="inline-block">
+      <button
+        type="button"
+        aria-label={label}
+        aria-describedby={show ? bubbleId : undefined}
+        aria-expanded={show}
+        className={`cursor-help rounded text-left ${
+          // 44px hit area without moving the layout: padding out, negative margin back in
+          iconOnly
+            ? '-m-[13px] p-[13px]'
+            : "relative before:absolute before:-inset-2.5 before:content-['']"
+        }`}
+        onPointerDown={(e) => { lastPointer.current = e.pointerType; }}
+        onPointerEnter={(e) => { if (e.pointerType === 'mouse') setShow(true); }}
+        onPointerLeave={(e) => { if (e.pointerType === 'mouse') setShow(false); }}
+        onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setShow(true); }}
+        onBlur={() => setShow(false)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setShow(false); }}
+        onClick={(e) => {
+          // detail === 0 means keyboard or assistive-tech activation: always open (Esc closes)
+          if (e.detail === 0) setShow(true);
+          else if (lastPointer.current !== 'mouse') setShow((s) => !s);
+        }}
+      >
+        {children}
+      </button>
       {show && (
-        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs bg-surface-raised text-text-primary rounded-md shadow-lg whitespace-nowrap border border-line">
+        <span
+          id={bubbleId}
+          ref={bubbleRef}
+          role="tooltip"
+          className="fixed left-0 top-0 z-50 w-max max-w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-line-strong bg-surface-raised px-3 py-2 text-sm font-normal leading-snug text-text-primary shadow-lg"
+        >
           {text}
-          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-surface-raised"></span>
         </span>
       )}
     </span>
   );
 };
 
-const TextWithTooltips = ({ text }) => {
-  if (!text) return null;
-  const sortedAcronyms = Object.keys(ACRONYMS).sort((a, b) => b.length - a.length);
-  let parts = [{ text, isAcronym: false }];
+/** One big tap target in a group of choices (a radio button styled as a tile). */
+const Tile = ({ name, value, checked, onChange, label, sub }) => (
+  <label className="relative block">
+    <input
+      type="radio"
+      name={name}
+      value={value}
+      checked={checked}
+      onChange={onChange}
+      className="peer absolute inset-0 h-full w-full cursor-pointer opacity-0"
+    />
+    <span
+      className="flex h-full min-h-[3.5rem] flex-col items-center justify-center gap-0.5 rounded-xl border-2 border-line-strong bg-surface-raised px-3 py-2 text-center text-base font-bold leading-tight text-text-primary transition-colors peer-hover:border-accent peer-checked:border-primary peer-checked:bg-primary peer-checked:text-white peer-focus-visible:outline peer-focus-visible:outline-[3px] peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[color:var(--color-focus)] peer-checked:[&_small]:text-white"
+    >
+      {label}
+      {sub && <small className="text-sm font-medium text-text-secondary">{sub}</small>}
+    </span>
+  </label>
+);
 
-  sortedAcronyms.forEach(acronym => {
-    const newParts = [];
-    parts.forEach(part => {
-      if (part.isAcronym) { newParts.push(part); return; }
-      const regex = new RegExp(`(${acronym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'g');
-      const splits = part.text.split(regex);
-      splits.forEach(s => {
-        if (s === acronym) newParts.push({ text: s, isAcronym: true, tooltip: ACRONYMS[acronym] });
-        else if (s) newParts.push({ text: s, isAcronym: false });
-      });
-    });
-    parts = newParts;
-  });
+const stepButton =
+  'min-h-[3.5rem] rounded-xl border-2 border-line-strong bg-surface-raised text-3xl font-bold leading-none text-text-primary transition-colors hover:border-accent active:translate-y-px active:bg-surface';
 
+/** A number field with big − / + buttons either side, for wet or gloved hands. */
+const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy }) => {
+  const inputRef = useRef(null);
+  const invalid = String(value).trim() !== '' && Number.isNaN(parseAmount(value));
+  const bump = (delta) => onChange(format(Math.max(0, (parseAmount(value) || 0) + delta)));
   return (
-    <>
-      {parts.map((part, i) =>
-        part.isAcronym ? (
-          <Tooltip key={i} text={part.tooltip}>
-            <span className="border-b border-dashed border-brand-terracotta/50 text-brand-teal dark:text-brand-yellow">{part.text}</span>
-          </Tooltip>
-        ) : (
-          <span key={i}>{part.text}</span>
-        )
-      )}
-    </>
+    <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] gap-2">
+      <button type="button" onClick={() => bump(-step)} aria-label={lessLabel} className={stepButton}>−</button>
+      {/* The input is sized to its text so the $ or unit sits right beside the number; a tap anywhere in the box focuses it */}
+      <div
+        onClick={() => inputRef.current?.focus()}
+        className="flex cursor-text items-center justify-center gap-1 overflow-hidden rounded-xl border-2 border-line-strong bg-surface-raised px-3 has-[[aria-invalid=true]]:border-danger focus-within:outline focus-within:outline-[3px] focus-within:outline-offset-2 focus-within:outline-[color:var(--color-focus)]">
+        {prefix && <span aria-hidden="true" className="text-xl font-bold text-text-secondary">{prefix}</span>}
+        <input
+          ref={inputRef}
+          id={id}
+          size={Math.max(String(value || placeholder || '').length, 2)}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
+          className="min-h-[3.25rem] min-w-0 max-w-full bg-transparent text-center text-2xl font-extrabold tabular-nums text-text-primary placeholder-text-muted focus:outline-none"
+        />
+        {suffix && <span aria-hidden="true" className="whitespace-nowrap text-lg font-bold text-text-secondary">{suffix}</span>}
+      </div>
+      <button type="button" onClick={() => bump(step)} aria-label={moreLabel} className={stepButton}>+</button>
+    </div>
   );
 };
 
-const RangeButton = ({ active, onClick, label }) => (
-  <button
-    onClick={onClick}
-    className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
-      active
-        ? 'bg-brand-teal text-white'
-        : 'bg-surface border border-line text-text-secondary hover:text-text-primary hover:border-brand-teal/50'
-    }`}
-  >
-    {label}
-  </button>
+const money = (n) => n.toFixed(2);
+const plainNumber = (n) => String(Number(n.toFixed(2)));
+const dollars = (n) => `$${n.toFixed(2)}`;
+
+/**
+ * A per-lb charge (processing or shipping) and which weight it is charged on.
+ * Processors differ: some bill every pound you drop off (incoming), some only the pounds you take back (outgoing).
+ */
+const ExtraCost = ({ id, title, amount, onAmount, basis, onBasis, basisLegend, fromState, toState, perFinishedLb, yieldPercent }) => {
+  const hintId = `${id}-hint`;
+  const charged = parseAmount(amount) > 0;
+  let hint = `Pick which weight the ${title.toLowerCase()} price is per pound of.`;
+  if (charged && basis === 'incoming') {
+    hint = `${dollars(parseAmount(amount))} per lb of ${fromState} works out to ${dollars(perFinishedLb)} per lb of ${toState} at ${yieldPercent}% yield.`;
+  } else if (charged) {
+    hint = `${dollars(parseAmount(amount))} per lb of ${toState}, added as is.`;
+  }
+  return (
+    <div className="space-y-3">
+      <label htmlFor={id} className="block text-base font-bold text-text-primary">
+        {title} <span className="font-normal text-text-secondary">per lb, optional</span>
+      </label>
+      <Stepper
+        id={id}
+        value={amount}
+        onChange={onAmount}
+        step={0.05}
+        format={money}
+        prefix="$"
+        placeholder="0.00"
+        lessLabel={`${title}: 5 cents less`}
+        moreLabel={`${title}: 5 cents more`}
+        describedBy={hintId}
+      />
+      <fieldset>
+        <legend className="mb-2 text-sm font-semibold text-text-primary">{basisLegend}</legend>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Tile
+            name={`${id}-basis`}
+            value="incoming"
+            checked={basis === 'incoming'}
+            onChange={() => onBasis('incoming')}
+            label="Incoming weight"
+            sub={`lbs of ${fromState}`}
+          />
+          <Tile
+            name={`${id}-basis`}
+            value="outgoing"
+            checked={basis === 'outgoing'}
+            onChange={() => onBasis('outgoing')}
+            label="Outgoing weight"
+            sub={`lbs of ${toState}`}
+          />
+        </div>
+      </fieldset>
+      <p id={hintId} className="text-sm text-text-secondary">{hint}</p>
+    </div>
+  );
+};
+
+const StepHeading = ({ number, children, id }) => (
+  <h2 id={id} className="flex items-center gap-3 text-xl font-bold text-text-primary">
+    <span
+      aria-hidden="true"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-base font-bold text-white"
+    >
+      {number}
+    </span>
+    {children}
+  </h2>
 );
+
+const TO_LIMIT = 6;
 
 const Calculator = () => {
   const { user, getAuthHeaders } = useAuth();
@@ -77,17 +236,17 @@ const Calculator = () => {
   const [species, setSpecies] = useState('');
   const [fromState, setFromState] = useState('');
   const [toState, setToState] = useState('');
+  const [showAllTo, setShowAllTo] = useState(false);
   const [cost, setCost] = useState('');
   const [yieldPercent, setYieldPercent] = useState('');
-  const [yieldRange, setYieldRange] = useState(null);
   const [processingCost, setProcessingCost] = useState('');
-  const [coldStorage, _setColdStorage] = useState('');
-  const [shipping, _setShipping] = useState('');
   const [weightType, setWeightType] = useState('incoming');
-  const [result, setResult] = useState(null);
-  const [saveStatus, setSaveStatus] = useState('');
-  const [useRangeMin, setUseRangeMin] = useState(false);
-  const [useRangeMax, setUseRangeMax] = useState(false);
+  const [shipping, setShipping] = useState('');
+  const [shippingWeightType, setShippingWeightType] = useState('outgoing');
+  // Which inputs the last save was for, so "Saved" disappears as soon as anything changes
+  const [saveState, setSaveState] = useState({ key: null, text: '' });
+  const [announcement, setAnnouncement] = useState('');
+  const dockRef = useRef(null);
 
   const [customData, setCustomData] = useState({});
   const [_history, setHistory] = useState([]);
@@ -158,24 +317,20 @@ const Calculator = () => {
 
   const speciesList = Object.keys(combinedData).sort();
 
+  const conversionsFor = (sp) => Object.values(combinedData[sp]?.conversions || {});
+
+  // Kept in the data's order (Round → D/H-On → D/H-Off …), which follows the cutting line, with Round first
   const fromStates = useMemo(() => {
     if (!species || !combinedData[species]) return [];
-    const states = new Set();
-    Object.values(combinedData[species].conversions || {}).forEach(conv => {
-      if (conv.from) states.add(conv.from);
-    });
-    return Array.from(states).sort();
+    const states = [...new Set(Object.values(combinedData[species].conversions || {}).map(c => c.from).filter(Boolean))];
+    return states.includes('Round') ? ['Round', ...states.filter(s => s !== 'Round')] : states;
   }, [species, combinedData]);
 
   const toStates = useMemo(() => {
     if (!species || !fromState || !combinedData[species]) return [];
-    const states = [];
-    Object.values(combinedData[species].conversions || {}).forEach(conv => {
-      if (conv.from === fromState && conv.to) {
-        states.push({ to: conv.to, yield: conv.yield, range: conv.range });
-      }
-    });
-    return states.sort((a, b) => a.to.localeCompare(b.to));
+    return Object.values(combinedData[species].conversions || {})
+      .filter(conv => conv.from === fromState && conv.to)
+      .map(conv => ({ to: conv.to, yield: conv.yield, range: conv.range }));
   }, [species, fromState, combinedData]);
 
   const currentConversion = useMemo(() => {
@@ -187,62 +342,84 @@ const Calculator = () => {
 
   const profile = species ? profilesData[species] : null;
   const scientificName = species && combinedData[species] ? combinedData[species].scientific_name : null;
+  const yieldRange = currentConversion?.range || null;
+
+  const chooseFrom = (from) => {
+    setFromState(from);
+    setToState(''); setYieldPercent(''); setShowAllTo(false);
+  };
 
   const handleSpeciesChange = (e) => {
-    setSpecies(e.target.value);
-    setFromState(''); setToState(''); setYieldPercent(''); setYieldRange(null); setResult(null);
+    const sp = e.target.value;
+    setSpecies(sp);
+    // Most people start from the whole fish, so pick it for them (or the only choice there is)
+    const froms = [...new Set(conversionsFor(sp).map(c => c.from).filter(Boolean))];
+    chooseFrom(froms.includes('Round') ? 'Round' : froms.length === 1 ? froms[0] : '');
   };
 
-  const handleFromChange = (e) => {
-    setFromState(e.target.value);
-    setToState(''); setYieldPercent(''); setYieldRange(null); setResult(null);
+  const chooseTo = (to) => {
+    setToState(to);
+    const conv = toStates.find(t => t.to === to);
+    setYieldPercent(conv ? String(conv.yield) : '');
   };
 
-  const handleToChange = (e) => { setToState(e.target.value); setResult(null); };
+  // The answer is worked out live from what is on screen, so it can never describe different numbers
+  const ready = Boolean(species && fromState && toState);
+  const mainInput = mode === 'cost' ? cost : targetWeight;
+  const hasMainInput = Number.isFinite(parseAmount(mainInput));
+  // A box with text that isn't a number would otherwise count as 0 and give a wrong answer, so show none
+  const badInput = [mainInput, yieldPercent, ...(mode === 'cost' ? [processingCost, shipping] : [])]
+    .some(v => String(v).trim() !== '' && Number.isNaN(parseAmount(v)));
+  const calc = useMemo(() => {
+    if (!ready) return null;
+    return calculate({
+      mode,
+      yieldPercent: parseAmount(yieldPercent),
+      targetWeight: parseAmount(targetWeight),
+      cost: parseAmount(cost),
+      processingCost: parseAmount(processingCost),
+      weightType,
+      shipping: parseAmount(shipping),
+      shippingWeightType,
+    });
+  }, [ready, mode, yieldPercent, targetWeight, cost, processingCost, weightType, shipping, shippingWeightType]);
+  const result = calc && hasMainInput && !badInput ? calc.result : null;
 
+  const inputsKey = JSON.stringify([
+    mode, species, fromState, toState, cost, targetWeight, yieldPercent,
+    processingCost, weightType, shipping, shippingWeightType,
+  ]);
+  const saveStatus = saveState.key === inputsKey ? saveState.text : '';
+
+  const numbersOnly = 'Use numbers only in the boxes, like 4.50 or 1,000';
+  let resultSentence = '';
+  if (result !== null) {
+    resultSentence = mode === 'cost' ? `${dollars(result)} per lb of ${toState}` : `Buy ${result.toFixed(1)} lbs of ${fromState}`;
+  } else if (ready && badInput) {
+    resultSentence = numbersOnly;
+  }
+
+  // Screen readers hear the answer once typing pauses, not on every keystroke
   useEffect(() => {
-    if (currentConversion) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setYieldPercent(String(currentConversion.yield));
-      setYieldRange(currentConversion.range);
-      setUseRangeMin(false);
-      setUseRangeMax(false);
-    }
-  }, [currentConversion]);
+    const timer = setTimeout(() => setAnnouncement(resultSentence), 900);
+    return () => clearTimeout(timer);
+  }, [resultSentence]);
 
+  // Tabbing or scrolling a field into view must not leave it under the pinned result bar (WCAG 2.4.11)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (yieldRange && useRangeMin) setYieldPercent(String(yieldRange[0]));
-    else if (yieldRange && useRangeMax) setYieldPercent(String(yieldRange[1]));
-    else if (currentConversion && !useRangeMin && !useRangeMax) setYieldPercent(String(currentConversion.yield));
-  }, [useRangeMin, useRangeMax, yieldRange, currentConversion]);
-
-  const calculate = () => {
-    const y = (parseFloat(yieldPercent) || 100) / 100;
-
-    if (mode === 'weight') {
-      const target = parseFloat(targetWeight) || 0;
-      setResult(y > 0 ? target / y : 0);
-      setSaveStatus('');
-      return;
-    }
-
-    const c = parseFloat(cost) || 0;
-    const proc = parseFloat(processingCost) || 0;
-    const cold = parseFloat(coldStorage) || 0;
-    const ship = parseFloat(shipping) || 0;
-
-    let baseRes = c / y;
-    if (weightType === 'incoming') baseRes += proc / y;
-    else baseRes += proc;
-    baseRes += cold + ship;
-
-    setResult(baseRes);
-    setSaveStatus('');
-  };
+    const bar = dockRef.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return undefined;
+    const root = document.documentElement;
+    const apply = () => { root.style.scrollPaddingBottom = `${bar.offsetHeight + 16}px`; };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    return () => { observer.disconnect(); root.style.scrollPaddingBottom = ''; };
+  }, []);
 
   const handleSave = async () => {
-    if (!user || !result) return;
+    if (!user || result === null) return;
+    const key = inputsKey;
     try {
       const headers = await getAuthHeaders('application/json');
       const res = await fetch(apiUrl('/api/save-calc'), {
@@ -251,14 +428,14 @@ const Calculator = () => {
         body: JSON.stringify({
           name: `${species} - ${fromState} → ${toState}`,
           species, product: `${fromState} → ${toState}`,
-          mode, cost: mode === 'cost' ? parseFloat(cost) : 0,
-          target_weight: mode === 'weight' ? parseFloat(targetWeight) : 0,
-          yield: parseFloat(yieldPercent), result
+          mode, cost: mode === 'cost' ? parseAmount(cost) : 0,
+          target_weight: mode === 'weight' ? parseAmount(targetWeight) : 0,
+          yield: parseAmount(yieldPercent), result
         })
       });
-      setSaveStatus(res.ok ? 'Saved!' : 'Failed to save');
+      setSaveState({ key, text: res.ok ? 'Saved!' : 'Failed to save' });
     } catch {
-      setSaveStatus('Error saving');
+      setSaveState({ key, text: 'Error saving' });
     }
   };
 
@@ -300,367 +477,373 @@ const Calculator = () => {
     }
   };
 
-  const canCalculate = species && toState;
+  const shownTo = showAllTo || toStates.length <= TO_LIMIT
+    ? toStates
+    : toStates.filter((t, i) => i < TO_LIMIT || t.to === toState);
+
+  const presets = currentConversion && yieldRange
+    ? [['Low', yieldRange[0]], ['Average', currentConversion.yield], ['High', yieldRange[1]]]
+    : [];
+
+  const extras = calc?.breakdown
+    ? [['Processing', calc.breakdown.processing], ['Shipping', calc.breakdown.shipping]].filter(([, v]) => v > 0)
+    : [];
+
+  let dockPrompt = 'Pick a species, what you have, and what you’re making';
+  if (ready && badInput) dockPrompt = numbersOnly;
+  else if (ready) dockPrompt = mode === 'cost' ? `Enter what you pay per lb of ${fromState}` : `Enter how many lbs of ${toState} you need`;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
-      {/* Page header */}
-      <div>
-        <h1 className="text-xl font-semibold text-text-primary">Fish Cost Calculator</h1>
-        <p className="text-sm text-text-secondary mt-0.5">
-          Estimate processed cost per pound from raw input cost and yield data.
+    <div className="mx-auto max-w-2xl space-y-6 pb-48">
+      <header>
+        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">Fish Cost Calculator</h1>
+        <p className="mt-1 text-base text-text-secondary">
+          Tap your fish. Your real cost per pound shows at the bottom the whole time.
         </p>
+      </header>
+
+      <div
+        role="group"
+        aria-label="What do you want to work out?"
+        className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line-strong bg-surface-raised p-1.5"
+      >
+        {[
+          { id: 'cost', label: 'Cost per pound' },
+          { id: 'weight', label: 'Pounds to buy' },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={mode === id}
+            onClick={() => setMode(id)}
+            className={`min-h-[3.5rem] rounded-xl px-2 text-base font-bold transition-colors sm:text-lg ${
+              mode === id ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* Main calculator card */}
-      <div className="card p-5 sm:p-6">
-        {/* Mode toggle */}
-        <div className="flex bg-surface rounded-md p-0.5 border border-line mb-6">
-          <button
-            onClick={() => { setMode('cost'); setResult(null); }}
-            className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-              mode === 'cost'
-                ? 'bg-brand-teal text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Cost per Pound
-          </button>
-          <button
-            onClick={() => { setMode('weight'); setResult(null); }}
-            className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
-              mode === 'weight'
-                ? 'bg-brand-teal text-white shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            Required Input Weight
-          </button>
+      {/* Step 1: the fish */}
+      <section className="card space-y-5 p-5 sm:p-6" aria-labelledby="step-fish">
+        <StepHeading number="1" id="step-fish">Your fish</StepHeading>
+
+        <div>
+          <label htmlFor="calc-species" className="mb-2 block text-base font-bold text-text-primary">Species</label>
+          {dataLoading ? (
+            <div className="form-select text-text-muted">Loading species data…</div>
+          ) : (
+            <select
+              id="calc-species"
+              value={species}
+              onChange={handleSpeciesChange}
+              className="form-select min-h-[3.5rem] rounded-xl border-2 text-lg font-bold"
+            >
+              <option value="">Choose a species</option>
+              {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {scientificName && <p className="mt-1.5 text-sm italic text-text-secondary">{scientificName}</p>}
         </div>
 
-        <div className="space-y-5">
-          {/* Species */}
-          <div>
-            <label className="form-label">Species</label>
-            {dataLoading ? (
-              <div className="form-select text-text-muted">Loading species data…</div>
-            ) : (
-              <select value={species} onChange={handleSpeciesChange} className="form-select">
-                <option value="">Select a species</option>
-                {speciesList.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            )}
-            {scientificName && (
-              <p className="mt-1 text-xs text-text-muted italic">{scientificName}</p>
-            )}
-          </div>
-
-          {/* From / To */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="form-label flex items-center gap-1.5">
-                From State
-                <Tooltip text="Starting form of the fish (e.g., Round = whole fish as caught)">
-                  <HelpCircle size={13} className="text-text-muted" />
-                </Tooltip>
-              </label>
-              <select
-                value={fromState}
-                onChange={handleFromChange}
-                className="form-select"
-                disabled={!species}
-              >
-                <option value="">{species ? 'Select starting form' : '— select species first —'}</option>
-                {fromStates.map(f => <option key={f} value={f}>{f}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="form-label flex items-center gap-1.5">
-                To Product
-                <Tooltip text="Final form after processing">
-                  <HelpCircle size={13} className="text-text-muted" />
-                </Tooltip>
-              </label>
-              <select
-                value={toState}
-                onChange={handleToChange}
-                className="form-select"
-                disabled={!fromState}
-              >
-                <option value="">{fromState ? 'Select product form' : '— select from state first —'}</option>
-                {toStates.map(t => (
-                  <option key={t.to} value={t.to}>
-                    {t.to} ({t.yield}%{t.range ? `, ${t.range[0]}–${t.range[1]}%` : ''})
-                  </option>
+        <fieldset disabled={!species} className="min-w-0">
+          <legend className="mb-2 flex items-center gap-2.5 text-base font-bold text-text-primary">
+            What you have
+            <Tooltip iconOnly label="Help: what you have" text="The form of the fish you're starting with. Round means the whole fish, as caught.">
+              <HelpCircle size={18} className="text-text-secondary" aria-hidden="true" />
+            </Tooltip>
+          </legend>
+          {species ? (
+            fromStates.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                {fromStates.map(f => (
+                  <Tile key={f} name="calc-from" value={f} checked={fromState === f} onChange={() => chooseFrom(f)} label={f} />
                 ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Conversion info */}
-          {currentConversion && (
-            <div className="bg-brand-teal/5 dark:bg-brand-teal/15 border border-brand-teal/20 rounded-md p-4 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-teal dark:text-text-secondary">
-                <Info size={13} />
-                Conversion Details
-              </div>
-              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                <span>
-                  <span className="text-text-secondary">Conversion: </span>
-                  <TextWithTooltips text={currentConversion.from} />
-                  <ChevronRight size={12} className="inline mx-0.5 text-text-muted" />
-                  <TextWithTooltips text={currentConversion.to} />
-                </span>
-                <span>
-                  <span className="text-text-secondary">Avg yield: </span>
-                  <span className="font-semibold text-text-primary">{currentConversion.yield}%</span>
-                </span>
-                {currentConversion.range && (
-                  <span>
-                    <span className="text-text-secondary">Range: </span>
-                    <span className="text-text-primary">{currentConversion.range[0]}–{currentConversion.range[1]}%</span>
-                  </span>
-                )}
-              </div>
-
-              {currentConversion.range && (
-                <div className="flex gap-2 flex-wrap">
-                  <RangeButton
-                    active={useRangeMin}
-                    onClick={() => { setUseRangeMin(true); setUseRangeMax(false); }}
-                    label={`Min (${currentConversion.range[0]}%)`}
-                  />
-                  <RangeButton
-                    active={!useRangeMin && !useRangeMax}
-                    onClick={() => { setUseRangeMin(false); setUseRangeMax(false); }}
-                    label={`Avg (${currentConversion.yield}%)`}
-                  />
-                  <RangeButton
-                    active={useRangeMax}
-                    onClick={() => { setUseRangeMax(true); setUseRangeMin(false); }}
-                    label={`Max (${currentConversion.range[1]}%)`}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Species profile */}
-          {profile && (
-            <div className="text-sm space-y-1 text-text-secondary border-l-2 border-brand-terracotta/40 pl-3">
-              {profile.description && <p>{profile.description}</p>}
-              {profile.edible_portions && (
-                <p><span className="text-text-muted">Edible portions: </span>{profile.edible_portions}</p>
-              )}
-              {profile.url && (
-                <a href={profile.url} target="_blank" rel="noreferrer" className="text-brand-terracotta hover:underline text-xs">
-                  Read more →
-                </a>
-              )}
-            </div>
-          )}
-
-          <div className="section-divider" />
-
-          {/* Cost/weight + yield row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {mode === 'cost' ? (
-              <div>
-                <label className="form-label">
-                  Cost per lb ({fromState || 'whole fish'})
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">$</span>
-                  <input
-                    type="number"
-                    value={cost}
-                    onChange={(e) => setCost(e.target.value)}
-                    className="form-input pl-7"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                  />
-                </div>
               </div>
             ) : (
-              <div>
-                <label className="form-label">
-                  Target output (lbs of {toState || 'product'})
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={targetWeight}
-                    onChange={(e) => setTargetWeight(e.target.value)}
-                    className="form-input pr-10"
-                    placeholder="e.g. 100"
-                    inputMode="decimal"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">lbs</span>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="form-label">Yield percentage</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={yieldPercent}
-                  onChange={(e) => { setYieldPercent(e.target.value); setUseRangeMin(false); setUseRangeMax(false); }}
-                  className="form-input pr-8"
-                  placeholder="0"
-                  inputMode="decimal"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs">%</span>
-              </div>
-              {yieldRange && (
-                <p className="mt-1 text-xs text-text-muted">
-                  Reported range: {yieldRange[0]}–{yieldRange[1]}%
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Additional costs (cost mode only) */}
-          {mode === 'cost' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Processing cost (optional)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm">$</span>
-                  <input
-                    type="number"
-                    value={processingCost}
-                    onChange={(e) => setProcessingCost(e.target.value)}
-                    className="form-input pl-7"
-                    placeholder="0.00"
-                    inputMode="decimal"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label">Applied to weight</label>
-                <select
-                  value={weightType}
-                  onChange={(e) => setWeightType(e.target.value)}
-                  className="form-select"
-                >
-                  <option value="incoming">Incoming ({fromState || 'whole'})</option>
-                  <option value="outgoing">Outgoing ({toState || 'product'})</option>
-                </select>
-              </div>
-            </div>
+              <p className="text-sm text-text-secondary">No yield data for this species yet.</p>
+            )
+          ) : (
+            <p className="text-sm text-text-secondary">Choose a species first.</p>
           )}
+        </fieldset>
 
-          {/* Calculate */}
-          <button
-            onClick={calculate}
-            disabled={!canCalculate}
-            className="btn-primary w-full"
-          >
-            {mode === 'cost' ? 'Calculate Cost per Pound' : 'Calculate Required Input Weight'}
-          </button>
-
-          {/* Result */}
-          {result !== null && (
-            <div className="mt-2 rounded-md border border-brand-teal/25 bg-brand-teal/5 dark:bg-brand-teal/10 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-1">
-                {mode === 'cost' ? `Cost per lb — ${toState}` : `Required ${fromState} input`}
-              </p>
-              <p className="text-4xl font-bold tracking-tight text-brand-teal dark:text-text-primary">
-                {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(1)} lbs`}
-              </p>
-              <p className="mt-1.5 text-sm text-text-secondary">
-                {mode === 'cost'
-                  ? `At ${yieldPercent}% yield from ${fromState} to ${toState}`
-                  : `${result.toFixed(1)} lbs ${fromState} needed to yield ${targetWeight} lbs of ${toState}`
-                }
-              </p>
-
-              {user ? (
-                <div className="mt-4 flex items-center gap-4 flex-wrap">
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center gap-1.5 text-sm font-medium text-brand-terracotta hover:text-brand-terracotta-light transition-colors"
-                  >
-                    <Save size={15} /> Save calculation
-                  </button>
-                  <button
-                    onClick={handleExport}
-                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
-                  >
-                    <Download size={15} /> Export CSV
-                  </button>
-                  <button
-                    onClick={handleExportXlsx}
-                    className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
-                  >
-                    <Download size={15} /> Export Excel
-                  </button>
-                  {saveStatus && (
-                    <span className="text-xs text-text-muted">{saveStatus}</span>
-                  )}
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-text-muted">
-                  <a href="/login" className="text-brand-terracotta hover:underline">Sign in</a> to save calculations
-                </p>
+        <fieldset disabled={!fromState} className="min-w-0">
+          <legend className="mb-2 flex items-center gap-2.5 text-base font-bold text-text-primary">
+            What you&apos;re making
+            <Tooltip iconOnly label="Help: what you're making" text="The finished cut or product you'll sell, such as a skinless fillet.">
+              <HelpCircle size={18} className="text-text-secondary" aria-hidden="true" />
+            </Tooltip>
+          </legend>
+          {fromState ? (
+            <>
+              <div id="calc-to-list" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                {shownTo.map(t => (
+                  <Tile
+                    key={t.to}
+                    name="calc-to"
+                    value={t.to}
+                    checked={toState === t.to}
+                    onChange={() => chooseTo(t.to)}
+                    label={t.to}
+                    sub={`${t.yield}% yield`}
+                  />
+                ))}
+              </div>
+              {toStates.length > TO_LIMIT && (
+                <button
+                  type="button"
+                  aria-controls="calc-to-list"
+                  aria-expanded={showAllTo}
+                  onClick={() => setShowAllTo(s => !s)}
+                  className="mt-2 min-h-[3rem] px-1 text-base font-bold text-link underline underline-offset-4"
+                >
+                  {showAllTo ? 'Show fewer products' : `Show all ${toStates.length} products`}
+                </button>
               )}
+            </>
+          ) : (
+            <p className="text-sm text-text-secondary">Choose what you have first.</p>
+          )}
+        </fieldset>
+
+        {profile && (
+          <div className="space-y-1 border-l-2 border-brand-terracotta/50 pl-3 text-sm text-text-secondary">
+            {profile.description && <p>{profile.description}</p>}
+            {profile.edible_portions && (
+              <p><span className="font-semibold">Edible portions: </span>{profile.edible_portions}</p>
+            )}
+            {profile.url && (
+              <a href={profile.url} target="_blank" rel="noreferrer" className="inline-block font-medium text-link underline">
+                Read more →
+              </a>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Step 2: the numbers */}
+      <section className="card space-y-6 p-5 sm:p-6" aria-labelledby="step-numbers">
+        <StepHeading number="2" id="step-numbers">Your numbers</StepHeading>
+
+        {mode === 'cost' ? (
+          <div className="space-y-2">
+            <label htmlFor="calc-cost" className="block text-base font-bold text-text-primary">
+              What you pay per lb <span className="font-normal text-text-secondary">({fromState || 'whole fish'})</span>
+            </label>
+            <Stepper
+              id="calc-cost"
+              value={cost}
+              onChange={setCost}
+              step={0.25}
+              format={money}
+              prefix="$"
+              placeholder="0.00"
+              lessLabel="25 cents less"
+              moreLabel="25 cents more"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <label htmlFor="calc-target" className="block text-base font-bold text-text-primary">
+              Pounds of {toState || 'finished product'} you need
+            </label>
+            <Stepper
+              id="calc-target"
+              value={targetWeight}
+              onChange={setTargetWeight}
+              step={10}
+              format={plainNumber}
+              suffix="lbs"
+              placeholder="0"
+              lessLabel="10 pounds less"
+              moreLabel="10 pounds more"
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label htmlFor="calc-yield" className="block text-base font-bold text-text-primary">
+            Yield <span className="font-normal text-text-secondary">how much is left after cutting</span>
+          </label>
+          <Stepper
+            id="calc-yield"
+            value={yieldPercent}
+            onChange={setYieldPercent}
+            step={1}
+            format={plainNumber}
+            suffix="%"
+            placeholder="0"
+            lessLabel="1 percent less yield"
+            moreLabel="1 percent more yield"
+            describedBy="calc-yield-hint"
+          />
+          <p id="calc-yield-hint" className="text-sm text-text-secondary">
+            {!currentConversion
+              ? 'Choose what you’re making to fill this in.'
+              : yieldRange
+                ? `Typical ${yieldRange[0]}–${yieldRange[1]}%. It changes with fish size and cutting skill.`
+                : 'No typical range reported for this cut.'}
+          </p>
+          {presets.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {presets.map(([name, value]) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={parseAmount(yieldPercent) === value}
+                  onClick={() => setYieldPercent(String(value))}
+                  className="min-h-[3.25rem] rounded-xl border-2 border-line-strong bg-surface-raised px-2 text-sm font-bold leading-tight text-text-primary transition-colors hover:border-accent aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-white"
+                >
+                  {name}<br /><span className="tabular-nums">{value}%</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Acronym reference */}
-      <div className="card p-5">
-        <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
-          <HelpCircle size={14} className="text-brand-terracotta" />
-          Acronym Reference
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          {Object.entries(ACRONYMS).slice(0, 9).map(([abbr, full]) => (
-            <div key={abbr} className="flex items-baseline gap-1.5 text-sm">
-              <span className="font-semibold text-brand-teal dark:text-brand-yellow shrink-0">{abbr}</span>
-              <span className="text-text-muted text-xs truncate">{full.split(' - ')[0]}</span>
+        {mode === 'cost' && (
+          <div className="space-y-6 border-t border-line-subtle pt-5">
+            <h3 className="text-lg font-bold text-text-primary">Other costs</h3>
+            <ExtraCost
+              id="calc-processing"
+              title="Processing"
+              amount={processingCost}
+              onAmount={setProcessingCost}
+              basis={weightType}
+              onBasis={setWeightType}
+              basisLegend="Your processor charges on"
+              fromState={fromState || 'starting fish'}
+              toState={toState || 'finished product'}
+              perFinishedLb={calc?.breakdown?.processing ?? 0}
+              yieldPercent={yieldPercent}
+            />
+            <ExtraCost
+              id="calc-shipping"
+              title="Shipping"
+              amount={shipping}
+              onAmount={setShipping}
+              basis={shippingWeightType}
+              onBasis={setShippingWeightType}
+              basisLegend="Shipping is charged on"
+              fromState={fromState || 'starting fish'}
+              toState={toState || 'finished product'}
+              perFinishedLb={calc?.breakdown?.shipping ?? 0}
+              yieldPercent={yieldPercent}
+            />
+          </div>
+        )}
+      </section>
+
+      {/* Keep it */}
+      {result !== null && (
+        user ? (
+          <section className="card flex flex-wrap items-center gap-x-2 gap-y-2 p-5" aria-label="Keep this result">
+            <button type="button" onClick={handleSave} className="btn-secondary">
+              <Save size={18} aria-hidden="true" /> Save calculation
+            </button>
+            <button type="button" onClick={handleExport} className="btn-ghost">
+              <Download size={16} aria-hidden="true" /> CSV
+            </button>
+            <button type="button" onClick={handleExportXlsx} className="btn-ghost">
+              <Download size={16} aria-hidden="true" /> Excel
+            </button>
+            <span role="status" className={`text-sm font-semibold ${saveStatus === 'Saved!' ? 'text-success' : 'text-danger'}`}>
+              {saveStatus}
+            </span>
+          </section>
+        ) : (
+          <p className="text-center text-base text-text-secondary">
+            Want to keep this? <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your calculations.
+          </p>
+        )
+      )}
+
+      {/* Abbreviation reference (collapsed: regulars know these, newcomers can open it) */}
+      <details className="card group">
+        <summary className="flex min-h-[3rem] cursor-pointer list-none items-center gap-2 rounded-xl px-5 py-3 text-base font-semibold text-text-primary [&::-webkit-details-marker]:hidden">
+          <HelpCircle size={18} className="text-link" aria-hidden="true" />
+          What do D/H-On, S/B and Round mean?
+          <ChevronDown size={18} className="ml-auto shrink-0 text-text-secondary transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line-subtle px-5 py-4 sm:grid-cols-2">
+          {Object.entries(ACRONYMS).map(([abbr, full]) => (
+            <div key={abbr}>
+              <dt className="text-sm font-bold text-accent">{abbr}</dt>
+              <dd className="text-sm text-text-secondary">{full.split(' - ')[0]}</dd>
             </div>
           ))}
-        </div>
-      </div>
+        </dl>
+      </details>
 
       {/* Community recent calculations */}
       {publicHistory.length > 0 && (
-        <div className="card p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-4 flex items-center gap-2">
-            <CalcIcon size={14} className="text-brand-terracotta" />
-            Recent Community Calculations
-          </h3>
-          <div className="divide-y divide-line-subtle">
-            {publicHistory.slice(0, 8).map((calc) => (
-              <div key={calc.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+        <section className="card p-5" aria-labelledby="community-calcs">
+          <h2 id="community-calcs" className="mb-4 flex items-center gap-2 text-base font-semibold text-text-primary">
+            <CalcIcon size={18} className="text-link" aria-hidden="true" />
+            Recent community calculations
+          </h2>
+          <ul className="divide-y divide-line-subtle">
+            {publicHistory.slice(0, 8).map((c) => (
+              <li key={c.id} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-text-primary truncate">{calc.name || calc.species}</p>
-                  <p className="text-xs text-text-muted mt-0.5">{calc.product} · {calc.yield}% yield</p>
+                  <p className="break-words text-base font-medium text-text-primary">{c.name || c.species}</p>
+                  <p className="mt-0.5 text-sm text-text-secondary">{c.product} · {c.yield}% yield</p>
                 </div>
-                <div className="text-right ml-4 shrink-0">
-                  <p className="text-sm font-semibold text-brand-teal dark:text-brand-yellow">
-                    ${parseFloat(calc.result).toFixed(2)}/lb
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-bold tabular-nums text-accent">
+                    ${parseFloat(c.result).toFixed(2)}/lb
                   </p>
-                  <p className="text-xs text-text-muted">
-                    {new Date(calc.date).toLocaleDateString()}
+                  <p className="text-sm text-text-secondary">
+                    {new Date(c.date).toLocaleDateString()}
                   </p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
           {!user && (
-            <p className="mt-4 text-xs text-text-muted text-center border-t border-line-subtle pt-3">
-              <a href="/login" className="text-brand-terracotta hover:underline">Sign in</a> to save your own calculations
+            <p className="mt-4 border-t border-line-subtle pt-3 text-center text-sm text-text-secondary">
+              <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your own calculations
             </p>
           )}
-        </div>
+        </section>
       )}
+
+      {/* The answer, pinned to the bottom of the screen so it is always in view while numbers change */}
+      <div
+        ref={dockRef}
+        role="region"
+        aria-label="Your result"
+        className="focus-on-dark fixed inset-x-0 bottom-0 z-30 border-t-4 border-brand-yellow bg-brand-teal pb-[env(safe-area-inset-bottom)] text-white shadow-[0_-4px_16px_rgba(0,0,0,0.18)]"
+      >
+        <div className="mx-auto max-w-2xl px-4 py-3">
+          {result === null ? (
+            <p className="py-2 text-lg font-bold">{dockPrompt}</p>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-white/90">
+                {mode === 'cost' ? `Your cost per lb of ${toState}` : `Buy this much ${fromState}`}
+              </p>
+              <p className="text-[clamp(2.5rem,11vw,3.5rem)] font-extrabold leading-none tracking-tight tabular-nums text-brand-yellow">
+                {mode === 'cost' ? dollars(result) : result.toFixed(1)}
+                <span className="ml-1 text-xl font-bold">{mode === 'cost' ? '/lb' : 'lbs'}</span>
+              </p>
+              <p className="mt-1 text-sm text-white/90">
+                {mode === 'cost'
+                  ? `${yieldPercent || 100}% yield · ${fromState} → ${toState}`
+                  : `makes ${parseAmount(targetWeight).toLocaleString('en-US')} lbs of ${toState} · ${yieldPercent || 100}% yield`}
+              </p>
+              {mode === 'cost' && extras.length > 0 && (
+                <p className="text-sm tabular-nums text-white/90">
+                  {[['Fish', calc.breakdown.fish], ...extras].map(([name, v]) => `${name} ${dollars(v)}`).join(' + ')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <p className="sr-only" aria-live="polite">{announcement}</p>
     </div>
   );
 };

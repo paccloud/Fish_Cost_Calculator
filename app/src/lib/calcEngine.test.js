@@ -158,6 +158,78 @@ describe('calculate — cold storage and shipping addends', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Shipping — incoming vs outgoing weight basis
+// ---------------------------------------------------------------------------
+
+describe('calculate — shipping weight basis', () => {
+  const cases = [
+    {
+      label: 'incoming basis: shipping the starting fish is spread over the finished pounds',
+      // cost=2, ship=0.20, yield=50%: 2/0.5 + 0.20/0.5 = 4.40
+      inputs: { mode: 'cost', yieldPercent: 50, cost: 2, shipping: 0.2, shippingWeightType: 'incoming' },
+      expected: { result: 4.4, appliedDiscount: 0 },
+    },
+    {
+      label: 'outgoing basis: shipping the finished product is added directly',
+      // cost=2, ship=0.20, yield=50%: 2/0.5 + 0.20 = 4.20
+      inputs: { mode: 'cost', yieldPercent: 50, cost: 2, shipping: 0.2, shippingWeightType: 'outgoing' },
+      expected: { result: 4.2, appliedDiscount: 0 },
+    },
+    {
+      label: 'processing and shipping bases are independent',
+      // cost=2, proc=0.50 outgoing, ship=0.20 incoming, yield=50%: 4 + 0.50 + 0.40 = 4.90
+      inputs: {
+        mode: 'cost', yieldPercent: 50, cost: 2,
+        processingCost: 0.5, weightType: 'outgoing', shipping: 0.2, shippingWeightType: 'incoming',
+      },
+      expected: { result: 4.9, appliedDiscount: 0 },
+    },
+  ];
+
+  cases.forEach(({ label, inputs, expected }) => {
+    it(label, () => {
+      const actual = calculate(inputs);
+      expect(actual.result).toBeCloseTo(expected.result, 10);
+      expect(actual.appliedDiscount).toBe(0);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Breakdown — what each cost adds per lb of finished product
+// ---------------------------------------------------------------------------
+
+describe('calculate — breakdown', () => {
+  it('reports each part per lb of finished product, and the parts add up to the result', () => {
+    // cost=2, proc=0.50 incoming, ship=0.20 incoming, cold=0.10, yield=50%
+    const actual = calculate({
+      mode: 'cost', yieldPercent: 50, cost: 2,
+      processingCost: 0.5, weightType: 'incoming', shipping: 0.2, shippingWeightType: 'incoming', coldStorage: 0.1,
+    });
+    expect(actual.breakdown.fish).toBeCloseTo(4, 10);
+    expect(actual.breakdown.processing).toBeCloseTo(1, 10);
+    expect(actual.breakdown.shipping).toBeCloseTo(0.4, 10);
+    expect(actual.breakdown.coldStorage).toBeCloseTo(0.1, 10);
+    expect(actual.breakdown.labor).toBe(0);
+    const sum = Object.values(actual.breakdown).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(actual.result, 10);
+  });
+
+  it('is taken before any bulk discount', () => {
+    const actual = calculate({
+      mode: 'cost', yieldPercent: 50, cost: 2,
+      showEconomyOfScale: true, quantity: '100', priceBreaks: DEFAULT_PRICE_BREAKS,
+    });
+    expect(actual.breakdown.fish).toBeCloseTo(4, 10);
+    expect(actual.result).toBeCloseTo(4 * 0.95, 10);
+  });
+
+  it('is null in weight mode', () => {
+    expect(calculate({ mode: 'weight', yieldPercent: 42, targetWeight: 100 }).breakdown).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Labor / time-tracking costs
 // ---------------------------------------------------------------------------
 

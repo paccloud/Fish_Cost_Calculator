@@ -57,8 +57,8 @@ const CommunityData = () => {
         <div className="max-w-5xl mx-auto px-4 py-8">
             <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-                        <Users className="text-brand-terracotta" size={24} />
+                    <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
+                        <Users className="text-link" size={24} />
                         Community Data Pool
                     </h1>
                     <p className="text-text-secondary mt-1 text-sm">
@@ -75,7 +75,7 @@ const CommunityData = () => {
                         Download CSV
                     </button>
                     {downloadError && (
-                        <p className="mt-1 text-xs text-red-500">{downloadError}</p>
+                        <p className="mt-1 text-xs text-danger">{downloadError}</p>
                     )}
                 </div>
             </div>
@@ -101,7 +101,7 @@ const CommunityData = () => {
 
             <div className="card overflow-hidden">
                 <div className="p-4 border-b border-line flex items-center justify-between">
-                    <h2 className="text-base font-semibold text-brand-teal">Shared Yield Data</h2>
+                    <h2 className="text-base font-semibold text-accent">Shared Yield Data</h2>
                     {search && (
                         <span className="text-sm text-text-secondary">{filtered.length} of {data.length} results</span>
                     )}
@@ -134,7 +134,7 @@ const CommunityData = () => {
                                     >
                                         <td className="p-4 text-text-primary font-medium">{row.species}</td>
                                         <td className="p-4 text-text-secondary">{row.product}</td>
-                                        <td className="p-4 text-right text-brand-teal font-semibold">{row.yield}%</td>
+                                        <td className="p-4 text-right text-accent font-semibold">{row.yield}%</td>
                                         <td className="p-4 text-text-secondary">
                                             {row.contributor || 'Anonymous'}
                                             {row.organization && (
@@ -152,7 +152,7 @@ const CommunityData = () => {
 
             <p className="mt-6 text-sm text-text-secondary text-center">
                 Want to contribute?{' '}
-                <Link to="/login" className="text-brand-teal hover:underline">Log in</Link>,
+                <Link to="/login" className="text-accent hover:underline">Log in</Link>,
                 add yield data in <strong>My Data</strong>, then toggle the share icon.
             </p>
         </div>

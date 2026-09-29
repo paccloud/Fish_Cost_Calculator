@@ -96,7 +96,7 @@ const UploadData = () => {
         <div className="bg-surface p-8 rounded-full">
           <Upload size={40} className="text-text-secondary" />
         </div>
-        <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+        <h2 className="text-xl font-bold text-accent">Login Required</h2>
         <p className="text-text-secondary max-w-md text-sm">
           You need to be logged in to upload your own yield data.
           This allows you to customize the calculator with your specific experience.
@@ -112,13 +112,13 @@ const UploadData = () => {
     <div className="max-w-2xl mx-auto p-4 sm:p-6">
       <div className="card p-6 sm:p-8">
         <div className="flex items-start justify-between mb-2">
-          <h2 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-            <Upload className="text-brand-terracotta" size={22} />
+          <h2 className="text-2xl font-bold text-accent flex items-center gap-3">
+            <Upload className="text-link" size={22} />
             Upload Yield Data
           </h2>
           <button
             onClick={downloadTemplate}
-            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-brand-teal transition font-medium"
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-accent transition font-medium"
             title="Download a template CSV"
           >
             <Download size={14} />
@@ -159,7 +159,7 @@ const UploadData = () => {
           />
           {file ? (
             <div className="flex flex-col items-center gap-3">
-              <FileText size={36} className="text-brand-teal" />
+              <FileText size={36} className="text-accent" />
               <div>
                 <p className="text-sm font-medium text-text-primary">{file.name}</p>
                 <p className="text-xs text-text-secondary mt-0.5">{formatBytes(file.size)}</p>
@@ -173,7 +173,7 @@ const UploadData = () => {
             </div>
           ) : (
             <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-3">
-              <Upload size={36} className={dragOver ? 'text-brand-teal' : 'text-text-secondary'} />
+              <Upload size={36} className={dragOver ? 'text-accent' : 'text-text-secondary'} />
               <div>
                 <p className="text-sm font-medium text-text-primary">
                   {dragOver ? 'Drop to upload' : 'Drag & drop or click to select'}
@@ -196,13 +196,13 @@ const UploadData = () => {
             <div className="flex gap-3 mb-3">
               {status.data.inserted > 0 && (
                 <div className="flex-1 bg-white dark:bg-white/10 rounded p-2 text-center">
-                  <p className="text-xl font-bold text-brand-teal">{status.data.inserted}</p>
+                  <p className="text-xl font-bold text-accent">{status.data.inserted}</p>
                   <p className="text-xs text-text-secondary">added</p>
                 </div>
               )}
               {status.data.updated > 0 && (
                 <div className="flex-1 bg-white dark:bg-white/10 rounded p-2 text-center">
-                  <p className="text-xl font-bold text-brand-teal">{status.data.updated}</p>
+                  <p className="text-xl font-bold text-accent">{status.data.updated}</p>
                   <p className="text-xs text-text-secondary">updated</p>
                 </div>
               )}
@@ -223,7 +223,7 @@ const UploadData = () => {
             )}
             <Link
               to="/manage-data"
-              className="inline-flex items-center gap-1 text-xs text-brand-terracotta hover:underline font-medium"
+              className="inline-flex items-center gap-1 text-xs text-link hover:underline font-medium"
             >
               View your data <ArrowRight size={12} />
             </Link>

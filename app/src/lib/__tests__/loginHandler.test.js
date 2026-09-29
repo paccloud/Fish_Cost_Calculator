@@ -8,9 +8,18 @@
  * Test runner: Vitest (run via `cd app && npm test`)
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { handleLogin } from '../../../../shared/handlers/login.js';
 import bcrypt from 'bcrypt';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+// The handler lives in /shared and may resolve a different physical copy of
+// bcrypt than this test file does (root vs app/node_modules). Spy on the
+// instance the handler actually uses, resolved from the handler's location.
+const handlerBcrypt = createRequire(
+  fileURLToPath(new URL('../../../../shared/handlers/login.js', import.meta.url))
+)('bcrypt');
 
 const VALID_SECRET = 'test-jwt-secret-32chars-minimum!!';
 const VALID_CONFIG = { jwtSecret: VALID_SECRET, tokenExpirySeconds: 86400 };
@@ -132,6 +141,82 @@ describe('handleLogin — invalid credentials', () => {
       handleLogin({ username: 'alice', password: 'bad' }, dbWrongPw, VALID_CONFIG),
     ]);
     expect(notFoundResult.body.error).toBe(wrongPwResult.body.error);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Accounts without a usable password (Firebase-only) / enumeration resistance
+// ---------------------------------------------------------------------------
+
+describe('handleLogin — no usable password', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const dbWith = (user) => makeFakeDb({ findUserByUsername: vi.fn().mockResolvedValue(user) });
+
+  it('returns 401 (not 500) when user exists with a null password', async () => {
+    const result = await handleLogin(
+      { username: 'a@b.com', password: 'pw' },
+      dbWith({ id: 1, username: 'a@b.com', password: null }),
+      VALID_CONFIG
+    );
+    expect(result.status).toBe(401);
+    expect(result.body).toEqual({ error: 'Invalid credentials' });
+  });
+
+  it.each([['empty string', ''], ['number', 12345], ['object', {}], ['undefined', undefined], ['malformed hash string', 'notahash'], ['truncated bcrypt hash', '$2b$10$abc'], ['plaintext password', 'hunter2']])(
+    'returns 401 when stored password is %s',
+    async (_label, bad) => {
+      const result = await handleLogin(
+        { username: 'a@b.com', password: 'pw' },
+        dbWith({ id: 1, username: 'a@b.com', password: bad }),
+        VALID_CONFIG
+      );
+      expect(result.status).toBe(401);
+      expect(result.body).toEqual({ error: 'Invalid credentials' });
+    }
+  );
+
+  it('returns identical status and body for missing user, null-password user, and wrong password', async () => {
+    const hash = await makeHashedPassword('correct');
+    const results = await Promise.all([
+      handleLogin({ username: 'x', password: 'bad' }, dbWith(null), VALID_CONFIG),
+      handleLogin({ username: 'x', password: 'bad' }, dbWith({ id: 1, username: 'x', password: null }), VALID_CONFIG),
+      handleLogin({ username: 'x', password: 'bad' }, dbWith({ id: 1, username: 'x', password: hash }), VALID_CONFIG),
+    ]);
+    for (const r of results) {
+      expect(r.status).toBe(401);
+      expect(r.body).toEqual({ error: 'Invalid credentials' });
+    }
+  });
+
+  it('runs a dummy bcrypt compare when the user is not found', async () => {
+    const spy = vi.spyOn(handlerBcrypt, 'compare');
+    await handleLogin({ username: 'nobody', password: 'pw' }, dbWith(null), VALID_CONFIG);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [plain, hash] = spy.mock.calls[0];
+    expect(plain).toBe('pw');
+    expect(hash).toMatch(/^\$2[aby]\$10\$/);
+  });
+
+  it('runs a dummy bcrypt compare when the user has no password', async () => {
+    const spy = vi.spyOn(handlerBcrypt, 'compare');
+    await handleLogin(
+      { username: 'a@b.com', password: 'pw' },
+      dbWith({ id: 1, username: 'a@b.com', password: null }),
+      VALID_CONFIG
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][1]).toMatch(/^\$2[aby]\$10\$/);
+  });
+
+  it('compares against the real hash (not the dummy) when the user has one', async () => {
+    const hash = await makeHashedPassword('correct');
+    const spy = vi.spyOn(handlerBcrypt, 'compare');
+    await handleLogin({ username: 'alice', password: 'wrong' }, dbWith({ id: 1, username: 'alice', password: hash }), VALID_CONFIG);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][1]).toBe(hash);
   });
 });
 
