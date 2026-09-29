@@ -36,7 +36,7 @@ describe('owner id comes from the verified token, never the body', () => {
     await savedCalcs(req, makeRes());
 
     const insert = query.mock.calls.find(([sql]) => /INSERT INTO calculations/i.test(sql));
-    expect(insert[1]).toContain(7);
+    expect(insert[1][0]).toBe(7); // user_id
     expect(insert[1]).not.toContain(999);
   });
 
@@ -49,6 +49,8 @@ describe('owner id comes from the verified token, never the body', () => {
     for (const [, params] of query.mock.calls) {
       expect(params).not.toContain(999);
     }
-    expect(query.mock.calls.some(([, params]) => params?.includes(7))).toBe(true);
+    const update = query.mock.calls.find(([sql]) => /UPDATE contributors/i.test(sql));
+    expect(update).toBeDefined();
+    expect(update[1][4]).toBe(7); // WHERE user_id = $5
   });
 });
