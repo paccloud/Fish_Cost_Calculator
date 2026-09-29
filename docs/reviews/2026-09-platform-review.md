@@ -4,6 +4,11 @@ Reviewed at commit `d6ee642` on 2026-09-28. Six parallel reviews covered design 
 
 > **Superseded in part (2026-09-29):** the architecture, sign-up and hosting recommendations below (Hono + Postgres, provider-neutral OIDC, keeping Vercel) were replaced by the decision to use Firebase Auth, Firestore and Firebase Hosting with no server of our own (ADR 0001 also rejects Firebase SQL Connect). See `CONTEXT.md` and `docs/adr/0001`–`0004` (#122); the work is tracked in #123–#133. Until it lands, production still runs the current Neon, Vercel API and sync stack, and the roadmap items for Hono, OIDC and Postgres below are no longer planned. The bug findings and the design, open-source and data-licensing sections still apply.
 
+> **Since this review (2026-09-29):**
+> - Design: the Dockside calculator (#121) added light/dark contrast tokens, a labelled yield field and a live, always-visible result. The design items for those are done; the rest of section 2 still applies.
+> - Contributor profile: the path is fixed in #113, and #119 added a strict `normalizeShowOnPage()`. Keep that helper; don't replace it with `Boolean(show_on_page)`, which would turn a stored `'false'` into an opt-in.
+> - Sharing: publishing saved calculations publicly is dropped (`CONTEXT.md`), so the share-sheet roadmap item is superseded. The four-level visibility model and aggregate-only default in section 7 are superseded by ADR 0004: a submitted yield is reviewed and, once approved, published individually under CC BY 4.0, attributed by display name or "Anonymous".
+
 > A separate security and privacy review was shared privately with the maintainer. Its fixes will land as ordinary PRs.
 
 ## Summary
@@ -193,7 +198,7 @@ Suggested suite layout, starting from `shared/` as a workspace root:
 | Asset | Recommendation |
 |---|---|
 | Code | MIT. Fix `server/package.json` ("ISC"). |
-| MAB-37-derived reference yields | Individual values are facts, very likely reusable with attribution. Remove the copyrighted PDF and full OCR text from `research/` and link the NOAA IR / Alaska Sea Grant copy instead. Ask Alaska Sea Grant for written permission and a review of the flagged values. |
+| MAB-37-derived reference yields | Individual values are facts, very likely reusable with attribution. Ask Alaska Sea Grant for written permission to keep the PDF and full OCR text in `research/`, and for a review of the flagged values. If permission isn't given, deleting the files isn't enough, since both remain in Git history; they must also be purged from history (a coordinated rewrite), and the NOAA IR / Alaska Sea Grant copy linked instead. |
 | Community yields | CC BY 4.0 outbound, with contributor terms that allow relicensing through governance (the lesson from OpenStreetMap's 2012 relicense). Record `terms_version` and `consented_at` per row. Rows shared before this existed carry no license grant: exclude them from licensed releases until their contributors re-consent. |
 | FishBase data | Don't import it. CC BY-NC conflicts with a tool for commercial fishers. |
 
