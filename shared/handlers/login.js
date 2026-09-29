@@ -8,8 +8,9 @@
  * Drift resolved from the dual-backend state:
  *   - Explicit presence validation for username AND password (was missing in
  *     the local Express server — server conflated db-error and missing-user).
- *   - Separate handling of db error vs. user-not-found (both map to 401 for
- *     the client, but internally distinguished so db errors are logged).
+ *   - Separate handling of db error vs. bad credentials (db errors are logged
+ *     and return 500; missing user, no-password user and wrong password all
+ *     return the same 401 and run a bcrypt compare for comparable timing).
  *   - Sanitized error responses — raw driver messages never reach the caller.
  *   - 500 returned when JWT_SECRET is absent (production already did this;
  *     server relied on startup-time throw instead).
@@ -18,6 +19,13 @@
  */
 
 import bcrypt from 'bcrypt';
+
+// bcrypt hash (cost 10, same as BCRYPT_ROUNDS in register.js) of a random value
+// that was discarded after hashing. It is never a valid credential. It exists
+// only so a compare runs when there is no real hash, keeping timing comparable.
+// Hardcoded (not computed at import) so module load stays fast on serverless.
+const BCRYPT_HASH_FORMAT = /^\$2[aby]\$\d{2}\$.{53}$/;
+const DUMMY_BCRYPT_HASH = '$2b$10$hqLh.WJehIHPuWzLmqOCN.sMvpo1P4myaP/hSzq7AmUSICHKwEPPG';
 
 /**
  * @typedef {Object} LoginRequest
@@ -70,13 +78,18 @@ export async function handleLogin(input, db, config) {
   try {
     const user = await db.findUserByUsername(username.trim());
 
-    if (!user) {
-      // User not found — same response as wrong password to avoid enumeration
-      return { status: 401, body: { error: 'Invalid credentials' } };
-    }
-
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) {
+    // Missing user, a user with no usable password (e.g. Firebase-only account
+    // stored with a NULL/empty/non-string password), and a wrong password all
+    // return the identical 401. A bcrypt compare always runs (against a dummy
+    // hash when there is no real one) so response timing does not reveal which
+    // case occurred.
+    // A stored value that is not a well-formed bcrypt hash would make compare()
+    // return instantly, so it is treated as "no usable hash" too.
+    const hash = user && typeof user.password === 'string' && BCRYPT_HASH_FORMAT.test(user.password)
+      ? user.password
+      : null;
+    const match = await bcrypt.compare(password, hash ?? DUMMY_BCRYPT_HASH);
+    if (!hash || !match) {
       return { status: 401, body: { error: 'Invalid credentials' } };
     }
 

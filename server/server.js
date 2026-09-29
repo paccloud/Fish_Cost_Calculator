@@ -608,47 +608,23 @@ app.post('/api/user-data/:id/unshare', authenticate, async (req, res) => {
     return res.status(status).json(body);
 });
 
-// Community pool — public read (no auth required)
-app.get('/api/community-data', (req, res) => {
-    const sql = `
-        SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) AS contributor,
-               c.organization
-        FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
-        LEFT JOIN contributors c ON ud.user_id = c.user_id
-        WHERE ud.is_shared = 1
-        ORDER BY ud.species ASC, ud.product ASC
-    `;
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Failed to load community data' });
-        res.json(rows);
-    });
-});
+// Community pool — public read (no auth required). Query + row shaping live in
+// the shared handler core so attribution consent matches production (#26).
+const sendCommunityData = async (req, res, format) => {
+    const { handleListCommunityData } = await handlersModulePromise;
+    const dbAdapter = makeSqliteAdapter(db);
+    const { status, body, headers } = await handleListCommunityData({ format }, dbAdapter);
+    if (headers && status === 200) {
+        Object.entries(headers).forEach(([name, value]) => res.setHeader(name, value));
+        return res.status(status).send(body);
+    }
+    return res.status(status).json(body);
+};
 
-// Export community pool as CSV
-app.get('/api/export-community-data', (req, res) => {
-    const sql = `
-        SELECT ud.species, ud.product, ud.yield, ud.source,
-               COALESCE(c.display_name, u.username) AS contributor,
-               c.organization
-        FROM user_data ud
-        JOIN users u ON ud.user_id = u.id
-        LEFT JOIN contributors c ON ud.user_id = c.user_id
-        WHERE ud.is_shared = 1
-        ORDER BY ud.species ASC
-    `;
-    db.all(sql, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Failed to export community data' });
-        const header = 'Species,Product,Yield (%),Source,Contributor,Organization\n';
-        const body = rows.map(r =>
-            `"${sanitizeCsvValue(r.species)}","${sanitizeCsvValue(r.product)}","${sanitizeCsvValue(r.yield)}","${sanitizeCsvValue(r.source || '')}","${sanitizeCsvValue(r.contributor || '')}","${sanitizeCsvValue(r.organization || '')}"`
-        ).join('\n');
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="community-yield-data.csv"');
-        res.send(header + body);
-    });
-});
+app.get('/api/community-data', (req, res) => sendCommunityData(req, res, req.query.format));
+
+// Export community pool as CSV (legacy path; same output as ?format=csv)
+app.get('/api/export-community-data', (req, res) => sendCommunityData(req, res, 'csv'));
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

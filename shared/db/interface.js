@@ -70,7 +70,10 @@
  *   {fishData, profiles, source}.
  *
  * @property {function(): Promise<Array>} listContributors
- *   Return visible contributor profiles plus contribution_count.
+ *   Return visible (show_on_page true) contributor profiles as
+ *   {id, display_name, organization, bio, contribution_count}. Must NOT select
+ *   account identifiers (username, email, user_id, firebase_uid) or use c.*;
+ *   the result is public and is allowlist-shaped by shared/handlers/contributorsList.js.
  *
  * @property {function(string|number): Promise<Object|null>} getContributorProfile
  *   Return the authenticated user's contributor profile, or null if none exists.
@@ -99,6 +102,15 @@
  *
  * @property {function(string|number, string|number, boolean): Promise<void>} setUserDataSharing
  *   Set the is_shared flag on the user-data entry (id, userId, isShared).
+ *
+ * @property {function(): Promise<Array>} listSharedYieldRows
+ *   Return every user-data row with is_shared = true for the public community
+ *   feed, ordered by species then product. Each row has
+ *   {id, species, product, yield, source, contributor_display_name,
+ *   contributor_organization, contributor_show_on_page} — the contributor_*
+ *   fields come from the owner's contributor profile (null when none exists).
+ *   The query must NOT select users.username, email, firebase_uid or user_id;
+ *   attribution consent is applied by shared/handlers/communityData.js.
  */
 
 /**

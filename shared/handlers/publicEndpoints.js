@@ -1,3 +1,5 @@
+import { shapeContributors } from './contributorsList.js';
+
 async function safeCall(label, action, failureMessage) {
   try {
     const body = await action();
@@ -27,7 +29,7 @@ export async function handleGetFishData(_input, db) {
 export async function handleListContributors(_input, db) {
   return safeCall(
     'contributors',
-    () => db.listContributors(),
+    async () => shapeContributors(await db.listContributors()),
     'Failed to fetch contributors'
   );
 }

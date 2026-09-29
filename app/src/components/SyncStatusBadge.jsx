@@ -3,13 +3,13 @@ import { Cloud, CloudOff, Loader2, AlertCircle, CheckCircle, TriangleAlert, Cloc
 import { useData } from '../context/DataContext';
 
 const CONFIG = {
-  synced:   { icon: CheckCircle,   label: 'Synced',   color: 'text-green-500' },
-  syncing:  { icon: Loader2,       label: 'Syncing…', color: 'text-brand-teal', spin: true },
-  pending:  { icon: Clock,         label: 'Pending',  color: 'text-yellow-400' },
-  offline:  { icon: CloudOff,      label: 'Offline',  color: 'text-text-muted' },
-  error:    { icon: AlertCircle,   label: 'Error',    color: 'text-red-400' },
-  conflict: { icon: TriangleAlert, label: 'Conflict', color: 'text-orange-400' },
-  idle:     { icon: Cloud,         label: 'Idle',     color: 'text-text-muted' },
+  synced:   { icon: CheckCircle,   label: 'Synced',   color: 'text-green-300' },
+  syncing:  { icon: Loader2,       label: 'Syncing…', color: 'text-brand-yellow', spin: true },
+  pending:  { icon: Clock,         label: 'Pending',  color: 'text-yellow-300' },
+  offline:  { icon: CloudOff,      label: 'Offline',  color: 'text-white/80' },
+  error:    { icon: AlertCircle,   label: 'Error',    color: 'text-red-300' },
+  conflict: { icon: TriangleAlert, label: 'Conflict', color: 'text-orange-300' },
+  idle:     { icon: Cloud,         label: 'Idle',     color: 'text-white/80' },
 };
 
 /**
@@ -23,7 +23,7 @@ export default function SyncStatusBadge({ onToggleDetails }) {
   return (
     <button
       onClick={onToggleDetails}
-      className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors hover:bg-white/10 ${color}`}
+      className={`flex min-h-[2.75rem] items-center gap-1 px-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-white/10 ${color}`}
       title={`Sync status: ${label}${pendingCount > 0 ? ` (${pendingCount} pending)` : ''}`}
       aria-label={`Sync status: ${label}`}
     >
