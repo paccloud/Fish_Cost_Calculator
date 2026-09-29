@@ -445,7 +445,7 @@ Retrieve the 100 most recent calculations. No authentication required.
 
 ### Get Contributors
 
-Retrieve opt-in contributor profiles. No authentication required. Account usernames, emails and user ids are never returned; `display_name` may be `null`, and clients show it as "Anonymous".
+Retrieve opt-in contributor profiles. No authentication required.
 
 **Endpoint:** `GET /api/contributors`
 
@@ -462,6 +462,8 @@ Retrieve opt-in contributor profiles. No authentication required. Account userna
   }
 ]
 ```
+
+Only profiles that have turned on "Show on contributors page" and have a display name are listed. The response is an allowlist: it never includes `user_id`, `username`, `email` or `show_on_page`. `id` is the contributor profile's id, not a user id.
 
 ---
 

@@ -25,24 +25,24 @@ const NavBar = () => {
     const [syncPanelOpen, setSyncPanelOpen] = React.useState(false);
 
     const navLinkClass = ({ isActive }) =>
-        `text-sm font-medium transition-colors ${
+        `inline-flex min-h-[2.75rem] items-center text-sm font-medium transition-colors ${
             isActive
-                ? 'text-brand-yellow'
-                : 'text-white/75 hover:text-white'
+                ? 'text-brand-yellow underline decoration-2 underline-offset-8'
+                : 'text-white/85 hover:text-white'
         }`;
 
     return (
-        <nav className="bg-brand-teal sticky top-0 z-50 border-b border-white/10">
+        <nav aria-label="Main" className="focus-on-dark bg-brand-teal sticky top-0 z-50 border-b border-white/10">
             <div className="max-w-5xl mx-auto px-4 sm:px-6">
                 <div className="flex items-center justify-between h-14">
                     {/* Logo */}
-                    <Link to="/" className="flex items-center gap-2.5 shrink-0">
+                    <Link to="/" className="flex min-h-[2.75rem] items-center gap-2.5 shrink-0">
                         <div className="w-7 h-7 bg-white/15 rounded flex items-center justify-center">
                             <Fish className="text-white h-4 w-4" />
                         </div>
                         <div className="leading-none">
                             <span className="font-semibold text-white text-sm tracking-tight">Local Catch</span>
-                            <span className="hidden sm:inline text-white/50 text-xs ml-1.5">Fish Cost Calculator</span>
+                            <span className="hidden sm:inline text-white/75 text-xs ml-1.5">Fish Cost Calculator</span>
                         </div>
                     </Link>
 
@@ -70,10 +70,10 @@ const NavBar = () => {
                     <div className="flex items-center gap-2">
                         <button
                             onClick={toggleTheme}
-                            className="p-1.5 rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
-                            aria-label="Toggle theme"
+                            className="flex h-11 w-11 items-center justify-center rounded-lg text-white/85 hover:text-white hover:bg-white/10 transition-colors"
+                            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
                         >
-                            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
                         </button>
 
                         {user && (
@@ -87,10 +87,10 @@ const NavBar = () => {
 
                         {user ? (
                             <div className="hidden md:flex items-center gap-3">
-                                <span className="text-white/60 text-xs">{user.username}</span>
+                                <span className="max-w-[10rem] truncate text-white/80 text-sm">{user.username}</span>
                                 <button
                                     onClick={signOut}
-                                    className="text-white/70 hover:text-white text-xs border border-white/25 px-2.5 py-1 rounded transition-colors"
+                                    className="min-h-[2.5rem] text-white/85 hover:text-white text-sm border border-white/40 px-3 rounded-lg transition-colors"
                                 >
                                     Sign out
                                 </button>
@@ -98,7 +98,7 @@ const NavBar = () => {
                         ) : (
                             <Link
                                 to="/login"
-                                className="hidden md:flex items-center gap-1.5 text-white/75 hover:text-white transition-colors text-sm"
+                                className="hidden md:flex min-h-[2.75rem] items-center gap-1.5 text-white/85 hover:text-white transition-colors text-sm"
                             >
                                 <UserCircle className="h-4 w-4" />
                                 Sign in
@@ -107,10 +107,12 @@ const NavBar = () => {
 
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className="md:hidden p-1.5 text-white/75 hover:text-white transition-colors"
-                            aria-label="Toggle mobile menu"
+                            className="md:hidden flex h-11 w-11 items-center justify-center rounded-lg text-white/85 hover:text-white hover:bg-white/10 transition-colors"
+                            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+                            aria-expanded={mobileMenuOpen}
+                            aria-controls="mobile-menu"
                         >
-                            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                         </button>
                     </div>
                 </div>
@@ -118,7 +120,7 @@ const NavBar = () => {
 
             {/* Mobile menu */}
             {mobileMenuOpen && (
-                <div className="md:hidden border-t border-white/10 bg-brand-teal">
+                <div id="mobile-menu" className="md:hidden border-t border-white/10 bg-brand-teal">
                     <div className="max-w-5xl mx-auto px-4 py-3 space-y-0.5">
                         {[
                             { to: '/', label: 'Calculator', end: true },
@@ -134,10 +136,10 @@ const NavBar = () => {
                                 end={end}
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={({ isActive }) =>
-                                    `block px-3 py-2 rounded text-sm font-medium transition-colors ${
+                                    `block px-3 py-3 rounded-lg text-base font-medium transition-colors ${
                                         isActive
                                             ? 'bg-white/15 text-white'
-                                            : 'text-white/75 hover:text-white hover:bg-white/10'
+                                            : 'text-white/85 hover:text-white hover:bg-white/10'
                                     }`
                                 }
                             >
@@ -148,10 +150,10 @@ const NavBar = () => {
                         <div className="pt-2 mt-2 border-t border-white/10">
                             {user ? (
                                 <div className="flex items-center justify-between px-3 py-2">
-                                    <span className="text-white/60 text-sm">{user.username}</span>
+                                    <span className="text-white/80 text-base">{user.username}</span>
                                     <button
                                         onClick={() => { signOut(); setMobileMenuOpen(false); }}
-                                        className="text-white/70 hover:text-white text-sm"
+                                        className="min-h-[2.75rem] px-3 text-white/85 hover:text-white text-base"
                                     >
                                         Sign out
                                     </button>
@@ -160,9 +162,9 @@ const NavBar = () => {
                                 <NavLink
                                     to="/login"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center gap-2 px-3 py-2 text-sm text-white/75 hover:text-white transition-colors"
+                                    className="flex items-center gap-2 px-3 py-3 text-base text-white/85 hover:text-white transition-colors"
                                 >
-                                    <UserCircle size={16} /> Sign in
+                                    <UserCircle size={18} /> Sign in
                                 </NavLink>
                             )}
                         </div>
@@ -175,9 +177,15 @@ const NavBar = () => {
 
 function AppContent() {
     return (
-        <div className="min-h-screen bg-surface text-text-primary font-sans selection:bg-brand-terracotta/20 selection:text-brand-terracotta">
+        <div className="min-h-screen bg-surface text-text-primary font-sans selection:bg-brand-terracotta/20 selection:text-link">
+            <a
+                href="#main"
+                className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-surface-raised focus:px-4 focus:py-2 focus:font-semibold focus:text-text-primary focus:shadow-lg"
+            >
+                Skip to main content
+            </a>
             <NavBar />
-            <main className="py-8 px-4">
+            <main id="main" tabIndex={-1} className="py-6 sm:py-8 px-4 focus:outline-none">
                 <Analytics />
                 <Suspense fallback={
                     <div className="flex items-center justify-center py-20 text-text-muted text-sm">Loading…</div>
@@ -198,9 +206,9 @@ function AppContent() {
                         } />
                         <Route path="*" element={
                             <div className="max-w-2xl mx-auto text-center mt-20 space-y-4">
-                                <p className="text-6xl font-bold text-brand-teal">404</p>
+                                <p className="text-6xl font-bold text-accent">404</p>
                                 <p className="text-text-secondary">Page not found.</p>
-                                <Link to="/" className="inline-block text-brand-terracotta hover:underline text-sm font-medium">
+                                <Link to="/" className="inline-block text-link hover:underline text-sm font-medium">
                                     Back to calculator
                                 </Link>
                             </div>

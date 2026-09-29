@@ -3,17 +3,16 @@ import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucid
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { DEFAULT_PROFILE_FORM, profileToFormData, buildProfilePayload } from '../lib/contributorProfile';
 
 const ContributorProfile = () => {
     const { user, getAuthHeaders } = useAuth();
     const navigate = useNavigate();
     const [status, setStatus] = useState(null);
-    const [formData, setFormData] = useState({
-        display_name: '',
-        organization: '',
-        bio: '',
-        show_on_page: true
-    });
+    const [formData, setFormData] = useState({ ...DEFAULT_PROFILE_FORM });
+    // Form is only editable/savable once the stored profile resolved (200 or
+    // 404), so a failed or pending load can never overwrite stored consent.
+    const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
         if (!user) return;
@@ -23,7 +22,10 @@ const ContributorProfile = () => {
                 const headers = await getAuthHeaders();
                 const res = await fetch(apiUrl('/api/contributor/me'), { headers });
 
-                if (res.status === 404) return;
+                if (res.status === 404) {
+                    setLoaded(true);
+                    return;
+                }
 
                 if (!res.ok) {
                     const rawError = await res.text().catch(() => '');
@@ -47,13 +49,9 @@ const ContributorProfile = () => {
 
                 const data = await res.json();
                 if (data) {
-                    setFormData({
-                        display_name: data.display_name || '',
-                        organization: data.organization || '',
-                        bio: data.bio || '',
-                        show_on_page: data.show_on_page === 1
-                    });
+                    setFormData(profileToFormData(data));
                 }
+                setLoaded(true);
             } catch (err) {
                 console.error('Failed to load profile:', err);
                 setStatus({ type: 'error', message: 'Unable to load your profile. Please try again.' });
@@ -65,13 +63,14 @@ const ContributorProfile = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!loaded) return;
 
         try {
             const headers = await getAuthHeaders('application/json');
             const res = await fetch(apiUrl('/api/contributor'), {
                 method: 'POST',
                 headers,
-                body: JSON.stringify(formData)
+                body: JSON.stringify(buildProfilePayload(formData))
             });
 
             if (res.ok) {
@@ -96,11 +95,11 @@ const ContributorProfile = () => {
                 <div className="bg-surface p-8 rounded-full">
                     <User size={40} className="text-text-secondary" />
                 </div>
-                <h2 className="text-xl font-bold text-brand-teal">Login Required</h2>
+                <h2 className="text-xl font-bold text-accent">Login Required</h2>
                 <p className="text-text-secondary max-w-md text-sm">
                     You need to be logged in to create a contributor profile.
                 </p>
-                <Link to="/login" className="text-brand-terracotta hover:underline text-sm font-medium">
+                <Link to="/login" className="text-link hover:underline text-sm font-medium">
                     Go to Login
                 </Link>
             </div>
@@ -110,8 +109,8 @@ const ContributorProfile = () => {
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
             <div className="mb-6">
-                <h1 className="text-2xl font-bold text-brand-teal flex items-center gap-3">
-                    <User className="text-brand-terracotta" size={22} />
+                <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
+                    <User className="text-link" size={22} />
                     Contributor Profile
                 </h1>
                 <p className="text-text-secondary mt-1 text-sm">
@@ -131,6 +130,7 @@ const ContributorProfile = () => {
             )}
 
             <form onSubmit={handleSubmit} className="card p-8 space-y-5">
+              <fieldset disabled={!loaded} className="space-y-5 border-0 p-0 m-0 min-w-0">
                 <div>
                     <label className="form-label flex items-center gap-2">
                         <User size={14} />
@@ -194,9 +194,12 @@ const ContributorProfile = () => {
                     </label>
                 </div>
 
+              </fieldset>
+
                 <div className="flex gap-3 pt-2">
                     <button
                         type="submit"
+                        disabled={!loaded}
                         className="flex-1 btn-primary flex items-center justify-center gap-2"
                     >
                         <Save size={16} />

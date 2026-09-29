@@ -14,8 +14,6 @@ vi.mock('../../../../api/_lib/db.js', () => ({ query: (...args) => query(...args
 
 const { default: savedCalcs } = await import('../../../../api/saved-calcs.js');
 const { default: contributor } = await import('../../../../api/contributor.js');
-const { default: communityData } = await import('../../../../api/community-data.js');
-const { default: contributors } = await import('../../../../api/contributors.js');
 
 function makeRes() {
   const res = { statusCode: 200, body: undefined };
@@ -52,34 +50,5 @@ describe('owner id comes from the verified token, never the body', () => {
       expect(params).not.toContain(999);
     }
     expect(query.mock.calls.some(([, params]) => params?.includes(7))).toBe(true);
-  });
-});
-
-describe('public endpoints never fall back to the account username/email', () => {
-  it('community data attributes rows by display name only', async () => {
-    query.mockResolvedValue({ rows: [] });
-
-    await communityData({ method: 'GET', query: {} }, makeRes());
-
-    const [sql] = query.mock.calls[0];
-    expect(sql).not.toMatch(/username/i);
-  });
-
-  it('community CSV labels rows without a display name as Anonymous', async () => {
-    query.mockResolvedValue({ rows: [] });
-
-    await communityData({ method: 'GET', query: { format: 'csv' } }, makeRes());
-
-    const [sql] = query.mock.calls[0];
-    expect(sql).toMatch(/'Anonymous'\) AS contributor/);
-  });
-
-  it('contributors list selects no username or user id', async () => {
-    query.mockResolvedValue({ rows: [] });
-
-    await contributors({ method: 'GET', query: {} }, makeRes());
-
-    const [sql] = query.mock.calls[0];
-    expect(sql).not.toMatch(/username|c\.\*|user_id\s*,|\bu\./i);
   });
 });

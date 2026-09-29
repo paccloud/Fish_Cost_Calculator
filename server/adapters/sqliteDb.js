@@ -259,16 +259,42 @@ function makeSqliteAdapter(db) {
       };
     },
 
+    // Public listing. Deliberately does not join users and does not use c.*:
+    // no username, email, firebase_uid or user_id is ever selected. Shaping is
+    // done by shared/handlers/contributorsList.js.
     listContributors() {
       return new Promise((resolve, reject) => {
         db.all(
           `SELECT c.id, c.display_name, c.organization, c.bio,
-                  COUNT(ud.id) as contribution_count
+                  COUNT(ud.id) AS contribution_count
            FROM contributors c
-           LEFT JOIN user_data ud ON c.user_id = ud.user_id
+           LEFT JOIN user_data ud ON ud.user_id = c.user_id
            WHERE c.show_on_page = 1
            GROUP BY c.id
-           ORDER BY contribution_count DESC`,
+           ORDER BY contribution_count DESC, c.id ASC`,
+          [],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows ?? []);
+          }
+        );
+      });
+    },
+
+    // Public community feed. Deliberately does not join users: no username,
+    // email, firebase_uid or user_id is ever selected. Consent is applied by
+    // shared/handlers/communityData.js (show_on_page must be 1).
+    listSharedYieldRows() {
+      return new Promise((resolve, reject) => {
+        db.all(
+          `SELECT ud.id, ud.species, ud.product, ud.yield, ud.source,
+                  c.display_name AS contributor_display_name,
+                  c.organization AS contributor_organization,
+                  c.show_on_page AS contributor_show_on_page
+           FROM user_data ud
+           LEFT JOIN contributors c ON c.user_id = ud.user_id
+           WHERE ud.is_shared = 1
+           ORDER BY ud.species ASC, ud.product ASC, ud.id ASC`,
           [],
           (err, rows) => {
             if (err) return reject(err);
