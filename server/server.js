@@ -14,6 +14,7 @@ const {
     parseImportRows,
     upsertImportedYieldRowsSqlite,
 } = require('./importRows');
+const { createReadOnlyMiddleware } = require('./readOnlyMiddleware');
 const ExcelJS = require('exceljs');
 const crypto = require('crypto');
 
@@ -73,6 +74,9 @@ app.use((err, req, res, next) => {
 });
 app.use('/api', apiRateLimit);
 app.use(express.json());
+
+// API read-only mode for the move to Firebase (issue #130): must come before every route.
+app.use('/api', createReadOnlyMiddleware());
 
 const CSV_FORMULA_PREFIX = /^[=+\-@]/;
 const sanitizeCsvValue = (value) => {

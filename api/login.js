@@ -34,4 +34,5 @@ async function handler(req, res) {
   return res.status(status).json(body);
 }
 
-export default handleCors(handler);
+// Sign-in stays open in read-only mode so people can still read their data.
+export default handleCors(handler, { allowWhenReadOnly: true });

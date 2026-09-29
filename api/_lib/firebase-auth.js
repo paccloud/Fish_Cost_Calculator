@@ -1,4 +1,5 @@
 import { createVerify } from 'node:crypto';
+import { isApiReadOnly } from '../../shared/readOnly.js';
 
 const FIREBASE_PROJECT_ID =
   process.env.FIREBASE_PROJECT_ID ||
@@ -184,7 +185,10 @@ async function linkExistingUser(existingUser, firebaseUser, query) {
   return existingUser;
 }
 
-export async function getOrCreateFirebaseUser(firebaseUser, query) {
+// In API read-only mode this only looks up an already-linked user: it never
+// syncs the email, links an existing account or creates one, so nothing in the
+// database changes while it is copied.
+export async function getOrCreateFirebaseUser(firebaseUser, query, { readOnly = isApiReadOnly() } = {}) {
   if (!firebaseUser?.uid || typeof query !== 'function') {
     return null;
   }
@@ -204,6 +208,7 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
 
     if (result.rows.length > 0) {
       const localUser = result.rows[0];
+      if (readOnly) return localUser;
       // If the Firebase user has changed their verified email, sync it to the local record.
       // Uses IS DISTINCT FROM so the UPDATE is a no-op when another request already synced.
       if (firebaseUser.emailVerified && firebaseUser.email && localUser.email !== firebaseUser.email) {
@@ -225,6 +230,8 @@ export async function getOrCreateFirebaseUser(firebaseUser, query) {
       }
       return localUser;
     }
+
+    if (readOnly) return null;
 
     if (firebaseUser.email && !firebaseUser.emailVerified) {
       return null;

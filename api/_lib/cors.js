@@ -1,3 +1,5 @@
+import { isBlockedWrite, READ_ONLY_BODY, READ_ONLY_STATUS } from '../../shared/readOnly.js';
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
   .split(',')
   .map(origin => origin.trim())
@@ -47,11 +49,14 @@ export function setCorsHeaders(req, res) {
 }
 
 /**
- * Higher-order function to handle CORS for a handler
+ * Higher-order function to handle CORS for a handler.
+ * Also refuses writes while the API is read-only (API_READ_ONLY=true).
  * @param {Function} handler - The route handler function
+ * @param {Object} [options]
+ * @param {boolean} [options.allowWhenReadOnly] - Let POSTs through in read-only mode (sign-in only)
  * @returns {Function} Wrapped handler with CORS support
  */
-export function handleCors(handler) {
+export function handleCors(handler, { allowWhenReadOnly = false } = {}) {
   return async (req, res) => {
     const allowedOrigin = setCorsHeaders(req, res);
 
@@ -62,6 +67,10 @@ export function handleCors(handler) {
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(204).end();
+    }
+
+    if (isBlockedWrite(req.method, { allowWrite: allowWhenReadOnly })) {
+      return res.status(READ_ONLY_STATUS).json(READ_ONLY_BODY);
     }
 
     return handler(req, res);
