@@ -36,6 +36,15 @@ describe('withConversionStates', () => {
   });
 });
 
+describe('hasUsableConversions', () => {
+  it('rejects API data whose only yields are outside 0-100%', () => {
+    const conv = (y) => ({ Cod: { conversions: { 'Round → Fillet': { from: 'Round', to: 'Fillet', yield: y } } } });
+    expect(hasUsableConversions(conv(150))).toBe(false);
+    expect(hasUsableConversions(conv(0))).toBe(false);
+    expect(hasUsableConversions(conv(42))).toBe(true);
+  });
+});
+
 describe('parseYieldPercent', () => {
   it('accepts yields in (0, 100]', () => {
     expect(parseYieldPercent('42')).toBe(42);

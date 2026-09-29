@@ -448,30 +448,40 @@ export function DataProvider({ children }) {
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
     if (!calc?.serverId) return;
-    let succeeded = false;
-    let transientFailure = false;
+    const queueForRetry = async () => {
+      await repo.queueUnpublish(calc.id);
+      setSavedCalcs((prev) =>
+        prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
+      );
+      debouncedSync();
+    };
+
+    let authHeaders;
     try {
-      const authHeaders = await getAuthHeaders();
+      authHeaders = await getAuthHeaders();
+    } catch {
+      // The session has ended, so nothing reached the server and the
+      // calculation is still public. Say so, and queue the change for when
+      // this account signs in again.
+      setSyncError('auth');
+      setSyncStatus('error');
+      await queueForRetry();
+      return;
+    }
+
+    try {
       const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
       if (res.ok) {
         await repo.updateCalcPublicationState(calc.id, true);
         setSavedCalcs((prev) =>
           prev.map((c) => (c.id === calc.id ? { ...c, is_private: true, syncStatus: 'synced' } : c))
         );
-        succeeded = true;
-      } else {
-        transientFailure = res.status === 429 || res.status >= 500;
+      } else if (res.status === 429 || res.status >= 500) {
+        await queueForRetry();
       }
     } catch {
       // Network error → transient
-      transientFailure = true;
-    }
-    if (!succeeded && transientFailure) {
-      await repo.queueUnpublish(calc.id);
-      setSavedCalcs((prev) =>
-        prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
-      );
-      debouncedSync();
+      await queueForRetry();
     }
   }, [getAuthHeaders, repo, debouncedSync]);
 

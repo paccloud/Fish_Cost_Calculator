@@ -69,9 +69,15 @@ function parseYieldPercent(value) {
 // can scale them (a "42%" cell is stored as 0.42). Every other cell becomes a
 // string: a plain 0.5 in an XLSX (including the app's own export) or "0.5" in
 // a CSV means 0.5%, not 50%.
+// A percent sign inside quotes or after a backslash is shown as text, not a
+// percentage: '0.0"%"' displays 0.5 as "0.5%".
+function isPercentFormat(numFmt) {
+  return String(numFmt ?? '').replace(/"[^"]*"/g, '').replace(/\\./g, '').includes('%');
+}
+
 function cellValue(cell, keepPercentCells) {
   const { value } = cell;
-  if (keepPercentCells && String(cell.numFmt ?? '').includes('%')) {
+  if (keepPercentCells && isPercentFormat(cell.numFmt)) {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (value && typeof value === 'object' && typeof value.result === 'number' && Number.isFinite(value.result)) {
       return value.result;
@@ -146,11 +152,9 @@ export function normalizeYieldRows(data, sourceName) {
       return;
     }
 
-    // Excel stores percentage cells as fractions (0.75 means 75%). Detect and
-    // convert only when the raw cell value is numeric (XLSX). For CSV, the raw
-    // value is always a string, so 0.5 means 0.5% — not 50% — and must not
-    // be scaled.
-    if (typeof yieldRaw === 'number' && finalYield > 0 && finalYield <= 1) {
+    // Only percent-formatted XLSX cells arrive as numbers, stored as fractions
+    // (a "42%" cell holds 0.42, "150%" holds 1.5). Text like CSV "0.5" means 0.5%.
+    if (typeof yieldRaw === 'number') {
       finalYield *= 100;
     }
 

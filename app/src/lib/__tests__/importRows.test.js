@@ -99,6 +99,33 @@ describe('parseImportRows — real files end to end', () => {
     expect(rows.map((r) => r.yield)).toEqual([0.5, 42]);
   });
 
+  it('treats a quoted % in the number format as text, not a percentage', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Yields');
+    sheet.addRow(['Species', '% Yield', 'Product', 'Source']);
+    sheet.addRow(['Anchovy', 0.5, 'Fillet', 'Test']).getCell(2).numFmt = '0.0"%"';
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const { rows } = normalizeYieldRows(await parseImportRows(buffer, '.xlsx'), 'test.xlsx');
+
+    expect(rows.map((r) => r.yield)).toEqual([0.5]);
+  });
+
+  it('scales every percent cell, so a 150% cell is rejected rather than read as 1.5%', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Yields');
+    sheet.addRow(['Species', '% Yield', 'Product', 'Source']);
+    sheet.addRow(['Cod', 1.5, 'Fillet', 'Test']).getCell(2).numFmt = '0%';
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const { rows, skippedRows } = normalizeYieldRows(await parseImportRows(buffer, '.xlsx'), 'test.xlsx');
+
+    expect(rows).toEqual([]);
+    expect(skippedRows).toEqual([2]);
+  });
+
   it('keeps a CSV "0.5" yield as 0.5%, not 50%', async () => {
     const csv = 'Species,% Yield,Product,Source\nAnchovy,0.5,Fillet,Test\nPink Salmon,42%,Fillet,Test\n';
     const parsed = await parseImportRows(Buffer.from(csv), '.csv');

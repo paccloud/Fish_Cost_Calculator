@@ -51,7 +51,7 @@ export function withConversionStates(fishData) {
 export function hasUsableConversions(fishData) {
   return Object.values(fishData || {}).some((data) =>
     Object.values(data?.conversions || {}).some(
-      (conv) => conv.from && conv.to && conv.yield !== null && conv.yield > 0
+      (conv) => conv.from && conv.to && parseYieldPercent(conv.yield) !== null
     )
   );
 }

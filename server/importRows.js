@@ -67,9 +67,15 @@ function parseYieldPercent(value) {
 
 // Mirrors api/_lib/importRows.js: only percent-formatted XLSX cells stay
 // numbers, so a "42%" cell (stored as 0.42) is scaled but a plain 0.5 is not.
+// A percent sign inside quotes or after a backslash is shown as text, not a
+// percentage: '0.0"%"' displays 0.5 as "0.5%".
+function isPercentFormat(numFmt) {
+    return String(numFmt ?? '').replace(/"[^"]*"/g, '').replace(/\\./g, '').includes('%');
+}
+
 function cellValue(cell, keepPercentCells) {
     const { value } = cell;
-    if (keepPercentCells && String(cell.numFmt ?? '').includes('%')) {
+    if (keepPercentCells && isPercentFormat(cell.numFmt)) {
         if (typeof value === 'number' && Number.isFinite(value)) return value;
         if (value && typeof value === 'object' && typeof value.result === 'number' && Number.isFinite(value.result)) {
             return value.result;
@@ -142,8 +148,9 @@ function normalizeYieldRows(data, sourceName) {
             return;
         }
 
-        // Only numeric (XLSX) fractions are percentages; CSV "0.5" means 0.5%.
-        if (typeof yieldRaw === 'number' && finalYield > 0 && finalYield <= 1) {
+        // Only percent-formatted XLSX cells arrive as numbers, stored as fractions
+        // (a "42%" cell holds 0.42, "150%" holds 1.5). Text like CSV "0.5" means 0.5%.
+        if (typeof yieldRaw === 'number') {
             finalYield *= 100;
         }
 

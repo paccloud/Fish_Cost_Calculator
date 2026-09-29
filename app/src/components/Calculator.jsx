@@ -123,9 +123,9 @@ const stepButton =
   'min-h-[3.5rem] rounded-xl border-2 border-line-strong bg-surface-raised text-3xl font-bold leading-none text-text-primary transition-colors hover:border-accent active:translate-y-px active:bg-surface';
 
 /** A number field with big − / + buttons either side, for wet or gloved hands. */
-const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy }) => {
+const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy, outOfRange = false }) => {
   const inputRef = useRef(null);
-  const invalid = String(value).trim() !== '' && Number.isNaN(parseAmount(value));
+  const invalid = outOfRange || (String(value).trim() !== '' && Number.isNaN(parseAmount(value)));
   const bump = (delta) => onChange(format(Math.max(0, (parseAmount(value) || 0) + delta)));
   return (
     <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] gap-2">
@@ -688,8 +688,12 @@ const Calculator = () => {
             placeholder="0"
             lessLabel="1 percent less yield"
             moreLabel="1 percent more yield"
-            describedBy="calc-yield-hint"
+            describedBy={yieldOutOfRange ? 'calc-yield-error calc-yield-hint' : 'calc-yield-hint'}
+            outOfRange={yieldOutOfRange}
           />
+          {yieldOutOfRange && (
+            <p id="calc-yield-error" className="text-sm font-semibold text-danger">{yieldRangeMessage}</p>
+          )}
           <p id="calc-yield-hint" className="text-sm text-text-secondary">
             {!currentConversion
               ? 'Choose what you’re making to fill this in.'
