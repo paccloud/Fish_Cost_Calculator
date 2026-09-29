@@ -11,11 +11,11 @@ Three candidate directions for the calculator screen, plus a visual board that s
 
 ## Status
 
-- **No direction has been chosen yet.** These are exploration, not a spec; the app does not use them.
+- **Direction A (Dockside) was chosen** and is built into the app (`app/src/components/Calculator.jsx`),
+  with shipping added, and processing and shipping each charged on incoming or outgoing weight (the
+  mock-up hid the processing choice in a collapsed section; the app shows both up front). See
+  "Calculator layout" in `docs/DESIGN_SYSTEM.md`. These files stay as the record of the options; the app
+  does not use them.
 - The directions are original and are **not** derived from the reference sites named in the redesign request (Grace Communications, NAMA, NFFC, Local Catch Network). Those sites could not be reached when the mock-ups were made.
 - Yields are real values from `app/src/data/fish_data_v3.js` for five species (Pink Salmon, Sockeye Salmon, Pacific Halibut, Pacific Cod, Lingcod), copied in at build time. They will not follow later changes to that file.
 - Colors and type follow the current brand tokens in `docs/DESIGN_SYSTEM.md`. Screenshots on the board were taken with a fallback font, so real devices using Inter will look slightly narrower.
-
-## Next step
-
-Once a direction (or a mix) is picked, port it into the React app as its own PR, using the design tokens rather than copying the mock-up's CSS.
