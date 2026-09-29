@@ -15,5 +15,7 @@ citing.
 
 ## Consequences
 
-- Yields shared before this consent existed are not in a licensed release until
-  their owners submit them again under the new terms.
+- Yields shared before this consent existed enter the community dataset only
+  with their owner's agreement to CC BY 4.0: the one-time copy from Neon marks
+  them approved only for owners who have agreed, and leaves the rest private
+  for their owners to submit again.
