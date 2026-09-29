@@ -65,10 +65,11 @@ function parseYieldPercent(value) {
     return Number.parseFloat(text);
 }
 
-// Mirrors api/_lib/importRows.js: XLSX keeps numeric cells as numbers so a
-// "42%" cell (stored as 0.42) can be scaled; CSV cells stay strings.
-function cellValue(value, keepNumbers) {
-    if (keepNumbers) {
+// Mirrors api/_lib/importRows.js: only percent-formatted XLSX cells stay
+// numbers, so a "42%" cell (stored as 0.42) is scaled but a plain 0.5 is not.
+function cellValue(cell, keepPercentCells) {
+    const { value } = cell;
+    if (keepPercentCells && String(cell.numFmt ?? '').includes('%')) {
         if (typeof value === 'number' && Number.isFinite(value)) return value;
         if (value && typeof value === 'object' && typeof value.result === 'number' && Number.isFinite(value.result)) {
             return value.result;
@@ -77,7 +78,7 @@ function cellValue(value, keepNumbers) {
     return normalizeCell(value);
 }
 
-function rowsFromWorksheet(worksheet, { keepNumbers = false } = {}) {
+function rowsFromWorksheet(worksheet, { keepPercentCells = false } = {}) {
     const rows = [];
     const headerRow = worksheet.getRow(1);
     const headers = [];
@@ -93,7 +94,7 @@ function rowsFromWorksheet(worksheet, { keepNumbers = false } = {}) {
         const item = {};
         headers.forEach((header, colNumber) => {
             if (!header) return;
-            item[header] = cellValue(row.getCell(colNumber).value, keepNumbers);
+            item[header] = cellValue(row.getCell(colNumber), keepPercentCells);
         });
         if (Object.values(item).some((v) => v !== '' && v !== null && v !== undefined)) rows.push(item);
     });
@@ -114,7 +115,7 @@ async function parseImportRows(buffer, extension) {
         await workbook.xlsx.load(buffer);
         const worksheet = workbook.worksheets[0];
         if (!worksheet) return [];
-        return rowsFromWorksheet(worksheet, { keepNumbers: true });
+        return rowsFromWorksheet(worksheet, { keepPercentCells: true });
     }
 
     throw new Error('Unsupported file type. Please upload a .csv or .xlsx file.');

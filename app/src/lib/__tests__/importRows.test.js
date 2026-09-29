@@ -84,6 +84,21 @@ describe('parseImportRows — real files end to end', () => {
     expect(rows[0].yield).toBe(42);
   });
 
+  it('keeps a plain (not percent-formatted) Excel 0.5 as 0.5%, as the app exports it', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Yields');
+    sheet.addRow(['Species', '% Yield', 'Product', 'Source']);
+    sheet.addRow(['Anchovy', 0.5, 'Fillet', 'Test']);
+    sheet.addRow(['Pink Salmon', 42, 'Fillet', 'Test']);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const parsed = await parseImportRows(buffer, '.xlsx');
+    const { rows } = normalizeYieldRows(parsed, 'test.xlsx');
+
+    expect(rows.map((r) => r.yield)).toEqual([0.5, 42]);
+  });
+
   it('keeps a CSV "0.5" yield as 0.5%, not 50%', async () => {
     const csv = 'Species,% Yield,Product,Source\nAnchovy,0.5,Fillet,Test\nPink Salmon,42%,Fillet,Test\n';
     const parsed = await parseImportRows(Buffer.from(csv), '.csv');
