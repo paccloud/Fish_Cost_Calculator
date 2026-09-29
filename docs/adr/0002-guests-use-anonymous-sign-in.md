@@ -15,5 +15,5 @@ calculator never get an account.
 
 - A guest who clears browser data loses what they saved, as today.
 - Unused anonymous accounts pile up and may need occasional cleanup.
-- Only a non-anonymous account can share, so every shared yield has a real
-  owner.
+- Only a non-anonymous account can submit yields to the community dataset, so
+  every submitted yield has a real owner.

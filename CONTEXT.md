@@ -22,31 +22,38 @@ A published yield from the MAB-37 research that ships with the app.
 _Avoid_: default yield, static data
 
 **Custom yield**:
-A yield a person measured from their own processing. Private unless shared.
+A yield a person measured from their own processing. Private unless approved
+into the community dataset.
 _Avoid_: user data, my data
 
 **Saved calculation**:
 A cost or weight calculation a person chose to keep.
 _Avoid_: calc, saved calc
 
-### People and sharing
+### People and the community dataset
 
 **Account**:
 An optional sign-in that exists for two reasons only: keeping a person's custom
-yields and saved calculations across devices, and sharing custom yields.
+yields and saved calculations across devices, and submitting custom yields to
+the community dataset.
 _Avoid_: user, profile
 
 **Guest**:
 Someone using the app without signing in. A guest can save, but loses what they
-saved if they clear their browser data, and cannot share.
+saved if they clear their browser data, and cannot submit yields.
 _Avoid_: anonymous user
 
-**Shared yield**:
-A custom yield its owner chose to make public in the community dataset.
-_Avoid_: published yield, contribution
+**Submitted yield**:
+A custom yield its owner has asked to add to the community dataset. It stays
+private until a reviewer approves it.
+_Avoid_: shared yield, published yield, contribution
+
+**Reviewer**:
+The person who approves or rejects submitted yields.
+_Avoid_: admin, moderator
 
 **Community dataset**:
-All shared yields, readable by anyone, attributed only by display name or as
+All approved yields, readable by anyone, attributed only by display name or as
 "Anonymous".
 _Avoid_: community pool, public data
 

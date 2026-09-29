@@ -7,7 +7,7 @@ status: accepted
 The app ran two backends (Express + SQLite locally, Vercel functions + Neon in
 production), a shared handler layer, a custom offline sync engine and two
 sign-in systems, for about two accounts whose only jobs are keeping custom
-yields and saved calculations across devices and sharing custom yields. We
+yields and saved calculations across devices and submitting custom yields. We
 chose Firebase Auth plus Cloud Firestore, reached directly from the browser:
 security rules decide who reads and writes what, and Firestore's offline cache
 replaces our sync engine. The static app is served from Firebase Hosting, so
