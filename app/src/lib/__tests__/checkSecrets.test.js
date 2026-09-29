@@ -1461,7 +1461,7 @@ describe('CLI', () => {
 
   it.skipIf(!hasGit())('--history reads a line that follows a lone carriage return', () => {
     const dir = makeRepo();
-    write(dir, 'lonecr.env', `A=1\r${assignment.replace('\n', '\r')}`);
+    write(dir, 'lonecr.env', `A=1\r${assignment.replace(/\n/g, '\r')}`);
     run('git', ['add', '-A'], dir);
     expect(commit(dir, 'cr').status).toBe(0);
     expect(scan(dir).stderr).toContain('lonecr.env:1  secret-assignment');
