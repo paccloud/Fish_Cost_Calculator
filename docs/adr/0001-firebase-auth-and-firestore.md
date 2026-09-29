@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# Firebase Auth and Firestore, with no server of our own
+# Firebase Auth, Firestore and Firebase Hosting, with no server of our own
 
 The app ran two backends (Express + SQLite locally, Vercel functions + Neon in
 production), a shared handler layer, a custom offline sync engine and two
@@ -10,8 +10,9 @@ sign-in systems, for about two accounts whose only jobs are keeping custom
 yields and saved calculations across devices and sharing custom yields. We
 chose Firebase Auth plus Cloud Firestore, reached directly from the browser:
 security rules decide who reads and writes what, and Firestore's offline cache
-replaces our sync engine. Firebase Auth was already in use, so no one signs up
-again.
+replaces our sync engine. The static app is served from Firebase Hosting, so
+the whole app lives with one provider. Firebase Auth was already in use, so no
+one signs up again.
 
 ## Considered Options
 
@@ -33,4 +34,7 @@ again.
   can use it without Firestore.
 - The Firebase SDK makes the app download larger than today's REST calls.
 - Local development and CI use the Firebase emulators.
+- The address moves from `*.vercel.app` to `*.web.app`. The Vercel project stays
+  only as a redirect for a while, so installed copies of the app and bookmarks
+  keep working. PR previews come from Firebase preview channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).
