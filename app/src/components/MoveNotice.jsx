@@ -11,7 +11,7 @@ function plural(count, one, many) {
 // VITE_MOVE_STAGE is "notice" or "read-only".
 export default function MoveNotice() {
   const { user } = useAuth();
-  const { readOnly, pendingCount, unsentCount, saveUnsentChanges, savedCalcs, customYields, dataLoaded } = useData();
+  const { readOnly, accountUnsentCount, unsentCount, saveUnsentChanges, savedCalcs, customYields, dataLoaded } = useData();
 
   if (!isMoveNoticeOn) return null;
 
@@ -44,9 +44,9 @@ export default function MoveNotice() {
             so {guestRecords === 1 ? 'it comes' : 'they come'} with you.
           </p>
         )}
-        {user && pendingCount > 0 && (
+        {user && accountUnsentCount > 0 && (
           <p>
-            {plural(pendingCount, 'change hasn’t', 'changes haven’t')} synced yet. Keep this page open and
+            {plural(accountUnsentCount, 'change hasn’t', 'changes haven’t')} synced yet. Keep this page open and
             online until it finishes.
           </p>
         )}

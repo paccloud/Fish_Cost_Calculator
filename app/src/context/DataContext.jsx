@@ -553,30 +553,40 @@ export function DataProvider({ children }) {
 
   // Everything on this device that never reached the server: the signed-in
   // user's pending changes plus anything saved here as a guest.
-  const collectUnsentChanges = useCallback(async () => {
+  const collectUnsentParts = useCallback(async () => {
     const guestRepo = uid ? createRepository(guestScope()) : repo;
-    const [pending, guestCalcs, guestYields] = await Promise.all([
+    const [pending, accountConflicts, guestCalcs, guestYields] = await Promise.all([
       uid ? repo.getPendingSync() : { calcs: [], yields: [] },
+      uid ? repo.getConflictedYields() : [],
       guestRepo.getCalcs(),
       guestRepo.getYields(),
     ]);
-    return buildUnsentChangesFile({
-      accountCalcs: pending.calcs,
-      accountYields: pending.yields,
-      guestCalcs,
-      guestYields,
-    });
+    return { accountCalcs: pending.calcs, accountYields: pending.yields, accountConflicts, guestCalcs, guestYields };
   }, [uid, repo]);
 
+  const collectUnsentChanges = useCallback(
+    async () => buildUnsentChangesFile(await collectUnsentParts()),
+    [collectUnsentParts]
+  );
+
+  // Counted straight from IndexedDB: pendingCount only updates after a sync
+  // runs, so it stays at zero for changes made while offline.
   const [unsentCount, setUnsentCount] = useState(0);
+  const [accountUnsentCount, setAccountUnsentCount] = useState(0);
   useEffect(() => {
     if (!isMoveNoticeOn || !dataLoaded) return;
     let cancelled = false;
-    collectUnsentChanges()
-      .then((file) => { if (!cancelled) setUnsentCount(countUnsentChanges(file)); })
+    collectUnsentParts()
+      .then(({ accountCalcs, accountYields, accountConflicts, guestCalcs, guestYields }) => {
+        if (cancelled) return;
+        const account = countUnsentChanges(buildUnsentChangesFile({ accountCalcs, accountYields, accountConflicts }));
+        const guest = countUnsentChanges(buildUnsentChangesFile({ guestCalcs, guestYields }));
+        setAccountUnsentCount(account);
+        setUnsentCount(account + guest);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [collectUnsentChanges, dataLoaded, pendingCount, savedCalcs, customYields]);
+  }, [collectUnsentParts, dataLoaded, pendingCount, savedCalcs, customYields, conflictedYields]);
 
   const saveUnsentChanges = useCallback(async () => {
     downloadUnsentChanges(await collectUnsentChanges());
@@ -584,14 +594,14 @@ export function DataProvider({ children }) {
 
   // Warn before leaving while changes have not reached the server yet.
   useEffect(() => {
-    if (!isMoveNoticeOn || !uid || pendingCount === 0) return;
+    if (!isMoveNoticeOn || !uid || accountUnsentCount === 0) return;
     const warn = (event) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [uid, pendingCount]);
+  }, [uid, accountUnsentCount]);
 
   // ---- Manual retry ----
 
@@ -631,6 +641,7 @@ export function DataProvider({ children }) {
     publishLoading,
     readOnly: isAppReadOnly,
     unsentCount,
+    accountUnsentCount,
     saveUnsentChanges,
   };
 

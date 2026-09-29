@@ -25,18 +25,24 @@ Set `VITE_NEW_APP_URL` once the new address is known, so the banner links to it.
   "version": 1,
   "exportedAt": "2026-10-01T12:00:00.000Z",
   "customYields": [
-    { "id": "…", "species": "Cod", "product": "Fillet", "yield": 42, "source": "Me", "createdAt": "…", "updatedAt": "…" }
+    { "id": "…", "serverId": null, "species": "Cod", "product": "Fillet", "yield": 42, "source": "Me", "createdAt": "…", "updatedAt": "…" },
+    { "id": "…", "serverId": 11, "species": "Cod", "product": "Head-off", "yield": 70, "source": null, "createdAt": "…", "updatedAt": "…" }
   ],
   "savedCalculations": [
-    { "id": "…", "species": "Tuna", "product": "Steak", "cost": 9, "yield": 60, "result": 15, "…": "other calculator inputs" }
+    { "id": "…", "serverId": null, "species": "Tuna", "product": "Steak", "cost": 9, "yield": 60, "result": 15, "…": "other calculator inputs" }
   ],
   "pendingDeletes": {
-    "customYields": [{ "id": 9, "species": "Cod", "product": "Loin" }],
+    "customYields": [{ "id": "…", "serverId": 9, "species": "Cod", "product": "Loin" }],
     "savedCalculations": []
-  }
+  },
+  "pendingPublication": [
+    { "id": "…", "serverId": 4, "species": "Halibut", "product": "Fillet", "intent": "unpublish" }
+  ]
 }
 ```
 
-- `customYields` and `savedCalculations` hold records that never reached the server: the signed-in user's pending changes and anything saved on the device as a guest. Sync bookkeeping fields are removed.
+- `customYields` and `savedCalculations` hold records that never reached the server: the signed-in user's pending changes, edits the server refused because the record changed there too (conflicts), and anything saved on the device as a guest. Sync bookkeeping fields are removed.
+- `serverId` is the record's id in Neon. When it is `null`, the record is new. When it is set, the record is an edit to that Neon row, and the copy from Neon holds the older version, so the import should replace it rather than add a second one.
 - `yield` is a percentage above 0 and up to 100. `product` is the finished product only; the old app never recorded the starting form.
-- `pendingDeletes` lists deletions that never reached the server. The Neon copy still contains these records, so the new app should show them so the owner can delete them again.
+- `pendingDeletes` lists deletions that never reached the server, including deletes held back by a conflict. The Neon copy still contains these records, so the new app should show them so the owner can delete them again.
+- `pendingPublication` lists publish or unpublish requests that never reached the server. The new app has no public calculations, so these are informational.
