@@ -13,6 +13,12 @@ calculator never get an account.
 
 ## Consequences
 
+- If the guest signs in with a Google account or email that already belongs to
+  an account, Firebase cannot link it to the anonymous user. In that case the
+  app reads the guest's custom yields and saved calculations while still signed
+  in as the guest, signs in to the existing account, and writes them there.
+  This copy is the one piece of guest-transfer code we keep.
+
 - A guest who clears browser data loses what they saved, as today.
 - Unused anonymous accounts pile up and may need occasional cleanup.
 - Only a non-anonymous account can submit yields to the community dataset, so

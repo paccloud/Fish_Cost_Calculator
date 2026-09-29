@@ -35,7 +35,7 @@ _Avoid_: calc, saved calc
 **Account**:
 An optional sign-in that exists for two reasons only: keeping a person's custom
 yields and saved calculations across devices, and submitting custom yields to
-the community dataset.
+the community dataset. A reviewer's account can also review submitted yields.
 _Avoid_: user, profile
 
 **Guest**:
@@ -56,7 +56,8 @@ rejected. Only the owner sees it.
 _Avoid_: rejection reason, feedback
 
 **Reviewer**:
-The person who approves or rejects submitted yields.
+An account that has been granted the right to approve or reject submitted
+yields. Being signed in is not enough.
 _Avoid_: admin, moderator
 
 **Community dataset**:

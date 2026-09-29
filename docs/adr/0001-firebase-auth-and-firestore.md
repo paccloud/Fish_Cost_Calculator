@@ -34,7 +34,12 @@ one signs up again.
   can use it without Firestore.
 - The Firebase SDK makes the app download larger than today's REST calls.
 - Local development and CI use the Firebase emulators.
-- The address moves from `*.vercel.app` to `*.web.app`. The Vercel project stays
-  only as a redirect for a while, so installed copies of the app and bookmarks
-  keep working. PR previews come from Firebase preview channels.
+- The address moves from `*.vercel.app` to `*.web.app`. Browser storage belongs
+  to an address, so a redirect cannot carry a guest's saved data or unsynced
+  edits across. Before the redirect is switched on, the last version on the old
+  address asks guests to sign in so their data reaches their account, and
+  finishes syncing signed-in users; only then is Neon copied and Vercel reduced
+  to a redirect. Bookmarks follow the redirect; installed copies of the app
+  need to be installed again from the new address. PR previews come from
+  Firebase preview channels.
 - Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).
