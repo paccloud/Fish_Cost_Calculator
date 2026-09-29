@@ -69,6 +69,8 @@ The reference-data audit found:
 
 ## 3. Architecture: one backend
 
+> Superseded: see the note at the top and ADR 0001. This section is kept as the record of what was reviewed.
+
 Express + SQLite (`server/`) and the Vercel functions (`api/`) duplicate about 1,350 lines across two SQL dialects, and they have drifted. Differences include:
 - publish routes
 - upload parsing
@@ -86,6 +88,8 @@ Recommendation:
 The "change both backends" rule then goes away, and Vercel function count stops being a constraint.
 
 ## 4. Sign-up and auth
+
+> Superseded: see the note at the top and ADR 0001. This section is kept as the record of what was reviewed.
 
 **Recommended flow:**
 1. Use the calculator as a guest.
@@ -117,6 +121,8 @@ Firebase is fine today but can't be the end state. It has no native passkeys, no
 - **Forks.** Verify standard OIDC/JWKS tokens rather than one vendor's, so forks can plug in any provider through env vars.
 
 ## 5. Hosting and cost
+
+> Superseded: see the note at the top and ADR 0001. This section is kept as the record of what was reviewed.
 
 | Option | ~100 MAU | ~1k MAU | ~10k MAU | Notes |
 |---|---|---|---|---|
@@ -216,6 +222,8 @@ Suggested suite layout, starting from `shared/` as a workspace root:
 **Reach:** Spanish first, then Vietnamese and French. Add kg/lb and USD/CAD preferences.
 
 ## 8. Roadmap
+
+> Items for Hono, OIDC, Postgres and staying on Vercel are superseded by ADR 0001; the rebuild plan is #123–#133.
 
 **This week**
 - Security fixes from the private review.
