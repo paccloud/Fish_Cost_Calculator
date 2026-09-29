@@ -40,6 +40,8 @@ These are bundled into the client code and exposed to the browser:
 - `VITE_API_URL` - API base URL (empty for production, http://localhost:3000 for dev)
 - `VITE_GEMINI_API_KEY` - **Required**; Gemini API key used for Gemini integration and **bundled into client code (exposed to the browser)** (e.g. `AIza...`)
 - `VITE_OCR_ENDPOINT` - **Optional**; custom OCR backend endpoint URL (default: use the app's built-in OCR flow/config if unset; e.g. `http://localhost:3000/api/ocr`)
+- `VITE_MOVE_STAGE` - **Optional**; stage of the move to Firebase: `off` (default), `notice` or `read-only`. See `docs/move-runbook.md`.
+- `VITE_NEW_APP_URL` - **Optional**; the new app's address, shown in the move banner (e.g. `https://local-catch.web.app`)
 
 ### Backend (Vercel Functions) - Server-side only
 
@@ -51,6 +53,7 @@ These are only accessible on the server:
 - `ALLOWED_ORIGINS` - Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`)
 - `CORS_ALLOW_CREDENTIALS` - Set to `true` only if you need to send cookies with cross-origin requests
 - `DATABASE_URL` - PostgreSQL connection string
+- `API_READ_ONLY` - **Optional**; set to `true` to make both backends refuse every write except sign-in (503, `{"error":"read_only"}`). Off by default. See `docs/move-runbook.md`.
 - All `POSTGRES_*` and `PG*` variables from Neon
 - `GEMINI_API_KEY` - **MUST be server-side only** (no `VITE_` prefix); Gemini API key for AI features (e.g., spreadsheet parsing). **NEVER expose to client code**. All Gemini API calls must be routed through server endpoints (e.g., `/api/parse-spreadsheet`) - the browser should never have direct access to this key.
 

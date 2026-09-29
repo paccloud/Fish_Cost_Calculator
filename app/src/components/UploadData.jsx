@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
+import { isAppReadOnly } from '../config/move';
 
 const TEMPLATE_CSV = `Species,% Yield,Product,Source\nAtlantic Salmon,45,Skinless Fillet,\nHalibut,38,Steak,\nDungeness Crab,25,Picked Meat,\n`;
 
@@ -46,6 +47,7 @@ const UploadData = () => {
   const handleDragLeave = () => setDragOver(false);
 
   const handleUpload = async () => {
+    if (isAppReadOnly) return;
     if (!file || !user || !isOnline) return;
 
     setUploading(true);
@@ -239,7 +241,7 @@ const UploadData = () => {
 
         <button
           onClick={handleUpload}
-          disabled={!file || uploading || !isOnline}
+          disabled={!file || uploading || !isOnline || isAppReadOnly}
           className="mt-6 btn-primary w-full"
         >
           {uploading ? 'Uploading...' : 'Upload Data'}

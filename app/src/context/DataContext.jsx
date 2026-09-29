@@ -13,6 +13,8 @@ import PreviewPublishModal from '../components/PreviewPublishModal';
 import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
+import { isAppReadOnly, isMoveNoticeOn } from '../config/move';
+import { buildUnsentChangesFile, countUnsentChanges, downloadUnsentChanges } from '../lib/unsentChanges';
 
 const DataContext = createContext(null);
 
@@ -385,6 +387,7 @@ export function DataProvider({ children }) {
 
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
+    if (isAppReadOnly) return;
     setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
@@ -447,6 +450,7 @@ export function DataProvider({ children }) {
 
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
+    if (isAppReadOnly) return;
     if (!calc?.serverId) return;
     const queueForRetry = async ({ sync = true } = {}) => {
       await repo.queueUnpublish(calc.id);
@@ -488,7 +492,10 @@ export function DataProvider({ children }) {
 
   // ---- Saved Calculations ----
 
+  // While the app is read-only for the move (issue #130), new edits are refused;
+  // changes already pending still sync.
   const saveCalc = useCallback(async (calc) => {
+    if (isAppReadOnly) return null;
     const newCalc = await repo.addCalc(calc);
     setSavedCalcs((prev) => [...prev, newCalc]);
     debouncedSync();
@@ -496,6 +503,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const removeCalc = useCallback(async (id) => {
+    if (isAppReadOnly) return;
     await repo.removeCalc(id);
     setSavedCalcs((prev) => prev.filter((c) => c.id !== id));
     debouncedSync();
@@ -504,6 +512,7 @@ export function DataProvider({ children }) {
   // ---- Custom Yields ----
 
   const addYield = useCallback(async (data) => {
+    if (isAppReadOnly) return null;
     const newYield = await repo.addYield(data);
     setCustomYields((prev) => [...prev, newYield]);
     debouncedSync();
@@ -511,6 +520,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const updateYield = useCallback(async (id, data) => {
+    if (isAppReadOnly) return null;
     const updated = await repo.updateYield(id, data);
     if (updated) {
       setCustomYields((prev) => prev.map((y) => (y.id === id ? updated : y)));
@@ -520,6 +530,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const removeYield = useCallback(async (id) => {
+    if (isAppReadOnly) return;
     await repo.removeYield(id);
     setCustomYields((prev) => prev.filter((y) => y.id !== id));
     debouncedSync();
@@ -537,6 +548,50 @@ export function DataProvider({ children }) {
     await setSpeciesLocal(data);
     setCustomSpeciesState(data);
   }, []);
+
+  // ---- The move to Firebase (issue #130) ----
+
+  // Everything on this device that never reached the server: the signed-in
+  // user's pending changes plus anything saved here as a guest.
+  const collectUnsentChanges = useCallback(async () => {
+    const guestRepo = uid ? createRepository(guestScope()) : repo;
+    const [pending, guestCalcs, guestYields] = await Promise.all([
+      uid ? repo.getPendingSync() : { calcs: [], yields: [] },
+      guestRepo.getCalcs(),
+      guestRepo.getYields(),
+    ]);
+    return buildUnsentChangesFile({
+      accountCalcs: pending.calcs,
+      accountYields: pending.yields,
+      guestCalcs,
+      guestYields,
+    });
+  }, [uid, repo]);
+
+  const [unsentCount, setUnsentCount] = useState(0);
+  useEffect(() => {
+    if (!isMoveNoticeOn || !dataLoaded) return;
+    let cancelled = false;
+    collectUnsentChanges()
+      .then((file) => { if (!cancelled) setUnsentCount(countUnsentChanges(file)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [collectUnsentChanges, dataLoaded, pendingCount, savedCalcs, customYields]);
+
+  const saveUnsentChanges = useCallback(async () => {
+    downloadUnsentChanges(await collectUnsentChanges());
+  }, [collectUnsentChanges]);
+
+  // Warn before leaving while changes have not reached the server yet.
+  useEffect(() => {
+    if (!isMoveNoticeOn || !uid || pendingCount === 0) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [uid, pendingCount]);
 
   // ---- Manual retry ----
 
@@ -574,6 +629,9 @@ export function DataProvider({ children }) {
     unpublishCalc,
     publishPreviewCalc,
     publishLoading,
+    readOnly: isAppReadOnly,
+    unsentCount,
+    saveUnsentChanges,
   };
 
   return (

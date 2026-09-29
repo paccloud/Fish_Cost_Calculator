@@ -3,6 +3,7 @@ import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucid
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
+import { isAppReadOnly } from '../config/move';
 import { DEFAULT_PROFILE_FORM, profileToFormData, buildProfilePayload } from '../lib/contributorProfile';
 
 const ContributorProfile = () => {
@@ -62,6 +63,7 @@ const ContributorProfile = () => {
     }, [user, getAuthHeaders]);
 
     const handleSubmit = async (e) => {
+        if (isAppReadOnly) { e.preventDefault(); return; }
         e.preventDefault();
         if (!loaded) return;
 
@@ -130,7 +132,7 @@ const ContributorProfile = () => {
             )}
 
             <form onSubmit={handleSubmit} className="card p-8 space-y-5">
-              <fieldset disabled={!loaded} className="space-y-5 border-0 p-0 m-0 min-w-0">
+              <fieldset disabled={!loaded || isAppReadOnly} className="space-y-5 border-0 p-0 m-0 min-w-0">
                 <div>
                     <label className="form-label flex items-center gap-2">
                         <User size={14} />
@@ -199,7 +201,7 @@ const ContributorProfile = () => {
                 <div className="flex gap-3 pt-2">
                     <button
                         type="submit"
-                        disabled={!loaded}
+                        disabled={!loaded || isAppReadOnly}
                         className="flex-1 btn-primary flex items-center justify-center gap-2"
                     >
                         <Save size={16} />
