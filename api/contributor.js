@@ -22,7 +22,7 @@ async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { status, body } = await handleSaveContributorProfile(
-      { userId, ...req.body },
+      { ...req.body, userId },
       db
     );
     return res.status(status).json(body);

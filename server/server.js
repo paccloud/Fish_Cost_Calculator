@@ -289,7 +289,7 @@ async function handleSaveCalcRequest(req, res) {
     const dbAdapter = makeSqliteAdapter(db);
     const { client_id: clientId, ...rest } = req.body ?? {};
     const { status, body } = await handleSaveCalc(
-        { userId: req.user.id, clientId, ...rest },
+        { ...rest, clientId, userId: req.user.id },
         dbAdapter
     );
     return res.status(status).json(body);
@@ -571,7 +571,7 @@ app.post('/api/contributor', authenticate, async (req, res) => {
     const { handleSaveContributorProfile } = await handlersModulePromise;
     const dbAdapter = makeSqliteAdapter(db);
     const { status, body } = await handleSaveContributorProfile(
-        { userId: req.user.id, ...req.body },
+        { ...req.body, userId: req.user.id },
         dbAdapter
     );
     return res.status(status).json(body);

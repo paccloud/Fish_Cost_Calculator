@@ -1,0 +1,56 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Pass-through auth/CORS so the tests exercise only the endpoint bodies.
+vi.mock('../../../../api/_lib/auth.js', () => ({
+  requireAuth: (handler) => (req, res) => {
+    req.user = { id: 7 };
+    return handler(req, res);
+  },
+}));
+vi.mock('../../../../api/_lib/cors.js', () => ({ handleCors: (handler) => handler }));
+
+const query = vi.fn();
+vi.mock('../../../../api/_lib/db.js', () => ({ query: (...args) => query(...args) }));
+
+const { default: savedCalcs } = await import('../../../../api/saved-calcs.js');
+const { default: contributor } = await import('../../../../api/contributor.js');
+
+function makeRes() {
+  const res = { statusCode: 200, body: undefined };
+  res.status = (code) => { res.statusCode = code; return res; };
+  res.json = (body) => { res.body = body; return res; };
+  res.send = (body) => { res.body = body; return res; };
+  res.setHeader = () => res;
+  return res;
+}
+
+beforeEach(() => {
+  query.mockReset();
+});
+
+describe('owner id comes from the verified token, never the body', () => {
+  it('saves a calculation under the signed-in user even if the body names another', async () => {
+    query.mockResolvedValue({ rows: [{ id: 1 }] });
+    const req = { method: 'POST', body: { userId: 999, name: 'x', species: 'Pink Salmon' }, query: {} };
+
+    await savedCalcs(req, makeRes());
+
+    const insert = query.mock.calls.find(([sql]) => /INSERT INTO calculations/i.test(sql));
+    expect(insert[1][0]).toBe(7); // user_id
+    expect(insert[1]).not.toContain(999);
+  });
+
+  it('saves a contributor profile under the signed-in user even if the body names another', async () => {
+    query.mockResolvedValue({ rows: [{ id: 1 }] });
+    const req = { method: 'POST', body: { userId: 999, display_name: 'Deckhand' }, query: {} };
+
+    await contributor(req, makeRes());
+
+    for (const [, params] of query.mock.calls) {
+      expect(params).not.toContain(999);
+    }
+    const update = query.mock.calls.find(([sql]) => /UPDATE contributors/i.test(sql));
+    expect(update).toBeDefined();
+    expect(update[1][4]).toBe(7); // WHERE user_id = $5
+  });
+});
