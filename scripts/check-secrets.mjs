@@ -70,7 +70,6 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -4197,10 +4196,16 @@ export function scanText(filePath, text) {
   return scanRanges(filePath, text).map(({ path: p, line, rule }) => ({ path: p, line, rule }));
 }
 
-// A keyed fingerprint (HMAC-SHA-256 under a key made for this run), so a fingerprint is only comparable inside the run that made it and
-// says nothing about the text on its own. It is a fingerprint for comparison, never a stored password hash.
-const EVIDENCE_KEY = randomBytes(32);
-const digest = (text) => createHmac('sha256', EVIDENCE_KEY).update(text).digest('hex');
+/**
+ * What each finding matched, kept apart from the finding itself so that no report, spread copy or serialisation of a finding can carry it.
+ * Held in memory for the run, compared with `evidenceKey`, and never printed, logged or stored.
+ */
+const EVIDENCE = new WeakMap();
+/** Identity of a finding inside one run: its rule and the two evidence strings, with a length prefix so they cannot run together. */
+const evidenceKey = (finding) => {
+  const [whole, value] = EVIDENCE.get(finding) ?? ['', ''];
+  return `${finding.rule}\t${whole.length}\t${whole}${value}`;
+};
 
 /** Like scanText, but each finding also carries `lastLine`, the last line its match spans, and valueFirst..valueLast, the line(s) of a separate value field. */
 function scanRanges(filePath, text) {
@@ -4296,11 +4301,13 @@ function scanRanges(filePath, text) {
         }
         if (allowed) continue;
         seen.add(key);
-        // `evidence` identifies WHAT matched without holding it (a digest of the match and of a separate value field), so --history
-        // and --range can tell whether a merge result carries a credential that one of its parents already had. It is never printed.
+        // EVIDENCE lets --history and --range tell whether a merge result carries a match that one of its parents already had. It
+        // is compared in memory during the run only (a Set of strings): no hash of it is made, and it is never printed, logged or stored.
         const matchEnd = match.spanEnd ?? match.index + match[0].length;
-        const evidence = digest(text.slice(match.index, matchEnd)) + (match.attrStart === undefined || match.attrCoarse ? '' : `:${digest(text.slice(match.attrStart, match.attrEnd ?? matchEnd))}`);
-        findings.push({ path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id, evidence });
+        const evidence = [text.slice(match.index, matchEnd), match.attrStart === undefined || match.attrCoarse ? '' : text.slice(match.attrStart, match.attrEnd ?? matchEnd)];
+        const finding = { path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id };
+        EVIDENCE.set(finding, evidence);
+        findings.push(finding);
       }
     }
   }
@@ -4370,33 +4377,50 @@ function listTracked(root) {
   return [...entries.values()];
 }
 
-/** The git object id of file content stored as a blob, in the repository's hash (sha1 or sha256, told apart by the id length). */
-function blobId(bytes, referenceId) {
-  const algorithm = referenceId.length === 64 ? 'sha256' : 'sha1';
-  return createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+/**
+ * Git object ids (as `git hash-object --no-filters` computes them, in the repository's own hash) of working-tree files, so the
+ * scanner never hashes file content itself. One git process covers every file whose path can be sent on a line; a file
+ * that cannot (newline, carriage return or a leading quote in its name) is hashed in its own process, streamed from an open
+ * descriptor so a file over the size limit is never held in memory. A file git cannot hash is missing from the map, and
+ * the caller then treats the index versions as differing, which is the safe direction.
+ * @param {Buffer[]} absolutePaths
+ * @returns {Map<string, string>} the path bytes as a latin1 string -> object id
+ */
+function hashWorkingFiles(root, absolutePaths) {
+  const ids = new Map();
+  const batch = [];
+  const single = [];
+  for (const absolute of absolutePaths) {
+    if (absolute.includes(10) || absolute.includes(13) || absolute[0] === 34) single.push(absolute);
+    else batch.push(absolute);
+  }
+  if (batch.length > 0) {
+    const input = Buffer.concat(batch.flatMap((absolute) => [absolute, Buffer.from('\n')]));
+    const run = spawnSync('git', ['hash-object', '--no-filters', '--stdin-paths'], { cwd: root, input, maxBuffer: 64 * 1024 * 1024 });
+    const lines = run.error || run.status !== 0 ? [] : run.stdout.toString('latin1').split('\n');
+    if (lines.length === batch.length + 1) batch.forEach((absolute, i) => ids.set(absolute.toString('latin1'), lines[i]));
+    else single.push(...batch); // any doubt about the batch: hash each file on its own
+  }
+  for (const absolute of single) {
+    let fd;
+    try {
+      fd = openSync(absolute, 'r');
+      const run = spawnSync('git', ['hash-object', '--no-filters', '--stdin'], { cwd: root, stdio: [fd, 'pipe', 'pipe'] });
+      const id = run.error || run.status !== 0 ? '' : run.stdout.toString('latin1').trim();
+      if (id !== '') ids.set(absolute.toString('latin1'), id);
+    } catch {
+      // unreadable: left out of the map
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+  return ids;
 }
 
-/**
- * The git blob id of a file, hashed in 1 MB chunks so a file over the size limit is never held in memory. `size` is the size
- * lstat reported; a file that changed size while it was read gets an id that matches nothing (the caller then treats the
- * index versions as differing, which is the safe direction). Throws when the file cannot be read.
- */
-function streamBlobId(absolute, size, referenceId) {
-  const hash = createHash(referenceId.length === 64 ? 'sha256' : 'sha1').update(`blob ${size}\0`);
-  const fd = openSync(absolute, 'r');
-  try {
-    const chunk = Buffer.allocUnsafe(1024 * 1024);
-    let total = 0;
-    for (;;) {
-      const n = readSync(fd, chunk, 0, chunk.length, null);
-      if (n === 0) break;
-      hash.update(chunk.subarray(0, n));
-      total += n;
-    }
-    return total === size ? hash.digest('hex') : '';
-  } finally {
-    closeSync(fd);
-  }
+/** The object id git gives to `bytes` stored as a blob ('' when git cannot say). */
+function hashBytes(root, bytes) {
+  const run = spawnSync('git', ['hash-object', '--no-filters', '--stdin'], { cwd: root, input: bytes, maxBuffer: 1024 * 1024 });
+  return run.error || run.status !== 0 ? '' : run.stdout.toString('latin1').trim();
 }
 
 /**
@@ -4468,14 +4492,22 @@ export function scanTree(root) {
   };
   const rootBytes = Buffer.from(root);
   const pending = []; // index versions still to read: { file, sha, missing }
-  for (const { raw, objects } of listTracked(root)) {
+  const tracked = listTracked(root);
+  const workingIds = hashWorkingFiles(root, tracked.flatMap(({ raw }) => {
+    const absolute = Buffer.concat([rootBytes, Buffer.from(path.sep), raw]);
+    try {
+      return lstatSync(absolute).isFile() ? [absolute] : [];
+    } catch {
+      return [];
+    }
+  }));
+  for (const { raw, objects } of tracked) {
     const file = displayPath(raw);
     // Only a gitlink (a submodule commit pointer, no content here) is skipped, and only its own stage: every other
     // stage of an unmerged path is a file and is scanned, whatever mode the gitlink stage has.
     const files = objects.filter((o) => o.mode !== '160000');
     if (files.length < objects.length) skip('submodule');
     if (files.length === 0) continue;
-    const sha = files[0].sha;
     const shas = [...new Set(files.map((o) => o.sha))];
     const hasLink = files.some((o) => o.mode === '120000');
     const hasFile = files.some((o) => o.mode !== '120000');
@@ -4492,7 +4524,7 @@ export function scanTree(root) {
         if (stat.size > sizeLimit(file)) {
           // Too large to read into memory here, but the staged version is still checked first: the working-tree copy
           // (a big binary, or an oversize text file) must not hide a differing index blob. The copy is hashed in chunks.
-          const workingId = streamBlobId(absolute, stat.size, sha);
+          const workingId = workingIds.get(absolute.toString('latin1')) ?? '';
           const otherVersions = shas.filter((blob) => blob !== workingId);
           if (otherVersions.length > 0) {
             differing.push(file);
@@ -4519,7 +4551,7 @@ export function scanTree(root) {
       continue;
     }
     // The index blob that differs from the working-tree bytes (all of them for an unmerged path) is scanned too.
-    const workingId = blobId(bytes, sha);
+    const workingId = workingIds.get(absolute.toString('latin1')) ?? hashBytes(root, bytes);
     const otherVersions = shas.filter((blob) => blob !== workingId);
     if (otherVersions.length > 0) {
       differing.push(file);
@@ -4793,10 +4825,10 @@ function scanMergeResults(root, merges) {
         if (parentBlob === undefined || parentBlob.bytes === null || parentBlob.size > sizeLimit(file)) continue;
         const parentText = decodeText(parentBlob.bytes);
         if (parentText === null) continue;
-        for (const finding of scanRanges(file, parentText)) known.add(`${finding.rule}\t${finding.evidence}`);
+        for (const finding of scanRanges(file, parentText)) known.add(evidenceKey(finding));
       }
       for (const finding of found) {
-        if (known.has(`${finding.rule}\t${finding.evidence}`)) continue;
+        if (known.has(evidenceKey(finding))) continue;
         const key = `${commit}\t${file}\t${finding.rule}`;
         const entry = hits.get(key) ?? { commit, path: file, rule: finding.rule, count: 0 };
         entry.count += 1;

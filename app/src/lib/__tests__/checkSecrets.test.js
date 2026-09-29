@@ -4184,7 +4184,7 @@ describe('review round 9', () => {
       const head = commit(dir, 'remove key', { 'x.env': clean });
       const result = scan(dir, '--range', `${base}..${head}`);
       expect(result.status).toBe(1);
-      expect(result.stderr.match(new RegExp(`${leaked.slice(0, 7)}  x.env`, 'g'))).toHaveLength(1);
+      expect(result.stderr.split(`${leaked.slice(0, 7)}  x.env`)).toHaveLength(2); // exactly one occurrence
     });
 
     it.skipIf(!hasGit())('a secret only a merge conflict resolution introduced is found in the range', SLOW, () => {
@@ -4426,7 +4426,7 @@ describe('review round 9', () => {
       it('is valid enough to parse: every "run:" block is well-formed and the env names the script reads are all defined', () => {
         const step = jobBlock.slice(jobBlock.indexOf('Scan commits in this change'));
         for (const name of ['EVENT_NAME', 'PR_BASE_SHA', 'PR_HEAD_SHA', 'PUSH_BEFORE_SHA', 'PUSH_AFTER_SHA']) {
-          expect(step.match(new RegExp(`${name}: `, 'g')), name).toHaveLength(1);
+          expect(step.split(`${name}: `), name).toHaveLength(2); // exactly one occurrence
           expect(step.includes(`"$${name}"`), name).toBe(true);
         }
       });
