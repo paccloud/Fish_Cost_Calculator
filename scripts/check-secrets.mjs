@@ -34,6 +34,19 @@
  *     A weak name needs a random-looking value.
  *   - Everything else (source code, SQL, HTML, ...): only a QUOTED literal that looks random,
  *     so ordinary identifiers and test fixtures do not trip it.
+ *   - A value with spaces is exempt only as text: a sentence (looksLikeSentence) inside a message catalog path, or
+ *     documentation about the credential (looksLikeDocumentation) anywhere; a passphrase that merely contains common words
+ *     ("correct horse battery and staple", "This is the way.") is a finding.
+ *   - A URL value is judged only under a strong name, and only for credential-looking parts (signed-URL parameters,
+ *     webhook path tokens, a token as the user name). Webhook URLs are also a rule of their own (webhook-url).
+ *   - Native credential files (.netrc, .pgpass, .git-credentials, .npmrc, .pypirc, .aws/credentials, docker config,
+ *     kubeconfig, .htpasswd, .my.cnf, .s3cfg, Terraform, .curlrc, .vault-token) have path-specific matchers
+ *     (rule credential-file) and a 4-character value minimum; netrc, pgpass and docker auth are also recognised by
+ *     content in any file (notes, scripts that write them).
+ *   - Name and value fields in one JSON/YAML/HCL/XML object or call are matched in either order (secret-name-value-pair),
+ *     and secrets passed on a command line (gh secret set, vercel env add, aws ssm put-parameter, ...) are their own rule.
+ *
+ * The index blob AND the working-tree file are both scanned whenever they differ (compared by git blob id).
  *
  * --history is for the repository owner to run locally. CI does NOT run it: the known
  * leak from issue #22 lives in history forever and would fail every build. A shallow
@@ -43,6 +56,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { closeSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -436,37 +450,226 @@ const GATES = {
 };
 const MIN_STRONG_CONFIG_LENGTH = 8;
 
-// Words that make a multi-word quoted value a sentence ("Invalid or expired token", "Passwords do not match")
-// and not a passphrase. Message catalogs (en.json, messages.yml) use keys such as password/token/apiKey a lot.
+// Words that appear in UI and error sentences ("Invalid or expired token", "Passwords do not match") far more often
+// than in a passphrase: function words plus the vocabulary of validation and sign-in messages. Message catalogs
+// (en.json, messages.yml) use keys such as password/token/apiKey a lot. Credential-like nouns (password, token, secret)
+// are deliberately NOT here: they say nothing about whether the text is a sentence.
 const PROSE_WORDS = new Set([
   'is', 'are', 'was', 'be', 'been', 'not', 'no', 'do', 'does', 'did', 'the', 'a', 'an', 'or', 'and', 'of', 'to',
   'for', 'in', 'on', 'at', 'by', 'as', 'if', 'it', 'its', 'this', 'that', 'these', 'those', 'your', 'you', 'my',
   'please', 'must', 'should', 'cannot', 'can', 'will', 'has', 'have', 'least', 'most', 'than', 'below', 'above',
   'enter', 'choose', 'select', 'type', 'invalid', 'expired', 'missing', 'required', 'incorrect', 'match',
   'matches', 'characters', 'forgot', 'reset', 'confirm', 'wrong', 'empty', 'too', 'short', 'long', 'weak',
+  'we', 'our', 'us', 'they', 'their', 'them', 'he', 'she', 'his', 'her', 'so', 'but', 'then', 'when', 'while',
+  'because', 'until', 'after', 'before', 'over', 'under', 'out', 'up', 'off', 'yet', 'still', 'also', 'only', 'just',
+  'now', 'any', 'all', 'some', 'each', 'every', 'both', 'more', 'less', 'other', 'another', 'such', 'what', 'which',
+  'who', 'how', 'why', 'where', 'there', 'am', 'were', 'being', 'had', 'having', 'would', 'could', 'may', 'might',
+  'shall', 'let', 'get', 'got', 'make', 'made', 'use', 'used', 'using', 'need', 'needs', 'needed', 'unable',
+  'failed', 'error', 'try', 'again', 'later', 'sign', 'with', 'from', 'into', 'about', 'sent', 'check', 'contact',
+  'support', 'session', 'log', 'logged', 'expire', 'expires', 'click', 'link', 'email', 'address', 'provided',
+  'provide', 'valid', 'value', 'field', 'set', 'updated', 'saved', 'changed', 'successfully', 'successful',
+  'new', 'old', 'current', 'first', 'last', 'name', 'account', 'user', 'requested', 'request', 'expected',
+  'copy', 'paste', 'one', 'number', 'symbol', 'contain', 'contains', 'found', 'must', 'be', 'at', 'least',
 ]);
+
+// Words that make a sentence read as DOCUMENTATION about a credential ("the password you chose during setup", "see the
+// deployment guide", "ask the team lead"): instructions and references, not a secret. A passphrase written as a sentence
+// of function words ("This is the way.") has none of them.
+const DOC_CUE_WORDS = new Set([
+  'see', 'ask', 'refer', 'docs', 'documentation', 'readme', 'guide', 'step', 'steps', 'setup', 'install', 'installed',
+  'configure', 'configured', 'configuration', 'generate', 'generated', 'obtain', 'retrieve', 'contact', 'admin',
+  'administrator', 'team', 'vault', 'dashboard', 'console', 'portal', 'environment', 'variable', 'variables', 'runtime',
+  'deployment', 'deploy', 'chose', 'chosen', 'choose', 'whatever', 'same', 'actual', 'real', 'random', 'string',
+  'provided', 'supplied', 'stored', 'store', 'set', 'database', 'value', 'manager', 'instructions', 'above', 'below',
+]);
+// "the password", "a random token", "your API key": a determiner, up to two words, then a credential noun.
+const CREDENTIAL_NOUN_PHRASE =
+  /(?:^|[^A-Za-z])(?:the|a|an|your|this|that|its|any|each|every|new|correct|current)[ \t]+(?:[A-Za-z-]+[ \t]+){0,2}(?:password|passphrase|passwd|token|secret|key|credentials?)(?![A-Za-z])/i;
+
+function hasDocumentationCue(text) {
+  if (CREDENTIAL_NOUN_PHRASE.test(text)) return true;
+  return text
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .some((word) => DOC_CUE_WORDS.has(word));
+}
+
+// A bare number in a sentence is prose only in a counting context ("at least 8 characters", "step 3", "3 attempts");
+// "the horse is 123" is a passphrase with a number in it.
+const NUMBER_LEAD_WORDS = new Set([
+  'step', 'steps', 'least', 'most', 'than', 'minimum', 'maximum', 'min', 'max', 'over', 'under', 'exactly', 'between',
+  'within', 'section', 'part', 'page', 'version', 'line', 'chapter', 'item', 'option', 'top', 'next', 'last', 'every',
+  'each', 'first',
+]);
+const NUMBER_UNIT_WORDS = new Set([
+  'character', 'characters', 'chars', 'char', 'digit', 'digits', 'letter', 'letters', 'symbol', 'symbols', 'number',
+  'numbers', 'word', 'words', 'byte', 'bytes', 'kb', 'mb', 'minute', 'minutes', 'hour', 'hours', 'day', 'days',
+  'second', 'seconds', 'ms', 'time', 'times', 'attempt', 'attempts', 'item', 'items', 'entries', 'percent',
+]);
+const plainWord = (piece) => (piece ?? '').replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '').toLowerCase();
+
+const MESSAGE_CATALOG_DIRS = /(?:^|\/)(?:i18n|l10n|locales?|_locales|lang|langs|languages?|messages?|translations?|intl|strings)(?:\/|$)/;
+const MESSAGE_CATALOG_FILE =
+  /^(?:(?:messages?|strings|translations?|locales?|i18n|l10n|errors?)(?:[._-][\w-]+)*|[a-z]{2,3}(?:[-_][A-Za-z]{2,4})?)\.(?:json|jsonc|json5|ya?ml|properties|po|pot|xlf|xliff|toml|ini|arb|resx|strings|xml)$/i;
+
+/** Is this path a message catalog (i18n, locales, messages, en.json, ...), where UI sentences under key names are normal? */
+function isMessageCatalogPath(filePath) {
+  const normalized = filePath.split(path.sep).join('/').toLowerCase();
+  return MESSAGE_CATALOG_DIRS.test(`/${normalized}`) || MESSAGE_CATALOG_FILE.test(path.posix.basename(normalized));
+}
+
+// Whitespace-separated pieces of a sentence: a word in any script (apostrophes and hyphens inside, punctuation
+// around), a short number ("at least 8 characters", "6-digit"), or a translation placeholder (%s, {name}, {{count}}, :attr).
+const SENTENCE_WORD = /^["'(\[“‘]*(?:\p{L}[\p{L}'’-]*|\d{1,3}-\p{L}+)["')\]”’]*[.,;:!?…]*$/u;
+const SENTENCE_NUMBER = /^["'(\[]*\d{1,4}[)"'.,;:%]*$/;
+const SENTENCE_PLACEHOLDER = /^["'(]*(?:%(?:\d\$)?[sd]|\{\{?[\w.-]{1,30}\}\}?|\{\d{1,2}\}|:[a-z_]{1,30})[)"'.,;:!?]*$/;
+
+/**
+ * Is this quoted, whitespace-containing text a natural-language sentence (a UI or error message) rather than a passphrase?
+ * Deliberately strict, because a passphrase such as "correct horse battery and staple" is made of ordinary words:
+ *   - every piece must be a plain word, a short number or a translation placeholder. A piece that mixes letters
+ *     with digits or symbols ("Passw0rd!", "123!") is credential-shaped, so the whole text is not prose;
+ *   - most of the words must be sentence vocabulary (PROSE_WORDS): at least half when the text is written like a
+ *     sentence (capital first letter or closing punctuation), at least two thirds when it is not;
+ *   - text with non-ASCII letters made of plain words counts as prose in another language (message catalogs);
+ *   - a bare number that counts nothing ("the horse is 123") is a non-prose word.
+ * Being sentence-like is necessary, not sufficient: isPhraseSecret exempts it only in a message catalog path (i18n,
+ * locales, messages, en.json, ...) or when it reads as documentation (hasDocumentationCue).
+ * Tradeoff: a passphrase that is a sentence and also mentions "the password" or an instruction word passes; a UI sentence
+ * outside a message catalog that has neither is reported (add the allow marker, or a placeholder value), and so is an
+ * ASCII sentence in a language other than English.
+ */
+function looksLikeSentence(text) {
+  const trimmed = text.trim();
+  const pieces = trimmed.split(/\s+/);
+  if (pieces.length < 2) return false;
+  let counted = 0;
+  let prose = 0;
+  for (let i = 0; i < pieces.length; i += 1) {
+    const piece = pieces[i];
+    if (SENTENCE_PLACEHOLDER.test(piece)) continue;
+    if (SENTENCE_NUMBER.test(piece)) {
+      // A number counts against the sentence unless it counts something ("at least 8 characters", "step 3").
+      const counting = NUMBER_LEAD_WORDS.has(plainWord(pieces[i - 1])) || NUMBER_UNIT_WORDS.has(plainWord(pieces[i + 1])) || /%/.test(piece);
+      if (!counting) counted += 1;
+      continue;
+    }
+    if (!SENTENCE_WORD.test(piece)) return false;
+    counted += 1;
+    if (PROSE_WORDS.has(plainWord(piece))) prose += 1;
+  }
+  if (counted === 0) return false;
+  if (pieces.length >= 3 && /[^\x00-\x7f]/.test(trimmed)) return true;
+  const sentenceShaped = /^["'(“‘]*[A-Z]/.test(trimmed) || /[.!?…:]["')”’]*$/.test(trimmed);
+  return sentenceShaped ? prose * 2 >= counted : prose * 3 >= counted * 2;
+}
+
+/**
+ * Documentation about a credential, outside a message catalog ("the password you chose during setup", "see the
+ * deployment guide", "set via environment variable at runtime"): three or more plain words (no mixed letter/digit/symbol
+ * piece, no stray number), at least one instruction or reference cue, and a third or more of them sentence vocabulary.
+ */
+function looksLikeDocumentation(text) {
+  const pieces = text.trim().split(/\s+/);
+  if (pieces.length < 3 || !hasDocumentationCue(text)) return false;
+  let counted = 0;
+  let prose = 0;
+  for (let i = 0; i < pieces.length; i += 1) {
+    const piece = pieces[i];
+    if (SENTENCE_PLACEHOLDER.test(piece)) continue;
+    if (SENTENCE_NUMBER.test(piece)) {
+      if (!(NUMBER_LEAD_WORDS.has(plainWord(pieces[i - 1])) || NUMBER_UNIT_WORDS.has(plainWord(pieces[i + 1])) || /%/.test(piece))) return false;
+      continue;
+    }
+    if (!SENTENCE_WORD.test(piece)) return false;
+    counted += 1;
+    if (PROSE_WORDS.has(plainWord(piece))) prose += 1;
+  }
+  return counted >= 3 && prose * 3 >= counted;
+}
 
 /**
  * A value with whitespace in it (a quoted passphrase, or the rest of a YAML/ini line). It is a finding when a
  * word in it is random-looking, or, for a strong name, when it is not a sentence and is long enough.
  */
-function isPhraseSecret({ kind, text }) {
+function isPhraseSecret({ kind, text, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false }) {
   const words = text
     .split(/\s+/)
     .map((w) => w.replace(/^[^A-Za-z0-9]+|[.,;:!?)]+$/g, ''))
     .filter(Boolean);
   if (words.some((w) => looksRandom(w, GATES.configWeak))) return true;
-  if (words.some((w) => PROSE_WORDS.has(w.toLowerCase()))) return false;
-  return kind === 'strong' && text.length >= MIN_STRONG_CONFIG_LENGTH;
+  // In a message catalog (its whole job is UI text) a sentence is exempt. Anywhere else only text that reads as
+  // documentation about the credential is: a sentence of common words ("This is the way.") is a passphrase until an
+  // allow marker says otherwise.
+  if (catalog ? looksLikeSentence(text) : looksLikeDocumentation(text)) return false;
+  return kind === 'strong' && text.length >= minLength;
 }
 
 const stripQuotes = (text) => text.trim().replace(/^["'`]+|["'`]+$/g, '');
 
+// Query and fragment parameter names that carry a credential: sig, signature, X-Amz-Signature, token, access_token,
+// key, api_key, secret, password, auth, ...
+const CREDENTIAL_PARAM = /(?:^|[-_.])(?:sig|signature|token|secret|key|apikey|password|passwd|pwd|auth|authorization|jwt|bearer|sas)$/i;
+
+const safeDecode = (text) => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+};
+
+// A path segment written as a template ({token}, :token, <token>, ${TOKEN}) stands for a value, it is not one.
+const isTemplateSegment = (segment) => /[{}<>$]|^:/.test(segment) || isPlaceholder(segment);
+
+/**
+ * Does a URL that is the VALUE of a strong secret name (API_TOKEN, WEBHOOK_SECRET, ...) carry a credential itself?
+ * Signed URLs (?sig=..., X-Amz-Signature), webhook URLs (/services/T000/B000/<token>) and token-as-username URLs
+ * (https://<token>@host) are bearer credentials. A URL whose parts are all ordinary words, ids and template
+ * placeholders is just an address. Weak names (TOKEN_URL, TOKEN_ENDPOINT) never reach this: they name an endpoint.
+ * The password of user:password@ is url-password's business, not judged here.
+ */
+function urlCarriesCredential(url) {
+  const rest = url.replace(URL_PREFIX, '');
+  const authorityEnd = rest.search(/[/?#]/);
+  const authority = authorityEnd === -1 ? rest : rest.slice(0, authorityEnd);
+  const afterAuthority = authorityEnd === -1 ? '' : rest.slice(authorityEnd);
+  const at = authority.lastIndexOf('@');
+  if (at > 0) {
+    const userinfo = authority.slice(0, at);
+    if (!userinfo.includes(':') && userinfo.length >= 8 && !isTemplateSegment(userinfo) && !isWordIdentifier(userinfo)) return true;
+  }
+  const hashAt = afterAuthority.indexOf('#');
+  const beforeFragment = hashAt === -1 ? afterAuthority : afterAuthority.slice(0, hashAt);
+  const fragment = hashAt === -1 ? '' : afterAuthority.slice(hashAt + 1);
+  const queryAt = beforeFragment.indexOf('?');
+  const pathPart = queryAt === -1 ? beforeFragment : beforeFragment.slice(0, queryAt);
+  const query = queryAt === -1 ? '' : beforeFragment.slice(queryAt + 1);
+  for (const segment of pathPart.split('/')) {
+    const decoded = safeDecode(segment);
+    if (decoded.length >= 16 && !isTemplateSegment(decoded) && looksRandom(decoded, { minLength: 16, minEntropy: 3.0 })) return true;
+  }
+  for (const pair of `${query}&${fragment}`.split(/[&;]/)) {
+    if (pair === '') continue;
+    const eq = pair.indexOf('=');
+    const name = eq === -1 ? '' : safeDecode(pair.slice(0, eq));
+    const value = safeDecode(eq === -1 ? pair : pair.slice(eq + 1));
+    if (value === '' || isTemplateSegment(value)) continue;
+    if (CREDENTIAL_PARAM.test(name)) {
+      if (value.length >= 8 && !isWordIdentifier(value)) return true;
+    } else if (looksRandom(value, { minLength: 20, minEntropy: 3.5 })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Decide whether a value assigned to a secret-like name is a finding.
- * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string}} input
+ * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string, minLength?: number}} input
+ * `minLength` is the shortest value a strong name may hold (8; credential files such as .npmrc use 4).
  */
-function isSecretValue({ kind, value, quoted, separator, mode }) {
+function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false }) {
   let text = value;
   if (!quoted) {
     if (mode === 'code') return false; // a bare token in source code is an expression, not a literal
@@ -479,22 +682,31 @@ function isSecretValue({ kind, value, quoted, separator, mode }) {
   // right next to a reference (${A}literal). Operands are judged as whole strings.
   if (mode === 'config' && text.includes('${')) {
     const operand = (literal) =>
-      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode });
+      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode, minLength, catalog });
     if (expansionLiterals(text).some(operand)) return true;
     const glued = stripQuotes(withoutExpansions(text));
-    return glued !== '' && looksRandom(glued, GATES.configWeak);
+    if (glued === '') return false;
+    return URL_PREFIX.test(glued) ? kind === 'strong' && urlCarriesCredential(glued) : looksRandom(glued, GATES.configWeak);
   }
-  if (text === '' || URL_PREFIX.test(text) || isPlaceholder(text)) return false;
+  if (URL_PREFIX.test(text)) {
+    // A URL value is an address for weak names (TOKEN_URL, TOKEN_ENDPOINT) and for URLs with nothing credential-like in them,
+    // but a bearer credential when it sits in a strong name and a part of it is one (signed URL, webhook path token).
+    return kind === 'strong' && !/\s/.test(text) && urlCarriesCredential(text);
+  }
+  if (text === '' || isPlaceholder(text)) return false;
   if (/\s/.test(text)) {
     // Only a quoted value (or a whole-line value) may contain spaces; in code a spaced string is text.
-    return quoted && mode !== 'code' && isPhraseSecret({ kind, text });
+    return quoted && mode !== 'code' && isPhraseSecret({ kind, text, minLength, catalog });
   }
   if (mode === 'code') return looksRandom(text, kind === 'strong' ? GATES.codeStrong : GATES.codeWeak);
   // Prose such as "Token: something" is common, so an unquoted `name: word` needs a random-looking word.
   const proseColon = mode === 'prose' && !quoted && separator !== '=';
-  if (kind === 'strong' && !proseColon) return text.length >= MIN_STRONG_CONFIG_LENGTH;
+  if (kind === 'strong' && !proseColon) return text.length >= minLength;
   return looksRandom(text, GATES.configWeak);
 }
+
+// YAML node properties (tags and anchors) in front of a scalar: `!!str`, `!vault`, `&default`, one or more, then a blank.
+const YAML_NODE_PROPERTIES = /(?:(?:![^\s]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+)+(?=\S)/y;
 
 /** Index of the "}" that closes the "${" at `open`, or -1. Nesting-aware, linear. */
 function closingBrace(text, open) {
@@ -575,9 +787,12 @@ function bareShellWordEnd(input, start) {
 
 // Files whose unquoted values run to the end of the line (YAML plain scalars, ini, properties, dotenv).
 const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env']);
+const REST_OF_LINE_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'mycnf', 's3cfg', 'wgetrc', 'terraformrc'];
 function valueRunsToEndOfLine(filePath) {
   const base = path.posix.basename(filePath).toLowerCase();
-  return REST_OF_LINE_EXTENSIONS.has(path.posix.extname(base)) || base === '.env' || base.startsWith('.env.') || base.endsWith('.env');
+  if (REST_OF_LINE_EXTENSIONS.has(path.posix.extname(base)) || base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) return true;
+  const formats = credentialFormats(filePath);
+  return REST_OF_LINE_FORMATS.some((tag) => formats.has(tag));
 }
 
 /**
@@ -586,12 +801,13 @@ function valueRunsToEndOfLine(filePath) {
  *  - the rest of the line, comment removed (a plain scalar or ini value with spaces)
  *  - the indented lines of a YAML block scalar (`|`, `>`, `|-`, `>-`, ...)
  */
-function unquotedContinuations(input, matchIndex, tokenEnd, token, filePath) {
-  let lineEnd = input.indexOf('\n', tokenEnd);
-  if (lineEnd === -1) lineEnd = input.length;
+function unquotedContinuations(ctx, input, matchIndex, tokenEnd, token) {
+  // Line boundaries come from the per-file newline index (binary search), never from a scan: a one-line file with
+  // thousands of matches must stay linear.
+  const lineEnd = ctx.lineEnd(tokenEnd);
   const results = [];
   if (/^[|>][-+0-9]*$/.test(token)) {
-    const lineStart = input.lastIndexOf('\n', matchIndex - 1) + 1;
+    const lineStart = ctx.lineStart(matchIndex);
     const keyIndent = /^[ \t]*/.exec(input.slice(lineStart, matchIndex + 1))[0].length;
     let cursor = lineEnd + 1;
     const collected = [];
@@ -612,7 +828,7 @@ function unquotedContinuations(input, matchIndex, tokenEnd, token, filePath) {
     if (collected.length > 1) results.push({ value: collected.join(' '), end });
     return results;
   }
-  if (!valueRunsToEndOfLine(filePath) || /^[!&*'"`{[]/.test(token) || token.endsWith(',')) return results;
+  if (!ctx.runsToEndOfLine || /^[!&*'"`{[]/.test(token) || token.endsWith(',')) return results;
   const rest = input.slice(tokenEnd, Math.min(lineEnd, tokenEnd + 400));
   if (!/^[ \t]+[^\s#]/.test(rest)) return results;
   const whole = (token + rest).replace(/\r$/, '').replace(/[ \t]+#.*$/, '').trim();
@@ -629,15 +845,57 @@ const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.tf', '.tfvars', '.hcl', '.example', '.sample', '.template',
-  '.dist',
+  '.dist', '.cnf', '.tfstate', '.kubeconfig',
 ]);
 const CONFIG_BASENAMES = new Set([
   '.npmrc', '.yarnrc', '.netrc', '.pgpass', '.envrc', 'makefile', 'gnumakefile', 'procfile', 'credentials', 'config',
 ]);
 
+const NETRC_NAME = /(?:^|[._-])netrc(?:$|[._-])/;
+const PGPASS_NAME = /(?:^|[._-])pgpass(?:$|[._-])/;
+const GITCRED_NAME = /(?:^|[._-])git-credentials(?:$|[._-])/;
+const DOCKER_NAME = /(?:^|[._-])(?:dockercfg|dockerconfigjson|dockerconfig|docker-config)(?:$|[._-])/;
+
+/**
+ * Which native credential-file formats a path is, by its base name and directories (all lower-case tags):
+ *   netrc pgpass gitcred npmrc pypirc awscreds docker kube htpasswd mycnf s3cfg terraformrc curlrc wgetrc vault
+ * A path can carry several. These files have their own syntax (`password <value>`, host:port:db:user:password,
+ * URL lines, `_authToken=`, user:hash) and are scanned by the credential-file rule, with lower value-length limits.
+ */
+export function credentialFormats(filePath) {
+  const normalized = filePath.split(path.sep).join('/').toLowerCase();
+  const base = path.posix.basename(normalized);
+  const dirs = `/${normalized}`;
+  const tags = new Set();
+  // Backups and variants reach a repository under names like netrc.txt, .netrc.bak, .netrc.prod, dot-netrc, pgpass.local:
+  // the name is matched as a whole word (separated by . _ or -), not as an exact base name.
+  if (NETRC_NAME.test(base)) tags.add('netrc');
+  if (PGPASS_NAME.test(base)) tags.add('pgpass');
+  if (GITCRED_NAME.test(base)) tags.add('gitcred');
+  if (/^\.?(?:npmrc|yarnrc)(?:\.|$)/.test(base)) tags.add('npmrc');
+  if (/^\.?pypirc(?:\.|$)/.test(base)) tags.add('pypirc');
+  if (base === 'credentials' || (base === 'config' && dirs.includes('/.aws/')) || base === '.aws-credentials') tags.add('awscreds');
+  if (DOCKER_NAME.test(base) || dirs.includes('/.docker/')) tags.add('docker');
+  if (base === 'kubeconfig' || base.endsWith('.kubeconfig') || base.startsWith('kubeconfig.') || dirs.includes('/.kube/')) tags.add('kube');
+  if (/^\.?ht(?:passwd|digest)(?:\.|$)/.test(base)) tags.add('htpasswd');
+  if (/^\.?(?:my|mylogin|mysql)\.cnf$/.test(base)) tags.add('mycnf');
+  if (base === '.s3cfg' || base === 's3cfg' || base === '.boto' || base === 'boto.cfg') tags.add('s3cfg');
+  if (base === '.terraformrc' || base === 'terraform.rc' || base.endsWith('.tfrc.json') || base.endsWith('.tfrc') || base.includes('.tfstate')) tags.add('terraformrc');
+  if (/^[._]?curlrc$/.test(base)) tags.add('curlrc');
+  if (base === '.wgetrc' || base === 'wgetrc') tags.add('wgetrc');
+  if (base === '.vault-token' || base === 'vault-token') tags.add('vault');
+  return tags;
+}
+
+// Formats in which every `name = value` is a credential setting: the value-length limit drops from 8 to 4 and
+// auth-style names (auth, npmAuthIdent, client-key-data) count as secret names.
+const STRICT_CREDENTIAL_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'docker', 'kube', 'mycnf', 's3cfg', 'terraformrc', 'wgetrc', 'curlrc'];
+const CREDENTIAL_FILE_MIN_LENGTH = 4;
+const CREDENTIAL_FILE_NAMES = new Set(['auth', 'authident', 'npmauthident', 'clientkeydata', 'clientkey', 'authorization', 'basicauth']);
+
 /**
  * 'prose'  Markdown and text: docs paste real values into code fences.
- * 'config' env files, YAML, JSON, INI, shell, Terraform, Makefile, ...: bare KEY=value lines.
+ * 'config' env files, YAML, JSON, INI, shell, Terraform, Makefile, credential files, ...: bare KEY=value lines.
  * 'code'   everything else (JS, TS, Python, SQL, HTML, ...): only quoted, random-looking literals.
  */
 export function fileMode(filePath) {
@@ -653,7 +911,8 @@ export function fileMode(filePath) {
     base.startsWith('docker-compose') ||
     base.startsWith('dockerfile') ||
     CONFIG_BASENAMES.has(base) ||
-    CONFIG_EXTENSIONS.has(ext)
+    CONFIG_EXTENSIONS.has(ext) ||
+    credentialFormats(filePath).size > 0
   ) {
     return 'config';
   }
@@ -668,6 +927,8 @@ export function fileMode(filePath) {
 const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:\\r|\r)?(?:\\n|\n))+[ \t]*`;
 const SECRET_HINT = /secret|passw|pwd|pass|token|credential|salt|pepper|key/i;
 const ENV_ROOT = String.raw`(?:process\.env|import\.meta\.env)`;
+// A "/" in a URL, or the same "/" escaped for JSON (\/).
+const SLASH = String.raw`\\?\/`;
 
 // `sign(payload, KEY, ...)`: is the text before the literal exactly one top-level argument?
 function isSecondArgument(prefix) {
@@ -715,13 +976,468 @@ function urlPasswordIsSecret(password) {
   return glued !== '' && !isPlaceholder(glued);
 }
 
+// ---------------------------------------------------------------------------
+// Name/value pairs split across fields (JSON, YAML, HCL objects), in any order
+// ---------------------------------------------------------------------------
+
+const PAIR_BACK_CHARS = 1500; // how far before the name field the enclosing "{" or "(" is looked for
+const PAIR_FORWARD_CHARS = 1500; // ... and how far after it the enclosing "}" or ")" is looked for
+const PAIR_YAML_LINES = 12; // lines above and below the name line that can belong to the same YAML mapping
+const PAIR_LINE_CHARS = 2000; // only this much of a YAML line is read
+const PAIR_XML_CHARS = 600; // an XML entry (<add key= value=/>, <property><name/><value/></property>) is read up to this size
+const PAIR_BUDGET_CHARS = 24_000_000; // per file: characters the window search may read before it gives up (and reports)
+
+/**
+ * The text of the innermost `{ ... }` around `index` by naive brace counting (null when there is none in range) and the
+ * characters it cost. Reads at most PAIR_BACK_CHARS + PAIR_FORWARD_CHARS. Braces inside strings are counted, which
+ * a JSON string such as "a } b" can exploit; stringAwareWindow covers that, and both are searched.
+ */
+function braceWindow(input, index) {
+  // Native indexOf/lastIndexOf jump between braces, so a window without many braces costs a couple of memchr calls.
+  const from = Math.max(0, index - PAIR_BACK_CHARS);
+  const back = input.slice(from, index);
+  let open = -1;
+  let nearOpen = back.lastIndexOf('{');
+  let nearClose = back.lastIndexOf('}');
+  let depth = 0;
+  while (nearOpen !== -1) {
+    if (nearClose > nearOpen) {
+      depth += 1;
+      nearClose = nearClose === 0 ? -1 : back.lastIndexOf('}', nearClose - 1);
+    } else {
+      if (depth === 0) {
+        open = from + nearOpen;
+        break;
+      }
+      depth -= 1;
+      nearOpen = nearOpen === 0 ? -1 : back.lastIndexOf('{', nearOpen - 1);
+    }
+  }
+  if (open === -1) return { text: null, cost: 64 };
+  const forward = input.slice(index, Math.min(input.length, index + PAIR_FORWARD_CHARS));
+  let end = index + forward.length;
+  let nextOpen = forward.indexOf('{');
+  let nextClose = forward.indexOf('}');
+  depth = 0;
+  while (nextClose !== -1) {
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth += 1;
+      nextOpen = forward.indexOf('{', nextOpen + 1);
+    } else {
+      if (depth === 0) {
+        end = index + nextClose + 1;
+        break;
+      }
+      depth -= 1;
+      nextClose = forward.indexOf('}', nextClose + 1);
+    }
+  }
+  return { text: input.slice(open, end), cost: end - open };
+}
+
+/**
+ * Bracket tracking that knows about strings: a `}` or `)` inside "..." or '...' (backslash escapes honoured; a string
+ * never runs past a line break, so an apostrophe in a comment cannot swallow the file) does not close anything.
+ * `state` = { braces: [], parens: [] } holds the positions of the still-open brackets. With `stopAt` ('}' or ')'), the scan
+ * ends at the first such closer that closes nothing opened inside `text` and returns its index (otherwise -1).
+ */
+function scanBrackets(text, offset, state, stopAt) {
+  let quote = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote !== null) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote || ch === '\n') quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '{') {
+      state.braces.push(offset + i);
+    } else if (ch === '(') {
+      state.parens.push(offset + i);
+    } else if (ch === '}') {
+      if (state.braces.length === 0 && stopAt === '}') return i;
+      state.braces.pop();
+    } else if (ch === ')') {
+      if (state.parens.length === 0 && stopAt === ')') return i;
+      state.parens.pop();
+    }
+  }
+  return -1;
+}
+
+/**
+ * The string-aware innermost enclosing bracket pair around `index`: `{ ... }` for a JSON/JS/Go/HCL object, or `( ... )`
+ * for a call (create_var(name='X', value='Y')) when that is the innermost one. Returns { text, cost } (text null when
+ * there is no enclosing pair in range). Bounded to PAIR_BACK_CHARS + PAIR_FORWARD_CHARS characters.
+ */
+function stringAwareWindow(input, index) {
+  const from = Math.max(0, index - PAIR_BACK_CHARS);
+  const back = input.slice(from, index);
+  if (!back.includes('{') && !back.includes('(')) return { text: null, cost: 64 };
+  const state = { braces: [], parens: [] };
+  scanBrackets(back, from, state, null);
+  const brace = state.braces[state.braces.length - 1] ?? -1;
+  const paren = state.parens[state.parens.length - 1] ?? -1;
+  const open = Math.max(brace, paren);
+  if (open === -1) return { text: null, cost: index - from };
+  const openChar = open === brace ? '{' : '(';
+  // Forward: brackets opened after the name field must be closed first; the first unmatched closer of our kind ends it.
+  const forward = input.slice(index, Math.min(input.length, index + PAIR_FORWARD_CHARS));
+  const ahead = { braces: [], parens: [] };
+  let end = index + forward.length;
+  const hit = scanBrackets(forward, index, ahead, openChar === '{' ? '}' : ')');
+  if (hit !== -1) end = index + hit + 1;
+  return { text: input.slice(open, end), cost: index - from + (end - index) };
+}
+
+/**
+ * The lines of the YAML mapping (a list item, or a plain block) that the name line belongs to: the item's own first line
+ * and its sibling keys, in either direction, up to PAIR_YAML_LINES lines each way. An item ends at the next `- ` at
+ * or left of it, a dedent, or a document marker. Returns null when the key is not at the start of its line.
+ * Every search for a line break is bounded to PAIR_LINE_CHARS, so a huge single line costs a constant amount.
+ */
+function yamlBlockWindow(input, index) {
+  // Start of the line holding `at`, or -1 when the line is longer than PAIR_LINE_CHARS (not a YAML block line).
+  const startOfLine = (at) => {
+    const from = Math.max(0, at - PAIR_LINE_CHARS);
+    const found = input.slice(from, at).lastIndexOf('\n');
+    return found !== -1 ? from + found + 1 : from === 0 ? 0 : -1;
+  };
+  // The line starting at `start`: its text and where the next line starts (input.length + 1 when there is none in range).
+  const lineFrom = (start) => {
+    const chunk = input.slice(start, start + PAIR_LINE_CHARS + 1);
+    const newline = chunk.indexOf('\n');
+    if (newline === -1) return { text: chunk.replace(/\r$/, ''), next: input.length + 1 };
+    return { text: chunk.slice(0, newline).replace(/\r$/, ''), next: start + newline + 1 };
+  };
+  const indentOf = (text) => /^[ \t]*/.exec(text)[0].length;
+  const isDash = (text) => /^[ \t]*-(?:[ \t]|$)/.test(text);
+  const isMarker = (text) => /^(?:---|\.\.\.)[ \t]*$/.test(text);
+
+  const lineStart = startOfLine(index);
+  if (lineStart === -1) return null;
+  const prefix = input.slice(lineStart, index);
+  if (!/^[ \t]*(?:-[ \t]+)*$/.test(prefix)) return null;
+  const keyCol = prefix.length;
+  const ownItem = prefix.includes('-');
+  const own = lineFrom(lineStart);
+  const above = [];
+  if (!ownItem) {
+    let cursor = lineStart;
+    for (let n = 0; n < PAIR_YAML_LINES && cursor > 0; n += 1) {
+      const previousStart = startOfLine(cursor - 1);
+      if (previousStart === -1) break;
+      const line = lineFrom(previousStart);
+      cursor = previousStart;
+      if (line.text.trim() === '' || isMarker(line.text)) break;
+      if (isDash(line.text) && /^[ \t]*-[ \t]+/.exec(line.text)[0].length === keyCol) {
+        above.push(line.text);
+        break;
+      }
+      if (indentOf(line.text) < keyCol || (isDash(line.text) && indentOf(line.text) <= keyCol)) break;
+      above.push(line.text);
+    }
+  }
+  const below = [];
+  let cursor = own.next;
+  for (let n = 0; n < PAIR_YAML_LINES && cursor <= input.length; n += 1) {
+    const line = lineFrom(cursor);
+    cursor = line.next;
+    if (line.text.trim() === '') continue;
+    if (isMarker(line.text)) break;
+    const indent = indentOf(line.text);
+    if (indent < keyCol || (isDash(line.text) && indent === keyCol && !ownItem)) break;
+    below.push(line.text);
+  }
+  return [...above.reverse(), own.text, ...below].join('\n');
+}
+
+// The entry tags of XML/properties-style configuration: <add key= value=/>, <setting name=><value/></setting>,
+// <property><name/><value/></property>, <entry key=>V</entry>.
+const XML_ENTRY_TAG = /<(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)(?![A-Za-z0-9_-])/gi;
+
+/**
+ * The XML entry around `index`: from the nearest opening entry tag before it (or the tag that holds it) to the end of that
+ * entry (`/>`, or its closing tag, or the start of the next entry), at most PAIR_XML_CHARS. Null when `index` is not in XML.
+ */
+function xmlWindow(input, index) {
+  const from = Math.max(0, index - PAIR_XML_CHARS);
+  const back = input.slice(from, index);
+  if (!back.includes('<')) return null;
+  let start = -1;
+  for (const tag of back.matchAll(XML_ENTRY_TAG)) start = from + tag.index;
+  if (start === -1) start = from + back.lastIndexOf('<');
+  const forward = input.slice(index, Math.min(input.length, index + PAIR_XML_CHARS));
+  let end = forward.length;
+  const selfClose = forward.indexOf('/>');
+  if (selfClose !== -1) end = Math.min(end, selfClose + 2);
+  const closing = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)\s*>/i.exec(forward);
+  if (closing) end = Math.min(end, closing.index + closing[0].length);
+  XML_ENTRY_TAG.lastIndex = 0;
+  const next = XML_ENTRY_TAG.exec(forward);
+  if (next && next.index > 0) end = Math.min(end, next.index);
+  XML_ENTRY_TAG.lastIndex = 0;
+  return input.slice(start, index + end);
+}
+
+// The value-carrying field of a name/value object. `valueFrom`, `values` and other longer names do not match. A YAML tag
+// or anchor before the scalar (`!!str V`, `&a V`) is skipped.
+const PAIR_VALUE_FIELD =
+  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}\]"']{1,4096}))/gi;
+// The same field as an XML element: <value>V</value>
+const PAIR_XML_VALUE = /<(?:value|val|secret|content|data|default|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
+
+/** Is any value field (either order) in the window text a non-placeholder secret? */
+function windowHoldsSecretValue(text, kind, ctx, escaped) {
+  const unescaped = escaped ? text.replace(/\\(["'])/g, '$1') : text;
+  for (const field of unescaped.matchAll(PAIR_VALUE_FIELD)) {
+    const quotedValue = field[2] ?? field[3];
+    const quoted = quotedValue !== undefined;
+    if (
+      isSecretValue({
+        kind,
+        value: quoted ? unescapeQuoted(quotedValue) : field[4],
+        quoted,
+        separator: ':',
+        mode: ctx.mode,
+        minLength: ctx.minStrong,
+        catalog: ctx.catalog,
+      })
+    ) {
+      return true;
+    }
+  }
+  if (unescaped.includes('</')) {
+    for (const field of unescaped.matchAll(PAIR_XML_VALUE)) {
+      if (isSecretValue({ kind, value: field[1], quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog })) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Judge a name/value object whose secret-like name field is at `m`: is any value field in the same bounded JSON/HCL/YAML/
+ * XML object or call (either order, other fields in between) a non-placeholder secret? Reads are budgeted per file;
+ * running out of budget reports the file once (hostile input must not be silently skipped).
+ */
+function pairValueIsSecret(m, kind, ctx) {
+  if (ctx.pairExhausted) return false; // already reported for this file, and nothing more is read
+  ctx.pairBudget ??= PAIR_BUDGET_CHARS;
+  const windows = [];
+  const brace = braceWindow(m.input, m.index);
+  ctx.pairBudget -= brace.cost;
+  if (brace.text !== null) windows.push(brace.text);
+  const aware = stringAwareWindow(m.input, m.index);
+  ctx.pairBudget -= aware.cost;
+  if (aware.text !== null && aware.text !== brace.text) windows.push(aware.text);
+  const yaml = yamlBlockWindow(m.input, m.index);
+  if (yaml !== null) {
+    ctx.pairBudget -= yaml.length;
+    windows.push(yaml);
+  }
+  const xml = xmlWindow(m.input, m.index);
+  if (xml !== null) {
+    ctx.pairBudget -= xml.length;
+    windows.push(xml);
+  }
+  if (ctx.pairBudget < 0) {
+    // Out of budget: the file is too dense with secret-like names to verify. Report it (once: one finding fails the run).
+    ctx.pairExhausted = true;
+    return true;
+  }
+  const escaped = m[1].startsWith('\\'); // a JSON document stored as a string: {\"key\":\"X\",\"value\":\"Y\"}
+  return windows.some((window) => windowHoldsSecretValue(window, kind, ctx, escaped));
+}
+
+/** Value fields inside the child block or object that belongs to a name: `NAME:` followed by indented lines, or `NAME: {`. */
+function childHoldsSecretValue(m, kind, ctx, keyIndent) {
+  if (ctx.pairExhausted) return false;
+  ctx.pairBudget ??= PAIR_BUDGET_CHARS;
+  const input = m.input;
+  const after = m.index + m[0].length;
+  let text;
+  if (input[after] === '{') {
+    const forward = input.slice(after + 1, Math.min(input.length, after + 1 + PAIR_FORWARD_CHARS));
+    const state = { braces: [], parens: [] };
+    const hit = scanBrackets(forward, after + 1, state, '}');
+    text = forward.slice(0, hit === -1 ? forward.length : hit);
+  } else {
+    const lines = [];
+    // `after` sits at the end of the name line (or a comment before its line break): the children are the following,
+    // more indented lines. Each line is cut at PAIR_LINE_CHARS, so a huge line costs a constant amount.
+    let lineBreak = input.indexOf('\n', after);
+    let childIndent = -1; // only the direct children count: `secrets:` is not the name of a value nested two levels down
+    for (let n = 0; n < PAIR_YAML_LINES * 2 && lineBreak !== -1 && lines.length < PAIR_YAML_LINES; n += 1) {
+      const from = lineBreak + 1;
+      const next = input.indexOf('\n', from);
+      const line = input.slice(from, next === -1 ? Math.min(input.length, from + PAIR_LINE_CHARS) : Math.min(next, from + PAIR_LINE_CHARS)).replace(/\r$/, '');
+      lineBreak = next;
+      if (line.trim() === '') continue;
+      const indent = /^[ \t]*/.exec(line)[0].length;
+      if (/^(?:---|\.\.\.)[ \t]*$/.test(line) || indent <= keyIndent) break;
+      if (childIndent === -1) childIndent = indent;
+      if (indent === childIndent) lines.push(line);
+    }
+    text = lines.join('\n');
+  }
+  ctx.pairBudget -= text.length + 64;
+  if (ctx.pairBudget < 0) {
+    ctx.pairExhausted = true;
+    return true;
+  }
+  return windowHoldsSecretValue(text, kind, ctx, false);
+}
+
+// ---------------------------------------------------------------------------
+// Secrets passed on a command line: gh secret set NAME --body V, netlify env:set NAME V, aws ssm put-parameter ...
+// ---------------------------------------------------------------------------
+
+// Flags that carry the variable name, and flags that carry its value, in the CLIs above.
+const CLI_NAME_FLAGS = new Set(['--name', '--key', '--secret-name', '--parameter-name']);
+const CLI_VALUE_FLAGS = new Set(['--body', '-b', '--value', '--secret-string', '--string-value', '--secret-value', '--plaintext']);
+// Flags that take a separate argument but are neither of the above (so it is not mistaken for a name or a value).
+const CLI_OTHER_ARG_FLAGS = new Set([
+  '--type', '--description', '--env', '--environment', '--app', '-a', '--repo', '-R', '--org', '-o', '--vault-name', '--region',
+  '--profile', '--scope', '--context', '--site', '-s', '--project', '--secret-id', '--tags', '--kms-key-id', '--key-id',
+  '--visibility', '--repos', '--user', '--env-file', '--config', '--namespace', '-n', '--from-file', '--tier', '--data-type',
+]);
+
+/** Shell words of one command line: quotes honoured, stops at an unquoted pipe, ;, &, > or comment. `<<<` is a word of its own. */
+function shellWords(line) {
+  const words = [];
+  let word = null;
+  let quote = null;
+  const push = () => {
+    if (word !== null) words.push(word);
+    word = null;
+  };
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quote !== null) {
+      if (ch === '\\' && quote === '"' && i + 1 < line.length) {
+        word += line[i + 1];
+        i += 1;
+      } else if (ch === quote) quote = null;
+      else word += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      word ??= '';
+    } else if (ch === ' ' || ch === '\t' || ch === '\r') {
+      push();
+    } else if (ch === '|' || ch === ';' || ch === '&' || ch === '>' || (ch === '#' && word === null)) {
+      break;
+    } else if (ch === '<' && line.startsWith('<<<', i)) {
+      push();
+      words.push('<<<');
+      i += 2;
+    } else if (ch === '\\' && i + 1 < line.length) {
+      word = (word ?? '') + line[i + 1];
+      i += 1;
+    } else {
+      word = (word ?? '') + ch;
+    }
+  }
+  push();
+  return words;
+}
+
+/**
+ * The (name, value) pairs of one CLI invocation. `verb` names the tool (see CLI_TOOLS): `positionalValue` tools take
+ * `NAME VALUE`; every tool takes --name/--value style flags, --from-literal=K=V, a `<<<` here-string or an
+ * `echo V |` pipe for its first positional name. `K=V` positionals are pairs only where `assignments` is true.
+ */
+function cliPairs(words, { positionalValue, assignments }, piped) {
+  const pairs = [];
+  const positional = [];
+  let flagName = null;
+  let flagValue = null;
+  let hereString = null;
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i];
+    if (word === '<<<') {
+      hereString = words[i + 1] ?? null;
+      i += 1;
+    } else if (word.startsWith('<<<') && word.length > 3) {
+      hereString = word.slice(3);
+    } else if (word.startsWith('--from-literal=')) {
+      const eq = word.indexOf('=', 15);
+      if (eq !== -1) pairs.push([word.slice(15, eq), word.slice(eq + 1)]);
+    } else if (word === '--from-literal') {
+      const literal = words[i + 1] ?? '';
+      const eq = literal.indexOf('=');
+      if (eq !== -1) pairs.push([literal.slice(0, eq), literal.slice(eq + 1)]);
+      i += 1;
+    } else if (word.startsWith('-')) {
+      const eq = word.indexOf('=');
+      const flag = eq === -1 ? word : word.slice(0, eq);
+      const inline = eq === -1 ? null : word.slice(eq + 1);
+      const take = () => (inline !== null ? inline : ((i += 1), words[i] ?? null));
+      if (CLI_NAME_FLAGS.has(flag)) flagName = take();
+      else if (CLI_VALUE_FLAGS.has(flag)) flagValue = take();
+      else if (CLI_OTHER_ARG_FLAGS.has(flag)) take();
+    } else if (assignments && /^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) {
+      pairs.push([word.slice(0, word.indexOf('=')), word.slice(word.indexOf('=') + 1)]);
+    } else {
+      positional.push(word);
+    }
+  }
+  const name = flagName ?? positional[0] ?? null;
+  const value = flagValue ?? hereString ?? (positionalValue ? positional[1] : null) ?? piped;
+  if (name !== null && value !== null && value !== undefined && !name.includes('=')) pairs.push([name, value]);
+  return pairs;
+}
+
+const CLI_TOOLS = [
+  [/^gh[ \t]+(?:secret|variable)[ \t]+set/, {}],
+  [/^netlify[ \t]+env:set/, { positionalValue: true }],
+  [/^vercel[ \t]+env[ \t]+(?:add|update)/, {}],
+  [/^heroku[ \t]+config:set/, {}],
+  [/^fly(?:ctl)?[ \t]+secrets[ \t]+set/, {}],
+  [/^wrangler[ \t]+secret[ \t]+put/, {}],
+  [/^railway[ \t]+variables[ \t]+set/, {}],
+  [/^doppler[ \t]+secrets[ \t]+set/, { positionalValue: true }],
+  [/^aws[ \t]+ssm[ \t]+put-parameter/, {}],
+  [/^aws[ \t]+secretsmanager[ \t]+(?:create-secret|put-secret-value)/, {}],
+  [/^firebase[ \t]+functions:secrets:set/, {}],
+  [/^az[ \t]+keyvault[ \t]+secret[ \t]+set/, {}],
+  [/^kubectl[ \t]+create[ \t]+secret[ \t]+generic/, {}],
+  [/^docker[ \t]+secret[ \t]+create/, {}],
+];
+
+/** Secret-name kind, with the extra auth-style names that only mean a credential inside a credential file. */
+function nameKindFor(name, ctx) {
+  const kind = secretNameKind(name);
+  if (kind === 'strong' || !ctx.strict) return kind;
+  return CREDENTIAL_FILE_NAMES.has(nameWords(name).join('')) ? 'strong' : kind;
+}
+
+/** A value in a native credential file: any non-placeholder of 4+ characters (the file's name already says it is a credential). */
+const credentialValueIsSecret = (raw) => {
+  const value = stripQuotes(String(raw ?? '').replace(/\r$/, '').trim());
+  return value.length >= CREDENTIAL_FILE_MIN_LENGTH && !isPlaceholder(value);
+};
+
+// netrc tokens are separated by blanks or line breaks; scripts write them with printf and a literal \n.
+const NETRC_SEP = String.raw`(?:[ \t\r\n]|\\[nr]){1,64}`;
+
+/** The anonymous-FTP convention (`password guest@`, `anonymous`): not a secret. */
+const isAnonymousFtpValue = (value) => /@$/.test(value) || /^(?:anonymous|guest)$/i.test(value);
+
+/** True when the match sits on a line whose first non-blank character is `#` (a comment in credential files). */
+function onCommentLine(m, ctx) {
+  const start = ctx.lineStart(m.index);
+  return /^[ \t]*#/.test(m.input.slice(start, m.index + 1));
+}
+
+const hasFormat = (tag) => (ctx) => ctx.formats.has(tag);
+
 /** Any secret-like environment variable name, strong or weak. */
 const isSecretLikeName = (name) => secretNameKind(name) !== null;
 
 /**
- * Each rule: id, description, matchers[{ pattern (global regex), accept(match, ctx) }],
+ * Each rule: id, description, matchers[{ pattern (global regex), accept(match, ctx), optional appliesTo(ctx) and hint }],
  * optional appliesTo(ctx) and hint (a cheap regex the file must match before the rule runs).
- * ctx is { path, mode }. accept() returns false for placeholders and other non-secrets.
+ * ctx is { path, mode, formats, strict, minStrong }. accept() returns false for placeholders and other non-secrets.
  * Every quantifier that can meet attacker-shaped text is bounded, so scan time stays linear.
  */
 export const RULES = [
@@ -869,6 +1585,63 @@ export const RULES = [
     ],
   },
   {
+    id: 'webhook-url',
+    description:
+      'webhook URL whose path or query is a secret token (Slack, Discord, Microsoft Teams / Power Automate, Zapier, IFTTT, PagerDuty, Telegram bot): anyone holding the URL can post',
+    hint: /hooks\.slack|discord|webhook\.office|outlook\.office|logic\.azure|zapier|ifttt|api\.telegram|pagerduty/i,
+    matchers: [
+      {
+        // https://hooks.slack.com/services/T000/B000/<token>, /workflows/T/A/<id>/<token>, /triggers/E/<id>/<token>
+        pattern: new RegExp(String.raw`hooks\.slack\.com${SLASH}(?:services|workflows|triggers)((?:${SLASH}[A-Za-z0-9_%-]{1,100}){1,6})`, 'gi'),
+        accept: (m) => {
+          const last = m[1].split(/\\?\//).pop();
+          return last.length >= 16 && !isPlaceholder(last);
+        },
+      },
+      {
+        // https://discord.com/api/webhooks/<id>/<token>
+        pattern: new RegExp(String.raw`discord(?:app)?\.com${SLASH}api(?:${SLASH}v\d{1,2})?${SLASH}webhooks${SLASH}\d{5,25}${SLASH}([A-Za-z0-9_-]{16,})`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // https://<tenant>.webhook.office.com/webhookb2/<guid>@<guid>/IncomingWebhook/<32 hex>/<guid>  (and outlook.office.com/webhook/...)
+        pattern: new RegExp(
+          String.raw`(?:outlook\.office(?:365)?\.com${SLASH}webhook|[a-z0-9.-]{1,80}\.webhook\.office\.com${SLASH}webhook[a-z0-9]{0,3})${SLASH}[^\s"'<>]{0,300}?IncomingWebhook${SLASH}([A-Za-z0-9]{20,})`,
+          'gi',
+        ),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // Power Automate / Logic Apps HTTP trigger: https://prod-00.region.logic.azure.com/workflows/<id>/triggers/manual/paths/invoke?...&sig=<signature>
+        pattern: new RegExp(
+          String.raw`\.logic\.azure\.com(?::\d{1,5})?${SLASH}workflows${SLASH}[^\s"'<>]{0,300}?(?:[?&]|\\u0026|&amp;)sig=([A-Za-z0-9_%-]{16,})`,
+          'gi',
+        ),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // https://hooks.zapier.com/hooks/catch/<id>/<code>
+        pattern: new RegExp(String.raw`hooks\.zapier\.com${SLASH}hooks${SLASH}catch${SLASH}\d{3,}${SLASH}([A-Za-z0-9]{5,})`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // https://maker.ifttt.com/trigger/<event>/with/key/<key>
+        pattern: new RegExp(String.raw`maker\.ifttt\.com${SLASH}trigger${SLASH}[A-Za-z0-9_-]{1,100}${SLASH}(?:json${SLASH})?with${SLASH}key${SLASH}([A-Za-z0-9_-]{16,})`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // https://events.pagerduty.com/integration/<32 character integration key>/enqueue
+        pattern: new RegExp(String.raw`events\.pagerduty\.com${SLASH}integration${SLASH}([A-Za-z0-9]{20,})${SLASH}enqueue`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+      {
+        // https://api.telegram.org/bot<bot id>:<token>/sendMessage
+        pattern: new RegExp(String.raw`api\.telegram\.org${SLASH}bot(\d{6,}:[A-Za-z0-9_-]{30,})`, 'gi'),
+        accept: (m) => !isPlaceholder(m[1]),
+      },
+    ],
+  },
+  {
     id: 'secret-assignment',
     description:
       'secret-like name (SECRET, PASSWORD, TOKEN, API_KEY, ...) set to a non-placeholder literal: any 8+ character value in env/config files, a random-looking quoted literal in code',
@@ -880,12 +1653,18 @@ export const RULES = [
         // matching resumes right after it, so `cfg['a']={"K":"v"}`, `x=1;K='v'` and minified JSON are still examined.
         // Not a name: "${NAME:-x}" (an expansion, judged by its outer assignment) or "://NAME:x@" (a URL, judged by url-password).
         pattern:
-          /(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'`])[ \t]*\])?(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40})?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?=\S)/g,
+          /(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'`])[ \t]*\])?(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40}(?!:\/\/))?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?=\S)/g,
         accept: (m, ctx) => {
-          const kind = secretNameKind(m[2]);
+          const kind = nameKindFor(m[2], ctx);
           if (!kind) return false;
           const input = m.input;
-          const valueStart = m.index + m[0].length;
+          let valueStart = m.index + m[0].length;
+          if (ctx.mode !== 'code' && m[3] === ':') {
+            // A YAML tag or anchor before the scalar (`!!str V`, `&anchor V`, `!vault V`) is not part of the value.
+            YAML_NODE_PROPERTIES.lastIndex = valueStart;
+            const properties = YAML_NODE_PROPERTIES.exec(input);
+            if (properties) valueStart += properties[0].length;
+          }
           // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
           // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
           const nested = valueStart < (ctx.bareRunEnd ?? 0);
@@ -897,7 +1676,7 @@ export const RULES = [
           const quoted = quotedValue !== undefined;
           m.spanEnd = valueStart + value[0].length;
           const check = (text, isQuoted) =>
-            isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode });
+            isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
           if (quoted) return check(unescapeQuoted(quotedValue), true);
           const bare = value[4];
           if (!nested) ctx.bareRunEnd = valueStart + bare.length;
@@ -908,9 +1687,17 @@ export const RULES = [
             token = input.slice(valueStart, wordEnd);
             m.spanEnd = Math.max(m.spanEnd, wordEnd);
           }
+          if (ctx.mode !== 'config') return check(token, false);
+          const extras = unquotedContinuations(ctx, input, m.index, valueStart + bare.length, bare);
+          // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
+          // the first word alone says nothing about it.
+          const wholeLine = extras.find((extra) => extra.value.length > bare.length && extra.value.startsWith(bare));
+          if (wholeLine) {
+            m.spanEnd = wholeLine.end;
+            return check(wholeLine.value, true);
+          }
           if (check(token, false)) return true;
-          if (ctx.mode !== 'config') return false;
-          for (const extra of unquotedContinuations(input, m.index, valueStart + bare.length, bare, ctx.path)) {
+          for (const extra of extras) {
             if (check(extra.value, true)) {
               m.spanEnd = extra.end;
               return true;
@@ -926,7 +1713,7 @@ export const RULES = [
           if (!/(?:^|\/)(?:[^/]*dockerfile[^/]*|containerfile[^/]*)$/i.test(ctx.path)) return false;
           const kind = secretNameKind(m[1]);
           if (!kind || m[2].startsWith('=')) return false;
-          return isSecretValue({ kind, value: stripQuotes(m[2].replace(/\r$/, '')), quoted: true, separator: '=', mode: ctx.mode });
+          return isSecretValue({ kind, value: stripQuotes(m[2].replace(/\r$/, '')), quoted: true, separator: '=', mode: ctx.mode, catalog: ctx.catalog });
         },
       },
     ],
@@ -934,11 +1721,11 @@ export const RULES = [
   {
     id: 'secret-name-value-pair',
     description:
-      'name/value pair split across keys (k8s "- name: X / value: Y", Vercel {"key":"X","value":"Y"}) where the name is secret-like',
-    appliesTo: (ctx) => ctx.mode !== 'code',
+      'name/value pair split across fields, in any order and with other fields in between (k8s "- name: X / value: Y", Vercel {"key":"X","value":"Y"}, {name: X, value: Y}, Terraform blocks, XML <add key= value=/>, CloudFormation ParameterKey/ParameterValue, create_var(name=X, value=Y), nested "X: {value: Y}") where the name is secret-like',
     hint: SECRET_HINT,
     matchers: [
       {
+        appliesTo: (ctx) => ctx.mode !== 'code',
         // group 3 = variable name, 5/6 = quoted value, 7 = bare value
         pattern:
           /(?<![A-Za-z0-9_$.-])(["']?)(?:name|key)\1[ \t]*:[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\2[ \t]*,?[ \t]*(?:\r?\n[ \t-]*)?["']?value["']?[ \t]*:[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}]{1,4096}))/gi,
@@ -953,7 +1740,218 @@ export const RULES = [
             quoted,
             separator: ':',
             mode: ctx.mode,
+            catalog: ctx.catalog,
           });
+        },
+      },
+      {
+        // The same pair when the fields are not adjacent or not in that order: {"value":"Y","key":"X"},
+        // {"key":"X","type":"encrypted","value":"Y"}, {name: X, value: Y}, `- value: Y` above `name: X`, Terraform
+        // `name = "X"` / `value = "Y"` blocks, Netlify {"key":"X","values":[{"value":"Y"}]}. The value is searched for
+        // in the enclosing bounded { ... } object and in the neighbouring lines of the YAML mapping.
+        // group 1 = quote (may be a backslash-escaped one), 3 = variable name
+        pattern:
+          /(?<![A-Za-z0-9_$.-])(\\?["']?)(?:name|key|variable|variablename|env|envname|envvar|var|varname|secretname|parametername|parameterkey|optionname|propertyname|settingname|keyname)\1[ \t]*[:=][ \t]*(\\?["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\2(?![A-Za-z0-9_.-])/gi,
+        accept: (m, ctx) => {
+          // In source code the name must be a quoted literal ('JWT_SECRET'); a bare identifier (`key = TOKEN`) is code, not data.
+          if (ctx.mode === 'code' && m[2] === '') return false;
+          const kind = nameKindFor(m[3], ctx);
+          return kind !== null && pairValueIsSecret(m, kind, ctx);
+        },
+      },
+      {
+        // XML element form: <property><name>X</name><value>Y</value></property>, <setting><key>X</key>...
+        hint: /<\/(?:name|key|variable|env)/i,
+        pattern: /<(name|key|variable|env|parametername|parameterkey)>[ \t\r\n]*([A-Za-z_][A-Za-z0-9_.-]{0,1023})[ \t\r\n]*<\/\1>/gi,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (kind === null) return false;
+          const window = xmlWindow(m.input, m.index);
+          ctx.pairBudget = (ctx.pairBudget ?? PAIR_BUDGET_CHARS) - (window?.length ?? 0) - 64;
+          if (ctx.pairBudget < 0) {
+            ctx.pairExhausted = true;
+            return true;
+          }
+          return window !== null && windowHoldsSecretValue(window, kind, ctx, false);
+        },
+      },
+      {
+        // The name is the KEY of a mapping whose child holds the value: `secrets:\n  NAME:\n    value: Y`, {"NAME": {"value": "Y"}},
+        // `NAME: {value: Y}`. group 2 = quote, 3 = name; the child is the indented block below, or the object that follows.
+        pattern:
+          /(?<![A-Za-z0-9_$.-])(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\1[ \t]*:[ \t]*(?=\{|[ \t]*(?:#[^\n]*)?\r?\n)/g,
+        accept: (m, ctx) => {
+          if (ctx.mode === 'code' && m[1] === '') return false;
+          const kind = nameKindFor(m[2], ctx);
+          if (kind === null) return false;
+          const start = ctx.lineStart(m.index);
+          const prefix = m.input.slice(start, m.index);
+          const isBlock = m.input[m.index + m[0].length] !== '{';
+          if (isBlock && (ctx.mode === 'code' || !/^[ \t]*(?:-[ \t]+)*$/.test(prefix))) return false;
+          return childHoldsSecretValue(m, kind, ctx, prefix.length);
+        },
+      },
+      {
+        // Delimited rows: `NAME,value` (CSV), `NAME<TAB>value` (TSV), `| NAME | value |` (Markdown or text tables).
+        pattern:
+          /^[ \t]*\|?[ \t]*(["'`]?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\1[ \t]*([,\t|;])[ \t]*(?:"([^"\n]{0,4096})"|`([^`\n]{0,4096})`|([^,\t|;\n"`]{1,4096}))/gm,
+        accept: (m, ctx) => {
+          const table = /\.(?:csv|tsv|psv|tab)$/i.test(ctx.path);
+          const prose = ctx.mode === 'prose';
+          if (!table && !(prose && m[3] === '|')) return false;
+          const kind = secretNameKind(m[2]);
+          if (kind === null) return false;
+          const quotedValue = m[4] ?? m[5];
+          const quoted = quotedValue !== undefined;
+          return isSecretValue({
+            kind,
+            value: (quoted ? quotedValue : m[6]).trim(),
+            quoted,
+            separator: table ? '=' : ':',
+            mode: table ? 'config' : 'prose',
+            catalog: ctx.catalog,
+          });
+        },
+      },
+    ],
+  },
+  {
+    id: 'secret-cli-command',
+    description:
+      'secret-like variable set on a command line with a literal value (gh secret set NAME --body V, netlify env:set NAME V, vercel env add NAME <<< V, aws ssm put-parameter --name NAME --value V, kubectl create secret --from-literal)',
+    hint: /\b(?:gh|netlify|vercel|heroku|fly|flyctl|wrangler|railway|doppler|aws|firebase|az|kubectl|docker)[ \t]/,
+    matchers: [
+      {
+        pattern:
+          /(?<![A-Za-z0-9_-])(?:gh[ \t]+(?:secret|variable)[ \t]+set|netlify[ \t]+env:set|vercel[ \t]+env[ \t]+(?:add|update)|heroku[ \t]+config:set|fly(?:ctl)?[ \t]+secrets[ \t]+set|wrangler[ \t]+secret[ \t]+put|railway[ \t]+variables[ \t]+set|doppler[ \t]+secrets[ \t]+set|aws[ \t]+ssm[ \t]+put-parameter|aws[ \t]+secretsmanager[ \t]+(?:create-secret|put-secret-value)|firebase[ \t]+functions:secrets:set|az[ \t]+keyvault[ \t]+secret[ \t]+set|kubectl[ \t]+create[ \t]+secret[ \t]+generic|docker[ \t]+secret[ \t]+create)[^\n]{0,600}/g,
+        accept: (m, ctx) => {
+          const tool = CLI_TOOLS.find(([re]) => re.test(m[0]));
+          if (!tool) return false;
+          // `echo V | vercel env add NAME`: the value comes from the text before the command on the same line.
+          const before = m.input.slice(Math.max(ctx.lineStart(m.index), m.index - 400), m.index);
+          const piped = /(?:^|[;&][ \t]*)(?:echo|printf)(?:[ \t]+-[A-Za-z]+)*[ \t]+(?:%s[ \t]+)?(?:"([^"\n]*)"|'([^'\n]*)'|([^\s"'|]+))[ \t]*\|[ \t]*$/.exec(before);
+          const pipedValue = piped ? (piped[1] ?? piped[2] ?? piped[3]) : null;
+          const options = { positionalValue: tool[1].positionalValue ?? false, assignments: ctx.mode === 'code' };
+          return cliPairs(shellWords(m[0].slice(tool[0].exec(m[0])[0].length)), options, pipedValue).some(([name, value]) => {
+            const kind = secretNameKind(name);
+            return kind !== null && isSecretValue({ kind, value: value.trim(), quoted: true, separator: '=', mode: 'config', catalog: false });
+          });
+        },
+      },
+    ],
+  },
+  {
+    id: 'credential-file',
+    description:
+      'secret in a native credential-file format: .netrc, .pgpass, .git-credentials, .npmrc/.yarnrc, .htpasswd, .curlrc, .vault-token, Kubernetes client-key-data and .dockerconfigjson',
+    matchers: [
+      {
+        // .netrc / _netrc: `machine H login U password P`, `default login U password P`, `account A`; tokens may span lines.
+        appliesTo: hasFormat('netrc'),
+        pattern: /(?<![A-Za-z0-9_-])(?:password|passwd|account)[ \t\r\n]+(?:"((?:[^"\\\n]|\\.){0,1024})"|([^\s"]\S{0,1023}))/g,
+        accept: (m, ctx) => {
+          const value = unescapeQuoted(m[1] ?? m[2]);
+          return !onCommentLine(m, ctx) && !isAnonymousFtpValue(value) && credentialValueIsSecret(value);
+        },
+      },
+      {
+        // .pgpass: hostname:port:database:username:password (a backslash escapes ":" and "\"). Comment lines start with #.
+        appliesTo: hasFormat('pgpass'),
+        pattern:
+          /^(?![ \t]*#)[ \t]*(?:[^:\\\n]|\\.){0,255}:(?:[^:\\\n]|\\.){0,255}:(?:[^:\\\n]|\\.){0,255}:(?:[^:\\\n]|\\.){0,255}:([^\n]+)$/gm,
+        accept: (m) => credentialValueIsSecret(unescapeQuoted(m[1])),
+      },
+      {
+        // .git-credentials: https://user:password@host lines. url-password judges those on real hosts; this covers
+        // documentation hosts (a stored credential is a credential wherever it points) and a token used as the user name.
+        appliesTo: hasFormat('gitcred'),
+        pattern: /^[ \t]*[a-z][a-z0-9+.-]*:\/\/([^\s:@/]{1,1024})(?::([^\s@/]{1,4096}))?@([^\s/?#]{0,256})/gim,
+        accept: (m) => {
+          if (m[2] === undefined) {
+            const user = safeDecode(m[1]);
+            return user.length >= 8 && !isPlaceholder(user) && !isWordIdentifier(user);
+          }
+          return isDocumentationHost(m[3]) && urlPasswordIsSecret(m[2]);
+        },
+      },
+      {
+        // .npmrc / .yarnrc in the space-separated form: "//registry.example/:_authToken" "value", npmAuthIdent "u:p"
+        appliesTo: hasFormat('npmrc'),
+        pattern:
+          /(?<![A-Za-z0-9_-])(?:_authToken|_auth|_password|npmAuthToken|npmAuthIdent|npmPassword)["']?[ \t]+(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s"']\S{0,4096}))/g,
+        accept: (m) => credentialValueIsSecret(unescapeQuoted(m[1] ?? m[2] ?? m[3])),
+      },
+      {
+        // .htpasswd / .htdigest: user:hash. The hash is offline-crackable, so a committed one counts as a credential.
+        appliesTo: hasFormat('htpasswd'),
+        pattern: /^(?![ \t]*#)[ \t]*[^\s:#][^:\n]{0,255}:(?:[^:\n]{0,255}:)?([^\s:]{1,4096})[ \t]*\r?$/gm,
+        // A hash is a credential; a placeholder body ($apr1$xxxxxxxx$xxxxxxxxxxxxxxxxxxxxxx, {SHA}REDACTED) is documentation.
+        accept: (m) => {
+          const hashBody = /^\$|^\{[A-Za-z0-9]+\}/.test(m[1]) ? m[1].slice(Math.max(m[1].lastIndexOf('$'), m[1].lastIndexOf('}')) + 1) : null;
+          return hashBody !== null ? hashBody.length >= 4 && !isPlaceholder(hashBody) : credentialValueIsSecret(m[1]);
+        },
+      },
+      {
+        // .curlrc: user = "name:password"  (also -u / --user)
+        appliesTo: hasFormat('curlrc'),
+        pattern: /^[ \t]*(?:-u|--user|user)[ \t]*(?:=|[ \t])[ \t]*(?:"((?:[^"\\\n]|\\.){0,1024})"|'([^'\n]{0,1024})'|(\S{1,1024}))/gm,
+        accept: (m) => {
+          const userAndPassword = unescapeQuoted(m[1] ?? m[2] ?? m[3]);
+          const colon = userAndPassword.indexOf(':');
+          return colon !== -1 && credentialValueIsSecret(userAndPassword.slice(colon + 1));
+        },
+      },
+      {
+        // .vault-token: the whole file is the token
+        appliesTo: hasFormat('vault'),
+        pattern: /^[ \t]*([^\s#][^\n]{0,4095})$/gm,
+        accept: (m) => m[1].trim().length >= MIN_STRONG_CONFIG_LENGTH && credentialValueIsSecret(m[1]),
+      },
+      {
+        // Kubernetes kubeconfig and image-pull secrets, in any file name: client-key-data, .dockerconfigjson, .dockercfg
+        appliesTo: (ctx) => ctx.mode !== 'code',
+        hint: /client-key-data|\.dockerconfigjson|\.dockercfg/,
+        pattern:
+          /(?<![A-Za-z0-9_$.-])(["']?)(?:client-key-data|\.dockerconfigjson|\.dockercfg)\1[ \t]*:[ \t]*(?:"([^"\\\n]{0,65536})"|'([^'\\\n]{0,65536})'|([^\s"']\S{0,65536}))/g,
+        accept: (m) => {
+          const value = m[2] ?? m[3] ?? m[4];
+          return value.length >= 20 && !isPlaceholder(value);
+        },
+      },
+      // ---- Content matchers: the same credential files under any name (netrc.txt, notes.md, a script or CI step that
+      // writes the file with echo/printf/heredoc). They need no path, and skip the path-specific format that already covers them.
+      {
+        // machine H login U password P / default login U password P / machine H password P (host with a dot), across lines
+        // or with literal \n separators (printf "machine h\nlogin u\npassword p\n").
+        hint: /machine|default/,
+        pattern: new RegExp(
+          String.raw`(?<![A-Za-z0-9_-])(?:machine${NETRC_SEP}([^\s"'\\]{1,255})|default)((?:${NETRC_SEP}(?:login|user|username|port|protocol)${NETRC_SEP}[^\s"'\\]{1,255}){0,4})` +
+            String.raw`${NETRC_SEP}(?:password|passwd|account)${NETRC_SEP}(?:"((?:[^"\\\n]|\\.){0,1024})"|([^\s"'\\]{1,1024}))`,
+          'g',
+        ),
+        accept: (m, ctx) => {
+          if (ctx.formats.has('netrc')) return false;
+          const hasLogin = /login|user/.test(m[2]);
+          if (!hasLogin && !(m[1] ?? '').includes('.')) return false; // "machine learning password reset" is prose
+          const value = unescapeQuoted(m[3] ?? m[4]);
+          return !isAnonymousFtpValue(value) && credentialValueIsSecret(value);
+        },
+      },
+      {
+        // .pgpass line, anywhere: host:port:database:user:password with a numeric port, alone on its line or written by
+        // echo/printf (`echo "db:5432:d:u:pw" > ~/.pgpass`). Anchored to the start of the line so it stays linear.
+        pattern:
+          /^[ \t]*(?:-[ \t]+)*(?:[\w-]+:[ \t]+)?(?:(?:echo|printf)(?:[ \t]+-[A-Za-z]+)*[ \t]+)?["']?([A-Za-z0-9_.*-]{1,255}):(?:\d{2,5}|\*):[A-Za-z0-9_.*-]{1,255}:([A-Za-z0-9_.@*-]{1,255}):([^\s:"'<>|;&]{4,1024})(?=["']?[ \t]*(?:>|\r?$))/gm,
+        accept: (m, ctx) => !ctx.formats.has('pgpass') && /[A-Za-z*]/.test(m[1]) && /[A-Za-z]/.test(m[2]) && credentialValueIsSecret(m[3]),
+      },
+      {
+        // Docker registry auth in any JSON/YAML/echo: {"auths": {"host": {"auth": "<base64 user:password>"}}}
+        hint: /auths/,
+        pattern:
+          /(?<![A-Za-z0-9_$.-])(\\?["']?)(auth|identitytoken|registrytoken)\1[ \t]*:[ \t]*(?:\\?"([^"\\\n]{0,65536})\\?"|'([^'\\\n]{0,65536})'|([^\s"',}\\]{1,65536}))/gi,
+        accept: (m, ctx) => {
+          if (ctx.formats.has('docker') || !ctx.hasBefore('auths', m.index, 500)) return false; // registry entries sit right under "auths"
+          return credentialValueIsSecret(m[3] ?? m[4] ?? m[5]);
         },
       },
     ],
@@ -1051,14 +2049,57 @@ function scanRanges(filePath, text) {
   const findings = [];
   const seen = new Set();
   const markerCache = new Map();
-  const ctx = { path: filePath.split(path.sep).join('/'), mode: fileMode(filePath) };
+  const formats = credentialFormats(filePath);
+  const strict = STRICT_CREDENTIAL_FORMATS.some((tag) => formats.has(tag));
   let newlines = null;
+  const newlineIndex = () => (newlines ??= buildNewlineIndex(text));
+  const occurrences = new Map();
+  const ctx = {
+    path: filePath.split(path.sep).join('/'),
+    mode: fileMode(filePath),
+    formats,
+    strict,
+    minStrong: strict ? CREDENTIAL_FILE_MIN_LENGTH : MIN_STRONG_CONFIG_LENGTH,
+    runsToEndOfLine: valueRunsToEndOfLine(filePath),
+    catalog: isMessageCatalogPath(filePath),
+    // Start of the line holding `index` and the index of its line break (text.length when it has none): O(log n).
+    lineStart(index) {
+      const line = lineAt(newlineIndex(), index);
+      return line === 1 ? 0 : newlineIndex()[line - 2] + 1;
+    },
+    // Is there an occurrence of `needle` within `distance` characters before `index`? Occurrences are listed once per file.
+    hasBefore(needle, index, distance) {
+      let list = occurrences.get(needle);
+      if (list === undefined) {
+        list = [];
+        for (let at = text.indexOf(needle); at !== -1 && list.length < 200_000; at = text.indexOf(needle, at + needle.length)) list.push(at);
+        occurrences.set(needle, list);
+      }
+      let lo = 0;
+      let hi = list.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (list[mid] <= index) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo === 0) return false;
+      // A list that hit its cap cannot say what lies beyond it: fail closed.
+      return index - list[lo - 1] <= distance || (list.length >= 200_000 && lo === list.length);
+    },
+    lineEnd(index) {
+      const line = lineAt(newlineIndex(), index);
+      return line - 1 < newlineIndex().length ? newlineIndex()[line - 1] : text.length;
+    },
+  };
   for (const rule of RULES) {
     if (rule.appliesTo && !rule.appliesTo(ctx)) continue;
-    if (rule.hint && !rule.hint.test(text)) continue;
+    // The name hint is a speed-up for ordinary files; a credential file is always scanned in full.
+    if (rule.hint && !strict && !rule.hint.test(text)) continue;
     for (const matcher of rule.matchers) {
+      if (matcher.appliesTo && !matcher.appliesTo(ctx)) continue;
+      if (matcher.hint && !matcher.hint.test(text)) continue;
       for (const match of text.matchAll(matcher.pattern)) {
-        newlines ??= buildNewlineIndex(text);
+        newlineIndex();
         const line = lineAt(newlines, match.index);
         const key = `${rule.id}:${line}`;
         if (seen.has(key)) continue; // already reported for this line: nothing to decide, and it keeps a hostile line cheap
@@ -1114,8 +2155,8 @@ function displayPath(raw) {
 /**
  * Every tracked path from `git ls-files -s -z`, as raw bytes. The list is NUL-delimited and never decoded as a
  * whole: a file name may hold bytes that are not UTF-8 (allowed on Unix), and a lossy decode would name a file
- * that does not exist. Unmerged paths appear once per stage and are listed once.
- * @returns {{raw: Buffer, mode: string, sha: string}[]}
+ * that does not exist. Unmerged paths appear once per stage: they are listed once, with every distinct blob.
+ * @returns {{raw: Buffer, mode: string, sha: string, shas: string[]}[]} `sha` is the first blob, `shas` all distinct ones
  */
 function listTracked(root) {
   const out = git(['ls-files', '-s', '-z'], root);
@@ -1132,21 +2173,74 @@ function listTracked(root) {
     if (!mode || !sha) throw new Error('git ls-files printed a record this scanner cannot parse');
     const raw = Buffer.from(record.subarray(tab + 1));
     const key = raw.toString('latin1');
-    if (!entries.has(key)) entries.set(key, { raw, mode, sha });
+    const known = entries.get(key);
+    if (!known) entries.set(key, { raw, mode, sha, shas: [sha] });
+    else if (!known.shas.includes(sha)) known.shas.push(sha);
   }
   return [...entries.values()];
 }
 
+/** The git object id of file content stored as a blob, in the repository's hash (sha1 or sha256, told apart by the id length). */
+function blobId(bytes, referenceId) {
+  const algorithm = referenceId.length === 64 ? 'sha256' : 'sha1';
+  return createHash(algorithm).update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+}
+
 /**
- * Scan every git-tracked file under `root`, working-tree content (what CI checked out).
+ * The content of several blobs from the index, in two `git cat-file --batch*` calls in total: sizes first (so a blob
+ * over the size limit is never read into memory), then the contents.
+ * @returns {Map<string, {size: number, bytes: Buffer | null}>} bytes is null for a blob over MAX_FILE_BYTES; a blob git
+ *   could not produce is missing from the map (the caller treats that as unreadable)
+ */
+function readIndexBlobs(root, shas) {
+  const result = new Map();
+  if (shas.length === 0) return result;
+  const request = (mode, ids) => {
+    const run = spawnSync('git', ['cat-file', mode], { cwd: root, input: `${ids.join('\n')}\n`, maxBuffer: 1024 * 1024 * 1024 });
+    if (run.error || run.status !== 0) throw new Error(`git cat-file failed`);
+    return run.stdout;
+  };
+  const sizes = new Map();
+  for (const line of request('--batch-check', shas).toString('latin1').split('\n')) {
+    const parts = line.split(' ');
+    if (parts.length === 3 && parts[1] === 'blob' && /^\d+$/.test(parts[2])) sizes.set(parts[0], Number(parts[2]));
+  }
+  const readable = shas.filter((sha) => sizes.has(sha) && sizes.get(sha) <= MAX_FILE_BYTES);
+  for (const sha of shas) {
+    if (sizes.has(sha) && sizes.get(sha) > MAX_FILE_BYTES) result.set(sha, { size: sizes.get(sha), bytes: null });
+  }
+  if (readable.length === 0) return result;
+  const stdout = request('--batch', readable);
+  let cursor = 0;
+  for (const sha of readable) {
+    const headerEnd = stdout.indexOf(10, cursor);
+    if (headerEnd === -1) break;
+    const [id, type, size] = stdout.subarray(cursor, headerEnd).toString('latin1').split(' ');
+    if (id !== sha || type !== 'blob' || !/^\d+$/.test(size ?? '')) break;
+    const bodyStart = headerEnd + 1;
+    const bodyEnd = bodyStart + Number(size);
+    if (bodyEnd > stdout.length) break;
+    result.set(sha, { size: Number(size), bytes: Buffer.from(stdout.subarray(bodyStart, bodyEnd)) });
+    cursor = bodyEnd + 1;
+  }
+  return result;
+}
+
+/**
+ * Scan every git-tracked file under `root`: the working-tree content (what CI checked out) AND the version staged in
+ * the index whenever the two differ, so a secret cannot be staged and then swapped for a placeholder in the working
+ * tree before the commit. The two are compared by git blob id (one hash of bytes already read); only files that
+ * differ cost an extra read, batched into one `git cat-file --batch`. A CI checkout has none.
  *  - lockfiles (exact names), gitlinks (submodule commit pointers: no content here) and files with binary
  *    content are skipped on purpose, and counted in `skipped`;
  *  - a symlink is scanned as its link target;
  *  - a file the index lists but the working tree no longer has (deleted, or skip-worktree) is scanned from the
- *    index blob instead, so nothing tracked goes unexamined (`fromIndex` names them; a CI checkout has none);
+ *    index blob instead, so nothing tracked goes unexamined (`fromIndex` names them);
+ *  - an unmerged path is scanned with every stage's blob, and the working-tree file besides;
  *  - a file that exists but cannot be read (permissions, wrong type, I/O error) is NOT scanned and is listed in
- *    `unreadable`; a text file over the size limit is listed in `oversize`. The CLI fails on both.
- * @returns {{findings: object[], scanned: number, skipped: Record<string, number>, oversize: string[], unreadable: string[], fromIndex: string[]}}
+ *    `unreadable`; a text file over the size limit (either version) is listed in `oversize`. The CLI fails on both.
+ * A finding in a file that has a differing second version carries `source`: 'index' or 'working tree'.
+ * @returns {{findings: object[], scanned: number, skipped: Record<string, number>, oversize: string[], unreadable: string[], fromIndex: string[], differing: string[]}}
  */
 export function scanTree(root) {
   const findings = [];
@@ -1154,12 +2248,14 @@ export function scanTree(root) {
   const oversize = [];
   const unreadable = [];
   const fromIndex = [];
+  const differing = [];
   let scanned = 0;
   const skip = (reason) => {
     skipped[reason] = (skipped[reason] ?? 0) + 1;
   };
   const rootBytes = Buffer.from(root);
-  for (const { raw, mode, sha } of listTracked(root)) {
+  const pending = []; // index versions still to read: { file, sha, missing }
+  for (const { raw, mode, sha, shas } of listTracked(root)) {
     const file = displayPath(raw);
     if (shouldSkipPath(file)) {
       skip('lockfile');
@@ -1194,18 +2290,16 @@ export function scanTree(root) {
       missing = true;
     }
     if (missing) {
-      try {
-        bytes = git(['cat-file', 'blob', sha], root);
-        fromIndex.push(file);
-      } catch {
-        unreadable.push(file);
-        continue;
-      }
-      if (bytes.length > MAX_FILE_BYTES) {
-        if (isBinaryContent(bytes)) skip('binary');
-        else oversize.push(file);
-        continue;
-      }
+      fromIndex.push(file);
+      for (const blob of shas) pending.push({ file, sha: blob, missing: true });
+      continue;
+    }
+    // The index blob that differs from the working-tree bytes (all of them for an unmerged path) is scanned too.
+    const workingId = blobId(bytes, sha);
+    const otherVersions = shas.filter((blob) => blob !== workingId);
+    if (otherVersions.length > 0) {
+      differing.push(file);
+      for (const blob of otherVersions) pending.push({ file, sha: blob, missing: false });
     }
     const text = decodeText(bytes);
     if (text === null) {
@@ -1213,9 +2307,41 @@ export function scanTree(root) {
       continue;
     }
     scanned += 1;
-    findings.push(...scanText(file, text));
+    for (const finding of scanText(file, text)) {
+      findings.push(otherVersions.length > 0 ? { ...finding, source: 'working tree' } : finding);
+    }
   }
-  return { findings, scanned, skipped, oversize, unreadable, fromIndex };
+
+  if (pending.length > 0) {
+    let blobs = new Map();
+    try {
+      blobs = readIndexBlobs(root, [...new Set(pending.map((p) => p.sha))]);
+    } catch {
+      // every pending version stays unreadable below
+    }
+    const reported = new Set();
+    for (const { file, sha, missing } of pending) {
+      const blob = blobs.get(sha);
+      if (blob === undefined) {
+        if (!reported.has(`${file}\0u`)) unreadable.push(file);
+        reported.add(`${file}\0u`);
+        continue;
+      }
+      if (blob.bytes === null || blob.size > MAX_FILE_BYTES) {
+        if (!reported.has(`${file}\0o`)) oversize.push(file);
+        reported.add(`${file}\0o`);
+        continue;
+      }
+      const text = decodeText(blob.bytes);
+      if (text === null) {
+        skip(missing ? 'binary' : 'binary (staged version)');
+        continue;
+      }
+      if (missing) scanned += 1;
+      for (const finding of scanText(file, text)) findings.push({ ...finding, source: 'index' });
+    }
+  }
+  return { findings, scanned, skipped, oversize, unreadable, fromIndex, differing };
 }
 
 /** Decode a path git printed C-style quoted ("b/we\"ird/a.env", octal escapes for control bytes). */
@@ -1383,7 +2509,7 @@ export function formatReport(findings) {
     `check-secrets: ${findings.length} potential secret${findings.length === 1 ? '' : 's'} found (values are never printed)`,
     '',
   ];
-  for (const f of findings) lines.push(`  ${printable(f.path)}:${f.line}  ${f.rule}`);
+  for (const f of findings) lines.push(`  ${printable(f.path)}:${f.line}  ${f.rule}${f.source ? `  (${f.source})` : ''}`);
   const rules = [...new Set(findings.map((f) => f.rule))];
   lines.push('', 'Rules triggered:');
   for (const id of rules) lines.push(`  ${id}: ${describeRule(id)}`);
@@ -1508,7 +2634,7 @@ export async function main(
       return 0;
     }
 
-    const { findings, scanned, skipped, oversize, unreadable, fromIndex } = scanTree(findRepoRoot(cwd));
+    const { findings, scanned, skipped, oversize, unreadable, fromIndex, differing } = scanTree(findRepoRoot(cwd));
     let failed = false;
     if (findings.length > 0) {
       stderr.write(`${formatReport(findings)}\n`);
@@ -1525,7 +2651,8 @@ export async function main(
     if (failed) return 1;
     const { total, detail } = describeSkipped(skipped);
     const indexNote = fromIndex.length > 0 ? `, ${fromIndex.length} missing from the working tree and scanned from the index` : '';
-    stdout.write(`check-secrets: OK (${scanned} files scanned, ${total} skipped${detail}${indexNote})\n`);
+    const differNote = differing.length > 0 ? `, ${differing.length} with a staged version that differs from the working tree (both scanned)` : '';
+    stdout.write(`check-secrets: OK (${scanned} files scanned, ${total} skipped${detail}${indexNote}${differNote})\n`);
     return 0;
   } catch (error) {
     stderr.write(`check-secrets: ${error.message}\n`);
