@@ -2979,7 +2979,7 @@ describe('CLI', () => {
     git(dir, 'checkout', '-q', trunk);
     write(dir, '.env', 'A=1\nCONF=trunk\n');
     expect(git(dir, 'commit', '-q', '-am', 'trunk').status).toBe(0);
-    expect(git(dir, 'merge', 'feature').status).not.toBe(0); // conflict, resolved below
+    expect(git(dir, 'merge', 'feature').status).toBe(1); // conflict (git exits 1), resolved below
     write(dir, '.env', `A=1\n${assignment}`);
     git(dir, 'add', '-A');
     expect(commit(dir, 'merge').status).toBe(0);
@@ -3674,7 +3674,7 @@ describe('CLI', () => {
     write(dir, 'x.env', 'A=2\n');
     run('git', ['add', '-A'], dir);
     expect(commit(dir, 'this side').status).toBe(0);
-    expect(git(dir, 'merge', 'other').status).not.toBe(0); // conflict: stages 1, 2 and 3 are in the index
+    expect(git(dir, 'merge', 'other').status).toBe(1); // conflict (git exits 1): stages 1, 2 and 3 are in the index
     write(dir, 'x.env', placeholderLine);
     const result = scan(dir);
     expect(result.status).toBe(1);
@@ -4195,7 +4195,7 @@ describe('review round 9', () => {
       git(dir, 'checkout', '-q', 'main');
       commit(dir, 'main edit', { 'x.env': 'A=3\n' });
       git(dir, 'checkout', '-q', 'feature');
-      expect(git(dir, 'merge', '-q', 'main').status).not.toBe(0);
+      expect(git(dir, 'merge', '-q', 'main').status).toBe(1); // a conflict, not a failure to run
       write(dir, 'x.env', `A=4\n${leak}`);
       git(dir, 'add', '-A');
       expect(git(dir, 'commit', '-q', '-m', 'resolve').status).toBe(0);
@@ -6157,7 +6157,8 @@ describe('review round 13', () => {
       expect(`${found.stdout}${found.stderr}`).not.toContain(secret);
     }
     // the same file with the clean text is not reported
-    expect(scan(dir, '--range', `${head}..${head}`).status).not.toBe(1);
+    const empty = scan(dir, '--range', `${head}..${head}`);
+    expect(empty.status, empty.stderr).toBe(0); // clean, not an error exit (2)
   };
 
   // -------------------------------------------------------------------------
@@ -6620,6 +6621,310 @@ describe('review round 13', () => {
           timings.push(Math.round(performance.now() - started));
         }`);
       for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 14: quoted passphrases in Basic-auth calls, merge results, PEM blocks in lockfile history.
+// Every value is generated or assembled at run time; the names that would look like secrets are split.
+// ---------------------------------------------------------------------------
+describe('review round 14', () => {
+  const phrase = ['correct horse', 'battery staple'].join(' ');
+  const random = randomString(20, 14001);
+  const count = (file, text) => scanText(file, text).length;
+
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const makeRepo = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r14-'));
+    dirs.push(dir);
+    expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+    return dir;
+  };
+  const commit = (dir, files) => {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    }
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', 'c').status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+  const branchFrom = (dir, name, revision) => expect(git(dir, 'checkout', '-q', '-b', name, revision).status).toBe(0);
+
+  // -------------------------------------------------------------------------
+  describe('(1) a quoted passphrase with spaces in a Basic-auth call is read whole', () => {
+    // The call names are split, so this file does not spell a call the scanner looks for.
+    const HTTP_BASIC = ['HTTP', 'BasicAuth'].join('');
+    const CREDS_BASIC = ['Credentials', '.basic'].join('');
+    const NEW_BASIC = ['new ', 'Basic'].join('');
+    const NET_CRED = ['Network', 'Credential'].join('');
+    const SET_BASIC = ['Set', 'BasicAuth'].join('');
+    const AUTH_KW = ['au', 'th'].join('');
+    const forms = [
+      ['a.py', (q) => `requests.get(url, ${AUTH_KW}=("admin", ${q}))\n`],
+      ['a.py', (q) => `${HTTP_BASIC}("admin", ${q})\n`],
+      ['a.js', (q) => `request(app).get('/x').${AUTH_KW}('admin', ${q})\n`],
+      ['a.js', (q) => `const agent = request(app); agent.${AUTH_KW}('admin', ${q});\n`], // a name right before the dot
+      ['A.java', (q) => `${CREDS_BASIC}("admin", ${q})\n`],
+      ['A.java', (q) => `${NEW_BASIC}("admin", ${q})\n`],
+      ['A.cs', (q) => `new ${NET_CRED}("admin", ${q})\n`],
+      ['a.go', (q) => `req.${SET_BASIC}("admin", ${q})\n`],
+      ['a.rb', (q) => `req.basic_auth("admin", ${q})\n`],
+      ['a.php', (q) => `Http::withBasicAuth('admin', ${q})\n`],
+    ];
+    const quotings = [
+      ['double quotes', (t) => `"${t}"`],
+      ['single quotes', (t) => `'${t}'`],
+      ['backticks', (t) => `\`${t}\``],
+      ['triple double quotes', (t) => `"""${t}"""`],
+      ['triple single quotes', (t) => `'''${t}'''`],
+    ];
+
+    for (const [quoting, quote] of quotings) {
+      it.each(forms)(`reports the passphrase in ${quoting}: %s`, (file, form) => {
+        expect(count(file, form(quote(phrase)))).toBe(1);
+      });
+    }
+
+    it('reads an escaped quote inside the passphrase as part of it', () => {
+      expect(count('a.py', `${HTTP_BASIC}("admin", "correct \\"horse\\" battery staple")\n`)).toBe(1);
+      expect(count('a.js', `agent.${AUTH_KW}('admin', 'correct \\'horse\\' battery staple')\n`)).toBe(1);
+    });
+
+    it('still reports a single random word', () => {
+      expect(count('a.py', `${HTTP_BASIC}("admin", "${random}")\n`)).toBe(1);
+    });
+
+    it('judges a passphrase like every other quoted value: placeholders and documentation pass', () => {
+      for (const text of ['your password here', '<your password>', 'the password of the admin user']) {
+        expect(count('a.py', `${HTTP_BASIC}("admin", "${text}")\n`), text).toBe(0);
+      }
+      expect(count('a.py', `${HTTP_BASIC}("admin", os.environ["PW"])\n`)).toBe(0);
+      expect(count('a.py', `${HTTP_BASIC}("admin", "")\n`)).toBe(0);
+    });
+
+    it('reports every passphrase-taking command line form, not only the Basic-auth calls', () => {
+      const lines = [
+        ['a.sh', `mysql -u root -p"${phrase}" db`],
+        ['a.sh', `mysql -u root -p'${phrase}' db`],
+        ['a.sh', `mysql -u root --password="${phrase}" db`],
+        ['a.sh', `sshpass -p '${phrase}' ssh host`],
+        ['a.sh', `rabbitmqadmin -u admin -p "${phrase}" list queues`],
+        ['a.sh', `rabbitmqadmin --password="${phrase}" list queues`],
+        ['a.sh', `docker login -u me -p '${phrase}' registry.example.net`],
+        ['a.sh', `docker login -u me --password "${phrase}" registry.example.net`],
+        ['a.sh', `redis-cli -a "${phrase}" ping`],
+        ['a.sh', `curl -u "admin:${phrase}" https://h.example.net`],
+        ['redis.conf', `requirepass "${phrase}"`],
+        ['redis.conf', `requirepass '${phrase}'`],
+        ['redis.conf', `masterauth "${phrase}"`],
+        ['mosquitto.conf', `password "${phrase}"`],
+        ['nginx.conf', `proxy_set_header X-Api-Key "${phrase}";`],
+      ];
+      for (const [file, line] of lines) expect(count(file, `${line}\n`), line.replace(phrase, 'P')).toBeGreaterThan(0);
+    });
+
+    it('is reported by the tree scan, --range and --history without printing the value', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'client.py': 'import requests\n' });
+      const head = commit(dir, { 'client.py': `import requests\n${HTTP_BASIC}("admin", "${phrase}")\n` });
+      for (const args of [[], ['--range', `${base}..${head}`], ['--history']]) {
+        const found = scan(dir, ...args);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('client.py');
+        expect(found.stderr).toContain('http-auth-credential');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(phrase);
+      }
+    });
+
+    it('scans hostile call text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const N = 20000;
+        const texts = [
+          'HTTPBasicAuth("a", "' + 'a\\\\'.repeat(100000), 'HTTPBasicAuth("a", """' + '"'.repeat(100000), "HTTPBasicAuth('a', '''" + "'".repeat(100000),
+          'HTTPBasicAuth("a", "b") '.repeat(N), 'auth=("a", \\'' + 'x '.repeat(100000), '.auth(' + '"a",'.repeat(N), 'HTTPBasicAuth(' + 'a'.repeat(200000),
+          'x.auth("a", \`' + 'b'.repeat(200000), ('HTTPBasicAuth("' + 'a'.repeat(150) + '", "b\\n').repeat(2000),
+        ];
+        for (const file of ['a.py', 'a.js', 'a.md', 'A.java']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(2) a merge that completes a credential neither parent held', () => {
+    const NAME = ['JWT_', 'SECRET'].join('');
+    const PEM_HEADER = ['-----BEGIN ', 'ENCRYPTED PRIVATE KEY', '-----'].join('');
+    const body = randomString(48, 14002);
+    const json = (name, value) => `{\n  "name": "${name}",\n  "kind": "env",\n  "value": "${value}"\n}\n`;
+    const pem = (header, material) => `${header}\nProc-Type: 4,ENCRYPTED\n${material}\n`;
+
+    // Each side branch (a file map) starts at the same commit; the last one checked out merges the others automatically, then a
+    // later commit puts the base text back, so the pair is gone from the tip.
+    const mergeAndRemove = (file, base, sides) => {
+      const dir = makeRepo();
+      const start = commit(dir, { [file]: base });
+      sides.forEach((files, i) => {
+        branchFrom(dir, `side${i}`, start);
+        commit(dir, files);
+      });
+      expect(git(dir, 'checkout', '-q', 'side0').status).toBe(0);
+      const merge = git(dir, 'merge', '-q', '--no-edit', ...sides.slice(1).map((_, i) => `side${i + 1}`));
+      expect(merge.status, merge.stderr).toBe(0);
+      const merged = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+      const head = commit(dir, { [file]: base });
+      return { dir, start, merged, head };
+    };
+    const expectFlagged = ({ dir, start, merged, head }, file) => {
+      // The pair is gone from the tip, so the tree scan is clean: only the range and the history can see it.
+      const tip = scan(dir);
+      expect(tip.status, tip.stderr).toBe(0);
+      for (const args of [['--range', `${start}..${head}`], ['--history']]) {
+        const found = scan(dir, ...args);
+        expect(found.status, `${args.join(' ')}: ${found.stdout}${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain(merged.slice(0, 7));
+        expect(found.stderr).toContain(file);
+        expect(`${found.stdout}${found.stderr}`).not.toContain(phrase);
+        expect(`${found.stdout}${found.stderr}`).not.toContain(body);
+      }
+    };
+
+    it.skipIf(!hasGit())('finds a name from one parent and its value from the other (range and history)', SLOW, () => {
+      const file = 'deploy/env.json';
+      const result = mergeAndRemove(file, json('changeme', 'changeme'), [{ [file]: json(NAME, 'changeme') }, { [file]: json('changeme', phrase) }]);
+      // each parent is clean on its own
+      expect(count(file, json(NAME, 'changeme'))).toBe(0);
+      expect(count(file, json('changeme', phrase))).toBe(0);
+      expectFlagged(result, file);
+    });
+
+    it.skipIf(!hasGit())('finds the two halves of a PEM block, header from one parent and key material from the other', SLOW, () => {
+      const file = 'notes/key.txt';
+      const result = mergeAndRemove(file, pem('# key', '# body'), [{ [file]: pem(PEM_HEADER, '# body') }, { [file]: pem('# key', body) }]);
+      expect(count(file, pem(PEM_HEADER, '# body'))).toBe(0);
+      expect(count(file, pem('# key', body))).toBe(0);
+      expectFlagged(result, file);
+    });
+
+    it.skipIf(!hasGit())('finds it in an octopus merge', SLOW, () => {
+      const file = 'deploy/env.json';
+      const result = mergeAndRemove(file, json('changeme', 'changeme'), [
+        { [file]: json(NAME, 'changeme') },
+        { [file]: json('changeme', phrase) },
+        { 'docs/other.txt': 'unrelated\n' },
+      ]);
+      expect(git(result.dir, 'show', '-s', '--format=%P', result.merged).stdout.trim().split(' ')).toHaveLength(3);
+      expectFlagged(result, file);
+    });
+
+    it.skipIf(!hasGit())('does not report a credential one parent already held (a base merged into a branch)', SLOW, () => {
+      const file = 'app.env';
+      const lines = (note, token) => `NOTE=${note}\nkeep1=a\nkeep2=b\nkeep3=c\nAPI_${['TOK', 'EN'].join('')}=${token}\n`;
+      const dir = makeRepo();
+      const start = commit(dir, { [file]: lines('one', 'changeme') });
+      branchFrom(dir, 'feature', start);
+      commit(dir, { [file]: lines('two', 'changeme') }); // the branch edits a line far from the credential
+      expect(git(dir, 'checkout', '-q', 'main').status).toBe(0);
+      commit(dir, { [file]: lines('one', random) }); // the base gains the credential
+      const base = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+      expect(git(dir, 'checkout', '-q', 'feature').status).toBe(0);
+      expect(git(dir, 'merge', '-q', '--no-edit', 'main').status).toBe(0);
+      const head = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+      const range = scan(dir, '--range', `${base}..${head}`);
+      expect(range.status, `${range.stdout}${range.stderr}`).toBe(0); // the base's commit is not the pull request's
+      expect(scan(dir, '--history').status).toBe(1); // the full audit still blames the base commit
+    });
+
+    it.skipIf(!hasGit())('a merge whose result equals a parent adds nothing and a clean merge stays clean', SLOW, () => {
+      const file = 'deploy/env.json';
+      const result = mergeAndRemove(file, json('changeme', 'changeme'), [{ [file]: json('alpha', 'changeme') }, { [file]: json('changeme', 'beta') }]);
+      for (const args of [[], ['--range', `${result.start}..${result.head}`], ['--history']]) {
+        const found = scan(result.dir, ...args);
+        expect(found.status, `${args.join(' ')}: ${found.stdout}${found.stderr}`).toBe(0);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(3) key material added to a lockfile under a PEM header that did not change', () => {
+    const PEM_HEADER = ['-----BEGIN ', 'ENCRYPTED PRIVATE KEY', '-----'].join('');
+    const material = randomString(48, 14003);
+    const dek = ['DEK-', 'Info: AES-256-CBC,', randomString(32, 14004, HEX.toUpperCase())].join('');
+    const head = '{\n  "name": "app",\n  "lockfileVersion": 3\n}\n';
+    // the header, its fields (as many as the PEM rule reads), a blank line, then the material
+    const block = (fields, tail) => `${PEM_HEADER}\nProc-Type: 4,ENCRYPTED\n${fields}${dek}\n\n${tail}`;
+
+    it.skipIf(!hasGit()).each(['package-lock.json', 'yarn.lock', 'npm-shrinkwrap.json'])('%s: the material added below an unchanged header is found in the range and the history', SLOW, (file) => {
+      const dir = makeRepo();
+      const header = commit(dir, { [file]: `${head}${block('', '')}` });
+      expect(scan(dir).status).toBe(0); // a header alone is not a key
+      const leaked = commit(dir, { [file]: `${head}${block('', `${material}\n`)}` });
+      expect(scan(dir).status).toBe(1);
+      for (const args of [['--range', `${header}..${leaked}`], ['--history']]) {
+        const found = scan(dir, ...args);
+        expect(found.status, `${args.join(' ')}: ${found.stdout}${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain(leaked.slice(0, 7));
+        expect(found.stderr).toContain('private-key-block');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(material);
+      }
+    });
+
+    it.skipIf(!hasGit())('finds material added under a header that has several header fields between', SLOW, () => {
+      const file = 'package-lock.json';
+      const fields = ['Comment: a\n', 'Version: 1\n', 'Comment: b\n'].join('');
+      const dir = makeRepo();
+      const header = commit(dir, { [file]: `${head}${block(fields, '')}` });
+      const leaked = commit(dir, { [file]: `${head}${block(fields, `${material}\n`)}` });
+      const found = scan(dir, '--range', `${header}..${leaked}`);
+      expect(found.status, `${found.stdout}${found.stderr}`).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('finds a header added above key material that did not change', SLOW, () => {
+      const file = 'package-lock.json';
+      const dir = makeRepo();
+      const body = commit(dir, { [file]: `${head}Proc-Type: 4,ENCRYPTED\n${dek}\n\n${material}\n` });
+      const leaked = commit(dir, { [file]: `${head}${block('', `${material}\n`)}` });
+      expect(scan(dir).status).toBe(1);
+      const found = scan(dir, '--range', `${body}..${leaked}`);
+      expect(found.status, `${found.stdout}${found.stderr}`).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('a lockfile bump without a PEM header keeps its small context and stays clean', SLOW, () => {
+      const file = 'package-lock.json';
+      const entries = (version) => {
+        const lines = ['{', '  "packages": {'];
+        for (let i = 0; i < 3000; i += 1) lines.push(`    "node_modules/pkg${i}": { "version": "${i === 1500 ? version : '1.0.0'}" },`);
+        lines.push('    "node_modules/last": { "version": "1.0.0" }', '  }', '}', '');
+        return lines.join('\n');
+      };
+      const dir = makeRepo();
+      const before = commit(dir, { [file]: entries('1.0.0') });
+      const after = commit(dir, { [file]: entries('1.0.1') });
+      for (const args of [['--range', `${before}..${after}`], ['--history']]) {
+        const found = scan(dir, ...args);
+        expect(found.status, `${args.join(' ')}: ${found.stdout}${found.stderr}`).toBe(0);
+      }
+    });
+
+    it.skipIf(!hasGit())('the other lockfile rules read one line, so the two-line context loses nothing for them', SLOW, () => {
+      // _authToken and registry URLs are single-line lockfile rules: each is found on the added line alone.
+      const dir = makeRepo();
+      const token = randomString(36, 14005);
+      const before = commit(dir, { 'package-lock.json': '{\n  "registry": "https://registry.example.net/"\n}\n' });
+      const after = commit(dir, { 'package-lock.json': `{\n  "registry": "https://registry.example.net/",\n  "_authToken": "${token}"\n}\n` });
+      const found = scan(dir, '--range', `${before}..${after}`);
+      expect(found.status, `${found.stdout}${found.stderr}`).toBe(1);
+      expect(`${found.stdout}${found.stderr}`).not.toContain(token);
     });
   });
 });

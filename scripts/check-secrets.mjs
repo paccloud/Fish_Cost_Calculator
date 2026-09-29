@@ -3762,9 +3762,21 @@ export const RULES = [
         // requests: auth=("user", "pw"), HTTPBasicAuth('user', 'pw'); Java / Kotlin / C# / Go: Credentials.basic("u", "pw"), new UsernamePasswordCredentials("u", "pw"),
         // new Basic("u", "pw"), NetworkCredential, SetBasicAuth; supertest .auth('u', 'pw'). The second argument is a literal password.
         hint: /auth|basic|credential/i,
-        pattern:
-          /(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|\.auth\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\()[^,()\n]{1,200},[ \t]{0,8}(["'\x60])([^"'\x60\s]{1,4096})\1(?=[ \t]{0,8}[),])/g,
-        accept: (m) => isSecretValue({ kind: 'strong', value: m[2], quoted: true, separator: '=', mode: 'config' }),
+        // The second argument is one complete quoted string: """triple""", 'single', "double" or `backtick`, escapes honoured, spaces
+        // allowed (a passphrase). Each alternative starts with a different quote and its body cannot contain that quote unescaped, so
+        // every attempt is bounded and linear.
+        pattern: new RegExp(
+          String.raw`(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}` +
+            String.raw`(?:"""(?<tdq>(?:[^"\\\n]|\\.|"(?!"")){0,4096})"""|'''(?<tsq>(?:[^'\\\n]|\\.|'(?!'')){0,4096})'''|"(?<dq>(?:[^"\\\n]|\\.){0,4096})"|'(?<sq>(?:[^'\\\n]|\\.){0,4096})'|\x60(?<bt>(?:[^\x60\\\n]|\\.){0,4096})\x60)` +
+            String.raw`(?=[ \t]{0,8}[),])`,
+          'g',
+        ),
+        accept: (m) => {
+          const g = m.groups;
+          const raw = g.tdq ?? g.tsq ?? g.dq ?? g.sq ?? g.bt;
+          if (raw.length === 0) return false;
+          return isSecretValue({ kind: 'strong', value: unescapeQuoted(raw), quoted: true, separator: '=', mode: 'config' });
+        },
       },
     ],
   },
@@ -3992,6 +4004,8 @@ export function scanText(filePath, text) {
   return scanRanges(filePath, text).map(({ path: p, line, rule }) => ({ path: p, line, rule }));
 }
 
+const digest = (text) => createHash('sha1').update(text).digest('hex');
+
 /** Like scanText, but each finding also carries `lastLine`, the last line its match spans, and valueFirst..valueLast, the line(s) of a separate value field. */
 function scanRanges(filePath, text) {
   const findings = [];
@@ -4085,7 +4099,11 @@ function scanRanges(filePath, text) {
         }
         if (allowed) continue;
         seen.add(key);
-        findings.push({ path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id });
+        // `evidence` identifies WHAT matched without holding it (a digest of the match and of a separate value field), so --history
+        // and --range can tell whether a merge result carries a credential that one of its parents already had. It is never printed.
+        const matchEnd = match.spanEnd ?? match.index + match[0].length;
+        const evidence = digest(text.slice(match.index, matchEnd)) + (match.attrStart === undefined || match.attrCoarse ? '' : `:${digest(text.slice(match.attrStart, match.attrEnd ?? matchEnd))}`);
+        findings.push({ path: filePath, line, lastLine, valueFirst, valueLast, rule: rule.id, evidence });
       }
     }
   }
@@ -4397,17 +4415,28 @@ const HISTORY_CONTEXT_CHARS = Math.max(PAIR_BACK_CHARS, PAIR_FORWARD_CHARS, PAIR
 // The unified context git is asked for. Every line is at least its own newline, so a window of N characters never spans
 // more than N lines: asking git for that many lines (it stops at the file's ends) always supplies enough to fill the window.
 export const HISTORY_CONTEXT = Math.max(HISTORY_CONTEXT_LINES, HISTORY_CONTEXT_CHARS);
-// A lockfile is scanned with single-line rules only (no name/value pairing), so a bump that touches a big lockfile in
-// many places must not drag hundreds of unchanged lines around every change into the text that is size-checked and scanned.
+// A lockfile is scanned with single-line rules only (no name/value pairing) and one multi-line rule, the PEM private key block
+// (private-key-block: its header, optional header fields and the key material are separate lines). So a bump that touches a big
+// lockfile in many places must not drag hundreds of unchanged lines around every change into the text that is size-checked and
+// scanned: it keeps HISTORY_LOCKFILE_CONTEXT, and the wider text window only where a `-----BEGIN` line makes a PEM block possible
+// (see pemBoundary), which costs nothing for a lockfile without key material.
 const HISTORY_LOCKFILE_CONTEXT = { lines: 2, chars: 0 };
 const HISTORY_TEXT_CONTEXT = { lines: HISTORY_CONTEXT_LINES, chars: HISTORY_CONTEXT_CHARS };
+const PEM_BOUNDARY = '-----BEGIN';
+/** The unchanged lines that stay in front of an added line of a lockfile: the last few, or all from the nearest `-----BEGIN` line on. */
+function lockfileLookbehind(recent) {
+  for (let i = recent.length - 1; i >= 0; i -= 1) {
+    if (recent[i].includes(PEM_BOUNDARY)) return { held: recent.slice(Math.min(i, Math.max(recent.length - HISTORY_LOCKFILE_CONTEXT.lines, 0))), pem: true };
+  }
+  return { held: recent.slice(-HISTORY_LOCKFILE_CONTEXT.lines), pem: false };
+}
 
 /**
  * The first SNIFF_BYTES bytes of `path` as it is in `commit` (`git cat-file blob <commit>:<path>`), or null when git
  * cannot produce them. The read is bounded: spawnSync stops the child at SNIFF_BYTES, so a huge blob is never held.
  */
 function blobHead(root, commit, filePath) {
-  const run = spawnSync('git', ['cat-file', 'blob', `${commit}:${filePath}`], {
+  const run = spawnSync('git', ['cat-file', 'blob', filePath === null ? commit : `${commit}:${filePath}`], {
     cwd: root,
     maxBuffer: SNIFF_BYTES,
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -4439,6 +4468,137 @@ function diffHeaderPath(header) {
 // as oversize or, if the version is a verified binary, skipped), so nothing that is scanned as text is lost.
 const MAX_HELD_LINE_CHARS = MAX_LOCKFILE_BYTES + 2;
 
+// ---------------------------------------------------------------------------
+// Merge results
+// ---------------------------------------------------------------------------
+
+const MERGE_BATCH = 25; // merge commits per `git diff-tree --stdin` call, so one call's output stays small
+const ZERO_OBJECT = /^0+$/;
+
+/**
+ * `git diff-tree --stdin -m -r -z --no-renames --raw` output as { commit id -> one Map per parent, in parent order } where each Map
+ * holds path (latin1 of its raw bytes) -> { raw, oldMode, newMode, oldOid, newOid, status } of the merge result against that parent.
+ * A parent whose tree equals the merge result has no entries (git may print no group for it: the callers count the groups).
+ */
+function parseMergeDiffs(out) {
+  const groups = new Map();
+  let current = null;
+  let start = 0;
+  const next = () => {
+    if (start >= out.length) return null;
+    let end = out.indexOf(0, start);
+    if (end === -1) end = out.length;
+    const token = out.subarray(start, end);
+    start = end + 1;
+    return token;
+  };
+  for (let token = next(); token !== null; token = next()) {
+    if (token.length === 0) continue;
+    if (token[0] === 0x3a) {
+      const meta = token.toString('latin1').slice(1).split(' ');
+      const raw = next();
+      if (meta.length !== 5 || raw === null || current === null) throw new Error('git diff-tree printed output this scanner cannot parse');
+      current.set(raw.toString('latin1'), { raw: Buffer.from(raw), oldMode: meta[0], newMode: meta[1], oldOid: meta[2], newOid: meta[3], status: meta[4] });
+    } else {
+      const id = token.toString('latin1');
+      if (!/^[0-9a-f]{40,64}$/.test(id)) throw new Error('git diff-tree printed output this scanner cannot parse');
+      current = new Map();
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(current);
+    }
+  }
+  return groups;
+}
+
+/** The first SNIFF_BYTES bytes of a blob given by object id, or null when git cannot produce them (see blobHead). */
+function objectHead(root, oid) {
+  return blobHead(root, oid, null);
+}
+
+/**
+ * A merge can complete a credential that neither parent held: one parent adds `"name": "JWT_SECRET"`, the other adds a nearby
+ * `"value": "..."`, or one adds a PEM header and the other its key material, and git merges both without a conflict. `git log --cc`
+ * shows only lines that differ from EVERY parent, so it shows none of it. This looks at the merge RESULT instead: for each file
+ * where the result differs from every parent (a file equal to one parent holds nothing that parent did not), it scans the result
+ * and reports a finding only when no parent's version of that file has the same finding (same rule, same matched text, compared
+ * by digest and never printed). A credential a parent already held is that parent's, reported wherever the parent's side is
+ * scanned; blaming it on the merge would blame a branch for commits that come in from its base.
+ * @returns {{hits: Map<string, object>, oversize: number, oversizeLimits: Map<number, number>, unscanned: number}}
+ */
+function scanMergeResults(root, merges) {
+  const hits = new Map();
+  const oversizeLimits = new Map();
+  let oversize = 0;
+  let unscanned = 0;
+  for (let from = 0; from < merges.length; from += MERGE_BATCH) {
+    const batch = merges.slice(from, from + MERGE_BATCH);
+    const run = spawnSync('git', ['diff-tree', '--stdin', '-m', '-r', '-z', '--no-renames', '--raw'], {
+      cwd: root,
+      input: `${batch.map((m) => m.commit).join('\n')}\n`,
+      maxBuffer: 1024 * 1024 * 1024,
+    });
+    if (run.error || run.status !== 0) throw new Error('git diff-tree failed while reading merge commits');
+    const groups = parseMergeDiffs(run.stdout);
+    const candidates = [];
+    for (const { commit, parents } of batch) {
+      const perParent = groups.get(commit) ?? [];
+      if (perParent.length > parents.length) throw new Error('git diff-tree printed more parents than a merge has');
+      if (perParent.length < parents.length) continue; // the result equals a parent's tree: nothing of it is new
+      for (const [key, entry] of perParent[0]) {
+        if (entry.status === 'D' || entry.newMode === '160000') continue;
+        const others = perParent.map((group) => group.get(key));
+        if (others.some((other) => other === undefined || other.status === 'D')) continue; // equal to a parent's version
+        candidates.push({
+          commit,
+          file: displayPath(entry.raw),
+          oid: entry.newOid,
+          parentOids: others.map((other) => (other.oldMode === '160000' || ZERO_OBJECT.test(other.oldOid) ? null : other.oldOid)),
+        });
+      }
+    }
+    if (candidates.length === 0) continue;
+    const blobs = readIndexBlobs(root, [...new Set(candidates.map((c) => c.oid))]);
+    for (const candidate of candidates) {
+      const { commit, file } = candidate;
+      const blob = blobs.get(candidate.oid);
+      if (blob === undefined) {
+        unscanned += 1;
+        continue;
+      }
+      if (blob.bytes === null || blob.size > sizeLimit(file)) {
+        const head = objectHead(root, candidate.oid);
+        if (head !== null && isBinaryContent(head)) continue;
+        oversize += 1;
+        unscanned += 1;
+        oversizeLimits.set(sizeLimit(file), (oversizeLimits.get(sizeLimit(file)) ?? 0) + 1);
+        continue;
+      }
+      const text = decodeText(blob.bytes);
+      if (text === null) continue;
+      const found = scanRanges(file, text);
+      if (found.length === 0) continue;
+      // What the parents already had. A parent version that cannot be read or scanned contributes nothing, which reports more.
+      const known = new Set();
+      const parentBlobs = readIndexBlobs(root, [...new Set(candidate.parentOids.filter((oid) => oid !== null))]);
+      for (const oid of candidate.parentOids) {
+        const parentBlob = oid === null ? undefined : parentBlobs.get(oid);
+        if (parentBlob === undefined || parentBlob.bytes === null || parentBlob.size > sizeLimit(file)) continue;
+        const parentText = decodeText(parentBlob.bytes);
+        if (parentText === null) continue;
+        for (const finding of scanRanges(file, parentText)) known.add(`${finding.rule}\t${finding.evidence}`);
+      }
+      for (const finding of found) {
+        if (known.has(`${finding.rule}\t${finding.evidence}`)) continue;
+        const key = `${commit}\t${file}\t${finding.rule}`;
+        const entry = hits.get(key) ?? { commit, path: file, rule: finding.rule, count: 0 };
+        entry.count += 1;
+        hits.set(key, entry);
+      }
+    }
+  }
+  return { hits, oversize, oversizeLimits, unscanned };
+}
+
 /**
  * Scan every commit reachable from any ref, reporting only matches that touch a line the commit ADDED.
  * Unchanged context lines are scanned together with the added ones (so multi-line rules can see the
@@ -4458,7 +4618,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     [
       '-c', 'core.quotepath=false',
       'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
-      '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H',
+      '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
       ...revisions, '--',
     ],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -4493,11 +4653,13 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   let dropped = false; // context lines were left out since the last kept line
   let afterLines = 0; // context lines still to keep after the last added line ...
   let afterChars = 0; // ... and characters still to cover; a line is kept while either is left
-  const contextFor = (path) => (isLockfile(path) ? HISTORY_LOCKFILE_CONTEXT : HISTORY_TEXT_CONTEXT);
+  // The context kept after an added line. A lockfile keeps little, unless the line is (or follows) a PEM boundary.
+  const contextFor = (path, pem = false) => (isLockfile(path) && !pem ? HISTORY_LOCKFILE_CONTEXT : HISTORY_TEXT_CONTEXT);
   // Drop the oldest held context line while the rest still covers the window (enough lines AND enough characters), or
-  // while what is held could not fit the file's size limit anyway (bounded memory, whatever the line lengths).
+  // while what is held could not fit the file's size limit anyway (bounded memory, whatever the line lengths). A lockfile is held
+  // to the text window too (lockfileLookbehind picks what it uses).
   const trimRecent = () => {
-    const window = contextFor(file ?? '');
+    const window = HISTORY_TEXT_CONTEXT;
     const limit = file === null ? Infinity : sizeLimit(file);
     while (
       recent.length > 0 &&
@@ -4555,7 +4717,19 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     afterChars = 0;
   };
 
+  const merges = []; // { commit, parents } of every merge commit walked (see scanMergeResults)
+  let expectParents = false;
   const onLine = (line) => {
+    if (expectParents) {
+      // The line after each `commit <id>` line is `parents <id>...` (the format asks for it). Anything else is not output this
+      // parser understands: fail closed rather than guess which commits were merges.
+      expectParents = false;
+      const listed = /^parents((?: [0-9a-f]{40,64})*) ?$/.exec(line); // a root commit prints "parents " (a trailing blank)
+      if (listed === null) throw new Error('git log printed a commit header this scanner cannot parse');
+      const parentIds = listed[1].split(' ').filter(Boolean);
+      if (parentIds.length > 1) merges.push({ commit, parents: parentIds });
+      return;
+    }
     if (/^commit [0-9a-f]{40,64}$/.test(line)) {
       flush();
       commit = line.slice(7);
@@ -4563,6 +4737,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       file = null;
       headerPath = null;
       inHunk = false;
+      expectParents = true;
     } else if (/^diff --(?:git|cc|combined) /.test(line)) {
       flush();
       file = null;
@@ -4595,15 +4770,23 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       const content = line.slice(parents);
       if (marks === '+'.repeat(parents)) {
         // An added line: the context before it (up to the window), then the line itself, then the window after it.
+        let held = recent;
+        let pem = content.includes(PEM_BOUNDARY);
+        if (isLockfile(file ?? '')) {
+          const look = lockfileLookbehind(recent);
+          if (look.held.length < recent.length) dropped = true;
+          held = look.held;
+          pem = pem || look.pem;
+        }
         if (dropped && lines.length > 0) keep('');
-        for (const held of recent) keep(held);
+        for (const line of held) keep(line);
         recent = [];
         recentChars = 0;
         dropped = false;
         keep(content);
         addedAny = true; // an added line that is over the limit on its own still makes this version unscanned
         if (!overflow) addedLines.add(lines.length);
-        ({ lines: afterLines, chars: afterChars } = contextFor(file ?? ''));
+        ({ lines: afterLines, chars: afterChars } = contextFor(file ?? '', pem));
       } else if (afterLines > 0 || afterChars > 0) {
         keep(content);
         afterLines -= 1;
@@ -4616,43 +4799,52 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     }
   };
 
-  // Split on "\n" only. readline would also split on a lone CR and lose the continuation.
-  const decoder = new StringDecoder('utf8');
-  let pending = '';
-  let discarding = false; // inside the rest of a line that was cut at MAX_HELD_LINE_CHARS
-  for await (const chunk of child.stdout) {
-    pending += decoder.write(chunk);
-    let start = 0;
-    let newline;
-    if (discarding) {
-      newline = pending.indexOf('\n');
-      if (newline === -1) {
-        pending = '';
-        continue;
+  try {
+    // Split on "\n" only. readline would also split on a lone CR and lose the continuation.
+    const decoder = new StringDecoder('utf8');
+    let pending = '';
+    let discarding = false; // inside the rest of a line that was cut at MAX_HELD_LINE_CHARS
+    for await (const chunk of child.stdout) {
+      pending += decoder.write(chunk);
+      let start = 0;
+      let newline;
+      if (discarding) {
+        newline = pending.indexOf('\n');
+        if (newline === -1) {
+          pending = '';
+          continue;
+        }
+        start = newline + 1;
+        discarding = false;
       }
-      start = newline + 1;
-      discarding = false;
+      while ((newline = pending.indexOf('\n', start)) !== -1) {
+        onLine(pending.slice(start, newline));
+        start = newline + 1;
+      }
+      pending = pending.slice(start);
+      if (pending.length > MAX_HELD_LINE_CHARS) {
+        // One line longer than any size limit (a binary blob with few newline bytes): parse its head once and drop the
+        // rest of it, so memory stays bounded whatever the blob size. See MAX_HELD_LINE_CHARS.
+        onLine(pending.slice(0, MAX_HELD_LINE_CHARS));
+        pending = '';
+        discarding = true;
+      }
     }
-    while ((newline = pending.indexOf('\n', start)) !== -1) {
-      onLine(pending.slice(start, newline));
-      start = newline + 1;
-    }
-    pending = pending.slice(start);
-    if (pending.length > MAX_HELD_LINE_CHARS) {
-      // One line longer than any size limit (a binary blob with few newline bytes): parse its head once and drop the
-      // rest of it, so memory stays bounded whatever the blob size. See MAX_HELD_LINE_CHARS.
-      onLine(pending.slice(0, MAX_HELD_LINE_CHARS));
-      pending = '';
-      discarding = true;
-    }
+    pending += decoder.end();
+    if (pending !== '') onLine(pending);
+    flush();
+  } catch (error) {
+    child.kill();
+    throw error;
   }
-  pending += decoder.end();
-  if (pending !== '') onLine(pending);
-  flush();
 
   const code = await exited;
   if (code !== 0) throw new Error(`git log failed with exit code ${code}${summarizeStderr(stderr)}`);
-  return { hits: [...hits.values()], commits, oversize, oversizeLimits, unscanned, skipped };
+  // The merge results: what the combined diff cannot show (see scanMergeResults).
+  const merged = scanMergeResults(root, merges);
+  for (const [key, entry] of merged.hits) if (!hits.has(key)) hits.set(key, entry);
+  for (const [limit, n] of merged.oversizeLimits) oversizeLimits.set(limit, (oversizeLimits.get(limit) ?? 0) + n);
+  return { hits: [...hits.values()], commits, oversize: oversize + merged.oversize, oversizeLimits, unscanned: unscanned + merged.unscanned, skipped };
 }
 
 // ---------------------------------------------------------------------------
