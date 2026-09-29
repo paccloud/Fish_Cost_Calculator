@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiUrl } from '../config/api';
 import { calculate } from '../lib/calcEngine';
 import { parseAmount } from '../lib/numberInput';
+import { withConversionStates, hasUsableConversions, parseYieldPercent } from '../lib/fishDataShape';
 
 /**
  * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
@@ -122,9 +123,9 @@ const stepButton =
   'min-h-[3.5rem] rounded-xl border-2 border-line-strong bg-surface-raised text-3xl font-bold leading-none text-text-primary transition-colors hover:border-accent active:translate-y-px active:bg-surface';
 
 /** A number field with big − / + buttons either side, for wet or gloved hands. */
-const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy }) => {
+const Stepper = ({ id, value, onChange, step, format, prefix, suffix, lessLabel, moreLabel, placeholder, describedBy, outOfRange = false }) => {
   const inputRef = useRef(null);
-  const invalid = String(value).trim() !== '' && Number.isNaN(parseAmount(value));
+  const invalid = outOfRange || (String(value).trim() !== '' && Number.isNaN(parseAmount(value)));
   const bump = (delta) => onChange(format(Math.max(0, (parseAmount(value) || 0) + delta)));
   return (
     <div className="grid grid-cols-[3.5rem_minmax(0,1fr)_3.5rem] gap-2">
@@ -252,7 +253,7 @@ const Calculator = () => {
   const [_history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
 
-  const [fishData, setFishData] = useState(FISH_DATA_V3);
+  const [fishData, setFishData] = useState(() => withConversionStates(FISH_DATA_V3));
   const [profilesData, setProfilesData] = useState(PROFILES_DATA);
   const [dataLoading, _setDataLoading] = useState(false);
 
@@ -260,7 +261,9 @@ const Calculator = () => {
     fetch(apiUrl('/api/fish-data'))
       .then(res => res.json())
       .then(data => {
-        if (data.fishData && Object.keys(data.fishData).length > 0) setFishData(data.fishData);
+        // Keep the bundled reference yields unless the API sends usable conversions.
+        const apiData = data.fishData ? withConversionStates(data.fishData) : null;
+        if (hasUsableConversions(apiData)) setFishData(apiData);
         if (data.profiles && Object.keys(data.profiles).length > 0) setProfilesData(data.profiles);
       })
       .catch(() => {});
@@ -370,6 +373,10 @@ const Calculator = () => {
   // A box with text that isn't a number would otherwise count as 0 and give a wrong answer, so show none
   const badInput = [mainInput, yieldPercent, ...(mode === 'cost' ? [processingCost, shipping] : [])]
     .some(v => String(v).trim() !== '' && Number.isNaN(parseAmount(v)));
+  // A yield of 0 would otherwise fall back to 100%, and one over 100% is impossible
+  const yieldNumber = parseAmount(yieldPercent);
+  const yieldValid = parseYieldPercent(yieldNumber) !== null;
+  const yieldOutOfRange = Number.isFinite(yieldNumber) && !yieldValid;
   const calc = useMemo(() => {
     if (!ready) return null;
     return calculate({
@@ -383,7 +390,7 @@ const Calculator = () => {
       shippingWeightType,
     });
   }, [ready, mode, yieldPercent, targetWeight, cost, processingCost, weightType, shipping, shippingWeightType]);
-  const result = calc && hasMainInput && !badInput ? calc.result : null;
+  const result = calc && hasMainInput && !badInput && yieldValid ? calc.result : null;
 
   const inputsKey = JSON.stringify([
     mode, species, fromState, toState, cost, targetWeight, yieldPercent,
@@ -392,11 +399,14 @@ const Calculator = () => {
   const saveStatus = saveState.key === inputsKey ? saveState.text : '';
 
   const numbersOnly = 'Use numbers only in the boxes, like 4.50 or 1,000';
+  const yieldRangeMessage = 'Enter a yield above 0 and up to 100%';
   let resultSentence = '';
   if (result !== null) {
     resultSentence = mode === 'cost' ? `${dollars(result)} per lb of ${toState}` : `Buy ${result.toFixed(1)} lbs of ${fromState}`;
   } else if (ready && badInput) {
     resultSentence = numbersOnly;
+  } else if (ready && yieldOutOfRange) {
+    resultSentence = yieldRangeMessage;
   }
 
   // Screen readers hear the answer once typing pauses, not on every keystroke
@@ -491,6 +501,7 @@ const Calculator = () => {
 
   let dockPrompt = 'Pick a species, what you have, and what you’re making';
   if (ready && badInput) dockPrompt = numbersOnly;
+  else if (ready && yieldOutOfRange) dockPrompt = yieldRangeMessage;
   else if (ready) dockPrompt = mode === 'cost' ? `Enter what you pay per lb of ${fromState}` : `Enter how many lbs of ${toState} you need`;
 
   return (
@@ -677,8 +688,12 @@ const Calculator = () => {
             placeholder="0"
             lessLabel="1 percent less yield"
             moreLabel="1 percent more yield"
-            describedBy="calc-yield-hint"
+            describedBy={yieldOutOfRange ? 'calc-yield-error calc-yield-hint' : 'calc-yield-hint'}
+            outOfRange={yieldOutOfRange}
           />
+          {yieldOutOfRange && (
+            <p id="calc-yield-error" className="text-sm font-semibold text-danger">{yieldRangeMessage}</p>
+          )}
           <p id="calc-yield-hint" className="text-sm text-text-secondary">
             {!currentConversion
               ? 'Choose what you’re making to fill this in.'

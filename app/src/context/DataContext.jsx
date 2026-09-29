@@ -17,7 +17,7 @@ import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, getAuthHeaders } = useAuth();
   const [savedCalcs, setSavedCalcs] = useState([]);
   const [customYields, setCustomYields] = useState([]);
   const [customSpecies, setCustomSpeciesState] = useState({});
@@ -37,6 +37,7 @@ export function DataProvider({ children }) {
   // null | calc record — non-null while publish preview modal is shown
   const [publishPreviewCalc, setPublishPreviewCalc] = useState(null);
   const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState(null);
   // null | { calcs: number, yields: number } — non-null while recovery modal is shown
   const [recoveryCounts, setRecoveryCounts] = useState(null);
   const [recoveryAssigning, setRecoveryAssigning] = useState(false);
@@ -384,6 +385,7 @@ export function DataProvider({ children }) {
 
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
+    setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
 
@@ -392,7 +394,16 @@ export function DataProvider({ children }) {
     if (!publishPreviewCalc?.serverId) return;
     setPublishLoading(true);
     try {
-      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      let authHeaders;
+      try {
+        authHeaders = await getAuthHeaders();
+      } catch {
+        // Token refresh failed: the session is ending, so close this
+        // account-scoped preview rather than leave it open.
+        setPublishError(null);
+        setPublishPreviewCalc(null);
+        return;
+      }
       let succeeded = false;
       let transientFailure = false;
       try {
@@ -418,45 +429,62 @@ export function DataProvider({ children }) {
         );
         debouncedSync();
       }
+      if (!succeeded && !transientFailure) {
+        // Permanent failure (e.g. 401/404): keep the modal open and say so.
+        setPublishError('Could not publish this calculation. Sign in again and retry.');
+        return;
+      }
       setPublishPreviewCalc(null);
     } finally {
       setPublishLoading(false);
     }
-  }, [publishPreviewCalc, user, repo, debouncedSync]);
+  }, [publishPreviewCalc, getAuthHeaders, repo, debouncedSync]);
 
   const cancelPublish = useCallback(() => {
+    setPublishError(null);
     setPublishPreviewCalc(null);
   }, []);
 
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
     if (!calc?.serverId) return;
-    let succeeded = false;
-    let transientFailure = false;
+    const queueForRetry = async ({ sync = true } = {}) => {
+      await repo.queueUnpublish(calc.id);
+      setSavedCalcs((prev) =>
+        prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
+      );
+      if (sync) debouncedSync();
+    };
+
+    let authHeaders;
     try {
-      const authHeaders = await (user?.getAuthHeaders?.() ?? Promise.resolve({}));
+      authHeaders = await getAuthHeaders();
+    } catch {
+      // The session has ended, so nothing reached the server and the
+      // calculation is still public. Say so, and queue the change for when
+      // this account signs in again. Skip the sync, which would replace the
+      // error badge with "pending" and cannot succeed without a session.
+      await queueForRetry({ sync: false });
+      setSyncError('auth');
+      setSyncStatus('error');
+      return;
+    }
+
+    try {
       const res = await apiClient.unpublishCalcRaw(calc.serverId, authHeaders);
       if (res.ok) {
         await repo.updateCalcPublicationState(calc.id, true);
         setSavedCalcs((prev) =>
           prev.map((c) => (c.id === calc.id ? { ...c, is_private: true, syncStatus: 'synced' } : c))
         );
-        succeeded = true;
-      } else {
-        transientFailure = res.status === 429 || res.status >= 500;
+      } else if (res.status === 429 || res.status >= 500) {
+        await queueForRetry();
       }
     } catch {
       // Network error → transient
-      transientFailure = true;
+      await queueForRetry();
     }
-    if (!succeeded && transientFailure) {
-      await repo.queueUnpublish(calc.id);
-      setSavedCalcs((prev) =>
-        prev.map((c) => (c.id === calc.id ? { ...c, syncStatus: 'pending-unpublish' } : c))
-      );
-      debouncedSync();
-    }
-  }, [user, repo, debouncedSync]);
+  }, [getAuthHeaders, repo, debouncedSync]);
 
   // ---- Saved Calculations ----
 
@@ -582,6 +610,7 @@ export function DataProvider({ children }) {
         <PreviewPublishModal
           calc={publishPreviewCalc}
           loading={publishLoading}
+          error={publishError}
           onConfirm={confirmPublish}
           onCancel={cancelPublish}
         />

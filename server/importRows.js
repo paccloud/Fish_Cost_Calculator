@@ -65,7 +65,26 @@ function parseYieldPercent(value) {
     return Number.parseFloat(text);
 }
 
-function rowsFromWorksheet(worksheet) {
+// Mirrors api/_lib/importRows.js: only percent-formatted XLSX cells stay
+// numbers, so a "42%" cell (stored as 0.42) is scaled but a plain 0.5 is not.
+// A percent sign inside quotes or after a backslash is shown as text, not a
+// percentage: '0.0"%"' displays 0.5 as "0.5%".
+function isPercentFormat(numFmt) {
+    return String(numFmt ?? '').replace(/"[^"]*"/g, '').replace(/\\./g, '').includes('%');
+}
+
+function cellValue(cell, keepPercentCells) {
+    const { value } = cell;
+    if (keepPercentCells && isPercentFormat(cell.numFmt)) {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (value && typeof value === 'object' && typeof value.result === 'number' && Number.isFinite(value.result)) {
+            return value.result;
+        }
+    }
+    return normalizeCell(value);
+}
+
+function rowsFromWorksheet(worksheet, { keepPercentCells = false } = {}) {
     const rows = [];
     const headerRow = worksheet.getRow(1);
     const headers = [];
@@ -81,9 +100,9 @@ function rowsFromWorksheet(worksheet) {
         const item = {};
         headers.forEach((header, colNumber) => {
             if (!header) return;
-            item[header] = normalizeCell(row.getCell(colNumber).value);
+            item[header] = cellValue(row.getCell(colNumber), keepPercentCells);
         });
-        if (Object.values(item).some(Boolean)) rows.push(item);
+        if (Object.values(item).some((v) => v !== '' && v !== null && v !== undefined)) rows.push(item);
     });
 
     return rows;
@@ -102,7 +121,7 @@ async function parseImportRows(buffer, extension) {
         await workbook.xlsx.load(buffer);
         const worksheet = workbook.worksheets[0];
         if (!worksheet) return [];
-        return rowsFromWorksheet(worksheet);
+        return rowsFromWorksheet(worksheet, { keepPercentCells: true });
     }
 
     throw new Error('Unsupported file type. Please upload a .csv or .xlsx file.');
@@ -129,7 +148,9 @@ function normalizeYieldRows(data, sourceName) {
             return;
         }
 
-        if (finalYield > 0 && finalYield <= 1) {
+        // Only percent-formatted XLSX cells arrive as numbers, stored as fractions
+        // (a "42%" cell holds 0.42, "150%" holds 1.5). Text like CSV "0.5" means 0.5%.
+        if (typeof yieldRaw === 'number') {
             finalYield *= 100;
         }
 

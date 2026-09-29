@@ -20,7 +20,7 @@ const ContributorProfile = () => {
         const loadProfile = async () => {
             try {
                 const headers = await getAuthHeaders();
-                const res = await fetch(apiUrl('/api/contributor/me'), { headers });
+                const res = await fetch(apiUrl('/api/contributor'), { headers });
 
                 if (res.status === 404) {
                     setLoaded(true);
