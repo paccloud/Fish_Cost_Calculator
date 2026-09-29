@@ -92,9 +92,9 @@ const Login = () => {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <div className="card w-full max-w-md p-8 text-center space-y-4">
-          <h2 className="text-2xl font-bold text-brand-teal">Check your email</h2>
+          <h2 className="text-2xl font-bold text-accent">Check your email</h2>
           {verificationFailed ? (
-            <p className="text-red-500 text-sm">
+            <p className="text-danger text-sm">
               Your account was created but we couldn&apos;t send the verification email to <strong>{email}</strong>. Use the button below to try again.
             </p>
           ) : (
@@ -102,7 +102,7 @@ const Login = () => {
               We sent a verification link to <strong>{email}</strong>. Click it to activate your account, then sign in.
             </p>
           )}
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && <p className="text-danger text-sm">{error}</p>}
           <button
             onClick={handleResend}
             className="btn-primary w-full"
@@ -111,7 +111,7 @@ const Login = () => {
           </button>
           <button
             onClick={() => { setVerificationSent(false); setVerificationFailed(false); setIsRegister(false); setError(''); }}
-            className="text-brand-terracotta hover:underline text-sm"
+            className="text-link hover:underline text-sm"
           >
             Back to sign in
           </button>
@@ -123,7 +123,7 @@ const Login = () => {
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
       <div className="card w-full max-w-md p-8">
-        <h2 className="text-2xl font-bold mb-6 text-center text-brand-teal">
+        <h2 className="text-2xl font-bold mb-6 text-center text-accent">
           {isRegister ? 'Create Account' : 'Welcome Back'}
         </h2>
 
@@ -133,10 +133,11 @@ const Login = () => {
               {isRegister ? 'Email' : 'Email or Username'}
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
+              <Mail aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-link w-4 h-4" />
               <input
                 id="email"
                 type={isRegister ? 'email' : 'text'}
+                autoComplete={isRegister ? 'email' : 'username'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="form-input pl-10"
@@ -146,11 +147,13 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="form-label">Password</label>
+            <label htmlFor="password" className="form-label">Password</label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 text-brand-terracotta w-4 h-4" />
+              <Lock aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-link w-4 h-4" />
               <input
+                id="password"
                 type="password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="form-input pl-10"
@@ -159,7 +162,7 @@ const Login = () => {
             </div>
           </div>
 
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+          {error && <p className="text-danger text-sm text-center">{error}</p>}
 
           <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
             {isRegister ? 'Sign Up' : 'Sign In'} <ArrowRight size={18} />
@@ -193,7 +196,7 @@ const Login = () => {
         <div className="mt-5 text-center">
           <button
             onClick={() => { setIsRegister(!isRegister); setError(''); setVerificationSent(false); setVerificationFailed(false); }}
-            className="text-text-secondary hover:text-brand-terracotta text-sm transition"
+            className="text-text-secondary hover:text-link text-sm transition"
           >
             {isRegister ? "Already have an account? Sign In" : "Need an account? Sign Up"}
           </button>

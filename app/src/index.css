@@ -2,63 +2,131 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens.
+ * Text pairs are checked against WCAG AA (4.5:1) and form-control edges against
+ * 3:1 by src/lib/__tests__/designTokens.test.js — change a value here and that
+ * test will tell you if it stops being readable in sunlight or a dim kitchen.
+ */
 :root {
+  color-scheme: light;
   --color-surface: #f5f0eb;
   --color-surface-raised: #ffffff;
   --color-text-primary: #1a2e35;
   --color-text-secondary: #4a6572;
-  --color-text-muted: #7a9aaa;
+  --color-text-muted: #557080;
   --color-border: #d6ccc4;
   --color-border-subtle: #ede7e0;
+  --color-border-strong: #857a70;
+  --color-primary: #014457;
+  --color-primary-hover: #025a72;
   --color-accent: #014457;
-  --color-accent-warm: #CA5F40;
+  --color-link: #a34329;
+  --color-focus: #014457;
+  --color-success: #166534;
+  --color-danger: #b42318;
 }
 
 .dark {
+  color-scheme: dark;
   --color-surface: #0d1f26;
   --color-surface-raised: #132830;
   --color-text-primary: #e8ddd4;
   --color-text-secondary: #8fa8b2;
-  --color-text-muted: #5d7f8c;
+  --color-text-muted: #7f9aa6;
   --color-border: rgba(255, 255, 255, 0.12);
   --color-border-subtle: rgba(255, 255, 255, 0.06);
-  --color-accent: #025a72;
-  --color-accent-warm: #d97356;
+  --color-border-strong: #6f8b96;
+  --color-primary: #0b7a99;
+  --color-primary-hover: #096a86;
+  --color-accent: #7fd0e3;
+  --color-link: #ec8f72;
+  --color-focus: #f7c648;
+  --color-success: #4ade80;
+  --color-danger: #fca5a5;
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    line-height: 1.6;
+  }
+
+  /* One clear, high-contrast focus indicator for keyboard and switch users */
+  :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* The navbar is teal in both themes, so its focus ring must be light */
+  .focus-on-dark :focus-visible {
+    outline-color: #f7c648;
+  }
+
+  /* ...but popovers rendered inside the navbar (sync details) sit on a normal surface */
+  .focus-on-dark [role="dialog"] :focus-visible {
+    outline-color: var(--color-focus);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @layer components {
+  /* Buttons: 48px tall so they're easy to hit with wet or gloved hands */
+  .btn-primary,
+  .btn-secondary {
+    @apply inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-lg px-5 py-3 text-base font-semibold
+           transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
   .btn-primary {
-    @apply bg-brand-teal hover:bg-brand-teal-light text-white font-semibold py-3 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary text-white hover:bg-primary-hover;
+  }
+
+  .btn-secondary {
+    @apply border-2 border-line-strong bg-surface-raised text-text-primary hover:border-accent hover:text-accent;
+  }
+
+  .btn-ghost {
+    @apply inline-flex min-h-[2.75rem] items-center gap-2 rounded-lg px-3 text-sm font-semibold text-accent
+           transition-colors hover:underline;
   }
 
   .card {
-    @apply bg-surface-raised rounded-lg border border-line shadow-sm;
+    @apply rounded-xl border border-line bg-surface-raised shadow-sm;
   }
 
   .form-label {
-    @apply block text-sm font-medium mb-1.5 text-text-secondary;
+    @apply mb-1.5 block text-sm font-semibold text-text-primary;
+  }
+
+  /* 16px text stops iOS from zooming the page when a field is focused */
+  .form-input,
+  .form-select {
+    @apply min-h-[3rem] w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5 text-base text-text-primary
+           disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .form-input {
-    @apply w-full bg-surface border border-line rounded-md px-3 py-2.5 text-sm text-text-primary
-           placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
-  .form-select {
-    @apply w-full bg-surface border border-line rounded-md px-3 py-2.5 text-sm text-text-primary
-           focus:outline-none focus:ring-2 focus:ring-brand-teal focus:border-transparent
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply placeholder-text-muted;
   }
 
   .section-divider {
-    @apply border-t border-line-subtle my-5;
+    @apply my-6 border-t border-line-subtle;
   }
 }
