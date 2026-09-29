@@ -13,6 +13,8 @@
  * @module lib/yieldSharing
  */
 
+import { isExplicitOptIn } from './contributorProfile';
+
 /**
  * Public attribution for the current user's shared rows, given their
  * contributor profile (GET /api/contributor, null when none exists).
@@ -26,7 +28,7 @@
  * @returns {{contributor: string|null, organization: string|null}}
  */
 export function describeShareAttribution(profile) {
-  const optedIn = profile?.show_on_page === true || profile?.show_on_page === 1;
+  const optedIn = isExplicitOptIn(profile?.show_on_page);
   if (!optedIn) return { contributor: null, organization: null };
   const clean = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
   return {
