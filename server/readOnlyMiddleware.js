@@ -8,7 +8,9 @@ function createReadOnlyMiddleware(readOnlyModulePromise = import('../shared/read
     return async function readOnlyMiddleware(req, res, next) {
         try {
             const { isBlockedWrite, READ_ONLY_BODY, READ_ONLY_STATUS } = await readOnlyModulePromise;
-            const allowWrite = READ_ONLY_ALLOWED_WRITES.has(req.originalUrl.split('?')[0]);
+            // Express routes match with or without a trailing slash, so compare without one.
+            const path = req.originalUrl.split('?')[0].replace(/\/+$/, '');
+            const allowWrite = READ_ONLY_ALLOWED_WRITES.has(path);
             if (isBlockedWrite(req.method, { allowWrite })) {
                 return res.status(READ_ONLY_STATUS).json(READ_ONLY_BODY);
             }

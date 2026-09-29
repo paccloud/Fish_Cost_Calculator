@@ -165,6 +165,12 @@ describe('Express server in read-only mode', () => {
     }
   });
 
+  it('keeps sign-in open with a trailing slash or query string', async () => {
+    expect((await run('POST', '/api/login/', true)).next).toHaveBeenCalled();
+    expect((await run('POST', '/api/login?x=1', true)).next).toHaveBeenCalled();
+    expect((await run('POST', '/api/register/', true)).res.statusCode).toBe(READ_ONLY_STATUS);
+  });
+
   it('lets reads through, and everything through when off', async () => {
     expect((await run('GET', '/api/user-data', true)).next).toHaveBeenCalled();
     expect((await run('POST', '/api/user-data', false)).next).toHaveBeenCalled();
