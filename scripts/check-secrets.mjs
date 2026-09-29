@@ -7,8 +7,14 @@
  *   node scripts/check-secrets.mjs --history   scan the ADDED lines of every commit on every ref
  *   node scripts/check-secrets.mjs --help
  *
- * Exit codes: 0 = clean, 1 = potential secret found (or a text file too large to scan),
- * 2 = usage or git error.
+ * Exit codes: 0 = clean, 1 = potential secret found (or a tracked file that could not be scanned:
+ * text over the size limit, unreadable), 2 = usage or git error, or a --history audit that did
+ * not look at everything (version over the size limit, shallow clone).
+ *
+ * Fail closed: the only content skipped on purpose is lockfiles (exact names), gitlinks (submodule
+ * pointers) and verified-binary files (a NUL byte in the first 8 KB AND a known binary signature such as PNG,
+ * ZIP or PDF; a stray NUL alone never exempts a file), and the OK line counts them. Everything else that cannot
+ * be examined makes the run fail with a message; nothing is skipped quietly.
  *
  * Redaction guarantee: findings carry only { path, line, rule }. The matched text is
  * never stored, printed or logged, not even partially. Keep it that way.
@@ -31,12 +37,13 @@
  *
  * --history is for the repository owner to run locally. CI does NOT run it: the known
  * leak from issue #22 lives in history forever and would fail every build. A shallow
- * clone only has part of the history, so the mode warns when it detects one.
+ * clone only has part of the history, so an incomplete audit (shallow, or any version not
+ * scanned) exits 2 and never prints "no hits".
  */
 
 import { spawn, spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { closeSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
+import { closeSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { StringDecoder } from 'node:string_decoder';
@@ -71,6 +78,41 @@ export function shouldSkipPath(filePath) {
   return LOCKFILE_NAMES.has(base);
 }
 
+// Leading bytes of common binary formats. A file is "verified binary" only when it has a NUL byte in its first
+// 8 KB AND starts with one of these; a NUL alone proves nothing (a stray NUL must not exempt an .env file).
+const BINARY_SIGNATURES = [
+  [0x89, 0x50, 0x4e, 0x47], // PNG
+  [0xff, 0xd8, 0xff], // JPEG
+  [0x47, 0x49, 0x46, 0x38], // GIF
+  [0x50, 0x4b, 0x03, 0x04], // ZIP, jar, docx, xlsx, ...
+  [0x50, 0x4b, 0x05, 0x06],
+  [0x25, 0x50, 0x44, 0x46, 0x2d], // %PDF-
+  [0x7f, 0x45, 0x4c, 0x46], // ELF
+  [0xca, 0xfe, 0xba, 0xbe], // Mach-O fat / Java class
+  [0xcf, 0xfa, 0xed, 0xfe], // Mach-O
+  [0x00, 0x61, 0x73, 0x6d], // WebAssembly
+  [0x1f, 0x8b, 0x08], // gzip
+  [0x42, 0x5a, 0x68, 0x39, 0x31, 0x41, 0x59], // bzip2 (level 9 block header)
+  [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00], // xz
+  [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c], // 7z
+  [0x28, 0xb5, 0x2f, 0xfd], // zstd
+  [0x52, 0x61, 0x72, 0x21], // Rar!
+  [0x77, 0x4f, 0x46, 0x46], // wOFF
+  [0x77, 0x4f, 0x46, 0x32], // wOF2
+  [0x00, 0x01, 0x00, 0x00], // TrueType
+  [0x4f, 0x54, 0x54, 0x4f], // OpenType
+  [0x00, 0x00, 0x01, 0x00], // ico
+  [0x49, 0x49, 0x2a, 0x00], // TIFF
+  [0x4d, 0x4d, 0x00, 0x2a],
+  [0x52, 0x49, 0x46, 0x46], // RIFF (webp, wav, avi)
+  [0x4f, 0x67, 0x67, 0x53], // Ogg
+  [0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66], // SQLite
+].map((bytes) => Buffer.from(bytes));
+
+const hasSignature = (head) =>
+  BINARY_SIGNATURES.some((sig) => head.length >= sig.length && head.subarray(0, sig.length).equals(sig)) ||
+  (head.length >= 12 && head[0] === 0 && head[1] === 0 && head.subarray(4, 8).toString('latin1') === 'ftyp'); // mp4, heic, avif
+
 // BOM-less UTF-16 of mostly ASCII text has a NUL in every other byte and none in the rest.
 function guessBomlessUtf16(head) {
   const pairs = head.length >> 1;
@@ -86,28 +128,85 @@ function guessBomlessUtf16(head) {
   return null;
 }
 
+// BOM-less UTF-32 of mostly ASCII text: three NULs in every four bytes (the last three for LE, the first three for BE).
+function guessBomlessUtf32(head) {
+  const quads = head.length >> 2;
+  if (quads < 4) return null;
+  let le = 0;
+  let be = 0;
+  for (let i = 0; i + 3 < head.length; i += 4) {
+    if (head[i] !== 0 && head[i + 1] === 0 && head[i + 2] === 0 && head[i + 3] === 0) le += 1;
+    if (head[i] === 0 && head[i + 1] === 0 && head[i + 2] === 0 && head[i + 3] !== 0) be += 1;
+  }
+  if (le >= quads * 0.7) return 'le';
+  if (be >= quads * 0.7) return 'be';
+  return null;
+}
+
 const swapped = (bytes) => Buffer.from(bytes.subarray(0, bytes.length & ~1)).swap16();
 
+function decodeUtf32(bytes, littleEndian) {
+  const parts = [];
+  let chunk = [];
+  for (let i = 0; i + 3 < bytes.length; i += 4) {
+    const cp = littleEndian ? bytes.readUInt32LE(i) : bytes.readUInt32BE(i);
+    chunk.push(cp <= 0x10ffff ? cp : 0xfffd);
+    if (chunk.length === 4096) {
+      parts.push(String.fromCodePoint(...chunk));
+      chunk = [];
+    }
+  }
+  parts.push(String.fromCodePoint(...chunk));
+  return parts.join('');
+}
+
+/** Which multi-byte Unicode encoding `buffer` is in, by BOM first and then by the NUL pattern of its first 8 KB. */
+function detectWideEncoding(buffer) {
+  if (buffer.length >= 4 && buffer[0] === 0xff && buffer[1] === 0xfe && buffer[2] === 0 && buffer[3] === 0) return 'utf32le-bom';
+  if (buffer.length >= 4 && buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 0xfe && buffer[3] === 0xff) return 'utf32be-bom';
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) return 'utf16le-bom';
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) return 'utf16be-bom';
+  const head = buffer.subarray(0, SNIFF_BYTES);
+  if (!head.includes(0)) return null;
+  const wide32 = guessBomlessUtf32(head);
+  if (wide32) return `utf32${wide32}`;
+  const wide16 = guessBomlessUtf16(head);
+  return wide16 ? `utf16${wide16}` : null;
+}
+
 /**
- * Decode file bytes to text. UTF-16 (with or without BOM) is decoded instead of being
- * mistaken for binary. Returns null when the content is binary (NUL bytes that are not UTF-16).
+ * True only for content that is positively binary: a NUL byte in the first 8 KB, not a UTF-16/32 text file, and a
+ * known binary signature at the start. `head` is the first bytes of the file (8 KB is enough).
+ */
+export function isBinaryContent(head) {
+  const sniff = head.subarray(0, SNIFF_BYTES);
+  return sniff.includes(0) && detectWideEncoding(sniff) === null && hasSignature(sniff);
+}
+
+/**
+ * Decode file bytes to text. UTF-8 (with or without BOM), UTF-16 and UTF-32 (with or without BOM) are decoded.
+ * Any other content, including text with a stray NUL byte, is decoded as UTF-8 with the NULs removed and scanned.
+ * Returns null only for verified-binary content (see isBinaryContent). A secret is ASCII, so the invalid-UTF-8
+ * replacement of non-UTF-8 text encodings does not hide one.
  */
 export function decodeText(buffer) {
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    return buffer.subarray(2, 2 + ((buffer.length - 2) & ~1)).toString('utf16le');
+  if (isBinaryContent(buffer)) return null;
+  const wide = detectWideEncoding(buffer);
+  let text;
+  if (wide === 'utf32le-bom') text = decodeUtf32(buffer.subarray(4), true);
+  else if (wide === 'utf32be-bom') text = decodeUtf32(buffer.subarray(4), false);
+  else if (wide === 'utf32le') text = decodeUtf32(buffer, true);
+  else if (wide === 'utf32be') text = decodeUtf32(buffer, false);
+  else if (wide === 'utf16le-bom') text = buffer.subarray(2, 2 + ((buffer.length - 2) & ~1)).toString('utf16le');
+  else if (wide === 'utf16be-bom') text = swapped(buffer.subarray(2)).toString('utf16le');
+  else if (wide === 'utf16le') text = buffer.subarray(0, buffer.length & ~1).toString('utf16le');
+  else if (wide === 'utf16be') text = swapped(buffer).toString('utf16le');
+  else {
+    const hasUtf8Bom = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
+    text = buffer.toString('utf8', hasUtf8Bom ? 3 : 0);
   }
-  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
-    return swapped(buffer.subarray(2)).toString('utf16le');
-  }
-  const head = buffer.subarray(0, SNIFF_BYTES);
-  if (head.includes(0)) {
-    const guess = guessBomlessUtf16(head);
-    if (guess === 'le') return buffer.subarray(0, buffer.length & ~1).toString('utf16le');
-    if (guess === 'be') return swapped(buffer).toString('utf16le');
-    return null;
-  }
-  const hasUtf8Bom = buffer.length >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf;
-  return buffer.toString('utf8', hasUtf8Bom ? 3 : 0);
+  // A NUL that is left over (a stray byte, or a mixed-encoding file) must not split a name or a value.
+  return text.includes('\u0000') ? text.replace(/\u0000/g, '') : text;
 }
 
 // ---------------------------------------------------------------------------
@@ -435,7 +534,7 @@ const MAX_EXPANSION_DEPTH = 8;
 function expansionLiterals(text, depth = 0) {
   const literals = [];
   if (depth > MAX_EXPANSION_DEPTH) {
-    const flat = text.replace(/\$\{[A-Za-z_][A-Za-z0-9_]{0,80}(?::?[-=+?])?|\}/g, '').trim();
+    const flat = text.replace(/\$\{[A-Za-z_][A-Za-z0-9_]{0,1023}(?::?[-=+?])?|\}/g, '').trim();
     if (flat !== '') literals.push(flat);
     return literals;
   }
@@ -443,7 +542,7 @@ function expansionLiterals(text, depth = 0) {
   for (let open = text.indexOf('${', i); open !== -1; open = text.indexOf('${', i)) {
     const end = closingBrace(text, open);
     const inner = text.slice(open + 2, end === -1 ? text.length : end);
-    const operation = /^[A-Za-z_][A-Za-z0-9_]{0,80}:?[-=+]([\s\S]*)$/.exec(inner);
+    const operation = /^[A-Za-z_][A-Za-z0-9_]{0,1023}:?[-=+]([\s\S]*)$/.exec(inner);
     if (operation) {
       const literal = withoutExpansions(operation[1]).trim();
       if (literal !== '') literals.push(literal);
@@ -487,15 +586,13 @@ function valueRunsToEndOfLine(filePath) {
  *  - the rest of the line, comment removed (a plain scalar or ini value with spaces)
  *  - the indented lines of a YAML block scalar (`|`, `>`, `|-`, `>-`, ...)
  */
-function unquotedContinuations(m, token, filePath) {
-  const input = m.input;
-  const tokenEnd = m.index + m[0].length;
+function unquotedContinuations(input, matchIndex, tokenEnd, token, filePath) {
   let lineEnd = input.indexOf('\n', tokenEnd);
   if (lineEnd === -1) lineEnd = input.length;
   const results = [];
   if (/^[|>][-+0-9]*$/.test(token)) {
-    const lineStart = input.lastIndexOf('\n', m.index - 1) + 1;
-    const keyIndent = /^[ \t]*/.exec(input.slice(lineStart, m.index + 1))[0].length;
+    const lineStart = input.lastIndexOf('\n', matchIndex - 1) + 1;
+    const keyIndent = /^[ \t]*/.exec(input.slice(lineStart, matchIndex + 1))[0].length;
     let cursor = lineEnd + 1;
     const collected = [];
     let end = lineEnd;
@@ -592,8 +689,31 @@ function nearbyLineText(m) {
   return before.slice(before.lastIndexOf('\n') + 1) + m[0] + (lineBreak === -1 ? after : after.slice(0, lineBreak));
 }
 
+// The value after `name =`, read at a given position: "quoted", 'quoted' or `quoted` (with backslash escapes)
+// in groups 1-3, otherwise the bare whitespace-free token in group 4.
+const valueAt = (bareMax) =>
+  new RegExp(
+    String.raw`"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|\x60((?:[^\x60\\\n]|\\.){0,4096})\x60|(\S{1,${bareMax}})`,
+    'y',
+  );
+const NESTED_VALUE_CHARS = 64;
+const VALUE_AT = valueAt(4096);
+const NESTED_VALUE_AT = valueAt(NESTED_VALUE_CHARS);
+
 /** Undo backslash escapes inside a quoted value (\" \\ \'), so an escaped quote cannot hide the rest of the string. */
 const unescapeQuoted = (text) => text.replace(/\\(.)/g, '$1');
+
+/**
+ * A password taken from a URL or `curl -u`. A password with no ${...} is judged as a whole. One with an expansion
+ * is judged like a secret-like assignment: a reference alone (${DB_PASSWORD}) passes, but a literal default
+ * (${DB_PASSWORD:-hunter2}) or literal text next to a reference (${A}suffix) is a candidate password.
+ */
+function urlPasswordIsSecret(password) {
+  if (!password.includes('${')) return !isPlaceholder(password);
+  if (expansionLiterals(password).some((literal) => !isPlaceholder(stripQuotes(literal)))) return true;
+  const glued = stripQuotes(withoutExpansions(password));
+  return glued !== '' && !isPlaceholder(glued);
+}
 
 /** Any secret-like environment variable name, strong or weak. */
 const isSecretLikeName = (name) => secretNameKind(name) !== null;
@@ -610,16 +730,17 @@ export const RULES = [
     description: 'URL (or curl -u) with an embedded non-placeholder password: database, broker, HTTP basic auth, ...',
     matchers: [
       {
-        pattern:
-          /(?<![A-Za-z0-9+.-])[a-z][a-z0-9+.-]{1,30}:\/\/([^\s:@/'"`]{0,64}):([^\s@/'"`]{1,256})@([^\s/'"`?#]{0,256})/gi,
-        accept: (m) => !isPlaceholder(m[2]) && !isDocumentationHost(m[3]),
+        // No length caps on user and password: a long one must not make the match fail. Each attempt starts at a
+        // "://" and cannot cross a "/", so the scan stays linear. Only the host (never judged) is capped.
+        pattern: /(?<=[a-z0-9+.-]):\/\/([^\s:@/'"`]*):([^\s@/'"`]+)@([^\s/'"`?#]{0,256})/gi,
+        accept: (m) => urlPasswordIsSecret(m[2]) && !isDocumentationHost(m[3]),
       },
       {
         // curl -u user:password https://...   (also --user)
-        pattern: /(?<![A-Za-z0-9_-])(?:-u|--user)(?:[ \t]+|=)["']?([^\s:"'`]{1,64}):([^\s"'`]{1,256})/g,
+        pattern: /(?<![A-Za-z0-9_-])(?:-u|--user)(?:[ \t]+|=)["']?([^\s:"'`]+):([^\s"'`]+)/g,
         // `-u root:root` is also docker's uid:gid, so the same line must mention an HTTP client or URL.
         accept: (m) =>
-          /curl|wget|https?:\/\//i.test(nearbyLineText(m)) && !isPlaceholder(m[2].replace(/[,;)]+$/, '')),
+          /curl|wget|https?:\/\//i.test(nearbyLineText(m)) && urlPasswordIsSecret(m[2].replace(/[,;)]+$/, '')),
       },
     ],
   },
@@ -738,7 +859,7 @@ export const RULES = [
     matchers: [
       {
         pattern:
-          /\b(?:(?:(?:alter|create)[ \t]+(?:user|role)\b[^;'\n]{0,160}?\b|with[ \t]+(?:encrypted[ \t]+)?|login[ \t]+)?password|identified[ \t]+by)[ \t]*=?[ \t]*'((?:[^'\n]|''){1,256})'/gi,
+          /\b(?:(?:(?:alter|create)[ \t]+(?:user|role)\b[^;'\n]{0,160}?\b|with[ \t]+(?:encrypted[ \t]+)?|login[ \t]+)?password|identified[ \t]+by)[ \t]*=?[ \t]*'((?:[^'\n]|''){1,4096})'/gi,
         accept: (m, ctx) => {
           // A bare `password '...'` is only SQL in a .sql file; elsewhere it is prose.
           if (/^password/i.test(m[0]) && !ctx.path.toLowerCase().endsWith('.sql')) return false;
@@ -754,26 +875,42 @@ export const RULES = [
     hint: SECRET_HINT,
     matchers: [
       {
-        // group 2 = name, 3 = separator, 4/5/6 = "quoted"/'quoted'/`quoted` (with backslash escapes), 7 = bare value
+        // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
+        // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
+        // matching resumes right after it, so `cfg['a']={"K":"v"}`, `x=1;K='v'` and minified JSON are still examined.
+        // Not a name: "${NAME:-x}" (an expansion, judged by its outer assignment) or "://NAME:x@" (a URL, judged by url-password).
         pattern:
-          /(?<![A-Za-z0-9_$.-])(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,80})\1(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40})?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|`((?:[^`\\\n]|\\.){0,4096})`|(\S{1,4096}))/g,
+          /(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'`])[ \t]*\])?(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40})?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?=\S)/g,
         accept: (m, ctx) => {
           const kind = secretNameKind(m[2]);
           if (!kind) return false;
-          const quotedValue = m[4] ?? m[5] ?? m[6];
+          const input = m.input;
+          const valueStart = m.index + m[0].length;
+          // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
+          // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
+          const nested = valueStart < (ctx.bareRunEnd ?? 0);
+          const reader = nested ? NESTED_VALUE_AT : VALUE_AT;
+          reader.lastIndex = valueStart;
+          const value = reader.exec(input);
+          if (!value) return false;
+          const quotedValue = value[1] ?? value[2] ?? value[3];
           const quoted = quotedValue !== undefined;
-          const check = (value, isQuoted) =>
-            isSecretValue({ kind, value, quoted: isQuoted, separator: m[3], mode: ctx.mode });
+          m.spanEnd = valueStart + value[0].length;
+          const check = (text, isQuoted) =>
+            isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode });
           if (quoted) return check(unescapeQuoted(quotedValue), true);
-          let token = m[7].replace(/^["'`]+/, '');
-          if (ctx.mode === 'config' && m[7].includes('${')) {
+          const bare = value[4];
+          if (!nested) ctx.bareRunEnd = valueStart + bare.length;
+          let token = bare.replace(/^["'`]+/, '');
+          if (ctx.mode === 'config' && bare.includes('${')) {
             // The value is the whole shell word, so ${A:-two words} and ${A}suffix stay in one piece.
-            const start = m.index + m[0].length - m[7].length;
-            token = m.input.slice(start, bareShellWordEnd(m.input, start));
+            const wordEnd = bareShellWordEnd(input, valueStart);
+            token = input.slice(valueStart, wordEnd);
+            m.spanEnd = Math.max(m.spanEnd, wordEnd);
           }
           if (check(token, false)) return true;
           if (ctx.mode !== 'config') return false;
-          for (const extra of unquotedContinuations(m, m[7], ctx.path)) {
+          for (const extra of unquotedContinuations(input, m.index, valueStart + bare.length, bare, ctx.path)) {
             if (check(extra.value, true)) {
               m.spanEnd = extra.end;
               return true;
@@ -784,7 +921,7 @@ export const RULES = [
       },
       {
         // Dockerfile "ENV NAME value" / "ARG NAME value" (space-separated; NAME=value is handled above)
-        pattern: /^[ \t]*(?:ENV|ARG)[ \t]+([A-Za-z_][A-Za-z0-9_]{0,80})[ \t]+([^\n]{1,4096})$/gim,
+        pattern: /^[ \t]*(?:ENV|ARG)[ \t]+([A-Za-z_][A-Za-z0-9_]{0,1023})[ \t]+([^\n]{1,4096})$/gim,
         accept: (m, ctx) => {
           if (!/(?:^|\/)(?:[^/]*dockerfile[^/]*|containerfile[^/]*)$/i.test(ctx.path)) return false;
           const kind = secretNameKind(m[1]);
@@ -804,7 +941,7 @@ export const RULES = [
       {
         // group 3 = variable name, 5/6 = quoted value, 7 = bare value
         pattern:
-          /(?<![A-Za-z0-9_$.-])(["']?)(?:name|key)\1[ \t]*:[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,80})\2[ \t]*,?[ \t]*(?:\r?\n[ \t-]*)?["']?value["']?[ \t]*:[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}]{1,4096}))/gi,
+          /(?<![A-Za-z0-9_$.-])(["']?)(?:name|key)\1[ \t]*:[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,1023})\2[ \t]*,?[ \t]*(?:\r?\n[ \t-]*)?["']?value["']?[ \t]*:[ \t]*(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}]{1,4096}))/gi,
         accept: (m, ctx) => {
           const kind = secretNameKind(m[3]);
           if (!kind) return false;
@@ -828,7 +965,7 @@ export const RULES = [
     hint: /\b(?:sign|verify)\b/,
     matchers: [
       {
-        pattern: /\b(?:jwt|jsonwebtoken|jws)\.(?:sign|verify)\(([^;]{0,300}?),[ \t]*(["'`])([^"'`\n]{8,256})\2/g,
+        pattern: /\b(?:jwt|jsonwebtoken|jws)\.(?:sign|verify)\(([^;]{0,300}?),[ \t]*(["'`])([^"'`\n]{8,4096})\2/g,
         accept: (m) => isSecondArgument(m[1]) && looksRandom(m[3], GATES.codeStrong),
       },
     ],
@@ -843,8 +980,8 @@ export const RULES = [
       {
         // group 1 = .NAME, 3 = ["NAME"], 5 = literal
         pattern: new RegExp(
-          String.raw`${ENV_ROOT}(?:\.([A-Za-z_$][A-Za-z0-9_$]{0,80})|\[\s*(["'\x60])([^"'\x60\]\n]{1,80})\2\s*\])\s*(?:\|\||\?\?)\s*` +
-            String.raw`(["'\x60])([^"'\x60\n]{1,512})\4`,
+          String.raw`${ENV_ROOT}(?:\.([A-Za-z_$][A-Za-z0-9_$]{0,1023})|\[\s*(["'\x60])([^"'\x60\]\n]{1,1023})\2\s*\])\s*(?:\|\||\?\?)\s*` +
+            String.raw`(["'\x60])([^"'\x60\n]{1,4096})\4`,
           'g',
         ),
         accept: (m) => isSecretLikeName(m[1] ?? m[3]) && !m[5].includes('${'),
@@ -853,13 +990,13 @@ export const RULES = [
         // destructuring defaults: const { NAME = "x" } = process.env, with a secret-like NAME
         pattern: new RegExp(String.raw`\{([^{}]{1,500})\}\s*=\s*${ENV_ROOT}\b`, 'g'),
         accept: (m) => {
-          const entry = /(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*=\s*(["'`])([^"'`\n]{1,512})\2/g;
+          const entry = /(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]{0,1023})\s*=\s*(["'`])([^"'`\n]{1,4096})\2/g;
           return [...m[1].matchAll(entry)].some((e) => isSecretLikeName(e[1]) && !e[3].includes('${'));
         },
       },
       {
         // Python defaults: os.getenv("NAME", "x") and os.environ.get("NAME", "x"), with a secret-like NAME
-        pattern: /\b(?:os\.environ\.get|os\.getenv|environ\.get|getenv)\(\s*(["'])([A-Za-z0-9_]{1,80})\1\s*,\s*(["'])([^"'\n]{1,512})\3/g,
+        pattern: /\b(?:os\.environ\.get|os\.getenv|environ\.get|getenv)\(\s*(["'])([A-Za-z0-9_]{1,1023})\1\s*,\s*(["'])([^"'\n]{1,4096})\3/g,
         accept: (m) => isSecretLikeName(m[2]),
       },
     ],
@@ -921,12 +1058,12 @@ function scanRanges(filePath, text) {
     if (rule.hint && !rule.hint.test(text)) continue;
     for (const matcher of rule.matchers) {
       for (const match of text.matchAll(matcher.pattern)) {
-        if (matcher.accept && !matcher.accept(match, ctx)) continue;
-        if (isPathSample(ctx.path, match[0])) continue;
         newlines ??= buildNewlineIndex(text);
         const line = lineAt(newlines, match.index);
         const key = `${rule.id}:${line}`;
-        if (seen.has(key)) continue;
+        if (seen.has(key)) continue; // already reported for this line: nothing to decide, and it keeps a hostile line cheap
+        if (matcher.accept && !matcher.accept(match, ctx)) continue;
+        if (isPathSample(ctx.path, text.slice(match.index, match.spanEnd ?? match.index + match[0].length))) continue;
         // The marker may sit on any line the match spans (a match can run across lines).
         const lastLine = lineAt(newlines, match.index + Math.max((match.spanEnd ?? match.index + match[0].length) - match.index - 1, 0));
         let allowed = false;
@@ -963,43 +1100,114 @@ function readHead(absolutePath) {
   }
 }
 
+const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+
+/** A path for messages and for the file-mode rules. Valid UTF-8 as is; otherwise every byte above 0x7e is shown as \xNN. */
+function displayPath(raw) {
+  try {
+    return strictUtf8.decode(raw);
+  } catch {
+    return raw.toString('latin1').replace(/[\u007f-ÿ]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+  }
+}
+
 /**
- * Scan every git-tracked file under `root`.
- * @returns {{findings: object[], scanned: number, skipped: Record<string, number>, oversize: string[]}}
- *   `oversize` lists text files above the size limit: they were NOT scanned, which the CLI treats as a failure.
+ * Every tracked path from `git ls-files -s -z`, as raw bytes. The list is NUL-delimited and never decoded as a
+ * whole: a file name may hold bytes that are not UTF-8 (allowed on Unix), and a lossy decode would name a file
+ * that does not exist. Unmerged paths appear once per stage and are listed once.
+ * @returns {{raw: Buffer, mode: string, sha: string}[]}
+ */
+function listTracked(root) {
+  const out = git(['ls-files', '-s', '-z'], root);
+  const entries = new Map();
+  let start = 0;
+  while (start < out.length) {
+    let end = out.indexOf(0, start);
+    if (end === -1) end = out.length;
+    const record = out.subarray(start, end);
+    start = end + 1;
+    if (record.length === 0) continue;
+    const tab = record.indexOf(9);
+    const [mode, sha] = tab === -1 ? [] : record.subarray(0, tab).toString('latin1').split(' ');
+    if (!mode || !sha) throw new Error('git ls-files printed a record this scanner cannot parse');
+    const raw = Buffer.from(record.subarray(tab + 1));
+    const key = raw.toString('latin1');
+    if (!entries.has(key)) entries.set(key, { raw, mode, sha });
+  }
+  return [...entries.values()];
+}
+
+/**
+ * Scan every git-tracked file under `root`, working-tree content (what CI checked out).
+ *  - lockfiles (exact names), gitlinks (submodule commit pointers: no content here) and files with binary
+ *    content are skipped on purpose, and counted in `skipped`;
+ *  - a symlink is scanned as its link target;
+ *  - a file the index lists but the working tree no longer has (deleted, or skip-worktree) is scanned from the
+ *    index blob instead, so nothing tracked goes unexamined (`fromIndex` names them; a CI checkout has none);
+ *  - a file that exists but cannot be read (permissions, wrong type, I/O error) is NOT scanned and is listed in
+ *    `unreadable`; a text file over the size limit is listed in `oversize`. The CLI fails on both.
+ * @returns {{findings: object[], scanned: number, skipped: Record<string, number>, oversize: string[], unreadable: string[], fromIndex: string[]}}
  */
 export function scanTree(root) {
-  const files = git(['ls-files', '-z'], root).toString('utf8').split('\0').filter(Boolean);
   const findings = [];
   const skipped = {};
   const oversize = [];
+  const unreadable = [];
+  const fromIndex = [];
   let scanned = 0;
   const skip = (reason) => {
     skipped[reason] = (skipped[reason] ?? 0) + 1;
   };
-  for (const file of files) {
+  const rootBytes = Buffer.from(root);
+  for (const { raw, mode, sha } of listTracked(root)) {
+    const file = displayPath(raw);
     if (shouldSkipPath(file)) {
       skip('lockfile');
       continue;
     }
-    const absolute = path.join(root, file);
-    let text;
+    if (mode === '160000') {
+      skip('submodule');
+      continue;
+    }
+    const absolute = Buffer.concat([rootBytes, Buffer.from(path.sep), raw]);
+    let bytes;
+    let missing = false;
     try {
       const stat = lstatSync(absolute);
-      if (!stat.isFile()) {
-        skip('symlink or submodule');
+      if (mode === '120000') {
+        if (!stat.isSymbolicLink()) throw new Error('not a symlink');
+        bytes = readlinkSync(absolute, 'buffer');
+      } else {
+        if (!stat.isFile()) throw new Error('not a regular file');
+        if (stat.size > MAX_FILE_BYTES) {
+          if (isBinaryContent(readHead(absolute))) skip('binary');
+          else oversize.push(file);
+          continue;
+        }
+        bytes = readFileSync(absolute);
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        unreadable.push(file);
         continue;
       }
-      if (stat.size > MAX_FILE_BYTES) {
-        if (decodeText(readHead(absolute)) === null) skip('binary');
+      missing = true;
+    }
+    if (missing) {
+      try {
+        bytes = git(['cat-file', 'blob', sha], root);
+        fromIndex.push(file);
+      } catch {
+        unreadable.push(file);
+        continue;
+      }
+      if (bytes.length > MAX_FILE_BYTES) {
+        if (isBinaryContent(bytes)) skip('binary');
         else oversize.push(file);
         continue;
       }
-      text = decodeText(readFileSync(absolute));
-    } catch {
-      skip('unreadable or deleted');
-      continue;
     }
+    const text = decodeText(bytes);
     if (text === null) {
       skip('binary');
       continue;
@@ -1007,7 +1215,7 @@ export function scanTree(root) {
     scanned += 1;
     findings.push(...scanText(file, text));
   }
-  return { findings, scanned, skipped, oversize };
+  return { findings, scanned, skipped, oversize, unreadable, fromIndex };
 }
 
 /** Decode a path git printed C-style quoted ("b/we\"ird/a.env", octal escapes for control bytes). */
@@ -1050,7 +1258,8 @@ const HISTORY_CONTEXT = 2;
  * name next to a new value) but a match made only of context lines belongs to an earlier commit.
  * Merge commits are shown as combined diffs (--cc), so only lines that the merge itself introduced
  * (conflict resolutions) are scanned; everything else was added by a parent and is reported there.
- * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number}>}
+ * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, unscanned: number}>}
+ * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
  */
 async function scanHistory(root) {
   const child = spawn(
@@ -1074,6 +1283,7 @@ async function scanHistory(root) {
   const hits = new Map();
   let commits = 0;
   let oversize = 0;
+  let unscanned = 0; // file versions whose added lines were NOT examined, for any reason (oversize included)
   let commit = null;
   let file = null;
   let inHunk = false;
@@ -1082,12 +1292,15 @@ async function scanHistory(root) {
   let addedLines = new Set(); // 1-based indexes into `lines` of the lines this commit added
 
   const flush = () => {
-    if (commit && file && addedLines.size > 0 && !shouldSkipPath(file)) {
+    if (commit && !file && addedLines.size > 0) {
+      unscanned += 1; // added lines under a header this parser could not attribute to a path
+    } else if (commit && file && addedLines.size > 0 && !shouldSkipPath(file)) {
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
       if (text.includes('\u0000')) text = text.replace(/[\u0000�]/g, '');
       if (text.length > MAX_FILE_BYTES) {
         oversize += 1;
+        unscanned += 1;
       } else {
         for (const finding of scanRanges(file, text)) {
           let touchesAddedLine = false;
@@ -1116,6 +1329,8 @@ async function scanHistory(root) {
       file = null;
       inHunk = false;
       parents = 1;
+    } else if (!inHunk && line.startsWith('Binary files ')) {
+      unscanned += 1; // git refused to show this version's content (for example above core.bigFileThreshold)
     } else if (line.startsWith('@@')) {
       inHunk = true;
       parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
@@ -1153,7 +1368,7 @@ async function scanHistory(root) {
 
   const code = await exited;
   if (code !== 0) throw new Error(`git log failed with exit code ${code}${summarizeStderr(stderr)}`);
-  return { hits: [...hits.values()], commits, oversize };
+  return { hits: [...hits.values()], commits, oversize, unscanned };
 }
 
 // ---------------------------------------------------------------------------
@@ -1189,8 +1404,22 @@ export function formatOversizeReport(paths) {
   ].join('\n');
 }
 
+const describeUnscanned = (unscanned, oversize) =>
+  `${unscanned} file version${unscanned === 1 ? '' : 's'} NOT scanned` +
+  (oversize > 0 ? ` (${oversize} over the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit)` : '') +
+  ', so this audit is incomplete.';
+
+/** Format the tracked files that could not be read. */
+export function formatUnreadableReport(paths) {
+  return [
+    `check-secrets: ${paths.length} tracked file${paths.length === 1 ? '' : 's'} could NOT be read, so ${paths.length === 1 ? 'it was' : 'they were'} NOT scanned:`,
+    ...paths.map((p) => `  ${printable(p)}`),
+    'An unreadable file is never treated as clean. Fix its permissions or type (or remove it from git), then run again.',
+  ].join('\n');
+}
+
 /** Format history-scan hits: commit, path, rule and counts only. */
-export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0 } = {}) {
+export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize } = {}) {
   const lines = [];
   if (shallow) {
     lines.push(
@@ -1199,9 +1428,7 @@ export function formatHistoryReport(hits, { commits = 0, shallow = false, oversi
       '',
     );
   }
-  if (oversize > 0) {
-    lines.push(`warning: ${oversize} file version${oversize === 1 ? '' : 's'} skipped because of the size limit.`, '');
-  }
+  if (unscanned > 0) lines.push(`warning: ${describeUnscanned(unscanned, oversize)}`, '');
   const distinctCommits = new Set(hits.map((h) => h.commit)).size;
   lines.push(
     `check-secrets --history: ${hits.length} hit${hits.length === 1 ? '' : 's'} in ${distinctCommits} of ${commits} commit${commits === 1 ? '' : 's'} (values are never printed)`,
@@ -1264,17 +1491,24 @@ export async function main(
         git(['rev-parse', '--git-dir'], cwd);
       }
       const shallow = git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true';
-      const { hits, commits, oversize } = await scanHistory(root);
+      const { hits, commits, oversize, unscanned } = await scanHistory(root);
       if (hits.length > 0) {
-        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize })}\n`);
+        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, unscanned })}\n`);
         return 1;
       }
-      const warnings = `${shallow ? 'warning: shallow clone, partial history only.\n' : ''}${oversize > 0 ? `warning: ${oversize} file version${oversize === 1 ? '' : 's'} skipped because of the size limit.\n` : ''}`;
-      stdout.write(`${warnings}check-secrets --history: no hits in ${commits} commits\n`);
+      // An audit that did not look at everything is never reported as clean.
+      const gaps = [];
+      if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize));
+      if (shallow) gaps.push('this is a shallow clone, so only part of the history was available. Run "git fetch --unshallow" or scan a full clone.');
+      if (gaps.length > 0) {
+        stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
+        return 2;
+      }
+      stdout.write(`check-secrets --history: no hits in ${commits} commits\n`);
       return 0;
     }
 
-    const { findings, scanned, skipped, oversize } = scanTree(findRepoRoot(cwd));
+    const { findings, scanned, skipped, oversize, unreadable, fromIndex } = scanTree(findRepoRoot(cwd));
     let failed = false;
     if (findings.length > 0) {
       stderr.write(`${formatReport(findings)}\n`);
@@ -1284,9 +1518,14 @@ export async function main(
       stderr.write(`${formatOversizeReport(oversize)}\n`);
       failed = true;
     }
+    if (unreadable.length > 0) {
+      stderr.write(`${formatUnreadableReport(unreadable)}\n`);
+      failed = true;
+    }
     if (failed) return 1;
     const { total, detail } = describeSkipped(skipped);
-    stdout.write(`check-secrets: OK (${scanned} files scanned, ${total} skipped${detail})\n`);
+    const indexNote = fromIndex.length > 0 ? `, ${fromIndex.length} missing from the working tree and scanned from the index` : '';
+    stdout.write(`check-secrets: OK (${scanned} files scanned, ${total} skipped${detail}${indexNote})\n`);
     return 0;
   } catch (error) {
     stderr.write(`check-secrets: ${error.message}\n`);
@@ -1295,10 +1534,14 @@ export async function main(
 }
 
 function isDirectRun() {
+  const entry = process.argv[1];
+  if (!entry) return false; // imported (or run from stdin): the caller drives main()
+  const self = fileURLToPath(import.meta.url);
   try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+    return realpathSync(entry) === realpathSync(self);
   } catch {
-    return false;
+    // Never fall back to "not the entry point": that would exit 0 without scanning anything.
+    return path.resolve(entry) === self;
   }
 }
 

@@ -12,7 +12,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -24,6 +24,8 @@ import {
   formatHistoryReport,
   formatOversizeReport,
   formatReport,
+  formatUnreadableReport,
+  isBinaryContent,
   isPlaceholder,
   scanText,
   secretNameKind,
@@ -47,6 +49,7 @@ const UPPER_ALNUM = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const HEX = '0123456789abcdef';
 const DIGITS = '0123456789';
 const BASE64 = `${ALNUM}+/`;
+const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
 const PASSWORD_MANAGER = `${ALNUM}!$*-_.~+=^`;
 
 /** Deterministic pseudo-random string so failures are reproducible. */
@@ -1209,6 +1212,122 @@ describe('documentation sample is compared as the whole value', () => {
   });
 });
 
+describe('review round 5: URL password expansions and quoted property names', () => {
+  const value = randomString(20, 501);
+  const name = secretName('JWT_', 'SECRET');
+  const scheme = ['post', 'gresql'].join('');
+  const urlLine = (password, file = '.env.prod') => scanText(file, `DATABASE_URL=${scheme}://user:${password}@prod.internal/db\n`).map((f) => f.rule);
+  const ref = (n) => `$` + `{${n}}`;
+  const withDefault = (n, literal) => `$` + `{${n}:-${literal}}`;
+
+  it('flags a literal default inside an expansion in a URL password', () => {
+    expect(urlLine(withDefault('DB_PASSWORD', value))).toEqual(['url-password']);
+    expect(urlLine(`$` + `{DB_PASSWORD-${value}}`)).toEqual(['url-password']);
+    expect(urlLine(`$` + `{DB_PASSWORD:=${value}}`)).toEqual(['url-password']);
+    expect(urlLine(`$` + `{DB_PASSWORD:+${value}}`)).toEqual(['url-password']);
+  });
+
+  it('flags a literal nested in an expansion, and literal text next to a reference', () => {
+    expect(urlLine(`$` + `{OUTER:-` + withDefault('INNER', value) + `}`)).toEqual(['url-password']);
+    expect(urlLine(`${ref('DB_PASSWORD')}${value}`)).toEqual(['url-password']);
+    expect(urlLine(`${value}${ref('DB_PASSWORD')}`)).toEqual(['url-password']);
+  });
+
+  it('flags a literal default in a curl -u password too', () => {
+    const line = `curl -u admin:${withDefault('API_PW', value)} https://api.internal/x\n`;
+    expect(scanText('deploy.sh', line).map((f) => f.rule)).toEqual(['url-password']);
+    expect(scanText('deploy.sh', `curl -u admin:${ref('API_PW')} https://api.internal/x\n`)).toEqual([]);
+  });
+
+  it('negative controls: a pure reference, or a placeholder default, still passes', () => {
+    expect(urlLine(ref('DB_PASSWORD'))).toEqual([]);
+    expect(urlLine('$DB_PASSWORD')).toEqual([]);
+    expect(urlLine(`$` + `{DB_PASSWORD:?set it}`)).toEqual([]);
+    expect(urlLine(withDefault('DB_PASSWORD', 'changeme'))).toEqual([]);
+    expect(urlLine(withDefault('DB_PASSWORD', ref('OTHER')))).toEqual([]);
+    expect(urlLine(`${ref('A')}:${ref('B')}`.replace(':', ''))).toEqual([]);
+  });
+
+  it('does not let a long user name or password stop the URL match', () => {
+    const longUser = randomString(200, 502, LOWER);
+    const longPassword = randomString(900, 503);
+    expect(scanText('.env.prod', `U=${scheme}://${longUser}:${value}@prod.internal/db\n`).map((f) => f.rule)).toEqual(['url-password']);
+    expect(scanText('.env.prod', `U=${scheme}://user:${longPassword}@prod.internal/db\n`).map((f) => f.rule)).toEqual(['url-password']);
+    expect(scanText('.env.prod', `U=${scheme}://user:${'x'.repeat(900)}@prod.internal/db\n`)).toEqual([]);
+  });
+
+  it('flags a secret-like name assigned through a quoted property', () => {
+    const q = { single: "'", double: '"', backtick: '`' };
+    for (const [label, quote] of Object.entries(q)) {
+      const bracket = `config[${quote}${name}${quote}] = ${quote}${value}${quote};\n`;
+      expect(scanText('config.js', bracket).map((f) => f.rule), label).toEqual(['secret-assignment']);
+    }
+    for (const text of [
+      `obj?.['${name}'] = '${value}';\n`,
+      `a.b['c']['${name}'] = '${value}';\n`,
+      `a['b'].c["${name}"] = "${value}";\n`,
+      `config[ '${name}' ] = '${value}';\n`,
+      `module.exports['${name}'] = '${value}'\n`,
+      `const o = { ['${name}']: '${value}' };\n`,
+      `settings["${name}"] := "${value}"\n`,
+    ]) {
+      expect(scanText('config.ts', text).map((f) => f.rule), text.replace(value, 'V')).toEqual(['secret-assignment']);
+    }
+  });
+
+  it('applies the same value rules to bracket notation', () => {
+    expect(scanText('config.js', `config['${name}'] = 'your_secret_here';\n`)).toEqual([]);
+    expect(scanText('config.js', `config['${name}'] = process.env.${name};\n`)).toEqual([]);
+    expect(scanText('config.js', `config['${name}'] = getSecret();\n`)).toEqual([]);
+    expect(scanText('config.js', `config['title'] = '${value}';\n`)).toEqual([]);
+    expect(scanText('config.js', `x = ['${name}', '${value}'];\n`)).toEqual([]);
+  });
+
+  it('still sees a secret name and a fallback literal longer than the old length caps', () => {
+    const longName = `${'A_'.repeat(60)}${name}`;
+    expect(scanText('.env', `${longName}=${value}\n`).map((f) => f.rule)).toEqual(['secret-assignment']);
+    const longFallback = randomString(700, 504);
+    expect(scanText('app.js', `const s = process.env.${name} || '${longFallback}';\n`).map((f) => f.rule)).toEqual(['hardcoded-secret-fallback']);
+  });
+});
+
+describe('review round 6: a rejected assignment must not hide the one after it', () => {
+  const value = randomString(22, 601);
+  const name = secretName('JWT_', 'SECRET');
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+  const shapes = {
+    'py dict after a non-secret bracket assignment': ['s.py', `settings["auth"] = {"${name}": "${value}"}\n`],
+    'py dict() after a bracket assignment': ['s.py', `CONFIG["auth"] = dict(${name}="${value}")\n`],
+    'py single quotes, no spaces': ['s.py', `cfg['auth']={'${name}':'${value}'}\n`],
+    'js object with an unquoted key': ['s.js', `cfg['auth'] = {${name}: '${value}'};\n`],
+    'minified JSON': ['c.json', `{"port":3000,"${name}":"${value}"}\n`],
+    'nested minified JSON': ['c.json', `{"a":{"${name}":"${value}"}}\n`],
+    'one-line JSON env block': ['c.json', `{"env":{"${name}":"${value}"}}\n`],
+    'statement after a statement': ['a.js', `x=1;${name}='${value}';\n`],
+    'object literal without spaces': ['a.js', `c = {'${name}': '${value}'};\n`],
+    'module.exports object': ['a.js', `module.exports={${name}:'${value}'};\n`],
+    'call arguments': ['a.js', `f(x=1,${name}='${value}');\n`],
+    'bracket then bracket': ['a.js', `env['PORT']=3;env['${name}']='${value}';\n`],
+    'chained bracket assignment': ['a.js', `cfg['x']=cfg['${name}']='${value}';\n`],
+    'YAML flow mapping': ['a.yml', `env: {PORT: 3, ${name}: ${value}}\n`],
+    'inside a quoted value of a non-secret key': ['a.yml', `run: "${name}=${value} node app.js"\n`],
+  };
+
+  it.each(Object.entries(shapes))('flags a secret in: %s', (_label, [file, text]) => {
+    expect(rules(file, text)).toContain('secret-assignment');
+  });
+
+  it.each(Object.entries(shapes))('a placeholder value passes in: %s', (_label, [file, text]) => {
+    expect(rules(file, text.replace(value, 'your_secret_here'))).toEqual([]);
+  });
+
+  it('does not treat an expansion default or a URL user as a second assignment', () => {
+    const ref = `$` + `{OTHER_SECRET}`;
+    expect(rules('docker.env', `${name}=$` + `{${name}:-${ref}}\n`)).toEqual([]);
+    expect(rules('a.env', `DATABASE_URL=${['post', 'gresql'].join('')}://password:${value}@prod.internal/db\n`)).toEqual(['url-password']);
+  });
+});
+
 describe('isPlaceholder', () => {
   it.each([
     '',
@@ -1336,7 +1455,7 @@ describe('redaction', () => {
     });
     expect(report).toContain('aaaaaaa  .env  jwt-token  x2');
     expect(report).toContain('shallow clone');
-    expect(report).toContain('1 file version skipped');
+    expect(report).toContain('1 file version NOT scanned');
   });
 
   it('the oversize report names paths only', () => {
@@ -1356,6 +1475,9 @@ describe('scan time', () => {
     ['token. repeated in Markdown', 'notes.md', repeat('token.', HUNDRED_KB)],
     ['api_key repeated in an env file', '.env', repeat('api_key', HUNDRED_KB)],
     ['name= repeated in an env file', '.env', repeat('secret=', HUNDRED_KB)],
+    ['weak name= chain (nested assignments)', '.env', repeat('secret_hint=', HUNDRED_KB)],
+    ['weak name= chain in Markdown', 'a.md', repeat('token_url=', HUNDRED_KB)],
+    ['a=b= chain', 'a.js', repeat('a=', HUNDRED_KB)],
     ['process.env.SECRET repeated in code', 'a.js', repeat('process.env.SECRET', HUNDRED_KB)],
     ['process.env.SECRET_TOKEN_ repeated in code', 'a.js', repeat('process.env.SECRET_TOKEN_', HUNDRED_KB)],
     ['one very long env name', 'a.js', `process.env.${'SECRET'.repeat(HUNDRED_KB / 6)}`],
@@ -1437,7 +1559,30 @@ describe('decodeText', () => {
   it('still calls real binary content binary', () => {
     const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]), Buffer.alloc(200, 0)]);
     expect(decodeText(png)).toBeNull();
-    expect(decodeText(Buffer.from([1, 2, 0, 3, 0, 0, 9, 8, 0, 7, 0, 0, 1]))).toBeNull();
+    // ...but a NUL alone is not proof: without a known binary signature the bytes are decoded, NULs removed.
+    expect(decodeText(Buffer.from([1, 2, 0, 3, 0, 0, 9, 8, 0, 7, 0, 0, 1]))).toBe('\u0001\u0002\u0003\u0009\u0008\u0007\u0001');
+  });
+
+  it('a stray NUL does not make a text file binary, wherever it sits', () => {
+    expect(decodeText(Buffer.from(`\0${text}`))).toBe(text);
+    expect(decodeText(Buffer.from(`${text}\0`))).toBe(text);
+    expect(decodeText(Buffer.from(`API_\0KEY=abcdef\n`))).toBe('API_KEY=abcdef\n');
+    expect(isBinaryContent(Buffer.from(`\0${text}`))).toBe(false);
+    expect(isBinaryContent(PNG_HEAD)).toBe(true);
+  });
+
+  it('decodes UTF-32 with a BOM and without one (LE and BE)', () => {
+    const codepoints = [...text].map((c) => c.codePointAt(0));
+    const le = Buffer.alloc(codepoints.length * 4);
+    const be = Buffer.alloc(codepoints.length * 4);
+    codepoints.forEach((cp, i) => {
+      le.writeUInt32LE(cp, i * 4);
+      be.writeUInt32BE(cp, i * 4);
+    });
+    expect(decodeText(Buffer.concat([Buffer.from([0xff, 0xfe, 0, 0]), le]))).toBe(text);
+    expect(decodeText(Buffer.concat([Buffer.from([0, 0, 0xfe, 0xff]), be]))).toBe(text);
+    expect(decodeText(le)).toBe(text);
+    expect(decodeText(be)).toBe(text);
   });
 });
 
@@ -1504,7 +1649,7 @@ describe('CLI', () => {
     write(dir, 'README.md', 'nothing here\n');
     // Skipped on purpose: lockfile and real binary content.
     write(dir, 'package-lock.json', assignment);
-    write(dir, 'blob.dat', `\u0000\u0000${assignment}`);
+    write(dir, 'blob.dat', Buffer.concat([PNG_HEAD, Buffer.from(assignment)]));
     run('git', ['add', '-A'], dir);
 
     const result = scan(dir);
@@ -1543,7 +1688,7 @@ describe('CLI', () => {
   it.skipIf(!hasGit())('says how many files were skipped and why', () => {
     const dir = makeRepo();
     write(dir, 'package-lock.json', '{}\n');
-    write(dir, 'blob.dat', '\u0000\u0000\u0000binary\n');
+    write(dir, 'blob.dat', Buffer.concat([PNG_HEAD, Buffer.from('binary\n')]));
     write(dir, 'src/app.js', 'export const x = 1;\n');
     run('git', ['add', '-A'], dir);
     const result = scan(dir);
@@ -1556,7 +1701,7 @@ describe('CLI', () => {
   it.skipIf(!hasGit())('fails, and names the file, when a text file is too large to scan', () => {
     const dir = makeRepo();
     write(dir, 'data/big.json', `${'{"a":1}\n'.repeat(700 * 1024)}`);
-    write(dir, 'data/big.bin', Buffer.alloc(6 * 1024 * 1024, 0).toString('latin1'));
+    write(dir, 'data/big.bin', Buffer.concat([PNG_HEAD, Buffer.alloc(6 * 1024 * 1024, 0)]));
     run('git', ['add', '-A'], dir);
     const result = scan(dir);
     expect(result.status).toBe(1);
@@ -1786,6 +1931,194 @@ describe('CLI', () => {
     const result = scan(dir, '--history');
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('no hits in 3 commits');
+  });
+
+
+  // ---- review round 5: nothing tracked may go unexamined ----
+
+  const RAW_NAME = Buffer.concat([Buffer.from('bad-'), Buffer.from([0xff]), Buffer.from('.env')]);
+  const rawPath = (dir) => Buffer.concat([Buffer.from(`${dir}${path.sep}`), RAW_NAME]);
+  const canCreateRawName = (() => {
+    const probe = mkdtempSync(path.join(tmpdir(), 'check-secrets-probe-'));
+    try {
+      writeFileSync(rawPath(probe), 'x');
+      return true;
+    } catch {
+      return false;
+    } finally {
+      rmSync(probe, { recursive: true, force: true });
+    }
+  })();
+  const RAW_SKIP_REASON = 'this file system cannot create a file name that is not valid UTF-8';
+
+  it.skipIf(!hasGit() || !canCreateRawName)(`scans a tracked file whose name is not valid UTF-8 (${RAW_SKIP_REASON})`, () => {
+    const dir = makeRepo();
+    writeFileSync(rawPath(dir), assignment);
+    run('git', ['add', '-A'], dir);
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(':1  secret-assignment');
+    expect(result.stderr).toContain('bad-\\xff.env');
+    expect(result.stdout).not.toContain('OK');
+  });
+
+  it.skipIf(!hasGit() || !canCreateRawName)(`a clean non-UTF-8 file name is counted as scanned, not skipped (${RAW_SKIP_REASON})`, () => {
+    const dir = makeRepo();
+    writeFileSync(rawPath(dir), 'A=1\n');
+    run('git', ['add', '-A'], dir);
+    const result = scan(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/1 files scanned, 0 skipped/);
+  });
+
+  it.skipIf(!hasGit())('fails, and names the count, when a tracked file exists but cannot be read (here: a directory took its place)', () => {
+    const dir = makeRepo();
+    write(dir, 'config.env', assignment);
+    write(dir, 'ok.js', 'export const x = 1;\n');
+    run('git', ['add', '-A'], dir);
+    rmSync(path.join(dir, 'config.env'));
+    mkdirSync(path.join(dir, 'config.env'));
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('1 tracked file could NOT be read');
+    expect(result.stderr).toContain('config.env');
+    expect(result.stdout).not.toContain('OK');
+  });
+
+  it.skipIf(!hasGit())('a tracked file that is deleted in the working tree is scanned from the index, so a staged secret still fails', () => {
+    const dir = makeRepo();
+    write(dir, 'gone.env', assignment);
+    run('git', ['add', '-A'], dir);
+    rmSync(path.join(dir, 'gone.env'));
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('gone.env:1  secret-assignment');
+  });
+
+  it.skipIf(!hasGit())('a clean deleted-but-listed file passes and the summary says it came from the index', () => {
+    const dir = makeRepo();
+    write(dir, 'gone.env', 'A=1\n');
+    write(dir, 'kept.js', 'export const x = 1;\n');
+    run('git', ['add', '-A'], dir);
+    rmSync(path.join(dir, 'gone.env'));
+    const result = scan(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('2 files scanned');
+    expect(result.stdout).toContain('1 missing from the working tree and scanned from the index');
+  });
+
+  it.skipIf(!hasGit() || process.platform === 'win32')('scans the target text of a tracked symlink instead of skipping it', () => {
+    const dir = makeRepo();
+    symlinkSync(assignment.trim(), path.join(dir, 'link.env'));
+    run('git', ['add', '-A'], dir);
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('link.env:1  secret-assignment');
+  });
+
+  it('the unreadable report names the count and paths only', () => {
+    const report = formatUnreadableReport(['a.env', 'b.env']);
+    expect(report).toContain('2 tracked files could NOT be read');
+    expect(report).toContain('  b.env');
+  });
+
+  function makeBigVersionRepo() {
+    const dir = makeRepo();
+    write(dir, 'big.env', `${assignment}${'X=1\n'.repeat(1_400_000)}`); // over 5 MB, secret on line 1
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'add big file').status).toBe(0);
+    write(dir, 'big.env', 'X=1\n');
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'shrink it').status).toBe(0);
+    return dir;
+  }
+
+  it.skipIf(!hasGit())('--history is NOT clean (exit 2, no "no hits") when an added version was too large to scan', () => {
+    const dir = makeBigVersionRepo();
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(2);
+    expect(`${result.stdout}${result.stderr}`).not.toContain('no hits');
+    expect(result.stderr).toContain('INCOMPLETE');
+    expect(result.stderr).toContain('1 file version NOT scanned');
+    expect(result.stderr).toContain('1 over the 5 MB limit');
+  });
+
+  it.skipIf(!hasGit())('--history still reports hits (exit 1) and the gap when both happen', () => {
+    const dir = makeBigVersionRepo();
+    write(dir, '.env', assignment);
+    run('git', ['add', '-A'], dir);
+    expect(commit(dir, 'add config').status).toBe(0);
+    const result = scan(dir, '--history');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('.env  secret-assignment  x1');
+    expect(result.stderr).toContain('NOT scanned');
+  });
+
+  it.skipIf(!hasGit())('--history on a shallow clone is incomplete (exit 2), not "no hits"', () => {
+    const source = makeRepo();
+    write(source, 'a.txt', 'one\n');
+    run('git', ['add', '-A'], source);
+    expect(commit(source, 'one').status).toBe(0);
+    write(source, 'a.txt', 'two\n');
+    run('git', ['add', '-A'], source);
+    expect(commit(source, 'two').status).toBe(0);
+    const shallow = path.join(source, '..', `${path.basename(source)}-shallow`);
+    dirs.push(shallow);
+    expect(run('git', ['clone', '-q', '--depth=1', `file://${source}`, shallow], source).status).toBe(0);
+    const result = scan(shallow, '--history');
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('shallow clone');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('no hits');
+  });
+
+  it('the history report counts versions that were not scanned', () => {
+    const report = formatHistoryReport([{ commit: 'a'.repeat(40), path: '.env', rule: 'jwt-token', count: 1 }], {
+      commits: 3,
+      oversize: 1,
+      unscanned: 2,
+    });
+    expect(report).toContain('2 file versions NOT scanned (1 over the 5 MB limit)');
+  });
+
+  const utf32 = (text, { bom = false, littleEndian = true } = {}) => {
+    const cps = [...text].map((c) => c.codePointAt(0));
+    const out = Buffer.alloc(cps.length * 4);
+    cps.forEach((cp, i) => (littleEndian ? out.writeUInt32LE(cp, i * 4) : out.writeUInt32BE(cp, i * 4)));
+    const mark = littleEndian ? [0xff, 0xfe, 0, 0] : [0, 0, 0xfe, 0xff];
+    return bom ? Buffer.concat([Buffer.from(mark), out]) : out;
+  };
+
+  it.skipIf(!hasGit())('a stray NUL byte does not exempt a text file (before or after the secret)', () => {
+    for (const content of [`\0${assignment}`, `${assignment}\0`, `FOO=1\n\0\n${assignment}`]) {
+      const dir = makeRepo();
+      write(dir, '.env', content);
+      run('git', ['add', '-A'], dir);
+      const result = scan(dir);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('.env:');
+      expect(result.stdout).not.toContain('OK');
+    }
+  });
+
+  it.skipIf(!hasGit())('scans UTF-32 files with and without a BOM', () => {
+    for (const options of [{ bom: true }, { bom: true, littleEndian: false }, {}, { littleEndian: false }]) {
+      const dir = makeRepo();
+      write(dir, '.env', utf32(assignment, options));
+      run('git', ['add', '-A'], dir);
+      const result = scan(dir);
+      expect(result.status, JSON.stringify(options)).toBe(1);
+      expect(result.stderr).toContain('.env:1  secret-assignment');
+    }
+  });
+
+  it.skipIf(!hasGit())('an over-limit file with a NUL near the start is reported as oversize, not skipped as binary', () => {
+    const dir = makeRepo();
+    write(dir, 'big.env', `\0${assignment}${'X=1\n'.repeat(1_400_000)}`);
+    run('git', ['add', '-A'], dir);
+    const result = scan(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('big.env');
+    expect(result.stderr).toContain('NOT scanned');
   });
 
   it('--help exits 0 and unknown arguments exit 2', () => {
