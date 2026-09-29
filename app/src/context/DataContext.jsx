@@ -271,19 +271,22 @@ export function DataProvider({ children }) {
   const signOut = useCallback(async () => {
     if (!uid) { await logout(); return; }
     let pending;
+    let conflicts;
     try {
-      pending = await repo.getPendingSync();
+      [pending, conflicts] = await Promise.all([repo.getPendingSync(), repo.getConflictedYields()]);
     } catch {
       // IndexedDB unavailable — sign out directly rather than leaving the user stuck.
       await logout();
       return;
     }
     const { calcs, yields } = pending;
-    if (calcs.length === 0 && yields.length === 0) {
+    // Conflicted yields haven't reached the server either.
+    const unsentYields = yields.length + conflicts.length;
+    if (calcs.length === 0 && unsentYields === 0) {
       try { await repo.clearSyncedCache(); } catch { /* best-effort */ }
       await logout();
     } else {
-      setSignOutGuardState({ calcs: calcs.length, yields: yields.length });
+      setSignOutGuardState({ calcs: calcs.length, yields: unsentYields });
     }
   }, [uid, repo, logout]);
 
