@@ -2,6 +2,8 @@
 
 Reviewed at commit `d6ee642` on 2026-09-28. Six parallel reviews covered design and UX, functionality and architecture, security and privacy, sign-up and auth, hosting economics and interoperability, and open-source and community readiness. Their key claims were checked against the code before being combined here.
 
+> **Superseded in part (2026-09-29):** the architecture, sign-up and hosting recommendations below (Hono + Postgres, provider-neutral OIDC, keeping Vercel) were replaced by the decision to use Firebase Auth, Firestore and Firebase Hosting with no server of our own. See `CONTEXT.md` and `docs/adr/0001`–`0004` (#122); the work is tracked in #123–#133. The bug findings and the design, open-source and data-licensing sections still apply.
+
 > A separate security and privacy review was shared privately with the maintainer. Its fixes will land as ordinary PRs.
 
 ## Summary
