@@ -59,14 +59,23 @@ const Tooltip = ({ text, label, iconOnly = false, children }) => {
         aria-label={label}
         aria-describedby={show ? bubbleId : undefined}
         aria-expanded={show}
-        className={`cursor-help rounded text-left ${iconOnly ? '-m-2.5 p-2.5' : ''}`}
+        className={`cursor-help rounded text-left ${
+          // 44px hit area without moving the layout: padding out, negative margin back in
+          iconOnly
+            ? '-m-[13px] p-[13px]'
+            : "relative before:absolute before:-inset-2.5 before:content-['']"
+        }`}
         onPointerDown={(e) => { lastPointer.current = e.pointerType; }}
         onPointerEnter={(e) => { if (e.pointerType === 'mouse') setShow(true); }}
         onPointerLeave={(e) => { if (e.pointerType === 'mouse') setShow(false); }}
         onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setShow(true); }}
         onBlur={() => setShow(false)}
         onKeyDown={(e) => { if (e.key === 'Escape') setShow(false); }}
-        onClick={() => { if (lastPointer.current !== 'mouse') setShow((s) => !s); }}
+        onClick={(e) => {
+          // detail === 0 means keyboard or assistive-tech activation: always open (Esc closes)
+          if (e.detail === 0) setShow(true);
+          else if (lastPointer.current !== 'mouse') setShow((s) => !s);
+        }}
       >
         {children}
       </button>
@@ -450,7 +459,7 @@ const Calculator = () => {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <div className="mb-1.5 flex items-center gap-1.5">
+                <div className="mb-1.5 flex items-center gap-2.5">
                   <label htmlFor="calc-from" className="text-sm font-semibold text-text-primary">What you have</label>
                   <Tooltip
                     iconOnly
@@ -473,7 +482,7 @@ const Calculator = () => {
               </div>
 
               <div>
-                <div className="mb-1.5 flex items-center gap-1.5">
+                <div className="mb-1.5 flex items-center gap-2.5">
                   <label htmlFor="calc-to" className="text-sm font-semibold text-text-primary">What you're making</label>
                   <Tooltip
                     iconOnly
@@ -705,50 +714,53 @@ const Calculator = () => {
           </div>
         </form>
 
-        {/* Result: announced to screen readers and scrolled into view when it appears */}
-        <div aria-live="polite" ref={resultRef} className="scroll-mt-20">
-          {result !== null && (
-            <div className="mt-6 rounded-xl border-2 border-brand-teal bg-brand-teal/5 p-5 dark:border-accent dark:bg-brand-teal/15">
-              <p className="text-sm font-semibold text-text-secondary">
-                {mode === 'cost' ? `Your cost per lb of ${toState}` : `You need to buy (${fromState})`}
-              </p>
-              <p className="mt-1 text-5xl font-bold tabular-nums tracking-tight text-accent">
-                {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(1)} lbs`}
-              </p>
-              <p className="mt-2 text-base text-text-secondary">
-                {mode === 'cost'
-                  ? `At ${yieldPercent}% yield from ${fromState} to ${toState}`
-                  : `${result.toFixed(1)} lbs of ${fromState} makes ${targetWeight} lbs of ${toState}`
-                }
-              </p>
-
-              {user ? (
-                <div className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <button type="button" onClick={handleSave} className="btn-secondary">
-                    <Save size={18} aria-hidden="true" /> Save calculation
-                  </button>
-                  <button type="button" onClick={handleExport} className="btn-ghost">
-                    <Download size={16} aria-hidden="true" /> CSV
-                  </button>
-                  <button type="button" onClick={handleExportXlsx} className="btn-ghost">
-                    <Download size={16} aria-hidden="true" /> Excel
-                  </button>
-                  {saveStatus && (
-                    <span
-                      role="status"
-                      className={`text-sm font-semibold ${saveStatus === 'Saved!' ? 'text-success' : 'text-danger'}`}
-                    >
-                      {saveStatus}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-text-secondary">
-                  Want to keep this? <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your calculations.
-                </p>
+        {/* Result: the live region stays mounted (so the first result is announced) and holds only the
+            answer. Actions and save status live outside it to avoid duplicate announcements. */}
+        <div ref={resultRef} className="scroll-mt-20">
+          <div className={result !== null ? 'mt-6 rounded-xl border-2 border-brand-teal bg-brand-teal/5 p-5 dark:border-accent dark:bg-brand-teal/15' : ''}>
+            <div aria-live="polite">
+              {result !== null && (
+                <>
+                  <p className="text-sm font-semibold text-text-secondary">
+                    {mode === 'cost' ? `Your cost per lb of ${toState}` : `You need to buy (${fromState})`}
+                  </p>
+                  <p className="mt-1 text-5xl font-bold tabular-nums tracking-tight text-accent">
+                    {mode === 'cost' ? `$${result.toFixed(2)}` : `${result.toFixed(1)} lbs`}
+                  </p>
+                  <p className="mt-2 text-base text-text-secondary">
+                    {mode === 'cost'
+                      ? `At ${yieldPercent}% yield from ${fromState} to ${toState}`
+                      : `${result.toFixed(1)} lbs of ${fromState} makes ${targetWeight} lbs of ${toState}`
+                    }
+                  </p>
+                </>
               )}
             </div>
-          )}
+
+            {result !== null && (user ? (
+              <div className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <button type="button" onClick={handleSave} className="btn-secondary">
+                  <Save size={18} aria-hidden="true" /> Save calculation
+                </button>
+                <button type="button" onClick={handleExport} className="btn-ghost">
+                  <Download size={16} aria-hidden="true" /> CSV
+                </button>
+                <button type="button" onClick={handleExportXlsx} className="btn-ghost">
+                  <Download size={16} aria-hidden="true" /> Excel
+                </button>
+                <span
+                  role="status"
+                  className={`text-sm font-semibold ${saveStatus === 'Saved!' ? 'text-success' : 'text-danger'}`}
+                >
+                  {saveStatus}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-text-secondary">
+                Want to keep this? <Link to="/login" className="font-semibold text-link underline">Sign in</Link> to save your calculations.
+              </p>
+            ))}
+          </div>
         </div>
       </div>
 

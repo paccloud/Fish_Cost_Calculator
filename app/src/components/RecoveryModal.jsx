@@ -63,7 +63,7 @@ export default function RecoveryModal({ calcs, yields, isAuthenticated, assignin
               <button
                 onClick={onDiscard}
                 disabled={assigning}
-                className="px-4 py-2 text-sm font-medium text-danger hover:text-red-400 border border-line rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5 disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Discard
@@ -92,7 +92,7 @@ export default function RecoveryModal({ calcs, yields, isAuthenticated, assignin
               </button>
               <button
                 onClick={onDiscard}
-                className="px-4 py-2 text-sm font-medium text-danger hover:text-red-400 border border-line rounded transition flex items-center gap-1.5"
+                className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5"
               >
                 <Trash2 size={14} />
                 Discard

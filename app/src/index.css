@@ -69,6 +69,11 @@
     outline-color: #f7c648;
   }
 
+  /* ...but popovers rendered inside the navbar (sync details) sit on a normal surface */
+  .focus-on-dark [role="dialog"] :focus-visible {
+    outline-color: var(--color-focus);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
