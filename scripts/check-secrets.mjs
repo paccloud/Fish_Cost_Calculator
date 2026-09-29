@@ -45,10 +45,18 @@
  *     kubeconfig, .htpasswd, .my.cnf, .s3cfg, Terraform, .curlrc, .vault-token) have path-specific matchers
  *     (rule credential-file) and a 4-character value minimum; netrc, pgpass and docker auth are also recognised by
  *     content in any file (notes, scripts that write them).
+ *   - Shell syntaxes with no "=" are read too: fish `set -gx NAME value ...`, csh `setenv NAME value`, Windows `setx` and
+ *     `set "NAME=value"`, `export NAME value`, PowerShell `$env:NAME = 'v'` / SetEnvironmentVariable / Set-Item Env:NAME, fish_variables
+ *     SETUVAR lines, in shell scripts, config files, heredocs written into them and fenced Markdown blocks.
+ *   - Literals over several lines are judged like a quoted value: TOML/Python triple quotes, HCL/Ruby/Perl/PHP heredocs, PowerShell
+ *     here-strings, template literals, quotes closed on a later line, backslash / INI continuation lines, YAML scalars on the next line.
+ *     They are read up to 200 lines / 32 KB; a literal that does not end within that is reported (fail closed).
  *   - Name and value fields in one JSON/YAML/HCL/XML object or call are matched in either order (secret-name-value-pair),
  *     and secrets passed on a command line (gh secret set, vercel env add, aws ssm put-parameter, ...) are their own rule.
  *
  * The index blob AND the working-tree file are both scanned whenever they differ (compared by git blob id).
+ * --history and --range skip a file version that is verified binary (the same test as above, on the version's own first 8 KB) and
+ * count it as skipped, so a large image never fails a run as "oversize"; a text version over the size limit still exits 2.
  *
  * --history is for the repository owner to run locally. CI does NOT run it: the known
  * leak from issue #22 lives in history forever and would fail every build. A shallow
@@ -881,8 +889,8 @@ function unquotedContinuations(ctx, input, matchIndex, tokenEnd, token) {
 const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
-  '.json5', '.sh', '.bash', '.zsh', '.fish', '.tf', '.tfvars', '.hcl', '.example', '.sample', '.template',
-  '.dist', '.cnf', '.tfstate', '.kubeconfig',
+  '.json5', '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.tf', '.tfvars', '.hcl', '.example',
+  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig',
 ]);
 // XML configuration formats: Maven settings.xml and pom.xml, Ant, Tomcat server.xml, Android strings.xml, .NET
 // web.config / app.config (.config is above), MSBuild (.csproj, .props, .targets), .plist, .resx, .wsdl. These hold settings
@@ -916,6 +924,9 @@ export function isXmlConfigPath(filePath) {
 
 const CONFIG_BASENAMES = new Set([
   '.npmrc', '.yarnrc', '.netrc', '.pgpass', '.envrc', 'makefile', 'gnumakefile', 'procfile', 'credentials', 'config',
+  // Shell start-up files have no extension: `export API_TOKEN=...` in them is a setting, not a code expression.
+  '.bashrc', '.bash_profile', '.bash_login', '.bash_aliases', '.profile', '.zshrc', '.zshenv', '.zprofile', '.zlogin',
+  '.kshrc', '.cshrc', '.tcshrc', '.login', 'fish_variables',
 ]);
 
 const NETRC_NAME = /(?:^|[._-])netrc(?:$|[._-])/;
@@ -1024,7 +1035,7 @@ function nearbyLineText(m) {
 // in groups 1-3, otherwise the bare whitespace-free token in group 4.
 const valueAt = (bareMax) =>
   new RegExp(
-    String.raw`"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|\x60((?:[^\x60\\\n]|\\.){0,4096})\x60|(\S{1,${bareMax}})`,
+    String.raw`"((?:[^"\\\n]|\\[\s\S]){0,4096})"|'((?:[^'\\\n]|\\[\s\S]){0,4096})'|\x60((?:[^\x60\\\n]|\\[\s\S]){0,4096})\x60|(\S{1,${bareMax}})`,
     'y',
   );
 const NESTED_VALUE_CHARS = 64;
@@ -1032,7 +1043,7 @@ const VALUE_AT = valueAt(4096);
 const NESTED_VALUE_AT = valueAt(NESTED_VALUE_CHARS);
 
 /** Undo backslash escapes inside a quoted value (\" \\ \'), so an escaped quote cannot hide the rest of the string. */
-const unescapeQuoted = (text) => text.replace(/\\(.)/g, '$1');
+const unescapeQuoted = (text) => text.replace(/\\\r?\n[ \t]*/g, '').replace(/\\(.)/g, '$1');
 
 /**
  * A password taken from a URL or `curl -u`. A password with no ${...} is judged as a whole. One with an expansion
@@ -1775,6 +1786,382 @@ function onCommentLine(m, ctx) {
   return /^[ \t]*#/.test(m.input.slice(start, m.index + 1));
 }
 
+// ---------------------------------------------------------------------------
+// Command-style assignments: shell syntaxes that set a variable WITHOUT "name=value"
+//   fish   set -gx NAME value [value ...]        csh/tcsh  setenv NAME value       Windows  setx NAME value, set "NAME=value"
+//   sh     export NAME value                     PowerShell  $env:NAME = 'v', [Environment]::SetEnvironmentVariable('NAME','v'),
+//   fish universal variables file   SETUVAR --export NAME:value            Set-Item Env:NAME 'v'
+// Judged like every other assignment (same name kinds, placeholder and passphrase logic), in shell-like contexts only:
+// shell script and config files, fenced blocks of Markdown, and the distinctive forms (a flagged fish `set`, setenv, setx,
+// PowerShell) anywhere, so a script written by heredoc into a YAML step or a Python string is read too.
+// ---------------------------------------------------------------------------
+
+const SHELL_SCRIPT_EXTENSIONS = new Set(['.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.ps1', '.psm1', '.nu', '.envrc']);
+const SHELL_FENCE_LANGS = /^(?:|sh|bash|zsh|fish|ksh|csh|tcsh|shell|shellscript|shell-session|console|terminal|bat|batch|cmd|powershell|pwsh|ps1|posh|nu|nushell|dockerfile|docker|yaml|yml|env|dotenv|ini|toml|makefile|make|text|txt|plaintext)$/i;
+const SHELL_DOTFILE = /^\.(?:bash|zsh|ksh|csh|tcsh)?[a-z_]*(?:rc|profile|login|zshenv|aliases)$/;
+const isShellScriptPath = (filePath) => {
+  const base = path.posix.basename(filePath.split(path.sep).join('/')).toLowerCase();
+  return SHELL_SCRIPT_EXTENSIONS.has(path.posix.extname(base)) || SHELL_DOTFILE.test(base);
+};
+
+// What may stand before a command on its line: nothing, a list dash, a run-like YAML key, a prompt, RUN, `@` (batch), an
+// opening quote; or a separator / `-c` / then / do when the command follows another one.
+const COMMAND_AT_LINE_START = /^[ \t]*(?:[-*][ \t]+)?(?:(?:run|script|command|cmd|entrypoint|shell|args):[ \t]+)?(?:RUN[ \t]+|[$>%][ \t]+|@)?["']?$/i;
+const COMMAND_AFTER_SEPARATOR = /(?:[;&|({"'`]|\b(?:then|do|else|and|or|begin)|[ \t]-c|--command)[ \t]*["']?$/;
+// `export A B` exports the variables A and B: words shaped like variable names (UPPER_SNAKE or lower_snake) are names, not a value.
+const SHELL_VARIABLE_NAME = /^(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_]*)$/;
+const SHELL_REFERENCE = /^(?:\$[A-Za-z_{(@*#?0-9]|%[^%\s]{1,100}%$|![^!\s]{1,100}!$)/;
+
+/** The blank-separated words of the rest of one line, quotes honoured (see the class comment above). At most 32 words, 4096 characters. */
+function shellTail(input, start) {
+  let end = input.indexOf('\n', start);
+  if (end === -1 || end - start > 4096) end = Math.min(input.length, start + 4096);
+  const line = input.slice(start, end).replace(/\r$/, '');
+  const words = [];
+  let text = null;
+  let quoted = false;
+  let expr = false; // the word holds a command substitution or a group: a reference, not a literal
+  let quote = null;
+  let openLength = 0;
+  let depth = 0;
+  let tick = false;
+  const push = () => {
+    if (text !== null) words.push({ text, quoted, expr: expr || text.includes('$(') });
+    text = null;
+    quoted = false;
+    expr = false;
+  };
+  let i = 0;
+  for (; i < line.length && words.length < 32; i += 1) {
+    const ch = line[i];
+    if (quote !== null) {
+      if (ch === '\\' && quote === '"' && i + 1 < line.length) {
+        text += line[i + 1];
+        i += 1;
+      } else if (ch === quote) quote = null;
+      else text += ch;
+    } else if (tick) {
+      if (ch === '`') tick = false;
+      text += ch;
+    } else if (depth > 0) {
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      text += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      openLength = (text ?? '').length;
+      text ??= '';
+      quoted = true;
+    } else if (ch === '`') {
+      tick = true;
+      expr = true;
+      text = (text ?? '') + ch;
+    } else if (ch === '(') {
+      depth = 1;
+      expr = true;
+      text = (text ?? '') + ch;
+    } else if (ch === ' ' || ch === '\t') push();
+    else if (ch === ';' || ch === '&' || ch === '|' || ch === '>' || ch === '<' || (ch === '#' && text === null)) break;
+    else if (ch === '\\' && i + 1 < line.length) {
+      text = (text ?? '') + line[i + 1];
+      i += 1;
+    } else text = (text ?? '') + ch;
+  }
+  // A quote that never closes belongs to the string around the command (`fish -c "set -gx NAME 'v'"`): what it opened is dropped.
+  if (quote !== null) {
+    text = text.slice(0, openLength);
+    quoted = false;
+    if (text === '') text = null;
+  }
+  push();
+  return words;
+}
+
+/** Is any word (or all of them together, as one passphrase) a secret value for a name of this kind? */
+function shellWordsAreSecret(kind, words, ctx) {
+  const literal = words.filter(
+    (w) => !w.expr && !SHELL_REFERENCE.test(w.text) && !/^\(.*\)$/.test(w.text) && !(!w.quoted && (w.text === '=' || /^\/[A-Za-z]$/.test(w.text))),
+  );
+  const judge = (value, quoted) =>
+    isSecretValue({ kind, value, quoted, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
+  if (literal.some((w) => (w.text !== '' || w.quoted) && judge(w.text, w.quoted))) return true;
+  // fish: `set -gx NAME correct horse battery staple` is a list, and a passphrase written without quotes.
+  return literal.length > 1 && literal.length === words.length && judge(literal.map((w) => w.text).join(' '), true);
+}
+
+/** Is the command at `index` in a place a command can start (see COMMAND_AT_LINE_START)? */
+function startsCommand(m, ctx) {
+  const lineStart = ctx.lineStart(m.index);
+  if (m.index - lineStart > 400) return COMMAND_AFTER_SEPARATOR.test(m.input.slice(m.index - 400, m.index));
+  const before = m.input.slice(lineStart, m.index);
+  return COMMAND_AT_LINE_START.test(before) || COMMAND_AFTER_SEPARATOR.test(before);
+}
+
+/**
+ * May a command-style assignment at this match be judged? `distinctive` syntax (a fish set with flags, setenv, setx, the
+ * PowerShell forms) is judged in every kind of file except plain prose, where only fenced blocks count. The bare
+ * `set NAME value` / `export NAME value` also need a shell-like file, a fenced shell block, or a run-like line.
+ */
+function commandContextOk(m, ctx, distinctive) {
+  if (ctx.mode === 'prose') return ctx.fenceLang(m.index) !== undefined && SHELL_FENCE_LANGS.test(ctx.fenceLang(m.index));
+  if (!startsCommand(m, ctx)) return false;
+  if (distinctive) return true;
+  if (isShellScriptPath(ctx.path)) return true;
+  const before = m.input.slice(Math.max(ctx.lineStart(m.index), m.index - 400), m.index);
+  return /(?:^[ \t]*(?:[-*][ \t]+)?(?:run|script|command|cmd|entrypoint|shell|args):[ \t]+|^[ \t]*RUN[ \t]+|[$>][ \t]+|[;&|({][ \t]*|\b(?:then|do)[ \t]+|[ \t]-c[ \t]+)["']?$/i.test(before);
+}
+
+/** The value of a PowerShell string literal starting at `start` ('...' doubles its quote; "..." escapes with a backtick), or null. */
+function powershellString(input, start) {
+  const quote = input[start];
+  if (quote !== "'" && quote !== '"') return null;
+  let out = '';
+  for (let i = start + 1; i < input.length && i - start < 4098; i += 1) {
+    const ch = input[i];
+    if (ch === '\n') return null;
+    if (ch === quote) {
+      if (input[i + 1] === quote) {
+        out += quote;
+        i += 1;
+      } else return { text: out, end: i + 1, expandable: quote === '"' };
+    } else if (ch === '`' && quote === '"' && i + 1 < input.length) {
+      out += input[i + 1];
+      i += 1;
+    } else out += ch;
+  }
+  return null;
+}
+
+/** A PowerShell literal is a candidate value unless it is a variable or a sub-expression ("$env:HOME", "$($x.Token)"). */
+function powershellValueIsSecret(kind, literal, ctx) {
+  if (literal === null || SHELL_REFERENCE.test(literal.text) || literal.text.includes('$(')) return false;
+  return isSecretValue({ kind, value: literal.text, quoted: true, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
+}
+
+/** fish `set` flags that read or remove a variable instead of assigning it (-e -q -S -n -h and their long forms). */
+function fishFlagsAssign(flags) {
+  return !flags.split(/[ \t]+/).some((flag) => (flag.startsWith('--') ? /^--(?:erase|query|show|names|help|list)$/.test(flag) : /^-[A-Za-z]*[eqSnh]/.test(flag)));
+}
+
+// ---------------------------------------------------------------------------
+// Values that span lines
+//   TOML """...""" and '''...''' (also Python, Kotlin, Java text blocks), HCL / Ruby / Perl / PHP heredocs (<<EOF, <<-EOF, <<~EOS,
+//   <<"EOF", <<<EOT), PowerShell here-strings (@' ... '@), JS / Go template and raw literals (`...` over several lines),
+//   shell / dotenv / YAML quotes that are closed on a later line, backslash continuations (properties files, shell, JSON5),
+//   INI continuation lines and YAML plain scalars folded over indented lines.
+// The body is judged like a quoted value: each line, and all lines joined by a blank. Every read is bounded (lines, characters,
+// and a per-file budget); when a bound is hit before the literal ends, the assignment is reported (fail closed).
+// ---------------------------------------------------------------------------
+
+const MULTILINE_MAX_LINES = 200;
+const MULTILINE_MAX_CHARS = 32_768;
+const MULTILINE_BUDGET_CHARS = 24_000_000; // per file: characters the multi-line readers may look at before the file is reported
+const TRIPLE_QUOTE = /[rRbBfFuU]{0,2}("""|''')/y;
+const HEREDOC_OPENER = /<<(?:<|[-~])?(["']?)([A-Za-z_][A-Za-z0-9_]{0,63})\1/y;
+const HERE_STRING_OPENER = /@(["'])[ \t]*\r?\n/y;
+
+/** The lines of a multi-line literal as candidate values: every non-blank line, trimmed, and all of them joined by a blank. */
+function bodyValues(body) {
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+  return lines.length > 1 ? [...lines, lines.join(' ')] : lines;
+}
+
+/** Charge `n` characters against the file's multi-line budget. False once it is used up. */
+function spendMultiline(ctx, n) {
+  ctx.multilineBudget = (ctx.multilineBudget ?? MULTILINE_BUDGET_CHARS) - n;
+  return ctx.multilineBudget >= 0;
+}
+
+/** The literal does not end within the bounds (or the file's budget is gone: `budget`): it cannot be verified, so it is reported. */
+function exhaustedLiteral(ctx, input, from) {
+  const budget = !spendMultiline(ctx, MULTILINE_MAX_CHARS);
+  return { values: [], end: Math.min(input.length, from + MULTILINE_MAX_CHARS), exhausted: true, budget };
+}
+const budgetSpent = (ctx) => (ctx.multilineBudget ?? MULTILINE_BUDGET_CHARS) < 0;
+
+/**
+ * The verdict for a multi-line read that ran out of a bound: reported at the first such literal of a file, and once the file's
+ * whole budget is gone, once (the run fails on one finding; nothing more is read).
+ */
+function exhaustedVerdict(m, ctx, read) {
+  if (!read.budget) return true;
+  if (ctx.multilineReported) return false;
+  ctx.multilineReported = true;
+  attributeToFile(m);
+  return true;
+}
+
+/**
+ * Index of the closing `quote` of a string body that starts at `from`, or -1 when it does not close within the bounds.
+ * `escapes`: a backslash makes the next character part of the string (so an escaped quote does not close it).
+ * `pair`: a doubled quote is one quote of the content (YAML 'it''s'). `tripled`: the closing delimiter is three quotes.
+ * `stop`: do not look at or beyond this index.
+ */
+function closingQuote(input, from, quote, { escapes, pair = false, tripled = false, stop = input.length }) {
+  const limit = Math.min(stop, from + MULTILINE_MAX_CHARS);
+  let lines = 0;
+  for (let i = from; i < limit; i += 1) {
+    const ch = input[i];
+    if (ch === '\n') {
+      lines += 1;
+      if (lines > MULTILINE_MAX_LINES) return -1;
+    } else if (ch === '\\' && escapes) i += 1;
+    else if (ch === quote) {
+      if (tripled) {
+        if (input[i + 1] === quote && input[i + 2] === quote) return i;
+      } else if (pair && input[i + 1] === quote) i += 1;
+      else return i;
+    }
+  }
+  return -1;
+}
+
+/** Undo the escapes of a multi-line basic string: a line-ending backslash joins the lines, and \x is x. */
+const unescapeMultiline = (text) => text.replace(/\\\r?\n[ \t\r\n]*/g, '').replace(/\\(.)/g, '$1');
+
+/**
+ * A literal that starts at `valueStart` and runs over more than one line (or is written in a form the one-line value reader
+ * cannot see), or null when the value is an ordinary one-line value.
+ * @returns {{values: string[], end: number, exhausted: boolean} | null}
+ */
+function multilineValue(ctx, input, valueStart) {
+  const first = input[valueStart];
+  // TOML / Python / Kotlin triple quotes, on one line or several.
+  TRIPLE_QUOTE.lastIndex = valueStart;
+  const triple = TRIPLE_QUOTE.exec(input);
+  if (triple !== null) {
+    if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+    const quote = triple[1];
+    const bodyStart = valueStart + triple[0].length;
+    const literalToml = quote === "'''" && /\.toml$/i.test(ctx.path);
+    const close = closingQuote(input, bodyStart, quote[0], { escapes: !literalToml, tripled: true });
+    if (close === -1 || !spendMultiline(ctx, close - bodyStart)) return exhaustedLiteral(ctx, input, bodyStart);
+    const raw = input.slice(bodyStart, close).replace(/^\r?\n/, '');
+    const isRawString = /[rR]/.test(triple[0].slice(0, -3));
+    return { values: bodyValues(quote === '"""' && !isRawString ? unescapeMultiline(raw) : raw), end: close + 2, exhausted: false };
+  }
+  // Heredocs: HCL <<EOF / <<-EOF, Ruby <<~EOS, Perl <<"EOT", PHP <<<EOT. The body starts on the line after the opener.
+  if (first === '<') {
+    HEREDOC_OPENER.lastIndex = valueStart;
+    const opener = HEREDOC_OPENER.exec(input);
+    if (opener !== null) {
+      const lineEnd = input.indexOf('\n', valueStart + opener[0].length);
+      if (lineEnd === -1) return null;
+      if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+      const indented = /^<<(?:<|[-~])/.test(opener[0]);
+      const tag = opener[2];
+      const body = [];
+      let at = lineEnd + 1;
+      for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length; n += 1) {
+        let next = input.indexOf('\n', at);
+        if (next === -1) next = input.length;
+        const line = input.slice(at, next).replace(/\r$/, '');
+        const head = indented ? line.trimStart() : line;
+        if (head.startsWith(tag) && /^[ \t;,)]*$/.test(head.slice(tag.length))) {
+          if (!spendMultiline(ctx, next - lineEnd)) return exhaustedLiteral(ctx, input, lineEnd);
+          return { values: bodyValues(body.join('\n')), end: next, exhausted: false };
+        }
+        body.push(line);
+        if (next >= input.length || next - lineEnd > MULTILINE_MAX_CHARS) break;
+        at = next + 1;
+      }
+      return exhaustedLiteral(ctx, input, lineEnd);
+    }
+  }
+  // PowerShell here-string: @' ... '@ and @" ... "@ (the closing mark starts a line).
+  if (first === '@') {
+    HERE_STRING_OPENER.lastIndex = valueStart;
+    const opener = HERE_STRING_OPENER.exec(input);
+    if (opener !== null) {
+      if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+      const bodyStart = valueStart + opener[0].length;
+      const window = input.slice(bodyStart, bodyStart + MULTILINE_MAX_CHARS);
+      const found = new RegExp(String.raw`^${opener[1]}@`, 'm').exec(window);
+      if (found === null || !spendMultiline(ctx, found.index)) return exhaustedLiteral(ctx, input, bodyStart);
+      return { values: bodyValues(window.slice(0, found.index)), end: bodyStart + found.index + 1, exhausted: false };
+    }
+  }
+  // A template / raw literal over several lines: JS `...`, Go `...`. (One line is read as an ordinary quoted value.)
+  if (first === '`' && ctx.mode === 'code') {
+    if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+    const close = closingQuote(input, valueStart + 1, '`', { escapes: true });
+    if (close === -1) return exhaustedLiteral(ctx, input, valueStart);
+    const body = input.slice(valueStart + 1, close);
+    if (!body.includes('\n')) return null;
+    if (!spendMultiline(ctx, body.length)) return exhaustedLiteral(ctx, input, valueStart);
+    return { values: bodyValues(body.replace(/\\\r?\n[ \t]*/g, '')).filter((line) => !line.includes('${')), end: close, exhausted: false };
+  }
+  // A quote that is not closed on its line: shell NAME='a<newline>b', dotenv and YAML flow scalars over several lines.
+  if ((first === '"' || first === "'") && ctx.mode === 'config') {
+    const lineEnd = ctx.lineEnd(valueStart);
+    const sameLine = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", stop: lineEnd });
+    if (sameLine !== -1) return null;
+    if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+    const close = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'" });
+    if (close === -1 || !spendMultiline(ctx, close - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
+    const body = input.slice(valueStart + 1, close);
+    return { values: bodyValues(first === '"' ? unescapeMultiline(body) : body.replace(/''/g, "'")), end: close, exhausted: false };
+  }
+  return null;
+}
+
+const ENDS_IN_BACKSLASH = /(?:^|[^\\])(?:\\\\)*\\$/;
+
+/**
+ * The lines that continue an unquoted value of a configuration file after its first line:
+ *  - a trailing backslash (properties files, shell scripts): the next line follows without a break;
+ *  - an INI value (configparser) or a YAML plain scalar folded over indented lines: the following lines indented deeper than the key.
+ * @returns {{values: string[], end: number, exhausted: boolean} | null}
+ */
+function continuedValue(ctx, input, matchIndex, valueStart) {
+  const lineEnd = ctx.lineEnd(valueStart);
+  const first = input.slice(valueStart, Math.min(lineEnd, valueStart + 4096)).replace(/\r$/, '');
+  const pieces = [];
+  let end = lineEnd;
+  if (ENDS_IN_BACKSLASH.test(first)) {
+    if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+    pieces.push(first.slice(0, -1));
+    let at = lineEnd + 1;
+    let closed = false;
+    for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length; n += 1) {
+      let next = input.indexOf('\n', at);
+      if (next === -1) next = input.length;
+      const line = input.slice(at, Math.min(next, at + 4096)).replace(/\r$/, '');
+      end = next;
+      const more = ENDS_IN_BACKSLASH.test(line);
+      pieces.push((more ? line.slice(0, -1) : line).trimStart());
+      if (!more || next >= input.length) {
+        closed = true;
+        break;
+      }
+      at = next + 1;
+    }
+    if (!closed) return exhaustedLiteral(ctx, input, valueStart);
+    if (!spendMultiline(ctx, end - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
+    return { values: [pieces.join(''), ...pieces.map((piece) => piece.trim()).filter((piece) => piece !== '')], end, exhausted: false };
+  }
+  if (!/\.(?:ini|cfg|conf|ya?ml)$/i.test(ctx.path)) return null;
+  if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
+  const yaml = /\.ya?ml$/i.test(ctx.path);
+  const lineStart = ctx.lineStart(matchIndex);
+  const keyIndent = /^[ \t]*/.exec(input.slice(lineStart, matchIndex + 1))[0].length;
+  let at = lineEnd + 1;
+  for (let n = 0; n < 20 && at <= input.length; n += 1) {
+    let next = input.indexOf('\n', at);
+    if (next === -1) next = input.length;
+    const line = input.slice(at, Math.min(next, at + 4096)).replace(/\r$/, '');
+    if (line.trim() === '' || /^[ \t]*[#;]/.test(line) || /^[ \t]*/.exec(line)[0].length <= keyIndent) break;
+    if (yaml && /^[ \t]*(?:[^\s#][^:]*:(?:[ \t]|$)|-[ \t])/.test(line)) break; // a mapping entry or a list item, not a folded scalar
+    pieces.push(line.trim());
+    end = next;
+    if (next >= input.length) break;
+    at = next + 1;
+  }
+  if (pieces.length === 0) return null;
+  if (!spendMultiline(ctx, end - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
+  return { values: [`${first.trim()} ${pieces.join(' ')}`.trim(), ...pieces], end, exhausted: false };
+}
+
 const hasFormat = (tag) => (ctx) => ctx.formats.has(tag);
 
 /** Any secret-like environment variable name, strong or weak. */
@@ -2376,6 +2763,16 @@ export const RULES = [
             const properties = YAML_NODE_PROPERTIES.exec(input);
             if (properties) valueStart += properties[0].length;
           }
+          // A literal over several lines (heredoc, triple quotes, a quote closed on a later line, a template literal) is judged
+          // as a whole. One that does not end within the bounds is reported: it cannot be verified.
+          const multiline = multilineValue(ctx, input, valueStart);
+          if (multiline !== null) {
+            m.spanEnd = multiline.end;
+            if (multiline.exhausted) return exhaustedVerdict(m, ctx, multiline);
+            return multiline.values.some((text) =>
+              isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
+            );
+          }
           // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
           // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
           const nested = valueStart < (ctx.bareRunEnd ?? 0);
@@ -2386,6 +2783,8 @@ export const RULES = [
           const quotedValue = value[1] ?? value[2] ?? value[3];
           const quoted = quotedValue !== undefined;
           m.spanEnd = valueStart + value[0].length;
+          // `NAME=\`cat file\`` in a shell script is a command substitution, not a string literal (in code it is a template literal).
+          if (value[3] !== undefined && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false;
           const check = (text, isQuoted) =>
             isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
           if (quoted) return check(unescapeQuoted(quotedValue), true);
@@ -2398,8 +2797,16 @@ export const RULES = [
             token = input.slice(valueStart, wordEnd);
             m.spanEnd = Math.max(m.spanEnd, wordEnd);
           }
+          if (bare.startsWith('`') && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false; // an unquoted command substitution
           if (ctx.mode !== 'config') return check(token, false);
           const extras = unquotedContinuations(ctx, input, m.index, valueStart + bare.length, bare);
+          // A backslash at the end of the line, an INI continuation line, a YAML scalar folded over indented lines.
+          const continued = /^[|>][-+0-9]*$/.test(bare) ? null : continuedValue(ctx, input, m.index, valueStart);
+          if (continued !== null) {
+            m.spanEnd = continued.end;
+            if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
+            for (const text of continued.values) if (check(text, true)) return true;
+          }
           // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
           // the first word alone says nothing about it.
           const wholeLine = extras.find((extra) => extra.value.length > bare.length && extra.value.startsWith(bare));
@@ -2418,8 +2825,154 @@ export const RULES = [
         },
       },
       {
+        // The value starts on a later line: YAML `NAME:` + an indented scalar, INI / configparser `NAME =` + indented
+        // continuation lines. A nested mapping (`NAME:` + `value: V`) is the name/value pair rule's business.
+        // group 2 = name. The name line ends the match, so the cost per start is the name plus a comment.
+        appliesTo: (ctx) => ctx.mode === 'config' && /\.(?:ya?ml|ini|cfg|conf)$/i.test(ctx.path),
+        pattern: /(?<![A-Za-z0-9_$.-])(["']?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1[ \t]{0,64}[:=][ \t]{0,64}(?:#[^\n]{0,4096})?\r?\n/g,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind) return false;
+          if (budgetSpent(ctx)) return exhaustedVerdict(m, ctx, { budget: true });
+          const input = m.input;
+          const yaml = /\.ya?ml$/i.test(ctx.path);
+          const lineStart = ctx.lineStart(m.index);
+          const keyIndent = /^[ \t]*(?:-[ \t]+)?/.exec(input.slice(lineStart, m.index + 1))[0].length;
+          const pieces = [];
+          let at = m.index + m[0].length;
+          let end = at;
+          for (let n = 0; n < 20 && at < input.length; n += 1) {
+            let next = input.indexOf('\n', at);
+            if (next === -1) next = input.length;
+            const line = input.slice(at, Math.min(next, at + 4096)).replace(/\r$/, '');
+            if (line.trim() !== '' && !/^[ \t]*[#;]/.test(line)) {
+              if (/^[ \t]*/.exec(line)[0].length <= keyIndent) break;
+              // A nested mapping or a list (`pass:` / `- "text"` in a test fixture) is not a scalar value of this name.
+              if (yaml && pieces.length === 0 && /^[ \t]*(?:[^\s#'"-][^:]*:(?:[ \t]|$)|-(?:[ \t]|$))/.test(line)) return false;
+              pieces.push(line.trim());
+              end = next;
+            }
+            at = next + 1;
+          }
+          if (pieces.length === 0) return false;
+          if (!spendMultiline(ctx, end - m.index)) return exhaustedVerdict(m, ctx, { budget: true });
+          m.spanEnd = end;
+          const judge = (text) => isSecretValue({ kind, value: stripQuotes(text), quoted: true, separator: m[0].includes('=') ? '=' : ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+          return pieces.some(judge) || (pieces.length > 1 && judge(pieces.join(' ')));
+        },
+      },
+      {
+        // Command-style assignments with no "=": fish `set -gx NAME value ...` (also csh `set NAME = value`, Windows `set "NAME=value"`),
+        // csh `setenv NAME value`, Windows `setx NAME value`, `export NAME value`. See the block above shellTail.
+        // group 1 = fish flags, 3 = name. The bounded flag list starts every flag with a blank and a "-", so it has one reading.
+        hint: /\b(?:set|setenv|setx|export)\b/i,
+        pattern: /(?<![A-Za-z0-9_$.\/-])set((?:[ \t]{1,64}-{1,2}[A-Za-z][A-Za-z-]{0,24}){0,8})[ \t]{1,64}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\2(?=[ \t]|$)/gim,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[3], ctx);
+          if (!kind || !fishFlagsAssign(m[1]) || !commandContextOk(m, ctx, m[1] !== '')) return false;
+          const words = shellTail(m.input, m.index + m[0].length);
+          m.spanEnd = m.index + m[0].length;
+          return shellWordsAreSecret(kind, words, ctx);
+        },
+      },
+      {
+        // Windows: set "NAME=value" (the quotes keep spaces and & out of the operator syntax)
+        hint: /\bset[ \t]+"/i,
+        pattern: /(?<![A-Za-z0-9_$.\/-])set[ \t]{1,64}"([A-Za-z_][A-Za-z0-9_.-]{0,255})=([^"\n]{0,4096})"/gi,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[1], ctx);
+          if (!kind || !commandContextOk(m, ctx, false)) return false;
+          return shellWordsAreSecret(kind, [{ text: m[2], quoted: true, expr: false }], ctx);
+        },
+      },
+      {
+        // csh / tcsh: setenv NAME value
+        hint: /\bsetenv\b/i,
+        pattern: /(?<![A-Za-z0-9_$.\/-])setenv[ \t]{1,64}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\1(?=[ \t]|$)/gim,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind || !commandContextOk(m, ctx, true)) return false;
+          m.spanEnd = m.index + m[0].length;
+          return shellWordsAreSecret(kind, shellTail(m.input, m.index + m[0].length), ctx);
+        },
+      },
+      {
+        // Windows: setx [/M] NAME value [/M]
+        hint: /\bsetx\b/i,
+        pattern: /(?<![A-Za-z0-9_$.\/-])setx[ \t]{1,64}(?:\/[A-Za-z][ \t]{1,64}){0,2}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\1(?=[ \t]|$)/gim,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind || !commandContextOk(m, ctx, true)) return false;
+          m.spanEnd = m.index + m[0].length;
+          return shellWordsAreSecret(kind, shellTail(m.input, m.index + m[0].length), ctx);
+        },
+      },
+      {
+        // sh: export NAME value (no "="). A list of plain variable names (`export A B`) is not a value.
+        hint: /\bexport\b/,
+        pattern: /(?<![A-Za-z0-9_$.\/-])export((?:[ \t]{1,64}-[A-Za-z]{1,6}){0,3})[ \t]{1,64}(["']?)([A-Za-z_][A-Za-z0-9_]{0,255})\2(?=[ \t])/gm,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[3], ctx);
+          if (!kind || !commandContextOk(m, ctx, false)) return false;
+          const words = shellTail(m.input, m.index + m[0].length).filter((w) => w.quoted || w.text !== '=');
+          if (words.length === 0 || words.every((w) => !w.quoted && SHELL_VARIABLE_NAME.test(w.text))) return false;
+          m.spanEnd = m.index + m[0].length;
+          return shellWordsAreSecret(kind, words, ctx);
+        },
+      },
+      {
+        // PowerShell: $env:NAME = 'value', ${env:NAME} += "value"
+        hint: /env:/i,
+        pattern: /\$\{?env:([A-Za-z_][A-Za-z0-9_.-]{0,255})\}?[ \t]{0,64}\+?=[ \t]{0,64}(?=["'])/gi,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[1], ctx);
+          if (!kind || !commandContextOk(m, ctx, true)) return false;
+          const literal = powershellString(m.input, m.index + m[0].length);
+          if (literal !== null) m.spanEnd = literal.end;
+          return powershellValueIsSecret(kind, literal, ctx);
+        },
+      },
+      {
+        // PowerShell / .NET: [Environment]::SetEnvironmentVariable('NAME', 'value'[, 'User'])
+        hint: /SetEnvironmentVariable/i,
+        pattern: /\[(?:System\.)?Environment\][ \t]{0,64}::[ \t]{0,64}SetEnvironmentVariable\([ \t]{0,64}(["'])([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,64},[ \t]{0,64}(?=["'])/gi,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind || !commandContextOk(m, ctx, true)) return false;
+          const literal = powershellString(m.input, m.index + m[0].length);
+          if (literal !== null) m.spanEnd = literal.end;
+          return powershellValueIsSecret(kind, literal, ctx);
+        },
+      },
+      {
+        // PowerShell: Set-Item -Path Env:NAME -Value 'v', Set-Item Env:\NAME 'v', New-Item -Path Env:NAME -Value 'v'
+        hint: /Env:/i,
+        pattern: /(?<![A-Za-z0-9_$.-])(?:Set-Item|New-Item|Set-Content)(?=[ \t])[^\n]{0,300}?(?:[ \t]|["'])Env:\\?([A-Za-z_][A-Za-z0-9_.-]{0,255})(?![A-Za-z0-9_.-])/gi,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[1], ctx);
+          if (!kind || !commandContextOk(m, ctx, true)) return false;
+          const words = shellTail(m.input, m.index);
+          const at = words.findIndex((w) => !w.quoted && /^-value$/i.test(w.text));
+          const rest = words.slice(1);
+          const value = at !== -1 ? words[at + 1] : rest.find((w) => w.quoted || !/^-|^Env:/i.test(w.text) && w.text !== '=');
+          m.spanEnd = m.index + m[0].length;
+          return value !== undefined && shellWordsAreSecret(kind, [value], ctx);
+        },
+      },
+      {
+        // fish universal variables file (~/.config/fish/fish_variables): SETUVAR [--export] NAME:value
+        hint: /SETUVAR/,
+        pattern: /^SETUVAR((?:[ \t]{1,64}--?[A-Za-z-]{1,20}){0,4})[ \t]{1,64}([A-Za-z_][A-Za-z0-9_]{0,255}):([^\n]{1,4096})$/gm,
+        accept: (m, ctx) => {
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind) return false;
+          const value = m[3].replace(/\\x1[de]/gi, ' ').replace(/\\(.)/g, '$1').replace(/\r$/, '').trim();
+          return isSecretValue({ kind, value, quoted: true, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
+        },
+      },
+      {
         // Dockerfile "ENV NAME value" / "ARG NAME value" (space-separated; NAME=value is handled above)
-        pattern: /^[ \t]*(?:ENV|ARG)[ \t]+([A-Za-z_][A-Za-z0-9_]{0,1023})[ \t]+([^\n]{1,4096})$/gim,
+        pattern: /^[ \t]*(?:ONBUILD[ \t]+)?(?:ENV|ARG)[ \t]+([A-Za-z_][A-Za-z0-9_]{0,1023})[ \t]+([^\n]{1,4096})$/gim,
         accept: (m, ctx) => {
           if (!/(?:^|\/)(?:[^/]*dockerfile[^/]*|containerfile[^/]*)$/i.test(ctx.path)) return false;
           const kind = secretNameKind(m[1]);
@@ -2741,6 +3294,26 @@ export const RULES = [
 // Scanning
 // ---------------------------------------------------------------------------
 
+const lineBreakAfter = (text, from) => {
+  const at = text.indexOf('\n', from);
+  return at === -1 ? text.length : at;
+};
+
+/** The fenced code blocks of a Markdown text: [{ start, end, lang }] where start..end is the body (a fence left open runs to the end). */
+function findFences(text) {
+  const blocks = [];
+  let open = null;
+  for (const line of text.matchAll(/^[ \t]{0,3}(`{3,20}|~{3,20})[ \t]{0,8}([^\s`]{0,40})/gm)) {
+    if (open === null) open = { start: lineBreakAfter(text, line.index + line[0].length), char: line[1][0], size: line[1].length, lang: line[2].toLowerCase() };
+    else if (line[1][0] === open.char && line[1].length >= open.size && line[2] === '') {
+      blocks.push({ start: open.start, end: line.index, lang: open.lang });
+      open = null;
+    }
+  }
+  if (open !== null) blocks.push({ start: open.start, end: text.length, lang: open.lang });
+  return blocks;
+}
+
 function buildNewlineIndex(text) {
   const positions = [];
   let i = -1;
@@ -2792,6 +3365,7 @@ function scanRanges(filePath, text) {
   let newlines = null;
   const newlineIndex = () => (newlines ??= buildNewlineIndex(text));
   const occurrences = new Map();
+  let fences = null;
   const ctx = {
     path: filePath.split(path.sep).join('/'),
     mode: fileMode(filePath),
@@ -2829,6 +3403,18 @@ function scanRanges(filePath, text) {
     lineEnd(index) {
       const line = lineAt(newlineIndex(), index);
       return line - 1 < newlineIndex().length ? newlineIndex()[line - 1] : text.length;
+    },
+    // The language tag of the Markdown code fence that holds `index` ('' for a bare fence), or undefined outside every fence.
+    fenceLang(index) {
+      fences ??= findFences(text);
+      let lo = 0;
+      let hi = fences.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (fences[mid].end <= index) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo < fences.length && fences[lo].start <= index ? fences[lo].lang : undefined;
     },
   };
   for (const rule of RULES) {
@@ -3161,11 +3747,12 @@ function summarizeStderr(stderr) {
 // Lines of unchanged context read around each change, so a split "name: X / value: Y" pair whose name line did not
 // change can still be recognised. Context lines are never reported by themselves. It is derived from the constants the
 // pair matcher (and the other multi-line rules: PEM headers, netrc tokens, mapping keys) look back and forward with, so
-// the two cannot drift apart: the YAML window counts lines; the brace and XML windows count characters, and a line
+// the two cannot drift apart: the YAML window and the multi-line literal reader count lines; the brace and XML windows count characters, and a line
 // that holds a name or a value is at least HISTORY_MIN_LINE_CHARS long, so that many characters span at most this many lines.
 const HISTORY_MIN_LINE_CHARS = 4;
 export const HISTORY_CONTEXT = Math.max(
   PAIR_YAML_LINES,
+  MULTILINE_MAX_LINES + 1, // a heredoc / triple-quoted body and its closing line
   Math.ceil(Math.max(PAIR_BACK_CHARS, PAIR_FORWARD_CHARS, PAIR_XML_CHARS) / HISTORY_MIN_LINE_CHARS),
 );
 // A lockfile is scanned with single-line rules only (no name/value pairing), so a bump that touches a big lockfile in
@@ -3173,13 +3760,52 @@ export const HISTORY_CONTEXT = Math.max(
 const HISTORY_LOCKFILE_CONTEXT = 2;
 
 /**
+ * The first SNIFF_BYTES bytes of `path` as it is in `commit` (`git cat-file blob <commit>:<path>`), or null when git
+ * cannot produce them. The read is bounded: spawnSync stops the child at SNIFF_BYTES, so a huge blob is never held.
+ */
+function blobHead(root, commit, filePath) {
+  const run = spawnSync('git', ['cat-file', 'blob', `${commit}:${filePath}`], {
+    cwd: root,
+    maxBuffer: SNIFF_BYTES,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const complete = run.status === 0 && !run.error;
+  const cut = run.error?.code === 'ENOBUFS' && run.stdout && run.stdout.length > 0; // longer than SNIFF_BYTES: the head is what was wanted
+  return complete || cut ? Buffer.from(run.stdout).subarray(0, SNIFF_BYTES) : null;
+}
+
+/** True only when the tree scan would also skip this version as binary: the same isBinaryContent test on the same first 8 KB. */
+const versionIsVerifiedBinary = (root, commit, filePath) => {
+  const head = blobHead(root, commit, filePath);
+  return head !== null && isBinaryContent(head);
+};
+
+/** The path a `diff --git a/P b/P` (or `diff --cc P`) header names, or null when it cannot be told exactly (quoted, renamed). */
+function diffHeaderPath(header) {
+  const combined = /^diff --(?:cc|combined) (.+)$/.exec(header);
+  if (combined) return combined[1].startsWith('"') ? unquoteGitPath(combined[1]) : combined[1];
+  const rest = header.slice('diff --git '.length);
+  const half = (rest.length - 5) / 2;
+  if (!Number.isInteger(half) || half < 1 || rest.startsWith('"')) return null;
+  const left = rest.slice(2, 2 + half);
+  return rest.startsWith('a/') && rest.slice(2 + half, 5 + half) === ' b/' && rest.slice(5 + half) === left ? left : null;
+}
+
+// Longest git output line that is held whole. A longer line is fed to the parser cut at this length and the rest is
+// dropped: no line that long can be a header, and an added line that long is over every size limit (it is reported
+// as oversize or, if the version is a verified binary, skipped), so nothing that is scanned as text is lost.
+const MAX_HELD_LINE_CHARS = MAX_LOCKFILE_BYTES + 2;
+
+/**
  * Scan every commit reachable from any ref, reporting only matches that touch a line the commit ADDED.
  * Unchanged context lines are scanned together with the added ones (so multi-line rules can see the
  * name next to a new value) but a match made only of context lines belongs to an earlier commit.
  * Merge commits are shown as combined diffs (--cc), so only lines that the merge itself introduced
  * (conflict resolutions) are scanned; everything else was added by a parent and is reported there.
- * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, oversizeLimits: Map<number, number>, unscanned: number}>}
+ * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, oversizeLimits: Map<number, number>, unscanned: number, skipped: Record<string, number>}>}
  * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
+ * `skipped` counts the file versions left out on purpose, as the tree scan does: a verified binary (see isBinaryContent, checked
+ * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`.
  * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
  * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an unknown base).
  */
@@ -3188,7 +3814,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     'git',
     [
       '-c', 'core.quotepath=false',
-      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-renames', '--text',
+      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
       '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H',
       ...revisions, '--',
     ],
@@ -3208,12 +3834,15 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   let oversize = 0;
   const oversizeLimits = new Map(); // size limit in bytes -> file versions over it (the limit differs per path)
   let unscanned = 0; // file versions whose added lines were NOT examined, for any reason (oversize included)
+  const skipped = {}; // file versions left out on purpose, by reason: the same accounting as the tree scan ('binary')
   let commit = null;
   let file = null;
+  let headerPath = null; // the path named by the current `diff` header, for versions git prints as one "Binary files" line
   let inHunk = false;
   let parents = 1;
   let lines = []; // added lines and the context around them (see contextFor) of the current file; gaps are a blank line
   let addedLines = new Set(); // 1-based indexes into `lines` of the lines this commit added
+  let addedAny = false; // this version had an added line, even one that overflowed the size limit before it could be indexed
   let textChars = 0; // characters held in `lines`
   let overflow = false; // the retained text passed the file's size limit: stop collecting, report it as oversize
   let recent = []; // context lines seen since the last kept line, at most contextFor(file) of them
@@ -3227,13 +3856,19 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   };
 
   const flush = () => {
-    if (commit && !file && addedLines.size > 0) {
+    if (commit && !file && addedAny) {
       unscanned += 1; // added lines under a header this parser could not attribute to a path
-    } else if (commit && file && addedLines.size > 0) {
+    } else if (commit && file && addedAny) {
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
-      if (text.includes('\u0000')) text = text.replace(/[\u0000�]/g, '');
-      if (overflow || text.length > sizeLimit(file)) {
+      const hadNul = text.includes('\u0000');
+      if (hadNul) text = text.replace(/[\u0000�]/g, '');
+      const tooLarge = overflow || text.length > sizeLimit(file);
+      if ((tooLarge || hadNul) && versionIsVerifiedBinary(root, commit, file)) {
+        // A verified binary (the tree scan's own test, on the version's own first 8 KB) is skipped whatever its size: a
+        // large image must not be judged by the text size limit. Anything else, a NUL-prefixed text file included, goes on.
+        skipped.binary = (skipped.binary ?? 0) + 1;
+      } else if (tooLarge) {
         oversize += 1;
         unscanned += 1;
         oversizeLimits.set(sizeLimit(file), (oversizeLimits.get(sizeLimit(file)) ?? 0) + 1);
@@ -3252,6 +3887,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     }
     lines = [];
     addedLines = new Set();
+    addedAny = false;
     textChars = 0;
     overflow = false;
     recent = [];
@@ -3265,14 +3901,19 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       commit = line.slice(7);
       commits += 1;
       file = null;
+      headerPath = null;
       inHunk = false;
     } else if (/^diff --(?:git|cc|combined) /.test(line)) {
       flush();
       file = null;
+      headerPath = diffHeaderPath(line);
       inHunk = false;
       parents = 1;
     } else if (!inHunk && line.startsWith('Binary files ')) {
-      unscanned += 1; // git refused to show this version's content (for example above core.bigFileThreshold)
+      // git refused to show this version's content (for example above core.bigFileThreshold). Only a verified binary is
+      // left out (counted, as the tree scan counts it); anything else, or a path this parser cannot name, is unscanned.
+      if (headerPath !== null && versionIsVerifiedBinary(root, commit, headerPath)) skipped.binary = (skipped.binary ?? 0) + 1;
+      else unscanned += 1;
     } else if (line.startsWith('@@')) {
       inHunk = true;
       parents = Math.max(1, line.match(/^@+/)[0].length - 1); // "@@@" hunks belong to 2-parent merges
@@ -3297,6 +3938,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
         recent = [];
         dropped = false;
         keep(content);
+        addedAny = true; // an added line that is over the limit on its own still makes this version unscanned
         if (!overflow) addedLines.add(lines.length);
         after = contextFor(file ?? '');
       } else if (after > 0) {
@@ -3315,15 +3957,32 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   // Split on "\n" only. readline would also split on a lone CR and lose the continuation.
   const decoder = new StringDecoder('utf8');
   let pending = '';
+  let discarding = false; // inside the rest of a line that was cut at MAX_HELD_LINE_CHARS
   for await (const chunk of child.stdout) {
     pending += decoder.write(chunk);
     let start = 0;
     let newline;
+    if (discarding) {
+      newline = pending.indexOf('\n');
+      if (newline === -1) {
+        pending = '';
+        continue;
+      }
+      start = newline + 1;
+      discarding = false;
+    }
     while ((newline = pending.indexOf('\n', start)) !== -1) {
       onLine(pending.slice(start, newline));
       start = newline + 1;
     }
     pending = pending.slice(start);
+    if (pending.length > MAX_HELD_LINE_CHARS) {
+      // One line longer than any size limit (a binary blob with few newline bytes): parse its head once and drop the
+      // rest of it, so memory stays bounded whatever the blob size. See MAX_HELD_LINE_CHARS.
+      onLine(pending.slice(0, MAX_HELD_LINE_CHARS));
+      pending = '';
+      discarding = true;
+    }
   }
   pending += decoder.end();
   if (pending !== '') onLine(pending);
@@ -3331,7 +3990,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
 
   const code = await exited;
   if (code !== 0) throw new Error(`git log failed with exit code ${code}${summarizeStderr(stderr)}`);
-  return { hits: [...hits.values()], commits, oversize, oversizeLimits, unscanned };
+  return { hits: [...hits.values()], commits, oversize, oversizeLimits, unscanned, skipped };
 }
 
 // ---------------------------------------------------------------------------
@@ -3430,6 +4089,12 @@ const describeSkipped = (skipped) => {
   return { total, detail: entries.length === 0 ? '' : `: ${entries.map(([reason, n]) => `${n} ${reason}`).join(', ')}` };
 };
 
+/** " (2 skipped: 2 binary)" for the history and range summaries, or nothing when no version was left out on purpose. */
+const skippedNote = (skipped) => {
+  const { total, detail } = describeSkipped(skipped);
+  return total === 0 ? '' : ` (${total} skipped${detail})`;
+};
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
@@ -3514,7 +4179,7 @@ async function runRange(spec, { cwd, stdout, stderr }) {
       return 2;
     }
   }
-  const { hits, commits, oversize, oversizeLimits, unscanned } = await scanHistory(
+  const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(
     root,
     newRef ? { revisions: [head], maxCount: 1 } : { revisions: [head, '--not', base] },
   );
@@ -3527,7 +4192,7 @@ async function runRange(spec, { cwd, stdout, stderr }) {
     stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize, oversizeLimits)}\n`);
     return 2;
   }
-  stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}\n`);
+  stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}${skippedNote(skipped)}\n`);
   return 0;
 }
 
@@ -3560,7 +4225,7 @@ export async function main(
         git(['rev-parse', '--git-dir'], cwd);
       }
       const shallow = git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true';
-      const { hits, commits, oversize, oversizeLimits, unscanned } = await scanHistory(root);
+      const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(root);
       if (hits.length > 0) {
         stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned })}\n`);
         return 1;
@@ -3573,7 +4238,7 @@ export async function main(
         stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
         return 2;
       }
-      stdout.write(`check-secrets --history: no hits in ${commits} commits\n`);
+      stdout.write(`check-secrets --history: no hits in ${commits} commits${skippedNote(skipped)}\n`);
       return 0;
     }
 

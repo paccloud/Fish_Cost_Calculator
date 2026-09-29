@@ -4873,6 +4873,530 @@ describe('curl -u and the other password flags judge the whole argument', () => 
   });
 });
 
+// ---------------------------------------------------------------------------
+// Review round 11
+//   (1) command-style assignments: shell syntaxes that set a variable without "name=value"
+//   (2) values that span lines: heredocs, triple quotes, template literals, quotes closed later, continuations
+//   (3) --range / --history: a verified binary is skipped whatever its size; text over the limit still fails closed
+// Every fixture is assembled at runtime from pieces (this file holds no secret-shaped literal).
+// ---------------------------------------------------------------------------
+
+describe('review round 11 (1): command-style assignments without "="', () => {
+  const NAME = ['API_', 'TOKEN'].join('');
+  const LOWER_NAME = ['api', 'token'].join('_');
+  const PASSWORD_NAME = ['DB_', 'PASSWORD'].join('');
+  const value = randomString(24, 8101);
+  const passphrase = ['correct', 'horse', 'battery', 'staple'].join(' ');
+  const placeholder = ['your', 'token', 'here'].join('_');
+  const count = (file, text) => scanText(file, text).length;
+
+  // [label, file, text]: each is a secret and must be reported by the scanner.
+  const flagged = [
+    // fish: every flag spelling, quoted and unquoted values, several values
+    ['fish -gx', 'config.fish', `set -gx ${NAME} ${value}\n`],
+    ['fish long flags and a passphrase', 'config.fish', `set --global --export ${NAME} "${passphrase}"\n`],
+    ['fish single-quoted passphrase', 'config.fish', `set -x ${NAME} '${passphrase}'\n`],
+    ['fish -Ux', 'config.fish', `set -Ux ${NAME} ${value}\n`],
+    ['fish -U', 'config.fish', `set -U ${NAME} ${value}\n`],
+    ['fish -l', 'config.fish', `set -l ${PASSWORD_NAME} ${value}\n`],
+    ['fish --universal --export', 'config.fish', `set --universal --export ${NAME} ${value}\n`],
+    ['fish --local', 'config.fish', `set --local ${NAME} ${value}\n`],
+    ['fish --append', 'config.fish', `set --append ${NAME} ${value}\n`],
+    ['fish --prepend', 'config.fish', `set --prepend ${NAME} ${value}\n`],
+    ['fish without flags', 'config.fish', `set ${NAME} ${value}\n`],
+    ['fish list written as an unquoted passphrase', 'config.fish', `set -gx ${NAME} ${passphrase}\n`],
+    ['fish list whose second element is the secret', 'config.fish', `set -gx ${NAME} short ${value}\n`],
+    ['fish inside fish -c in a shell script', 'setup.sh', `fish -c 'set -gx ${NAME} ${value}'\n`],
+    ['fish after && on a line', 'setup.sh', `mkdir -p x && set -gx ${NAME} ${value}\n`],
+    ['fish in a heredoc that a shell script writes', 'setup.sh', `cat > ~/.config/fish/config.fish <<'EOF'\nset -gx ${NAME} ${value}\nEOF\n`],
+    ['fish in a heredoc in a CI step', 'ci.yml', `steps:\n  - run: |\n      cat > c.fish <<EOF\n      set -gx ${NAME} "${passphrase}"\n      EOF\n`],
+    ['fish in a Python string', 'tool.py', `SCRIPT = """\nset -gx ${NAME} ${value}\n"""\n`],
+    ['fish in a fenced Markdown block', 'README.md', `Add to config:\n\n\`\`\`fish\nset -gx ${NAME} ${value}\n\`\`\`\n`],
+    ['fish in an untagged fence', 'README.md', `\`\`\`\nset -gx ${NAME} ${value}\n\`\`\`\n`],
+    ['fish universal variables file', 'fish_variables', `SETUVAR --export ${NAME}:${value}\n`],
+    ['fish dotfile name', '.config/fish/conf.d/x.fish', `set -gx ${NAME} ${value}\n`],
+    // csh / tcsh
+    ['csh setenv', 'env.csh', `setenv ${NAME} ${value}\n`],
+    ['csh setenv passphrase', 'env.csh', `setenv ${NAME} "${passphrase}"\n`],
+    ['.cshrc setenv', '.cshrc', `setenv ${NAME} ${value}\n`],
+    ['tcsh set name = value', '.tcshrc', `set ${LOWER_NAME} = ${value}\n`],
+    ['tcsh set name = passphrase', 'env.tcsh', `set ${LOWER_NAME} = "${passphrase}"\n`],
+    ['tcsh set name=value', 'env.tcsh', `set ${LOWER_NAME}=${value}\n`],
+    ['setenv in a Dockerfile RUN', 'Dockerfile', `RUN setenv ${NAME} ${value}\n`],
+    // PowerShell
+    ['ps $env:NAME', 'setup.ps1', `$env:${NAME} = '${value}'\n`],
+    ['ps $env:NAME passphrase', 'setup.ps1', `$env:${NAME} = "${passphrase}"\n`],
+    ['ps ${env:NAME}', 'setup.ps1', `\${env:${NAME}} = '${passphrase}'\n`],
+    ['ps $Env:NAME without blanks', 'setup.ps1', `$Env:${NAME}="${value}"\n`],
+    ['ps += ', 'setup.ps1', `$env:${NAME} += '${value}'\n`],
+    ['ps SetEnvironmentVariable', 'setup.ps1', `[Environment]::SetEnvironmentVariable('${NAME}', '${value}')\n`],
+    ['ps [System.Environment]::SetEnvironmentVariable with a scope', 'setup.ps1', `[System.Environment]::SetEnvironmentVariable("${NAME}", "${passphrase}", "User")\n`],
+    ['ps Set-Item -Path Env:', 'setup.ps1', `Set-Item -Path Env:${NAME} -Value '${value}'\n`],
+    ['ps Set-Item Env:\\', 'setup.ps1', `Set-Item Env:\\${NAME} "${passphrase}"\n`],
+    ['ps New-Item Env:', 'setup.ps1', `New-Item -Path Env:${NAME} -Value '${value}'\n`],
+    ['ps in a Markdown fence', 'README.md', `\`\`\`powershell\n$env:${NAME} = '${value}'\n\`\`\`\n`],
+    ['ps in a JavaScript string', 'tool.js', `const s = "$env:${NAME} = '${value}'";\n`],
+    // Windows cmd
+    ['cmd set NAME=value', 'setup.bat', `set ${NAME}=${value}\n`],
+    ['cmd set "NAME=passphrase"', 'setup.cmd', `set "${NAME}=${passphrase}"\n`],
+    ['setx', 'setup.bat', `setx ${NAME} ${value}\n`],
+    ['setx with a passphrase and /M', 'setup.bat', `setx ${NAME} "${passphrase}" /M\n`],
+    ['setx /M first', 'setup.bat', `setx /M ${NAME} ${value}\n`],
+    ['setx in a .ps1', 'run.ps1', `setx ${NAME} ${value}\n`],
+    ['setx in a CI step', 'ci.yml', `steps:\n  - run: setx ${NAME} ${value}\n`],
+    // sh
+    ['export NAME value', 'env.sh', `export ${NAME} ${value}\n`],
+    ['export NAME passphrase', 'env.sh', `export ${NAME} "${passphrase}"\n`],
+    ['export -n NAME value', 'env.sh', `export -n ${NAME} ${value}\n`],
+    ['export in .bashrc (an extensionless start-up file is configuration)', '.bashrc', `export ${NAME}=${value}\n`],
+    ['export NAME=value in .zshrc', '.zshrc', `export ${NAME}=${value}\n`],
+    ['export NAME=value in .profile', '.profile', `export ${NAME}=${value}\n`],
+    ['Dockerfile ONBUILD ENV', 'Dockerfile', `ONBUILD ENV ${NAME} ${value}\n`],
+    ['Dockerfile ENV NAME value', 'Dockerfile', `ENV ${NAME} ${value}\n`],
+  ];
+  it.each(flagged)('reports: %s', (_label, file, text) => {
+    const found = scanText(file, text);
+    expect(found.length).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(found[0]).sort()).toEqual(['line', 'path', 'rule']); // never the matched text
+  });
+
+  const clean = [
+    ['fish placeholder', 'config.fish', `set -gx ${NAME} ${placeholder}\n`],
+    ['fish angle-bracket placeholder', 'config.fish', `set -gx ${NAME} <your-token>\n`],
+    ['fish variable reference', 'config.fish', `set -gx ${NAME} $OTHER_VALUE\n`],
+    ['fish quoted variable reference', 'config.fish', `set -gx ${NAME} "$OTHER_VALUE"\n`],
+    ['fish command substitution', 'config.fish', `set -gx ${NAME} (cat ~/.token)\n`],
+    ['fish quoted command substitution', 'config.fish', `set -gx ${NAME} "(cat ~/.token)"\n`],
+    ['fish erase', 'config.fish', `set -e ${NAME}\n`],
+    ['fish query', 'config.fish', `set -q ${NAME}\n`],
+    ['fish show', 'config.fish', `set --show ${NAME}\n`],
+    ['fish PATH', 'config.fish', 'set -gx PATH $PATH /usr/local/bin\n'],
+    ['fish weak name with an address', 'config.fish', 'set -gx TOKEN_ENDPOINT https://auth.example.net/oauth/token\n'],
+    ['fish comment', 'config.fish', `# set -gx ${NAME} ${value}\n`],
+    ['fish allow marker', 'config.fish', `set -gx ${NAME} ${value} # ${ALLOW_MARKER}\n`],
+    ['fish SETUVAR placeholder', 'fish_variables', `SETUVAR --export ${NAME}:${placeholder}\n`],
+    ['fish placeholder in a fence', 'README.md', `\`\`\`fish\nset -gx ${NAME} ${placeholder}\n\`\`\`\n`],
+    ['the verb "set" in prose outside a fence', 'README.md', `Please set ${LOWER_NAME} ${value} in your shell\n`],
+    ['"set token" in a sentence', 'README.md', 'We set token verification on the server.\n'],
+    ['a Python sentence', 'tool.py', 'x = "set up token verification"\n'],
+    ['a YAML list item that starts with Set', 'ci.yml', '- Set token expiration in the dashboard\n'],
+    ['a YAML description', 'ci.yml', 'description: Set token expiration in the dashboard\n'],
+    ['bash set -euo pipefail', 'env.sh', 'set -euo pipefail\nset -x\n'],
+    ['bash set --', 'env.sh', `set -- "$${NAME}"\n`],
+    ['bash set +x NAME', 'env.sh', `set +x ${NAME}\n`],
+    ['csh placeholder', 'env.csh', `setenv ${NAME} ${placeholder}\n`],
+    ['csh reference', 'env.csh', `setenv ${NAME} $HOME/x\n`],
+    ['csh PATH', 'env.csh', 'setenv PATH /usr/bin\n'],
+    ['tcsh reference', 'env.tcsh', `set ${LOWER_NAME} = $other\n`],
+    ['tcsh command substitution', 'env.tcsh', `set ${LOWER_NAME} = \`cat ~/.tok\`\n`],
+    ['sh command substitution in backticks', 'env.sh', `${NAME}=\`cat ~/.tok\`\n`],
+    ['ps variable', 'setup.ps1', `$env:${NAME} = $secret\n`],
+    ['ps sub-expression', 'setup.ps1', `$env:${NAME} = "$($x.Token)"\n`],
+    ['ps placeholder', 'setup.ps1', `$env:${NAME} = '${placeholder}'\n`],
+    ['ps Read-Host', 'setup.ps1', `$env:${NAME} = Read-Host "token"\n`],
+    ['ps SetEnvironmentVariable with a variable', 'setup.ps1', `[Environment]::SetEnvironmentVariable("${NAME}", $val, "User")\n`],
+    ['ps SetEnvironmentVariable placeholder', 'setup.ps1', `[Environment]::SetEnvironmentVariable('${NAME}', '${placeholder}')\n`],
+    ['cmd %reference%', 'setup.bat', `set ${NAME}=%SECRET_VAL%\n`],
+    ['cmd placeholder', 'setup.bat', `set ${NAME}=${placeholder}\n`],
+    ['cmd set /p prompt', 'setup.bat', `set /p ${NAME}=Enter token: \n`],
+    ['setx reference', 'setup.bat', `setx ${NAME} %TOKEN_SRC%\n`],
+    ['setx placeholder', 'setup.bat', `setx ${NAME} ${placeholder}\n`],
+    ['export of two variable names', 'env.sh', `export ${NAME} OTHER_TOKEN\n`],
+    ['export of one name', 'env.sh', `export ${NAME}\n`],
+    ['export placeholder', 'env.sh', `export ${NAME} ${placeholder}\n`],
+    ['Dockerfile ARG without a value', 'Dockerfile', `ARG ${NAME}\n`],
+    ['Dockerfile ENV reference', 'Dockerfile', `ENV ${NAME} $\{OTHER}\n`],
+    ['JavaScript Set', 'app.js', `const s = new Set(['${NAME}', '${value}']);\n`],
+    ['Python set()', 'app.py', `s = {'${NAME}', '${value}'}\nx = set(${LOWER_NAME}, ${value})\n`],
+  ];
+  it.each(clean)('passes: %s', (_label, file, text) => {
+    expect(count(file, text)).toBe(0);
+  });
+
+  it('only the distinctive forms are read in source code, and set/export without flags need a shell context', () => {
+    expect(count('tool.py', `x = "set ${NAME} ${value}"\n`)).toBe(0); // a bare set in code is not a command
+    expect(count('tool.py', `x = "export ${NAME} ${value}"\n`)).toBe(0);
+    expect(count('tool.py', `x = "setenv ${NAME} ${value}"\n`)).toBeGreaterThan(0); // setenv is distinctive
+  });
+
+  it('fileMode: shell start-up files and the classic shells are configuration', () => {
+    for (const file of ['.bashrc', '.zshrc', '.profile', '.bash_profile', '.zshenv', '.cshrc', '.tcshrc', 'env.ksh', 'env.csh', 'env.tcsh', 'setup.bat', 'setup.cmd', 'fish_variables']) {
+      expect(fileMode(file), file).toBe('config');
+    }
+  });
+
+  it('a hostile line of set/setenv/export/flags/quotes is scanned in linear time', SLOW, () => {
+    const started = performance.now();
+    for (const [file, text] of [
+      ['a.fish', `set -gx ${NAME} a `.repeat(50000)],
+      ['a.fish', `set ${'-a '.repeat(100000)}${NAME}`],
+      ['a.fish', `set${' '.repeat(200000)}x`],
+      ['a.csh', `setenv ${NAME} $HOME\n`.repeat(20000)],
+      ['a.sh', `export ${NAME} ${'a '.repeat(100000)}`],
+      ['a.sh', `${'set '.repeat(50000)}${NAME}`],
+      ['a.ps1', `Set-Item${' '.repeat(50000)}Env:${NAME}`],
+      ['a.ps1', `${'Set-Item '.repeat(20000)}\n`],
+      ['a.ps1', `[Environment]::SetEnvironmentVariable(${"'".repeat(100000)}`],
+      ['a.md', `${'```sh\n'.repeat(30000)}set -gx ${NAME} x\n`],
+      ['a.md', `${'`'.repeat(200000)}\n`],
+      ['fish_variables', `SETUVAR ${NAME}:x\n`.repeat(20000)],
+    ]) {
+      scanText(file, text);
+    }
+    expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+  });
+});
+
+describe('review round 11 (2): values that span lines', () => {
+  const NAME = ['API_', 'TOKEN'].join('');
+  const SECRET = ['jwt_', 'secret'].join('');
+  const value = randomString(24, 8102);
+  const passphrase = ['correct', 'horse', 'battery', 'staple'].join(' ');
+  const placeholder = ['your', 'secret', 'here'].join('_');
+  const Q3 = '"'.repeat(3);
+  const S3 = "'".repeat(3);
+  const count = (file, text) => scanText(file, text).length;
+
+  const flagged = [
+    // HCL / Terraform heredocs
+    ['tf heredoc', 'main.tf', `${SECRET} = <<EOF\n${value}\nEOF\n`],
+    ['tf <<- with indentation', 'main.tf', `${SECRET} = <<-EOF\n  ${passphrase}\n  EOF\n`],
+    ['tf double-quoted tag', 'main.tf', `${SECRET} = <<"EOF"\n${passphrase}\nEOF\n`],
+    ['tf single-quoted tag', 'main.tf', `${SECRET} = <<'EOF'\n${passphrase}\nEOF\n`],
+    ['tfvars, the secret on the second line', 'vars.tfvars', `${SECRET} = <<EOT\na line of filler text\n${value}\nEOT\n`],
+    ['hcl', 'x.hcl', `${SECRET} = <<EOF\n${passphrase}\nEOF\n`],
+    ['tf CRLF line ends', 'main.tf', `${SECRET} = <<EOF\r\n${passphrase}\r\nEOF\r\n`],
+    ['tf: a plain heredoc closed only by an indented tag never ends (fail closed)', 'main.tf', `${SECRET} = <<EOF\n${passphrase}\n  EOF\nmore\n`],
+    ['tf: an unterminated heredoc is reported (fail closed)', 'main.tf', `${SECRET} = <<EOF\n${passphrase}\n`],
+    // TOML
+    ['toml """ on one line', 'cfg.toml', `${SECRET} = ${Q3}${passphrase}${Q3}\n`],
+    ['toml """ over lines', 'cfg.toml', `${SECRET} = ${Q3}\n${passphrase}\n${Q3}\n`],
+    ["toml ''' on one line", 'cfg.toml', `${SECRET} = ${S3}${passphrase}${S3}\n`],
+    ["toml ''' over lines, the secret on line two", 'cfg.toml', `${SECRET} = ${S3}\nfiller line\n${value}\n${S3}\n`],
+    ['toml line-ending backslash', 'cfg.toml', `${SECRET} = ${Q3}\ncorrect horse \\\n    battery staple${Q3}\n`],
+    ['toml: an escaped quote does not close the string early', 'cfg.toml', `${SECRET} = ${Q3}decoy\\${Q3}\n${value}${Q3}\n`],
+    ['toml: an unterminated string is reported (fail closed)', 'cfg.toml', `${SECRET} = ${Q3}\nunterminated ${value}\n`],
+    // Python, JS, Go
+    ['python triple quotes', 'app.py', `${SECRET.toUpperCase()} = ${Q3}\n${value}\n${Q3}\n`],
+    ['python raw triple quotes', 'app.py', `${SECRET.toUpperCase()} = r${Q3}${value}${Q3}\n`],
+    ["python ''' on one line", 'app.py', `${SECRET.toUpperCase()} = ${S3}${value}${S3}\n`],
+    ['js template literal over lines', 'app.js', `const ${SECRET} = \`\n${value}\n\`;\n`],
+    ['ts template literal, typed', 'app.ts', `let ${SECRET}: string = \`\nline\n${value}\n\`;\n`],
+    ['go raw string', 'app.go', `${SECRET} := \`\n${value}\n\`\n`],
+    // Ruby, Perl, PHP heredocs
+    ['ruby <<~', 'app.rb', `${SECRET.toUpperCase()} = <<~EOS\n  ${value}\nEOS\n`],
+    ['ruby <<-', 'app.rb', `${SECRET.toUpperCase()} = <<-EOS\n  ${value}\n  EOS\n`],
+    ['ruby <<', 'app.rb', `${SECRET.toUpperCase()} = <<EOS\n${value}\nEOS\n`],
+    ['ruby quoted tag', 'app.rb', `${SECRET.toUpperCase()} = <<~'EOS'\n  ${value}\nEOS\n`],
+    ['perl <<"EOT"', 'app.pl', `my $${SECRET} = <<"EOT";\n${value}\nEOT\n`],
+    ['perl <<EOT', 'app.pl', `$${SECRET} = <<EOT;\n${value}\nEOT\n`],
+    ['php heredoc', 'app.php', `$${SECRET} = <<<EOT\n${value}\nEOT;\n`],
+    ['php nowdoc', 'app.php', `$${SECRET} = <<<'EOT'\n${value}\nEOT;\n`],
+    // PowerShell here-strings
+    ['ps here-string', 'a.ps1', `$${SECRET} = @'\n${value}\n'@\n`],
+    ['ps here-string with double quotes', 'a.ps1', `$${SECRET} = @"\n${value}\n"@\n`],
+    // quotes closed on a later line
+    ['sh single quote over lines', 'a.sh', `${NAME}='first line\n${passphrase}'\n`],
+    ['sh double quote over lines', 'a.sh', `${NAME}="first line\n${value}"\n`],
+    ['sh double quote, the value on the next line', 'a.sh', `${NAME}="\n${passphrase}\n"\n`],
+    ['dotenv value over lines', '.env', `${NAME}="line1\nline2 ${passphrase}"\n`],
+    ['sh: an unterminated quote is reported (fail closed)', 'a.sh', `${NAME}="unterminated\nfoo\n`],
+    ['yaml double-quoted scalar over lines', 'a.yml', `${NAME}: "folded\n  ${passphrase}"\n`],
+    ['yaml single-quoted scalar over lines', 'a.yml', `${NAME}: 'folded\n  ${passphrase}'\n`],
+    // continuation lines
+    ['properties backslash continuation of a passphrase', 'app.properties', `jwt.secret=correct horse \\\n  battery staple\n`],
+    ['properties continuation joins the lines', 'app.properties', `jwt.secret=abc\\\n${value}\n`],
+    ['sh unquoted backslash continuation', 'a.sh', `${NAME}=abcd\\\n${value}\n`],
+    ['json5 backslash-newline in a string', 'a.json5', `{ ${SECRET}: "abcd\\\n${value}" }\n`],
+    ['json5 single-quoted with a continuation', 'a.json5', `{ ${SECRET}: 'abcd\\\n${passphrase}' }\n`],
+    ['ini continuation line', 'a.ini', `[s]\n${SECRET} = first\n    ${passphrase}\n`],
+    ['cfg continuation line with a tab', 'a.cfg', `[s]\n${SECRET} = f\n\t${value}\n`],
+    ['ini: the value starts on the next line', 'a.ini', `[s]\n${NAME} =\n    ${value}\n`],
+    ['yaml plain scalar folded over lines', 'a.yml', `${NAME}: first\n  ${passphrase}\n`],
+    ['yaml: the scalar starts on the next line', 'a.yml', `${NAME}:\n  ${passphrase}\n`],
+    ['yaml block scalar (existing behaviour)', 'a.yml', `${NAME}: |\n  ${passphrase}\n`],
+  ];
+  it.each(flagged)('reports: %s', (_label, file, text) => {
+    expect(count(file, text)).toBeGreaterThanOrEqual(1);
+  });
+
+  const clean = [
+    ['tf placeholder', 'main.tf', `${SECRET} = <<EOF\n${placeholder}\nEOF\n`],
+    ['tf interpolation', 'main.tf', `${SECRET} = <<EOF\n$\{var.jwt}\nEOF\n`],
+    ['tf empty heredoc', 'main.tf', `${SECRET} = <<EOF\nEOF\n`],
+    ['tf heredoc under a name that is not secret-like', 'main.tf', 'user_data = <<EOF\n#!/bin/bash\necho hi\nEOF\n'],
+    ['tf text after a closed heredoc is not part of it', 'main.tf', `${SECRET} = <<EOF\nEOF\nother = "${passphrase}x"\n`],
+    ['toml placeholder', 'cfg.toml', `${SECRET} = ${Q3}${placeholder}${Q3}\n`],
+    ['toml empty string', 'cfg.toml', `${SECRET} = ${Q3}${Q3}\n`],
+    ['python placeholder', 'app.py', `${SECRET.toUpperCase()} = ${Q3}${placeholder}${Q3}\n`],
+    ['python prose docstring under a secret name (code mode)', 'app.py', `${SECRET.toUpperCase()} = ${Q3}this is help text about the secret${Q3}\n`],
+    ['python triple quotes under a name that is not secret-like', 'app.py', `DOC = ${Q3}${value}${Q3}\n`],
+    ['js template with interpolation only', 'app.js', `const ${SECRET} = \`\nhello \${name}\n\`;\n`],
+    ['ruby non-secret name', 'app.rb', 'GREETING = <<~EOS\n  hello there friend\nEOS\n'],
+    ['dotenv multi-line placeholder', '.env', `${NAME}="line1\nline2 ${placeholder}"\nOTHER=1\n`],
+    ['yaml escaped single quote', 'a.yml', `${NAME}: 'it''s fine'\n`],
+    ['sh: a value closed on its line, then another assignment', 'a.sh', `${NAME}="$\{OTHER}"\nNEXT="${passphrase}"\n`],
+    ['properties placeholder', 'app.properties', `jwt.secret=${placeholder}\n`],
+    ['ini: the next key is not a continuation', 'a.ini', `[s]\n${SECRET} = short\nnext = other line\n`],
+    ['yaml: a nested mapping is not a folded scalar', 'a.yml', `${NAME}: abc\n  nested: value\n`],
+    ['yaml: a sibling key is not a continuation', 'a.yml', `${NAME}: placeholder\nother: ${passphrase}\n`],
+    ['yaml: a fixture list under a key named pass', 'a.yml', 'pass:\n  - "(arg: boolish)"\nfail:\n  - "(arg: bool)"\n'],
+  ];
+  it.each(clean)('passes: %s', (_label, file, text) => {
+    expect(count(file, text)).toBe(0);
+  });
+
+  it('a body inside the bound is read to its last line; one past the bound is reported instead of skipped', () => {
+    const filler = 'a line of ordinary filler text\n';
+    // 150 lines, the secret on the last one: read in full
+    expect(count('main.tf', `${SECRET} = <<EOF\n${filler.repeat(149)}${value}\nEOF\n`)).toBeGreaterThanOrEqual(1);
+    // 400 lines and a terminator: past the 200-line bound, so it cannot be verified and is reported
+    expect(count('main.tf', `${SECRET} = <<EOF\n${filler.repeat(400)}EOF\n`)).toBeGreaterThanOrEqual(1);
+    expect(count('cfg.toml', `${SECRET} = ${Q3}\n${filler.repeat(400)}${Q3}\n`)).toBeGreaterThanOrEqual(1);
+    expect(count('a.sh', `${NAME}="\n${filler.repeat(400)}"\n`)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('the allow marker on a line of a multi-line literal silences it', () => {
+    expect(count('main.tf', `${SECRET} = <<EOF # ${ALLOW_MARKER}\n${passphrase}\nEOF\n`)).toBe(0);
+  });
+
+  it('reports only the name line, the rule and the count: never the value', () => {
+    const found = scanText('main.tf', `${SECRET} = <<EOF\n${value}\nEOF\n`);
+    expect(found).toEqual([{ path: 'main.tf', line: 1, rule: 'secret-assignment' }]);
+    expect(JSON.stringify(found)).not.toContain(value.slice(0, 8));
+  });
+
+  it('a file full of unterminated literals is read within a budget and reported, not searched forever', SLOW, () => {
+    for (const [file, opener] of [
+      ['a.tf', `${SECRET} = <<EOF\n`],
+      ['a.toml', `${SECRET} = ${Q3}\n`],
+      ['a.sh', `${NAME}="x\n`],
+      ['a.properties', `${SECRET}=abc\\\n`],
+      ['a.ps1', `$${SECRET} = @'\n`],
+      ['a.yml', `${NAME}:\n`],
+    ]) {
+      const started = performance.now();
+      const found = scanText(file, opener.repeat(60000));
+      expect(performance.now() - started, file).toBeLessThan(HOSTILE_LIMIT_MS);
+      if (file !== 'a.yml') expect(found.length, file).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('quotes and continuation lines stay linear on one huge line', SLOW, () => {
+    const started = performance.now();
+    for (const [file, text] of [
+      ['a.sh', `${NAME}='${"a'b".repeat(300000)}`],
+      ['a.toml', `${SECRET} = ${Q3}${'\\'.repeat(400000)}`],
+      ['a.js', `const ${SECRET} = \`${'\\`'.repeat(200000)}`],
+      ['a.properties', `${SECRET}=${'\\'.repeat(400000)}\n`],
+    ]) {
+      scanText(file, text);
+    }
+    expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+  });
+});
+
+describe('review round 11 (3): --range and --history skip a verified binary of any size', () => {
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const write = (dir, file, content) => {
+    mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+    writeFileSync(path.join(dir, file), content);
+  };
+  const commit = (dir, message, files = {}) => {
+    for (const [file, content] of Object.entries(files)) write(dir, file, content);
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', message).status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+  const makeRepo = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-bin-'));
+    dirs.push(dir);
+    expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+    return dir;
+  };
+  const OVER = 5 * 1024 * 1024 + 4096;
+  // PNG-headed content with a NUL in it, N bytes of pseudo-random data (newlines every few hundred bytes, like a real image)
+  const png = (size, seed = 1) => {
+    const body = Buffer.alloc(size);
+    let state = seed;
+    for (let i = 0; i < size; i += 1) {
+      state = (state * 1103515245 + 12345) % 2147483648;
+      body[i] = (state >>> 16) & 0xff;
+    }
+    return Buffer.concat([PNG_HEAD, body]);
+  };
+  const constantPng = (size) => Buffer.concat([PNG_HEAD, Buffer.alloc(size, 1)]); // one enormous "line": no newline byte at all
+  const textOver = (first = '') => `${first}${`${'x'.repeat(1023)}\n`.repeat(5 * 1024 + 8)}`;
+  const secretLine = `${['API_', 'KEY'].join('')}=${randomString(32, 8103)}\n`;
+  const base = (dir) => commit(dir, 'base', { 'base.txt': 'base\n' });
+
+  it.skipIf(!hasGit())('the tree scan already skips the same asset (the behaviour --range and --history now match)', SLOW, () => {
+    const dir = makeRepo();
+    commit(dir, 'asset', { 'logo.png': png(OVER) });
+    const result = scan(dir);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('--range: adding a binary over the size limit exits 0 and counts it as skipped: binary', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add image', { 'assets/logo.png': png(OVER) });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('no hits in 1 commit');
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+    expect(result.stderr).not.toContain('INCOMPLETE');
+  });
+
+  it.skipIf(!hasGit())('--history: adding a binary over the size limit exits 0 and counts it as skipped: binary', SLOW, () => {
+    const dir = makeRepo();
+    base(dir);
+    commit(dir, 'add image', { 'assets/logo.png': png(OVER) });
+    const result = scan(dir, '--history');
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('no hits in 2 commits');
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('--range and --history: modifying a binary over the size limit (both versions large)', SLOW, () => {
+    const dir = makeRepo();
+    commit(dir, 'add image', { 'logo.png': png(OVER, 1) });
+    const from = git(dir, 'rev-parse', 'HEAD').stdout.trim();
+    const head = commit(dir, 'change image', { 'logo.png': png(OVER, 2) });
+    const range = scan(dir, '--range', `${from}..${head}`);
+    expect(range.status, range.stderr).toBe(0);
+    expect(range.stdout).toContain('1 skipped: 1 binary');
+    const history = scan(dir, '--history');
+    expect(history.status, history.stderr).toBe(0);
+    expect(history.stdout).toContain('2 skipped: 2 binary');
+  });
+
+  it.skipIf(!hasGit())('--range: renaming a large binary is judged by the new version, and is skipped', SLOW, () => {
+    const dir = makeRepo();
+    const from = commit(dir, 'add image', { 'logo.png': png(OVER) });
+    git(dir, 'mv', 'logo.png', 'brand.png');
+    expect(git(dir, 'commit', '-q', '-m', 'rename').status).toBe(0);
+    const result = scan(dir, '--range', `${from}..HEAD`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('--range: a small binary is skipped and counted, like the tree scan does', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add icon', { 'icon.png': png(2000) });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('--range: a large binary with no newline byte at all is skipped, and the reader keeps its memory bounded', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add blob', { 'blob.bin': constantPng(20 * 1024 * 1024) });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('--range: text over the size limit still exits 2 (--range and --history)', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add big text', { 'big.txt': textOver() });
+    for (const args of [['--range', `${from}..${head}`], ['--history']]) {
+      const result = scan(dir, ...args);
+      expect(result.status, args.join(' ')).toBe(2);
+      expect(result.stderr).toContain('INCOMPLETE');
+      expect(result.stderr).toContain('1 over the 5 MB limit');
+    }
+  });
+
+  it.skipIf(!hasGit())('--range: a single added line over the size limit is unscanned too (it used to pass as clean)', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add one huge line', { 'big.env': `${'y'.repeat(20 * 1024 * 1024)}\n` });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('INCOMPLETE');
+  });
+
+  it.skipIf(!hasGit())('--range: a lockfile over its limit still exits 2, a binary next to it does not hide it', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add both', { 'logo.png': png(OVER), 'package-lock.json': `${'x'.repeat(1023)}\n`.repeat(16 * 1024 + 8) });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('1 file version NOT scanned');
+    expect(result.stderr).toContain('1 over the 16 MB lockfile limit');
+  });
+
+  it.skipIf(!hasGit())('a NUL prefix without a known signature is NOT binary: small text with a secret is found, large text is oversize (as in the tree scan)', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'nul prefix', { 'x.env': Buffer.concat([Buffer.from([0, 0, 0, 0]), Buffer.from(secretLine)]) });
+    const found = scan(dir, '--range', `${from}..${head}`);
+    expect(found.status).toBe(1);
+    expect(found.stderr).toContain('x.env  secret-assignment');
+    expect(scan(dir).status).toBe(1); // the tree scan agrees
+    const big = commit(dir, 'nul prefix, big', { 'big.dat': Buffer.concat([Buffer.from([0, 0, 0, 0]), Buffer.from(textOver())]) });
+    const oversize = scan(dir, '--range', `${head}..${big}`);
+    expect(oversize.status).toBe(2);
+    expect(oversize.stderr).toContain('1 over the 5 MB limit');
+    expect(scan(dir).status).toBe(1); // the tree scan reports it as oversize too
+  });
+
+  it.skipIf(!hasGit())('a PNG-headed file that holds a text secret is handled exactly as the tree scan handles it (skipped, no bypass of a NUL-only file)', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'png with text', { 'blob.dat': Buffer.concat([PNG_HEAD, Buffer.from(secretLine)]) });
+    const range = scan(dir, '--range', `${from}..${head}`);
+    const tree = scan(dir);
+    expect(tree.status).toBe(0);
+    expect(tree.stdout).toContain('1 skipped: 1 binary');
+    expect(range.status).toBe(0);
+    expect(range.stdout).toContain('1 skipped: 1 binary');
+  });
+
+  it.skipIf(!hasGit())('a binary version does not hide a secret in the same commit', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'both', { 'logo.png': png(OVER), 'x.env': secretLine });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('x.env  secret-assignment  x1');
+  });
+
+  it.skipIf(!hasGit())('a lowered core.bigFileThreshold changes nothing: the binary is still skipped, a text version is still scanned', SLOW, () => {
+    const dir = makeRepo();
+    git(dir, 'config', 'core.bigFileThreshold', '1k');
+    const from = base(dir);
+    const head = commit(dir, 'add', { 'logo.png': png(100 * 1024) });
+    const skipped = scan(dir, '--range', `${from}..${head}`);
+    expect(skipped.status, skipped.stderr).toBe(0);
+    expect(skipped.stdout).toContain('1 skipped: 1 binary');
+    const leak = commit(dir, 'add text', { 'x.env': `${'# filler line\n'.repeat(400)}${secretLine}` });
+    const found = scan(dir, '--range', `${head}..${leak}`);
+    expect(found.status).toBe(1);
+    expect(found.stderr).toContain('x.env  secret-assignment  x1');
+  });
+
+  it.skipIf(!hasGit())('the report and the summary never contain the file content', SLOW, () => {
+    const dir = makeRepo();
+    const from = base(dir);
+    const head = commit(dir, 'add', { 'logo.png': png(OVER), 'x.env': secretLine });
+    const result = scan(dir, '--range', `${from}..${head}`);
+    const output = `${result.stdout}${result.stderr}`;
+    for (const piece of windows(secretLine.split('=')[1].trim())) expect(output).not.toContain(piece);
+  });
+});
+
 function hasGit() {
   return spawnSync('git', ['--version']).status === 0;
 }
