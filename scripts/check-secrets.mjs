@@ -70,7 +70,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { Buffer } from 'node:buffer';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { closeSync, lstatSync, openSync, readFileSync, readlinkSync, readSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -331,10 +331,29 @@ const MARKER_SPANS = /<[^<>\n]{1,80}>|\[[A-Za-z][A-Za-z _-]{0,60}\]|\.{3,}|…|\
 // Template and environment references. Interpolation syntax is unambiguous, so it counts anywhere;
 // a bare $NAME counts only when the WHOLE value is that shape, so `$` + random letters does not.
 const INTERPOLATION = /\$\{|\{\{|#\{|^\$\(|^`/;
-const WHOLE_REFERENCE =
-  /^(?:\$[A-Z_][A-Z0-9_]*|\$[a-z][a-z0-9]*_[a-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|%%[A-Za-z_][A-Za-z0-9_.-]*%%|@[A-Za-z_][A-Za-z0-9_.-]*@|[@?]\+?(?:[a-z]+:)?[a-z]+\/[A-Za-z0-9_.]+)$/;
+const WHOLE_REFERENCE = new RegExp(
+  '^(?:' +
+    [
+      String.raw`\$[A-Z_][A-Z0-9_]*`, // $NAME
+      String.raw`\$[a-z][a-z0-9]*_[a-z0-9_]*`, // $db_password
+      // $password, $dbPassword, $DbPassword: one word, or a few capitalised words, and at most two digits. `$` followed by a longer
+      // or mixed run (letters and digits together, or a long run of capitals inside) reads as a password that starts with `$`.
+      String.raw`\$[A-Za-z][a-z]{0,40}(?:[A-Z][a-z]{1,20}){0,4}[0-9]{0,2}`,
+      String.raw`\$[0-9]{1,2}`, // $1 (a positional parameter)
+      String.raw`\$[Ee][Nn][Vv]:[A-Za-z_][A-Za-z0-9_]{0,63}`, // PowerShell $env:NAME
+      String.raw`\$ENV\{[A-Za-z_][A-Za-z0-9_]{0,63}\}`, // Perl $ENV{NAME}
+      String.raw`\$_(?:ENV|SERVER)\[["']?[A-Za-z_][A-Za-z0-9_]{0,63}["']?\]`, // PHP $_ENV['NAME']
+      String.raw`%\([A-Za-z_][A-Za-z0-9_.:-]{0,64}\)[sdifr]`, // Python / configparser %(name)s
+      String.raw`%[A-Za-z_][A-Za-z0-9_]*%`, // cmd %NAME%
+      String.raw`%%[A-Za-z_][A-Za-z0-9_.-]*%%`, // Ant / Maven build tokens
+      String.raw`@[A-Za-z_][A-Za-z0-9_.-]*@`, // autoconf / Maven filtering @name@
+      String.raw`<%[=-]?[^%\n]{1,200}%>`, // ERB / EJS <%= ENV['X'] %>
+      String.raw`[@?]\+?(?:[a-z]+:)?[a-z]+\/[A-Za-z0-9_.]+`, // Android @string/name, ?attr/name
+    ].join('|') +
+    ')$',
+);
 // (%%NAME%% and @NAME@ are build-time substitution tokens (Ant, Maven filtering, autoconf); @string/name and ?attr/name are Android resource references.)
-const CODE_REFERENCE = /process\.env|import\.meta\.env|os\.environ|\bgetenv|\bENV\[/;
+const CODE_REFERENCE = /process\.env|import\.meta\.env|os\.environ|\bgetenv|\bENV\[|\bENV\.(?:fetch|dig)\b|\bDeno\.env\b|GetEnvironmentVariable|\bgetProperty\(/;
 // Encrypted or hashed forms are not plaintext credentials.
 const NON_SECRET_FORMS = /^(?:ENC\[|\$ANSIBLE_VAULT|\$2[abxy]?\$\d{2}\$|\$argon2|\$pbkdf2|\$scrypt|\$apr1\$|\{SHA\})/;
 // AWS documentation keys end in EXAMPLE / EXAMPLEKEY.
@@ -849,7 +868,7 @@ const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf
 const REST_OF_LINE_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'mycnf', 's3cfg', 'wgetrc', 'terraformrc'];
 function valueRunsToEndOfLine(filePath) {
   const base = path.posix.basename(filePath).toLowerCase();
-  if (REST_OF_LINE_EXTENSIONS.has(path.posix.extname(base)) || base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) return true;
+  if (REST_OF_LINE_EXTENSIONS.has(path.posix.extname(base)) || isPropertiesPath(filePath) || base === '.env' || base.startsWith('.env.') || base.endsWith('.env')) return true;
   const formats = credentialFormats(filePath);
   return REST_OF_LINE_FORMATS.some((tag) => formats.has(tag));
 }
@@ -997,6 +1016,18 @@ const DOVECOT_CONFIG = /^dovecot[a-z0-9._-]{0,60}\.conf(?:\.ext)?$/;
  * 'config' env files, YAML, JSON, INI, shell, Terraform, Makefile, credential files, ...: bare KEY=value lines.
  * 'code'   everything else (JS, TS, Python, SQL, HTML, ...): only quoted, random-looking literals.
  */
+/**
+ * Is this a Java properties file: `app.properties`, or one with an environment or backup suffix (`app.properties.local`,
+ * `application.properties.prod`, `db.properties.bak`)? Its lines are `key value`, `key=value` or `key:value`.
+ */
+export function isPropertiesPath(filePath) {
+  const base = path.posix.basename(filePath.split(path.sep).join('/')).toLowerCase();
+  const at = base.lastIndexOf('.properties');
+  if (at === -1) return false;
+  const rest = base.slice(at + '.properties'.length);
+  return rest === '' || (rest.length <= 33 && rest[0] === '.' && /^[a-z0-9_-]+$/.test(rest.slice(1)));
+}
+
 export function fileMode(filePath) {
   const base = path.posix.basename(filePath.split(path.sep).join('/')).toLowerCase();
   const ext = path.posix.extname(base);
@@ -1015,6 +1046,7 @@ export function fileMode(filePath) {
     XML_CONFIG_EXTENSIONS.has(ext) ||
     isXmlConfigPath(filePath) ||
     CONFIG_EXTENSIONS.has(path.posix.extname(baseWithoutTemplateSuffix(base))) ||
+    isPropertiesPath(filePath) ||
     credentialFormats(filePath).size > 0
   ) {
     return 'config';
@@ -1066,6 +1098,37 @@ const NESTED_VALUE_AT = valueAt(NESTED_VALUE_CHARS);
 
 /** Undo backslash escapes inside a quoted value (\" \\ \'), so an escaped quote cannot hide the rest of the string. */
 const unescapeQuoted = (text) => text.replace(/\\\r?\n[ \t]*/g, '').replace(/\\(.)/g, '$1');
+
+const QUOTED_ARGUMENT_MAX = 4096;
+/**
+ * The quoted string that starts at `start` (text[start] is a quote) and is the last argument of a call: its body without the quotes
+ * (`raw`, escapes still in place) and the index after the closing quote (`end`), or null when it is not one complete string on one line
+ * followed by `)` or `,`. A triple quote (three double or three single quotes) ends at the first run of three; the others end at the first quote that is not escaped.
+ * One pass over at most QUOTED_ARGUMENT_MAX body characters.
+ */
+function quotedArgument(text, start) {
+  const quote = text[start];
+  const triple = (quote === '"' || quote === "'") && text[start + 1] === quote && text[start + 2] === quote;
+  const bodyStart = start + (triple ? 3 : 1);
+  const limit = Math.min(text.length, bodyStart + QUOTED_ARGUMENT_MAX + 3);
+  let i = bodyStart;
+  for (; i < limit; i += 1) {
+    const c = text[i];
+    if (c === '\n') return null;
+    if (c === '\\') {
+      if (text[i + 1] === undefined || text[i + 1] === '\n') return null;
+      i += 1;
+    } else if (c === quote && (!triple || (text[i + 1] === quote && text[i + 2] === quote))) {
+      break;
+    }
+  }
+  if (i >= limit || i - bodyStart > QUOTED_ARGUMENT_MAX) return null;
+  const end = i + (triple ? 3 : 1);
+  let after = end;
+  while (after < text.length && after - end < 8 && (text[after] === ' ' || text[after] === '\t')) after += 1;
+  if (text[after] !== ')' && text[after] !== ',') return null;
+  return { raw: text.slice(bodyStart, i), end };
+}
 
 /**
  * A password taken from a URL or `curl -u`. A password with no ${...} is judged as a whole. One with an expansion
@@ -2142,6 +2205,76 @@ function powershellValueIsSecret(kind, literal, ctx) {
   return isSecretValue({ kind, value: literal.text, quoted: true, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
 }
 
+// Function-call forms that set an environment variable or a system property to a literal:
+//   C# / .NET  Environment.SetEnvironmentVariable("NAME", "v"[, EnvironmentVariableTarget.Machine])   Win32  SetEnvironmentVariableW(L"NAME", L"v")
+//   Go         os.Setenv("NAME", "v")           Python  os.putenv("NAME", "v"), os.environ.setdefault("NAME", "v")
+//   Java       System.setProperty("name", "v"), props.setProperty("name", "v"), System.getenv().put("NAME", "v"), pb.environment().put(...)
+//   Ruby       ENV.store("NAME", "v")           Deno  Deno.env.set("NAME", "v")           Rust  std::env::set_var("NAME", "v")
+//   C / PHP / Swift / Lua  setenv("NAME", "v", 1), putenv("NAME=v"), _putenv_s("NAME", "v"), g_setenv(...), apache_setenv(...)
+//   Elixir System.put_env("NAME", "v")          Erlang  os:putenv("NAME", "v")
+// (`ENV["NAME"] = "v"`, `os.environ["NAME"] = "v"`, `process.env.NAME = "v"`, `$_ENV['NAME'] = 'v'` and `$env:NAME = 'v'` are assignments.)
+// Every alternative is a fixed call name, so a match starts at a name and reads a bounded argument list.
+const ENV_SETTER_CALLEE = [
+  String.raw`(?:System\.)?Environment\.SetEnvironmentVariable`,
+  String.raw`(?:os|syscall)\.Setenv`,
+  String.raw`os\.(?:putenv|environ\.setdefault)`,
+  String.raw`System\.(?:setProperty|getProperties\(\)\.setProperty|getenv\(\)\.put|put_env)`,
+  String.raw`[A-Za-z_$][A-Za-z0-9_$]{0,64}\.setProperty`,
+  String.raw`(?:environment|getenv)\(\)\.put`,
+  String.raw`ENV\.store`,
+  String.raw`Deno\.env\.set`,
+  String.raw`(?:std::)?env::set_var`,
+  String.raw`os:putenv`,
+  String.raw`(?:g_|_)?(?:setenv|putenv)(?:_s)?`,
+  String.raw`SetEnvironmentVariable[AW]?`,
+  String.raw`apache_setenv`,
+].join('|');
+// The name, then either `, value` (two arguments) or `=value` inside the same string (putenv). Group 1 = the quote of the name, 2 = the name,
+// 3 = "=" for the one-string form.
+const ENV_SETTER_CALL = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_CALLEE})\([ \t]{0,64}[@$LuUrRbBfF]{0,2}(["'\x60])([A-Za-z_][A-Za-z0-9_.-]{0,255})(?:\1[ \t]{0,64},[ \t]{0,64}(?=[@$LuUrRbBfF]{0,2}["'\x60])|(=))`,
+  'g',
+);
+
+/**
+ * The string literal at `start` in call syntax: an optional prefix (C# @ $, C L, Python r b f u), then "...", '...' or \`...\`,
+ * or a triple-quoted string, all on one line. Backslash escapes the next character unless the string is verbatim (@"..." doubles its
+ * quote; \`...\` and r"..." are raw). Returns { text, end, interpolated } or null (not a literal, not closed within the bounds).
+ */
+function callStringLiteral(input, start) {
+  let i = start;
+  let prefix = '';
+  while (i < start + 2 && /[@$LuUrRbBfF]/.test(input[i] ?? '')) {
+    prefix += input[i];
+    i += 1;
+  }
+  const quote = input[i];
+  if (quote !== '"' && quote !== "'" && quote !== '`') return null;
+  const verbatim = prefix.includes('@');
+  const raw = quote === '`' || /r/i.test(prefix);
+  const interpolated = /[$fF]/.test(prefix);
+  if (quote !== '`' && input[i + 1] === quote && input[i + 2] === quote) {
+    const close = input.indexOf(quote.repeat(3), i + 3);
+    if (close === -1 || close - i > 4098 || input.slice(i + 3, close).includes('\n')) return null;
+    return { text: input.slice(i + 3, close), end: close + 3, interpolated };
+  }
+  let out = '';
+  for (let j = i + 1; j < input.length && j - i < 4098; j += 1) {
+    const ch = input[j];
+    if (ch === '\n') return null;
+    if (ch === quote) {
+      if (verbatim && input[j + 1] === quote) {
+        out += quote;
+        j += 1;
+      } else return { text: out, end: j + 1, interpolated };
+    } else if (ch === '\\' && !raw && !verbatim && j + 1 < input.length) {
+      out += input[j + 1];
+      j += 1;
+    } else out += ch;
+  }
+  return null;
+}
+
 /** fish `set` flags that read or remove a variable instead of assigning it (-e -q -S -n -h and their long forms). */
 function fishFlagsAssign(flags) {
   return !flags.split(/[ \t]+/).some((flag) => (flag.startsWith('--') ? /^--(?:erase|query|show|names|help|list)$/.test(flag) : /^-[A-Za-z]*[eqSnh]/.test(flag)));
@@ -2932,6 +3065,34 @@ const DEFINITION_ASSIGNMENT_MATCHER = {
   accept: (m, ctx) => SECRET_ASSIGNMENT_MATCHER.accept(m, ctx),
 };
 
+// Java properties: `key value` is a line too. The key ends at the first unescaped blank, `=` or `:`, and the value is the rest of the
+// line (with `\` continuations); `key=value` and `key:value` are read by the assignment matchers above. The key is a run of
+// characters that are not blanks, `=`, `:` or a backslash, or a backslash and the character it escapes, so each character has one reading.
+// A `#` or `!` first character is a comment.
+const PROPERTIES_BLANK_MATCHER = {
+  appliesTo: (ctx) => ctx.properties,
+  pattern: /^[ \t\f]{0,64}((?:[^\s=:#!\\]|\\[^\n]){1}(?:[^\s=:\\]|\\[^\n]){0,1023})[ \t\f]{1,64}(?=[^\s=:])/gm,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[1].replace(/\\(.)/g, '$1'), ctx);
+    if (!kind) return false;
+    const input = m.input;
+    const valueStart = m.index + m[0].length;
+    const lineEnd = ctx.lineEnd(valueStart);
+    const first = input.slice(valueStart, Math.min(lineEnd, valueStart + 4096)).replace(/\r$/, '');
+    m.spanEnd = Math.min(lineEnd, valueStart + first.length);
+    const check = (text, quoted) => isSecretValue({ kind, value: text, quoted, separator: ' ', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+    const continued = continuedValue(ctx, input, m.index, valueStart);
+    if (continued !== null) {
+      m.spanEnd = continued.end;
+      if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
+      return continued.values.some((text) => check(text, true));
+    }
+    const token = first.trimEnd();
+    if (/\s/.test(token)) return check(token, true) || check(token.split(/\s/, 1)[0], false);
+    return check(token, false);
+  },
+};
+
 // ---------------------------------------------------------------------------
 // HTTP credentials written out: `Authorization: Bearer <token>`, headers.set('Authorization', 'Basic <base64>'),
 // `proxy_set_header Authorization "Bearer <token>"`, requests.get(url, auth=('user', 'password')), ...
@@ -3278,6 +3439,7 @@ export const RULES = [
     matchers: [
       SECRET_ASSIGNMENT_MATCHER,
       DEFINITION_ASSIGNMENT_MATCHER,
+      PROPERTIES_BLANK_MATCHER,
       {
         // Pulumi.<stack>.yaml: `config:` keys are `<namespace>:<name>: value` (app:apiToken: V). The name is the part after the namespace; a
         // secret stored by `pulumi config set --secret` is a `secure:` ciphertext mapping and passes.
@@ -3409,6 +3571,41 @@ export const RULES = [
           const literal = powershellString(m.input, m.index + m[0].length);
           if (literal !== null) m.spanEnd = literal.end;
           return powershellValueIsSecret(kind, literal, ctx);
+        },
+      },
+      {
+        // Function-call setters (see ENV_SETTER_CALLEE): the second argument is a literal, or the name is followed by `=` in one string.
+        pattern: ENV_SETTER_CALL,
+        accept: (m, ctx) => {
+          if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind) return false;
+          const start = m.index + m[0].length;
+          let literal;
+          if (m[3] === '=') {
+            // putenv("NAME=value"): the value runs to the closing quote of the same string
+            const body = callStringLiteral(m.input, m.index + m[0].lastIndexOf('(') + 1 + /^[ \t]*/.exec(m[0].slice(m[0].lastIndexOf('(') + 1))[0].length);
+            literal = body === null ? null : { text: body.text.slice(body.text.indexOf('=') + 1), end: body.end, interpolated: body.interpolated };
+          } else {
+            literal = callStringLiteral(m.input, start);
+          }
+          if (literal === null) return false;
+          m.spanEnd = literal.end;
+          if (literal.interpolated && /[{}]/.test(literal.text)) return false; // an interpolated string is built from other values
+          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
+        },
+      },
+      {
+        // Perl hash elements: $ENV{NAME} = 'v', $config{'password'} = "v" (a subscript in braces; PHP and Ruby use brackets, read above)
+        pattern: /(?<![A-Za-z0-9_$])\$[A-Za-z_][A-Za-z0-9_]{0,64}\{[ \t]{0,8}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,8}\}[ \t]{0,16}=(?![=~])[ \t]{0,16}(?=["'])/g,
+        accept: (m, ctx) => {
+          if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
+          const kind = nameKindFor(m[2], ctx);
+          if (!kind) return false;
+          const literal = callStringLiteral(m.input, m.index + m[0].length);
+          if (literal === null) return false;
+          m.spanEnd = literal.end;
+          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
         },
       },
       {
@@ -3762,20 +3959,16 @@ export const RULES = [
         // requests: auth=("user", "pw"), HTTPBasicAuth('user', 'pw'); Java / Kotlin / C# / Go: Credentials.basic("u", "pw"), new UsernamePasswordCredentials("u", "pw"),
         // new Basic("u", "pw"), NetworkCredential, SetBasicAuth; supertest .auth('u', 'pw'). The second argument is a literal password.
         hint: /auth|basic|credential/i,
-        // The second argument is one complete quoted string: """triple""", 'single', "double" or `backtick`, escapes honoured, spaces
-        // allowed (a passphrase). Each alternative starts with a different quote and its body cannot contain that quote unescaped, so
-        // every attempt is bounded and linear.
-        pattern: new RegExp(
-          String.raw`(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}` +
-            String.raw`(?:"""(?<tdq>(?:[^"\\\n]|\\.|"(?!"")){0,4096})"""|'''(?<tsq>(?:[^'\\\n]|\\.|'(?!'')){0,4096})'''|"(?<dq>(?:[^"\\\n]|\\.){0,4096})"|'(?<sq>(?:[^'\\\n]|\\.){0,4096})'|\x60(?<bt>(?:[^\x60\\\n]|\\.){0,4096})\x60)` +
-            String.raw`(?=[ \t]{0,8}[),])`,
-          'g',
-        ),
+        // The pattern finds the call and its first argument; the second argument, one complete quoted string ("""triple""", 'single',
+        // "double" or `backtick`, escapes honoured, spaces allowed: a passphrase), is read by quotedArgument, one forward scan with no
+        // backtracking, so no regex has to tell a quote that closes the string from one inside it.
+        pattern:
+          /(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}(?=["'\x60])/g,
         accept: (m) => {
-          const g = m.groups;
-          const raw = g.tdq ?? g.tsq ?? g.dq ?? g.sq ?? g.bt;
-          if (raw.length === 0) return false;
-          return isSecretValue({ kind: 'strong', value: unescapeQuoted(raw), quoted: true, separator: '=', mode: 'config' });
+          const argument = quotedArgument(m.input, m.index + m[0].length);
+          if (argument === null || argument.raw.length === 0) return false;
+          m.spanEnd = argument.end;
+          return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config' });
         },
       },
     ],
@@ -4004,7 +4197,10 @@ export function scanText(filePath, text) {
   return scanRanges(filePath, text).map(({ path: p, line, rule }) => ({ path: p, line, rule }));
 }
 
-const digest = (text) => createHash('sha1').update(text).digest('hex');
+// A keyed fingerprint (HMAC-SHA-256 under a key made for this run), so a fingerprint is only comparable inside the run that made it and
+// says nothing about the text on its own. It is a fingerprint for comparison, never a stored password hash.
+const EVIDENCE_KEY = randomBytes(32);
+const digest = (text) => createHmac('sha256', EVIDENCE_KEY).update(text).digest('hex');
 
 /** Like scanText, but each finding also carries `lastLine`, the last line its match spans, and valueFirst..valueLast, the line(s) of a separate value field. */
 function scanRanges(filePath, text) {
@@ -4029,6 +4225,7 @@ function scanRanges(filePath, text) {
     minStrong: strict ? CREDENTIAL_FILE_MIN_LENGTH : MIN_STRONG_CONFIG_LENGTH,
     runsToEndOfLine: valueRunsToEndOfLine(filePath),
     catalog: isMessageCatalogPath(filePath),
+    properties: isPropertiesPath(filePath),
     // Start of the line holding `index` and the index of its line break (text.length when it has none): O(log n).
     lineStart(index) {
       const line = lineAt(newlineIndex(), index);
@@ -4472,6 +4669,17 @@ const MAX_HELD_LINE_CHARS = MAX_LOCKFILE_BYTES + 2;
 // Merge results
 // ---------------------------------------------------------------------------
 
+/** The object ids of a `parents <id> <id> ...` line (none for a root commit, which prints a trailing blank), or null for any other text. */
+function parseParentsLine(line) {
+  if (!line.startsWith('parents')) return null;
+  const rest = line.slice('parents'.length);
+  if (rest === '' || rest === ' ') return [];
+  if (rest[0] !== ' ') return null;
+  const ids = rest.slice(1).split(' ');
+  if (ids[ids.length - 1] === '') ids.pop();
+  return ids.every((id) => /^[0-9a-f]{40,64}$/.test(id)) ? ids : null;
+}
+
 const MERGE_BATCH = 25; // merge commits per `git diff-tree --stdin` call, so one call's output stays small
 const ZERO_OBJECT = /^0+$/;
 
@@ -4724,9 +4932,8 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
       // The line after each `commit <id>` line is `parents <id>...` (the format asks for it). Anything else is not output this
       // parser understands: fail closed rather than guess which commits were merges.
       expectParents = false;
-      const listed = /^parents((?: [0-9a-f]{40,64})*) ?$/.exec(line); // a root commit prints "parents " (a trailing blank)
-      if (listed === null) throw new Error('git log printed a commit header this scanner cannot parse');
-      const parentIds = listed[1].split(' ').filter(Boolean);
+      const parentIds = parseParentsLine(line); // a root commit prints "parents " (a trailing blank)
+      if (parentIds === null) throw new Error('git log printed a commit header this scanner cannot parse');
       if (parentIds.length > 1) merges.push({ commit, parents: parentIds });
       return;
     }

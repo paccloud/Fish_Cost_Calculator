@@ -6928,3 +6928,273 @@ describe('review round 14', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Review round 15: Java properties with a blank separator, whole-value variable references, call-style environment setters.
+// Every value is generated or assembled at run time; the names that would look like secrets are split.
+// ---------------------------------------------------------------------------
+describe('review round 15', () => {
+  const value = randomString(28, 15001);
+  const dollarPassword = ['pa$', '$w0rd', 'Zq7!'].join('');
+  const JWT = ['JWT_', 'SECRET'].join('');
+  const jwtDotted = ['jwt.', 'secret'].join('');
+  const DB = ['db_', 'password'].join('');
+  const count = (file, text) => scanText(file, text).length;
+
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const commit = (dir, files) => {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    }
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', 'c').status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+
+  // -------------------------------------------------------------------------
+  describe('(1) a Java properties line whose key and value are separated by blanks', () => {
+    const files = ['app.properties', 'application-prod.properties', 'config/db.properties', 'application.properties.local', 'db.properties.bak'];
+
+    it.each(files)('reports key<blank>value, key<tab>value, key=value and key:value in %s', (file) => {
+      for (const line of [`${jwtDotted} ${value}`, `${jwtDotted}\t${value}`, `   ${jwtDotted}   ${value}`, `${jwtDotted}=${value}`, `${jwtDotted}:${value}`, `${jwtDotted} = ${value}`]) {
+        expect(count(file, `${line}\n`), line.replace(value, 'V')).toBe(1);
+      }
+    });
+
+    it('reads an escaped blank as part of the key', () => {
+      expect(count('a.properties', `${['jwt.', 'secret'].join('')}\\ key ${value}\n`)).toBe(1);
+      expect(count('a.properties', `jwt\\ ${['sec', 'ret'].join('')} ${value}\n`)).toBe(1);
+    });
+
+    it('reads a value continued with a trailing backslash', () => {
+      expect(count('a.properties', `${jwtDotted} \\\n    ${value}\n`)).toBe(1);
+      expect(count('a.properties', `${jwtDotted} ${value.slice(0, 10)}\\\n    ${value.slice(10)}\n`)).toBe(1);
+      expect(count('a.properties', `${jwtDotted}=\\\n    ${value}\n`)).toBe(1);
+    });
+
+    it('reads a passphrase and a value with a dollar sign', () => {
+      expect(count('a.properties', `${DB} correct horse battery staple\n`)).toBe(1);
+      expect(count('a.properties', `${DB} ${dollarPassword}\n`)).toBe(1);
+    });
+
+    it('lets placeholders, references, empty values and comments pass', () => {
+      for (const text of ['${JWT_ID}', '@jwt.secret@', 'changeme', '$JWT_ID', '%(JWT_ID)s', 'your secret here', '<your secret>']) {
+        expect(count('a.properties', `${jwtDotted} ${text}\n`), text).toBe(0);
+      }
+      expect(count('a.properties', `${jwtDotted}\n`)).toBe(0);
+      expect(count('a.properties', `${jwtDotted}   \n`)).toBe(0);
+      expect(count('a.properties', `# ${jwtDotted} ${value}\n! ${jwtDotted} ${value}\n`)).toBe(0);
+      expect(count('a.properties', 'server.port 8080\napp.name Fish Calculator\ntimeout 30\n')).toBe(0);
+    });
+
+    it('keeps the message-catalog exemption for prose', () => {
+      expect(count('messages.properties', `login.password Please type your password here now\n`)).toBe(0);
+      expect(count('messages_en.properties', `password.reset.help Enter the password you received by mail\n`)).toBe(0);
+      expect(count('i18n/errors.properties', `${DB}.hint The password of the admin user\n`)).toBe(0);
+    });
+
+    it('does not read other file types this way', () => {
+      expect(count('notes.txt', `${jwtDotted} ${value}\n`)).toBe(0);
+      expect(count('a.js', `${jwtDotted} ${value}\n`)).toBe(0);
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r15-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'conf/app.properties': 'server.port 8080\n' });
+      const head = commit(dir, { 'conf/app.properties': `server.port 8080\n${jwtDotted} ${value}\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('app.properties');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+
+    it('scans hostile properties text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const texts = [
+          'a'.repeat(200000), 'a '.repeat(100000), ('k' + ' '.repeat(70)).repeat(3000), '\\\\ '.repeat(100000), 'a\\\\\\n'.repeat(50000),
+          ('jwt.secret ' + 'x '.repeat(500) + '\\\\\\n').repeat(400), ' '.repeat(200000) + 'a', ('a'.repeat(1100) + ' v\\n').repeat(500),
+        ];
+        for (const file of ['a.properties', 'a.properties.local']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(2) a value that is entirely a variable reference is not a hardcoded secret', () => {
+    const cases = [
+      ['a.sh', (n) => `${n}=$password`],
+      ['a.sh', (n) => `${n}="$password"`],
+      ['a.env', (n) => `${n}=$password`],
+      ['a.yml', (n) => `${n}: $password`],
+      ['a.sh', (n) => `${n}=$dbPassword`],
+      ['a.sh', (n) => `${n}=$1`],
+      ['a.sh', (n) => `${n}=\${password}`],
+      ['a.sh', (n) => `${n}=\${password:-}`],
+      ['a.sh', (n) => `${n}=$(cat /run/secrets/x)`],
+      ['a.sh', (n) => `${n}=\`cat /run/secrets/x\``],
+      ['a.ini', (n) => `${n} = %(DB_PASSWORD)s`],
+      ['a.ini', (n) => `${n} = %(db_password)d`],
+      ['a.ini', (n) => `${n} = %%db_pw%%`],
+      ['a.bat', (n) => `set ${n}=%jwt_pw%`],
+      ['a.yml', (n) => `${n}: {{ db_pw }}`],
+      ['a.yml', (n) => `${n}: {{ .Values.db.pw }}`],
+      ['a.yml', (n) => `${n}: <%= ENV['DB_PW'] %>`],
+      ['a.yml', (n) => `${n}: #{ENV['DB_PW']}`],
+      ['a.yml', (n) => `${n}: \${{ secrets.DB_PW }}`],
+      ['a.properties', (n) => `${n}=@db.pw@`],
+      ['a.yml', (n) => `${n}: $\${DB_PW}`],
+      ['docker-compose.yml', (n) => `${n}: \${DB_PW:?err}`],
+      ['a.pl', (n) => `${n} = $ENV{DB_PW};`],
+      ['a.php', (n) => `$${n} = $_ENV['DB_PW'];`],
+      ['a.cmd', (n) => `set ${n}=%ENV%`],
+      ['a.ps1', (n) => `$${n} = $env:DB_PW`],
+      ['a.py', (n) => `${n} = os.environ["DB_PW"]`],
+      ['a.c', (n) => `char* ${n} = getenv("DB_PW");`],
+      ['a.js', (n) => `const ${n} = process.env.DB_PW;`],
+      ['A.java', (n) => `String ${n} = System.getenv("DB_PW");`],
+      ['a.rb', (n) => `${n} = ENV.fetch("DB_PW")`],
+      ['a.rb', (n) => `${n} = ENV["DB_PW"]`],
+      ['A.cs', (n) => `var ${n} = Environment.GetEnvironmentVariable("DB_PW");`],
+    ];
+    it.each(cases)('passes a whole-value reference in %s: %s', (file, form) => {
+      expect(count(file, `${form(DB)}\n`)).toBe(0);
+      expect(count(file, `${form(JWT)}\n`)).toBe(0);
+    });
+
+    it('judges a literal glued to a reference, and a default with a literal', () => {
+      expect(count('a.sh', `${JWT}=${value}$suffix\n`)).toBe(1);
+      expect(count('a.sh', `${JWT}=$prefix${value}\n`)).toBe(1);
+      expect(count('a.sh', `${JWT}=\${password:-${value}}\n`)).toBe(1);
+      expect(count('a.ini', `${DB} = ${value}%(DB_PASSWORD)s\n`)).toBe(1);
+    });
+
+    it('still reports a password that contains or starts with a dollar sign', () => {
+      for (const file of ['a.sh', 'a.env', 'a.ini', 'a.yml', 'a.properties']) {
+        expect(count(file, `${DB}=${dollarPassword}\n`), file).toBe(1);
+        expect(count(file, `${DB}=$${value}\n`), file).toBe(1);
+        expect(count(file, `${DB}=$${value.toLowerCase()}9\n`), file).toBe(1);
+      }
+      expect(count('a.js', `const ${DB} = "${dollarPassword}";\n`)).toBe(1);
+    });
+
+    it('exports isPlaceholder with the same verdicts', () => {
+      for (const text of ['$password', '$dbPassword', '%(DB_PASSWORD)s', '%(x)d', '$ENV{X}', "$_ENV['X']", '$env:X', "<%= ENV['X'] %>", '@x@', '%X%']) {
+        expect(isPlaceholder(text), text).toBe(true);
+      }
+      for (const text of [dollarPassword, `$${value}`, `${value}%(X)s`, `x%(X)`]) expect(isPlaceholder(text), text.slice(0, 6)).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(3) a function call that sets an environment variable or property to a literal', () => {
+    const NAME_PROP = ['jwt.', 'secret'].join('');
+    const calls = [
+      ['A.cs', (n, v) => `Environment.SetEnvironmentVariable("${n}", "${v}");`],
+      ['A.cs', (n, v) => `System.Environment.SetEnvironmentVariable("${n}", "${v}");`],
+      ['A.cs', (n, v) => `Environment.SetEnvironmentVariable("${n}", "${v}", EnvironmentVariableTarget.Machine);`],
+      ['A.cs', (n, v) => `Environment.SetEnvironmentVariable(@"${n}", @"${v}");`],
+      ['a.ps1', (n, v) => `[Environment]::SetEnvironmentVariable('${n}', '${v}', 'User')`],
+      ['a.c', (n, v) => `SetEnvironmentVariableW(L"${n}", L"${v}");`],
+      ['a.go', (n, v) => `os.Setenv("${n}", "${v}")`],
+      ['a.go', (n, v) => `os.Setenv("${n}", \`${v}\`)`],
+      ['a.py', (n, v) => `os.putenv("${n}", "${v}")`],
+      ['a.py', (n, v) => `os.environ.setdefault("${n}", '${v}')`],
+      ['a.py', (n, v) => `os.environ["${n}"] = "${v}"`],
+      ['A.java', (n, v) => `System.setProperty("${NAME_PROP}", "${v}");`],
+      ['A.java', (n, v) => `props.setProperty("${n}", "${v}");`],
+      ['A.java', (n, v) => `System.getenv().put("${n}", "${v}");`],
+      ['A.java', (n, v) => `pb.environment().put("${n}", "${v}");`],
+      ['a.rb', (n, v) => `ENV["${n}"] = "${v}"`],
+      ['a.rb', (n, v) => `ENV.store("${n}", "${v}")`],
+      ['a.c', (n, v) => `putenv("${n}=${v}");`],
+      ['a.c', (n, v) => `setenv("${n}", "${v}", 1);`],
+      ['a.c', (n, v) => `_putenv_s("${n}", "${v}");`],
+      ['a.php', (n, v) => `putenv("${n}=${v}");`],
+      ['a.php', (n, v) => `apache_setenv('${n}', '${v}');`],
+      ['a.php', (n, v) => `$_ENV['${n}'] = '${v}';`],
+      ['a.ts', (n, v) => `Deno.env.set("${n}", "${v}");`],
+      ['a.js', (n, v) => `process.env["${n}"] = "${v}";`],
+      ['a.rs', (n, v) => `std::env::set_var("${n}", "${v}");`],
+      ['a.ex', (n, v) => `System.put_env("${n}", "${v}")`],
+      ['a.pl', (n, v) => `$ENV{${n}} = '${v}';`],
+      ['a.pl', (n, v) => `$config{'${n}'} = "${v}";`],
+      ['a.cmd', (n, v) => `setx ${n} ${v}`],
+    ];
+    it.each(calls)('reports a literal set in %s: %s', (file, form) => {
+      expect(count(file, `${form(JWT, value)}\n`)).toBe(1);
+    });
+
+    it('reports a passphrase and a fenced block in Markdown', () => {
+      expect(count('A.cs', `Environment.SetEnvironmentVariable("${JWT}", "correct horse battery staple");\n`)).toBe(1);
+      expect(count('a.md', `\`\`\`csharp\nEnvironment.SetEnvironmentVariable("${JWT}", "${value}");\n\`\`\`\n`)).toBe(1);
+      expect(count('a.md', `Call Environment.SetEnvironmentVariable("${JWT}", "${value}") in your code.\n`)).toBe(0);
+    });
+
+    it('passes placeholders, references, variables and names that are not secrets', () => {
+      const same = [
+        (v) => `Environment.SetEnvironmentVariable("${JWT}", "${v}");`,
+        (v) => `os.Setenv("${JWT}", "${v}")`,
+        (v) => `putenv("${JWT}=${v}");`,
+        (v) => `setenv("${JWT}", "${v}", 1);`,
+        (v) => `System.setProperty("${NAME_PROP}", "${v}");`,
+      ];
+      for (const form of same) {
+        for (const v of ['changeme', '${JWT_ID}', '$OTHER', '%(X)s', '<your secret>', '']) expect(count('x.cs', `${form(v)}\n`), form('V') + v).toBe(0);
+        expect(count('x.cs', `${form(value)}`.replace(JWT, 'PATH').replace(NAME_PROP, 'user.dir')), form('V')).toBe(0);
+      }
+      expect(count('A.cs', `Environment.SetEnvironmentVariable("${JWT}", Configuration["X"]);\n`)).toBe(0);
+      expect(count('A.cs', `Environment.SetEnvironmentVariable("${JWT}", $"{prefix}${value}");\n`)).toBe(0);
+      expect(count('a.go', `os.Setenv("${JWT}", token)\n`)).toBe(0);
+      expect(count('a.c', `setenv("${JWT}", getenv("OTHER"), 1);\n`)).toBe(0);
+      expect(count('a.py', `os.environ["${JWT}"] = other\n`)).toBe(0);
+      expect(count('a.pl', `$ENV{${JWT}} = $other;\n`)).toBe(0);
+    });
+
+    it('scans hostile call text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const N = 20000;
+        const J = 'JWT_' + 'SECRET';
+        const env = 'Environment.' + 'SetEnvironmentVariable(';
+        const texts = [
+          env + '"' + J + '", "' + 'a\\\\'.repeat(100000), 'set' + 'env(' + '"'.repeat(100000), 'put' + 'env("' + J + '=' + 'x'.repeat(200000),
+          ('os.' + 'Setenv("' + J + '", "b") ').repeat(N), 'x.set' + 'Property(' + 'a.'.repeat(100000), 'a'.repeat(100000) + '.set' + 'Property("' + J + '", "b")',
+          '$ENV{' + ' '.repeat(200000), ('$c{"' + J + '"} =' + ' '.repeat(20)).repeat(5000), env + '@$LuU'.repeat(40000),
+          env + '"' + J + '", """' + 'a'.repeat(200000),
+        ];
+        for (const file of ['a.cs', 'a.c', 'a.md', 'A.java']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r15-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'src/Program.cs': 'class P { }\n' });
+      const head = commit(dir, { 'src/Program.cs': `class P { void M() { System.Environment.SetEnvironmentVariable("${JWT}", "${value}"); } }\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('Program.cs');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+  });
+});
