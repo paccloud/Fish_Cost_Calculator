@@ -30,8 +30,17 @@ one signs up again.
 - `api/`, `server/`, `shared/`, SQLite, Neon, the legacy password login and the
   custom sync layer go away, and so does the rule to change both backends.
 - Excel/CSV import parses in the browser.
-- The community dataset is also published as a CSV/JSON file, so other tools
-  can use it without Firestore.
+- Security rules cannot hide single fields of a readable document, so approved
+  yields are copied into a separate public collection holding only the public
+  fields (species, conversion, yield, source, display name). The owner's user
+  id, submission details and review note stay in the owner's private document.
+  The reviewer's approval writes both in one batch.
+- Our sync engine's revision check goes away: when the same record is edited
+  on two devices while one is offline, the later write wins. We accept this
+  because the accounts belong to one person; the conflict screen is dropped.
+- The community dataset can be downloaded as CSV/JSON from the Community page.
+  A stable file address for other tools comes with the versioned releases in
+  ADR 0004.
 - The Firebase SDK makes the app download larger than today's REST calls.
 - Local development and CI use the Firebase emulators.
 - The address moves from `*.vercel.app` to `*.web.app`. Browser storage belongs

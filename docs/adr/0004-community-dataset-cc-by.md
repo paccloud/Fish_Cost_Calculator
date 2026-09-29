@@ -11,8 +11,9 @@ old contributor profiles) is published or exported. The code stays MIT. A licens
 narrowed after the fact, so this is set before any submissions under the new
 flow. For now the Community page offers a CSV/JSON download built from the
 approved yields. Scheduled, versioned releases (a GitHub Action exporting a
-numbered file) will be added once there are enough approved yields to be worth
-citing.
+numbered file at a stable address other tools can fetch) will be added once
+there are enough approved yields to be worth citing. Until then the dataset has
+no fixed download address.
 
 ## Consequences
 

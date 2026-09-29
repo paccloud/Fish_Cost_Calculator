@@ -9,7 +9,9 @@ guest data in the browser and copying it into an account with our own code, a
 guest's first save signs them in anonymously; their data lives in Firestore
 under the same rules as any account, and signing in with Google or email later
 links to that same user so nothing is copied. People who only use the
-calculator never get an account.
+calculator never get an account. Anonymous sign-in needs the network, so a save
+made offline before the guest has a user is kept in the browser and written to
+Firestore once sign-in succeeds.
 
 ## Consequences
 
@@ -27,6 +29,8 @@ calculator never get an account.
   This copy is the one piece of guest-transfer code we keep.
 
 - A guest who clears browser data loses what they saved, as today.
-- Unused anonymous accounts pile up and may need occasional cleanup.
+- Unused anonymous accounts pile up and may need occasional cleanup. Deleting
+  an Auth user does not delete its Firestore documents, so cleanup removes the
+  user's custom yields and saved calculations along with the user.
 - Only a non-anonymous account can submit yields to the community dataset, so
   every submitted yield has a real owner.
