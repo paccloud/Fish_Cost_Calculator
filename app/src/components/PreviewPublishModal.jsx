@@ -63,7 +63,7 @@ export default function PreviewPublishModal({ calc, loading, error, onConfirm, o
         className="bg-surface border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4"
       >
         <div className="flex items-center gap-2 mb-1">
-          <Globe size={18} className="text-brand-teal" />
+          <Globe size={18} className="text-accent" />
           <h2 id="preview-publish-title" className="text-base font-semibold text-text-primary">
             Publish calculation
           </h2>
@@ -89,7 +89,7 @@ export default function PreviewPublishModal({ calc, loading, error, onConfirm, o
         </div>
 
         {error && (
-          <p role="alert" className="mb-3 text-sm text-red-600 dark:text-red-400">
+          <p role="alert" className="mb-3 text-sm text-danger">
             {error}
           </p>
         )}

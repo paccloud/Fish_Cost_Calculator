@@ -169,7 +169,7 @@ const SubmitRequest = () => {
           <label className="block text-lg font-semibold text-navy dark:text-text-primary mb-4">
             What type of request is this?
             {errors.type && (
-              <span className="text-red-500 text-sm font-normal ml-2">
+              <span className="text-danger text-sm font-normal ml-2">
                 {errors.type}
               </span>
             )}
@@ -241,7 +241,7 @@ const SubmitRequest = () => {
               >
                 Title *
                 {errors.title && (
-                  <span className="text-red-500 ml-2">{errors.title}</span>
+                  <span className="text-danger ml-2">{errors.title}</span>
                 )}
               </label>
               <input
@@ -266,7 +266,7 @@ const SubmitRequest = () => {
               >
                 Description *
                 {errors.description && (
-                  <span className="text-red-500 ml-2">{errors.description}</span>
+                  <span className="text-danger ml-2">{errors.description}</span>
                 )}
               </label>
               <textarea
@@ -323,7 +323,7 @@ const SubmitRequest = () => {
                 >
                   Your Email (optional)
                   {errors.email && (
-                    <span className="text-red-500 ml-2">{errors.email}</span>
+                    <span className="text-danger ml-2">{errors.email}</span>
                   )}
                 </label>
                 <input

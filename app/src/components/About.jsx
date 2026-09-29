@@ -11,7 +11,7 @@ const About = () => {
                         <Fish className="h-10 w-10 text-white" />
                     </div>
                 </div>
-                <h1 className="text-3xl font-bold text-brand-teal mb-3">
+                <h1 className="text-3xl font-bold text-accent mb-3">
                     About Local Catch
                 </h1>
                 <p className="text-text-secondary max-w-xl mx-auto">
@@ -22,8 +22,8 @@ const About = () => {
             {/* Origin Story */}
             <div className="card p-8">
                 <div className="flex items-center gap-3 mb-5">
-                    <Anchor className="h-5 w-5 text-brand-terracotta" />
-                    <h2 className="text-xl font-semibold text-brand-teal">The Origin Story</h2>
+                    <Anchor className="h-5 w-5 text-link" />
+                    <h2 className="text-xl font-semibold text-accent">The Origin Story</h2>
                 </div>
 
                 <div className="space-y-4 text-text-secondary leading-relaxed text-sm">
@@ -34,7 +34,7 @@ const About = () => {
                     </p>
                     <p>
                         After some time away from active development, the project was{' '}
-                        <span className="text-brand-terracotta font-medium">reinvigorated
+                        <span className="text-link font-medium">reinvigorated
                         by a conversation on the listserv of the Local Catch network</span>. The discussions about
                         pricing transparency and the challenges fishers face when calculating fair prices for
                         their catch reminded me why this tool matters.
@@ -60,7 +60,7 @@ const About = () => {
                                 href="https://localcatch.org"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 text-brand-terracotta hover:underline text-sm font-medium"
+                                className="inline-flex items-center gap-2 text-link hover:underline text-sm font-medium"
                             >
                                 Visit Local Catch Network
                                 <ExternalLink className="h-3 w-3" />
@@ -73,13 +73,13 @@ const About = () => {
             {/* Open Source */}
             <div className="card p-8">
                 <div className="flex items-center gap-3 mb-5">
-                    <Github className="h-5 w-5 text-brand-terracotta" />
-                    <h2 className="text-xl font-semibold text-brand-teal">Open Source & Free Forever</h2>
+                    <Github className="h-5 w-5 text-link" />
+                    <h2 className="text-xl font-semibold text-accent">Open Source & Free Forever</h2>
                 </div>
 
                 <p className="text-text-secondary leading-relaxed mb-6 text-sm">
                     This calculator is and will always be{' '}
-                    <span className="text-brand-teal font-medium">free and open source</span>.
+                    <span className="text-accent font-medium">free and open source</span>.
                     It's built for and by the fishing community. Whether you're a small-scale fisher calculating
                     prices for direct sales, or a processor working with multiple species, this tool is here to help.
                 </p>
@@ -103,7 +103,7 @@ const About = () => {
                     </div>
                 </div>
 
-                <h2 className="text-xl font-semibold text-brand-teal mb-3">Support Future Updates</h2>
+                <h2 className="text-xl font-semibold text-accent mb-3">Support Future Updates</h2>
 
                 <p className="text-text-secondary max-w-lg mx-auto mb-6 leading-relaxed text-sm">
                     If you find this tool useful and want to support continued development, consider buying me a coffee!
@@ -114,7 +114,7 @@ const About = () => {
                     href="https://buymeacoffee.com/pcswny"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-brand-terracotta hover:bg-brand-terracotta-light text-white font-semibold px-6 py-3 rounded-md transition"
+                    className="inline-flex items-center gap-2 bg-brand-cta hover:bg-brand-cta-hover text-white font-semibold px-6 py-3 rounded-md transition"
                 >
                     <Coffee className="h-4 w-4" />
                     Buy Me a Coffee

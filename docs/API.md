@@ -455,16 +455,15 @@ Retrieve opt-in contributor profiles. No authentication required.
 [
   {
     "id": 1,
-    "user_id": 42,
-    "username": "fisherman_joe",
     "display_name": "Joe Fisher",
     "organization": "Pacific Catch Co.",
     "bio": "20 years of commercial fishing.",
-    "show_on_page": true,
     "contribution_count": 15
   }
 ]
 ```
+
+Only profiles that have turned on "Show on contributors page" and have a display name are listed. The response is an allowlist: it never includes `user_id`, `username`, `email` or `show_on_page`. `id` is the contributor profile's id, not a user id.
 
 ---
 

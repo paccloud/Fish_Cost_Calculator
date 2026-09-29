@@ -79,7 +79,7 @@ export default function SignOutGuardModal({ calcs, yields, onKeep, onDiscard, on
           <button
             onClick={handleDiscard}
             disabled={processing}
-            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg border border-border bg-surface text-text-secondary hover:bg-brand-terracotta/10 hover:text-brand-terracotta hover:border-brand-terracotta/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full text-sm font-medium px-4 py-2.5 rounded-lg border border-border bg-surface text-text-secondary hover:bg-brand-terracotta/10 hover:text-link hover:border-brand-terracotta/30 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Discard unsaved data and sign out
           </button>
