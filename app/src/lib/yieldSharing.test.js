@@ -3,6 +3,7 @@ import {
   buildSharePreviewFields,
   createYieldShareFlow,
   describeShareAttribution,
+  getShareBlocker,
 } from './yieldSharing';
 import { resolveCommunityAttribution } from '../../../shared/handlers/communityData.js';
 
@@ -10,7 +11,7 @@ import { resolveCommunityAttribution } from '../../../shared/handlers/communityD
 // flow is tested at the controller level: DataManagement's share icon calls
 // flow.toggle(), ShareYieldModal's buttons call flow.confirm()/flow.cancel().
 
-const ITEM = { id: 'local-1', serverId: 42, species: 'Cod', product: 'Fillet', yield: 40, source: 'Dock test', is_shared: false };
+const ITEM = { id: 'local-1', serverId: 42, syncStatus: 'synced', species: 'Cod', product: 'Fillet', yield: 40, source: 'Dock test', is_shared: false };
 
 function okRes() {
   return { ok: true, status: 200, json: async () => ({}) };
@@ -131,6 +132,51 @@ describe('yield share confirmation flow', () => {
     resolveSecond(null);
     await second;
     expect(flow.getPending().attribution).toEqual({ status: 'ready', contributor: null, organization: null });
+  });
+
+  it.each(['local', 'conflicted', 'pending-delete', 'conflict-delete', undefined])(
+    'refuses to preview or share a row that is not fully synced (syncStatus: %s)',
+    async (syncStatus) => {
+      const { flow, client } = makeFlow({ profile: { display_name: 'A', show_on_page: true } });
+      const dirty = { ...ITEM, syncStatus };
+
+      const opened = await flow.toggle(dirty);
+
+      expect(opened.ok).toBe(false);
+      expect(opened.error).toMatch(/sync/i);
+      expect(flow.getPending()).toBeNull(); // no preview of fields that would not be published
+      expect(client.getContributorProfile).not.toHaveBeenCalled();
+      expect(client.shareUserDataRaw).not.toHaveBeenCalled();
+    }
+  );
+
+  it('re-checks at confirm time so a row that stopped being synced is never published', async () => {
+    const { flow, client } = makeFlow();
+    const row = { ...ITEM }; // own copy: never mutate the shared fixture
+    await flow.toggle(row);
+    expect(flow.getPending().attribution.status).toBe('ready');
+    // Simulate the previewed snapshot no longer matching the server copy.
+    row.syncStatus = 'local';
+
+    const result = await flow.confirm();
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/sync/i);
+    expect(client.shareUserDataRaw).not.toHaveBeenCalled();
+    expect(flow.getPending()).toBeNull();
+  });
+
+  it('getShareBlocker allows only fully synced rows that exist on the server', () => {
+    expect(getShareBlocker(ITEM)).toBeNull();
+    expect(getShareBlocker({ ...ITEM, serverId: null })).toMatch(/sync/i);
+    expect(getShareBlocker({ ...ITEM, syncStatus: 'local' })).toMatch(/sync/i);
+  });
+
+  it('still lets a user stop sharing a row that has unsynced edits', async () => {
+    const { flow, client } = makeFlow();
+    const result = await flow.toggle({ ...ITEM, syncStatus: 'local', is_shared: true });
+    expect(result).toEqual({ ok: true, action: 'unshare' });
+    expect(client.unshareUserDataRaw).toHaveBeenCalledTimes(1);
   });
 
   it('unsharing needs no confirmation', async () => {

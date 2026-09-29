@@ -64,6 +64,26 @@ async function readError(res, fallback) {
 }
 
 /**
+ * Why a row cannot be shared right now, or null if it can.
+ *
+ * The share API publishes the SERVER copy of the row (it takes only the id),
+ * while the preview shows the LOCAL fields. They are the same only when the
+ * row is fully synced. A row with an unsynced local edit, a conflict, or a
+ * pending delete would preview one thing and publish another, and sharing
+ * bumps the server revision, which would then make the pending edit conflict.
+ *
+ * @param {{serverId?: string|number|null, syncStatus?: string}} item
+ * @returns {string|null}
+ */
+export function getShareBlocker(item) {
+  if (!item?.serverId) return 'Sync this entry before sharing it.';
+  if (item.syncStatus !== 'synced') {
+    return 'Sync your latest changes to this entry before sharing it, so what you preview is what gets published.';
+  }
+  return null;
+}
+
+/**
  * Create the share/unshare controller.
  *
  * Pending state emitted through onPendingChange is either null (no preview
@@ -99,6 +119,8 @@ export function createYieldShareFlow(initialDeps) {
 
   /** Open the share preview. Loads attribution (read-only); never shares. */
   async function request(item) {
+    const blocker = getShareBlocker(item);
+    if (blocker) return { ok: false, error: blocker };
     const opened = {
       item,
       attribution: { status: 'loading', contributor: null, organization: null },
@@ -115,8 +137,9 @@ export function createYieldShareFlow(initialDeps) {
     // Ignore a late profile response unless THIS exact preview is still the
     // open one. Comparing the row is not enough: closing and reopening the same
     // row creates a new preview, and an older response must not mark it ready.
-    if (pending !== opened) return;
+    if (pending !== opened) return { ok: true, action: 'preview' };
     setPending({ ...pending, attribution });
+    return { ok: true, action: 'preview' };
   }
 
   /** Close the preview without sharing. Makes no request. */
@@ -138,9 +161,10 @@ export function createYieldShareFlow(initialDeps) {
       };
     }
     const { item } = current;
-    if (!item.serverId) {
+    const blocker = getShareBlocker(item);
+    if (blocker) {
       setPending(null);
-      return { ok: false, error: 'Sync this entry before sharing it.' };
+      return { ok: false, error: blocker };
     }
     setPending({ ...current, sending: true });
     try {
@@ -182,8 +206,7 @@ export function createYieldShareFlow(initialDeps) {
    */
   async function toggle(item) {
     if (item.is_shared) return unshare(item);
-    await request(item);
-    return { ok: true, action: 'preview' };
+    return request(item);
   }
 
   return { configure, request, cancel, confirm, unshare, toggle, getPending: () => pending };
