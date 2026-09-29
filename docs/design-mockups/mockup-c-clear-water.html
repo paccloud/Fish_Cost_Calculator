@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fish Cost Calculator — Mock-up C, Clear Water</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #e6f2f5; --card: #ffffff; --ink: #113540; --ink2: #3f6270; --teal: #0a6577; --slot: #d4eaf0; --line: #547f8d; --answer: #08505f; --soft: #cfe5eb;
+    --btn: #0a6577; --btn-ink: #ffffff; --focus: #0b5fd1; --tag: #ffe9a8; --tag-ink: #4a3600;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0a181e; --card: #10262e; --ink: #e8f2f5; --ink2: #a6c1ca; --teal: #86d6e8; --slot: #183640; --line: #6f9aa8; --answer: #9be0f0; --soft: #1b3a45;
+      --btn: #86d6e8; --btn-ink: #06222a; --focus: #ffd66b; --tag: #3a3213; --tag-ink: #ffe9a8;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0a181e; --card: #10262e; --ink: #e8f2f5; --ink2: #a6c1ca; --teal: #86d6e8; --slot: #183640; --line: #6f9aa8; --answer: #9be0f0; --soft: #1b3a45;
+    --btn: #86d6e8; --btn-ink: #06222a; --focus: #ffd66b; --tag: #3a3213; --tag-ink: #ffe9a8;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 1.0625rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+  .ribbon { background: var(--tag); color: var(--tag-ink); font-size: .8125rem; font-weight: 600; text-align: center; padding: 6px 12px; }
+  .page { max-width: 820px; margin: 0 auto; padding: 0 20px 56px; }
+  header.bar { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--teal); font-size: 1.0625rem; }
+  .brand svg { width: 26px; height: 26px; fill: var(--teal); }
+  .theme { min-width: 48px; min-height: 48px; border-radius: 50%; border: 2px solid var(--line); background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+
+  .eyebrow { margin: 12px 0 0; color: var(--ink2); font-weight: 600; letter-spacing: .02em; }
+  h1 { margin: 4px 0 18px; font-size: clamp(1.9rem, 6.4vw, 3rem); line-height: 1.12; font-weight: 700; letter-spacing: -.02em; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+  .pills button { min-height: 48px; padding: 0 20px; border-radius: 999px; border: 2px solid var(--line); background: transparent; color: var(--ink); font: 600 1rem system-ui, sans-serif; cursor: pointer; }
+  .pills button[aria-pressed="true"] { background: var(--btn); border-color: var(--btn); color: var(--btn-ink); }
+
+  .card { background: var(--card); border-radius: 28px; padding: clamp(20px, 5vw, 36px); box-shadow: 0 2px 0 rgba(10, 60, 75, .06), 0 18px 40px rgba(10, 60, 75, .08); }
+  .mad { margin: 0; font-size: clamp(1.25rem, 4.4vw, 1.9rem); line-height: 2.35; font-weight: 500; }
+  .slot { display: inline-block; max-width: 100%; min-height: 48px; margin: 0 2px; padding: 2px 34px 2px 12px; font: 700 inherit system-ui, sans-serif; font-size: inherit; color: var(--teal);
+    border: 0; border-bottom: 3px solid var(--teal); border-radius: 12px 12px 4px 4px; vertical-align: middle; line-height: 1.3; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+    background: linear-gradient(45deg, transparent 50%, currentColor 50%) calc(100% - 19px) 55% / 7px 7px no-repeat, linear-gradient(135deg, currentColor 50%, transparent 50%) calc(100% - 13px) 55% / 7px 7px no-repeat, var(--slot); }
+  .nw { white-space: nowrap; }
+  .slot:disabled { opacity: .55; cursor: not-allowed; }
+  input.slot { padding-right: 12px; width: 6.4ch; text-align: center; background: var(--slot); font-variant-numeric: tabular-nums; cursor: text; }
+  input.slot.wide { width: 7.6ch; }
+  .slot option { font-size: 1rem; color: #000; background: #fff; }
+
+  .answer { margin-top: 26px; padding-top: 24px; border-top: 2px dashed var(--soft); min-height: 12rem; }
+  .answer .pre { margin: 0; color: var(--ink2); font-size: 1.125rem; font-weight: 600; }
+  .answer .big { margin: 0; font-size: clamp(3.4rem, 15vw, 6rem); line-height: 1.02; font-weight: 800; color: var(--answer); letter-spacing: -.03em; font-variant-numeric: tabular-nums; animation: rise .35s ease-out; }
+  .answer .big small { font-size: .3em; font-weight: 600; letter-spacing: 0; color: var(--ink2); }
+  .answer .because { margin: 10px 0 0; font-size: 1.125rem; max-width: 34em; }
+  .answer .because b { font-weight: 800; }
+  .answer .waiting { margin: 0; color: var(--ink2); font-size: 1.25rem; padding-top: 12px; }
+  @keyframes rise { from { opacity: .3; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  details.more { margin-top: 22px; border-top: 2px dashed var(--soft); padding-top: 8px; }
+  details.more summary { min-height: 52px; display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--teal); cursor: pointer; }
+  .more .grid { display: grid; gap: 18px; padding: 8px 0 6px; }
+  @media (min-width: 640px) { .more .grid { grid-template-columns: 1fr 1fr; } }
+  .more label, .more .lab { display: block; font-weight: 700; margin-bottom: 6px; }
+  .more .hint { font-weight: 400; color: var(--ink2); }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; }
+  .presets button { min-height: 48px; padding: 0 16px; border-radius: 12px; border: 2px solid var(--line); background: transparent; color: var(--ink); font: 700 .95rem system-ui, sans-serif; cursor: pointer; }
+  .presets button[aria-pressed="true"] { background: var(--btn); color: var(--btn-ink); border-color: var(--btn); }
+  .more input, .more select { width: 100%; min-height: 50px; padding: 8px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: 500 1.0625rem system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .answer .big { animation: none; } * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="ribbon">Mock-up C · Clear Water — live sample with 5 species from the real yield data</div>
+<div class="page">
+  <header class="bar">
+    <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c3-5 8-7 13-5l5-3v4l2 4-2 4v4l-5-3c-5 2-10 0-13-5z"/><circle cx="16" cy="10" r="1.2" fill="#fff"/></svg>Local Catch</div>
+    <button class="theme" id="theme" type="button" aria-label="Switch color theme">◐</button>
+  </header>
+
+  <main>
+    <p class="eyebrow">Fish Cost Calculator</p>
+    <h1 id="headline">What does your fish really cost?</h1>
+    <div class="pills" role="group" aria-label="What do you want to know?">
+      <button type="button" id="m-cost" aria-pressed="true">What it costs me</button>
+      <button type="button" id="m-weight" aria-pressed="false">How much to buy</button>
+    </div>
+
+    <div class="card">
+      <p class="mad" id="sentence"></p>
+
+      <div class="answer" id="answer" aria-live="polite"></div>
+
+      <details class="more">
+        <summary>Change the details</summary>
+        <div class="grid">
+          <div><span class="lab">Yield <span class="hint">how much is left after cutting</span></span>
+            <div class="presets" id="presets" role="group" aria-label="Yield presets"></div>
+            <label for="yield" class="sr">Yield percent</label>
+            <div style="margin-top:8px"><input id="yield" type="number" min="1" max="100" step="any" inputmode="decimal" aria-label="Yield percent"></div></div>
+          <div id="proc-wrap"><label for="proc">Processing cost per lb <span class="hint">(optional)</span></label>
+            <input id="proc" type="number" min="0" step="any" inputmode="decimal" placeholder="$0.00">
+            <label for="basis" style="margin-top:12px">Charged per lb of</label>
+            <select id="basis"></select></div>
+        </div>
+      </details>
+    </div>
+  </main>
+</div>
+
+<script>
+const DATA = {"Pink Salmon":{"sci":"Oncorhynchus gorbuscha","conv":[{"from":"Round","to":"D/H-On","yield":91,"range":[84,94]},{"from":"Round","to":"D/H-Off","yield":73,"range":[68,80]},{"from":"Round","to":"Canned","yield":65,"range":[58,67]},{"from":"Round","to":"Skin-On Fillet (Hand)","yield":52,"range":[47,58]},{"from":"Round","to":"Skin-On Fillet (Machine)","yield":50,"range":[45,55]},{"from":"Round","to":"Skinless Fillet","yield":42,"range":[41,46]},{"from":"Round","to":"SIB Fillet (V-Cut)","yield":33,"range":[30,36]},{"from":"Round","to":"SIB Fillet (Pinboning)","yield":41,"range":[40,44]},{"from":"Round","to":"SIB Trim","yield":14,"range":[12,16]},{"from":"Round","to":"Steaks","yield":58,"range":[53,65]},{"from":"Round","to":"Dry-Salt Sides","yield":36,"range":null},{"from":"Round","to":"Mild Cure Sides","yield":30,"range":null},{"from":"Round","to":"Smoked Sides","yield":30,"range":null},{"from":"Round","to":"Roe","yield":6,"range":[3,10]},{"from":"D/H-On","to":"D/H-Off","yield":81,"range":[72,90]},{"from":"D/H-On","to":"Skin-On Fillet (Hand)","yield":57,"range":[50,64]},{"from":"D/H-On","to":"Skin-On Fillet (Machine)","yield":55,"range":[48,61]},{"from":"D/H-On","to":"Skinless Fillet","yield":46,"range":[43,55]},{"from":"D/H-On","to":"SIB Fillet (V-Cut)","yield":36,"range":[32,43]},{"from":"D/H-On","to":"SIB Fillet (Pinboning)","yield":44,"range":[41,53]},{"from":"D/H-On","to":"SIB Trim","yield":16,"range":[13,19]},{"from":"D/H-On","to":"Steaks","yield":63,"range":[56,77]},{"from":"D/H-On","to":"Dry-Salt Sides","yield":40,"range":null},{"from":"D/H-On","to":"Mild Cure Sides","yield":33,"range":null},{"from":"D/H-On","to":"Smoked Sides","yield":33,"range":null},{"from":"D/H-Off","to":"Skin-On Fillet (Hand)","yield":74,"range":null},{"from":"D/H-Off","to":"Skin-On Fillet (Machine)","yield":71,"range":null},{"from":"D/H-Off","to":"Skinless Fillet","yield":58,"range":null},{"from":"D/H-Off","to":"SIB Fillet (V-Cut)","yield":45,"range":null},{"from":"D/H-Off","to":"SIB Fillet (Pinboning)","yield":55,"range":null},{"from":"D/H-Off","to":"SIB Trim","yield":19,"range":null},{"from":"D/H-Off","to":"Steaks","yield":80,"range":null},{"from":"D/H-Off","to":"Dry-Salt Sides","yield":49,"range":null},{"from":"D/H-Off","to":"Mild Cure Sides","yield":41,"range":null},{"from":"D/H-Off","to":"Smoked Sides","yield":41,"range":[35,50]},{"from":"D/H-On (Thawed)","to":"Skin-On Fillet","yield":54,"range":null},{"from":"D/H-On (Thawed)","to":"Skinless Fillet","yield":45,"range":null},{"from":"D/H-Off (Thawed)","to":"Skin-On Fillet","yield":67,"range":null},{"from":"D/H-Off (Thawed)","to":"Skinless Fillet","yield":56,"range":null}]},"Sockeye Salmon":{"sci":"Oncorhynchus nerka","conv":[{"from":"Round","to":"D/H-On","yield":92,"range":[85,94]},{"from":"Round","to":"D/H-Off","yield":74,"range":[66,82]},{"from":"Round","to":"Canned","yield":67,"range":[60,70]},{"from":"Round","to":"Skin-On Fillet (Hand)","yield":53,"range":[50,59]},{"from":"Round","to":"Skin-On Fillet (Machine)","yield":51,"range":[48,56]},{"from":"Round","to":"Skinless Fillet","yield":46,"range":[41,49]},{"from":"Round","to":"SIB Fillet (V-Cut)","yield":35,"range":[30,38]},{"from":"Round","to":"SIB Fillet (Pinboning)","yield":45,"range":[40,48]},{"from":"Round","to":"SIB Trim","yield":15,"range":[12,16]},{"from":"Round","to":"Steaks","yield":57,"range":[55,65]},{"from":"Round","to":"Dry-Salt Sides","yield":40,"range":null},{"from":"Round","to":"Mild Cure Sides","yield":33,"range":null},{"from":"Round","to":"Smoked Sides","yield":33,"range":null},{"from":"Round","to":"Roe","yield":4,"range":[3,6]},{"from":"D/H-On","to":"D/H-Off","yield":80,"range":[70,94]},{"from":"D/H-On","to":"Skin-On Fillet (Hand)","yield":57,"range":[53,68]},{"from":"D/H-On","to":"Skin-On Fillet (Machine)","yield":54,"range":[49,62]},{"from":"D/H-On","to":"Skinless Fillet","yield":50,"range":[43,56]},{"from":"D/H-On","to":"SIB Fillet (V-Cut)","yield":38,"range":[32,41]},{"from":"D/H-On","to":"SIB Fillet (Pinboning)","yield":48,"range":[42,54]},{"from":"D/H-On","to":"SIB Trim","yield":16,"range":[13,28]},{"from":"D/H-On","to":"Steaks","yield":62,"range":[59,75]},{"from":"D/H-On","to":"Dry-Salt Sides","yield":44,"range":null},{"from":"D/H-On","to":"Mild Cure Sides","yield":36,"range":null},{"from":"D/H-On","to":"Smoked Sides","yield":36,"range":null},{"from":"D/H-Off","to":"Skin-On Fillet (Hand)","yield":72,"range":null},{"from":"D/H-Off","to":"Skin-On Fillet (Machine)","yield":69,"range":null},{"from":"D/H-Off","to":"Skinless Fillet","yield":62,"range":null},{"from":"D/H-Off","to":"SIB Fillet (V-Cut)","yield":47,"range":null},{"from":"D/H-Off","to":"SIB Fillet (Pinboning)","yield":59,"range":null},{"from":"D/H-Off","to":"SIB Trim","yield":20,"range":null},{"from":"D/H-Off","to":"Steaks","yield":77,"range":null},{"from":"D/H-Off","to":"Dry-Salt Sides","yield":54,"range":null},{"from":"D/H-Off","to":"Mild Cure Sides","yield":45,"range":null},{"from":"D/H-Off","to":"Smoked Sides","yield":45,"range":[35,60]},{"from":"D/H-On (Thawed)","to":"Skin-On Fillet","yield":52,"range":null},{"from":"D/H-On (Thawed)","to":"Skinless Fillet","yield":47,"range":null},{"from":"D/H-Off (Thawed)","to":"Skin-On Fillet","yield":65,"range":null},{"from":"D/H-Off (Thawed)","to":"Skinless Fillet","yield":59,"range":null}]},"Pacific Halibut":{"sci":"Hippoglossus stenolepis","conv":[{"from":"Round","to":"D/H-On","yield":88,"range":[85,92]},{"from":"Round","to":"D/H-Off","yield":72,"range":[68,80]},{"from":"Round","to":"Steaks","yield":62,"range":[60,75]},{"from":"Round","to":"Skin-On Fillet","yield":49,"range":[45,56]},{"from":"Round","to":"Skinless Fillet (Fletch)","yield":41,"range":[34,44]},{"from":"D/H-On","to":"D/H-Off","yield":83,"range":[73,94]},{"from":"D/H-On","to":"Steaks","yield":76,"range":[71,88]},{"from":"D/H-On","to":"Skin-On Fillet","yield":56,"range":[47,64]},{"from":"D/H-On","to":"Skinless Fillet (Fletch)","yield":46,"range":[38,50]},{"from":"D/H-Off","to":"Steaks","yield":79,"range":[70,94]},{"from":"D/H-Off","to":"Skin-On Fillet","yield":68,"range":[64,73]},{"from":"D/H-Off","to":"Skinless Fillet (Fletch)","yield":56,"range":[45,60]},{"from":"D/H-Off","to":"Roasts","yield":84,"range":null}]},"Pacific Cod":{"sci":"Gadus macrocephalus","conv":[{"from":"Round","to":"D/H-On","yield":81,"range":[72,90]},{"from":"Round","to":"D/H-Off","yield":63,"range":[56,75]},{"from":"Round","to":"Skin-On Fillets (V-cut)","yield":45,"range":[38,48]},{"from":"Round","to":"Skinless Fillets (V-cut)","yield":39,"range":[22,45]},{"from":"Round","to":"SIB Fillets (V-cut)","yield":33,"range":[18,39]},{"from":"Round","to":"Skin-On Fillets","yield":38,"range":null},{"from":"Round","to":"Skinless Fillets (J-cut)","yield":32,"range":null},{"from":"Round","to":"SIB Fillets (J-cut)","yield":26,"range":null},{"from":"Round","to":"Steaks","yield":62,"range":null},{"from":"Round","to":"Salted D/H-Off","yield":45,"range":null},{"from":"Round","to":"Smoked D/H-Off","yield":58,"range":[50,65]},{"from":"Round","to":"Belly Flaps","yield":10,"range":null},{"from":"Round","to":"Liver","yield":5,"range":[3,7]},{"from":"Round","to":"Roe","yield":4,"range":[1,7]},{"from":"D/H-On","to":"D/H-Off","yield":78,"range":null},{"from":"D/H-On","to":"Skin-On Fillets","yield":55,"range":[42,60]},{"from":"D/H-On","to":"Skinless Fillets","yield":48,"range":[34,56]},{"from":"D/H-On","to":"SIB Fillets","yield":41,"range":[20,48]},{"from":"D/H-Off","to":"Skin-On Fillets","yield":71,"range":[54,80]},{"from":"D/H-Off","to":"Skinless Fillets","yield":62,"range":[31,81]},{"from":"D/H-Off","to":"SIB Fillets","yield":52,"range":[25,70]},{"from":"D/H-Off","to":"Smoked","yield":58,"range":[50,65]},{"from":"Skin-On Fillets","to":"Skinless Fillets","yield":87,"range":null},{"from":"Skin-On Fillets","to":"Trim","yield":12,"range":null},{"from":"Skin-On Fillets","to":"SIB Fillets","yield":73,"range":null},{"from":"Skinless Fillets","to":"SIB Fillets","yield":84,"range":null},{"from":"Skinless Fillets","to":"Trim","yield":13,"range":null},{"from":"Trim","to":"Mince","yield":90,"range":[80,95]}]},"Lingcod":{"sci":"Ophiodon elongatus","conv":[{"from":"Round","to":"D/H-On","yield":90,"range":[83,93]},{"from":"Round","to":"D/H-Off","yield":70,"range":[62,74]},{"from":"Round","to":"Skinless Fillet","yield":35,"range":[29,38]},{"from":"Round","to":"Steaks","yield":62,"range":null},{"from":"D/H-On","to":"D/H-Off","yield":80,"range":[67,89]},{"from":"D/H-On","to":"Skinless Fillet","yield":39,"range":[31,45]},{"from":"D/H-On","to":"Steaks","yield":69,"range":null},{"from":"D/H-Off","to":"Skinless Fillet","yield":49,"range":null},{"from":"D/H-Off","to":"Steaks","yield":86,"range":null}]}};
+const S = { mode: 'cost', species: 'Pink Salmon', from: 'Round', to: 'Skinless Fillet', cost: '4.50', target: '100', yield: '42', proc: '', basis: 'incoming' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = v => parseFloat(v) || 0;
+const conv = () => (DATA[S.species]?.conv || []).find(c => c.from === S.from && c.to === S.to);
+const fromList = () => [...new Set((DATA[S.species]?.conv || []).map(c => c.from))];
+const toList = () => (DATA[S.species]?.conv || []).filter(c => c.from === S.from);
+
+function compute() {
+  const y = (parseFloat(S.yield) || 100) / 100;
+  if (S.mode === 'weight') return y > 0 ? num(S.target) / y : 0;
+  return num(S.cost) / y + (S.basis === 'incoming' ? num(S.proc) / y : num(S.proc));
+}
+const sel = (id, label) => `<select class="slot" id="${id}" aria-label="${label}"></select>`;
+function buildSentence() {
+  $('sentence').innerHTML = S.mode === 'cost'
+    ? `I’m buying ${sel('species', 'Species')} as ${sel('from', 'What you have')} for $<input class="slot" id="cost" type="number" min="0" step="any" inputmode="decimal" aria-label="What you pay per pound, in dollars"> a pound, and turning it into <span class="nw">${sel('to', 'What you’re making')}.</span>`
+    : `I need <input class="slot wide" id="target" type="number" min="0" step="any" inputmode="decimal" aria-label="Pounds of finished product you need"> lbs of ${sel('to', 'What you’re making')}, cut from ${sel('species', 'Species')} that comes in as ${sel('from', 'What you have')}.`;
+  $('headline').textContent = S.mode === 'cost' ? 'What does your fish really cost?' : 'How much fish do you need to buy?';
+  $('m-cost').setAttribute('aria-pressed', S.mode === 'cost'); $('m-weight').setAttribute('aria-pressed', S.mode === 'weight');
+  $('proc-wrap').hidden = S.mode !== 'cost';
+  fillAll();
+}
+function fill(id, values, selected, placeholder, labels) {
+  const el = $(id); if (!el) return;
+  el.innerHTML = `<option value="">${placeholder}</option>` + values.map((v, i) => `<option value="${esc(v)}"${v === selected ? ' selected' : ''}>${esc(labels ? labels[i] : v)}</option>`).join('');
+}
+function fillAll() {
+  fill('species', Object.keys(DATA), S.species, 'a fish');
+  fill('from', fromList(), S.from, 'what I have'); if ($('from')) $('from').disabled = !S.species;
+  fill('to', toList().map(c => c.to), S.to, 'a product', toList().map(c => `${c.to} (${c.yield}%)`)); if ($('to')) $('to').disabled = !S.from;
+  if ($('cost')) $('cost').value = S.cost; if ($('target')) $('target').value = S.target;
+  $('yield').value = S.yield; $('proc').value = S.proc;
+  $('basis').innerHTML = `<option value="incoming">Starting fish (${esc(S.from || 'whole')})</option><option value="outgoing">Finished product (${esc(S.to || 'product')})</option>`; $('basis').value = S.basis;
+  const c = conv();
+  $('presets').innerHTML = c && c.range ? [['Low', c.range[0]], ['Average', c.yield], ['High', c.range[1]]].map(([n, v]) => `<button type="button" data-y="${v}" aria-pressed="${String(v) === String(S.yield)}">${n} ${v}%</button>`).join('') : '<span class="hint">Pick a product to see typical yields.</span>';
+  renderAnswer();
+}
+function renderAnswer() {
+  const c = conv(), a = $('answer');
+  if (!c) { a.innerHTML = '<p class="waiting">Fill in the blanks above and your answer appears here.</p>'; return; }
+  const r = compute(), y = S.yield;
+  if (S.mode === 'cost') {
+    a.innerHTML = `<p class="pre">That works out to</p><p class="big">$${r.toFixed(2)} <small>a pound</small></p>
+      <p class="because">Only <b>${esc(y)}%</b> of each ${esc(S.from)} ends up as ${esc(S.to)}, so ${'$' + num(S.cost).toFixed(2)} a pound becomes <b>$${r.toFixed(2)}</b>${num(S.proc) ? ' with processing included' : ''}.</p>`;
+  } else {
+    a.innerHTML = `<p class="pre">You’ll need to buy</p><p class="big">${r.toFixed(1)} <small>lbs of ${esc(S.from)}</small></p>
+      <p class="because">Only <b>${esc(y)}%</b> of each ${esc(S.from)} ends up as ${esc(S.to)}, so ${esc(num(S.target))} lbs takes <b>${r.toFixed(1)} lbs</b> to start.</p>`;
+  }
+}
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'species') { S.species = t.value; S.from = fromList().includes('Round') ? 'Round' : ''; S.to = ''; S.yield = ''; fillAll(); }
+  else if (t.id === 'from') { S.from = t.value; S.to = ''; S.yield = ''; fillAll(); }
+  else if (t.id === 'to') { S.to = t.value; const c = conv(); S.yield = c ? String(c.yield) : ''; fillAll(); }
+  else if (t.id === 'basis') { S.basis = t.value; renderAnswer(); }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (['cost', 'target', 'proc', 'yield'].includes(t.id)) { S[t.id] = t.value; if (t.id === 'yield') document.querySelectorAll('#presets button').forEach(b => b.setAttribute('aria-pressed', b.dataset.y === t.value)); renderAnswer(); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'm-cost' || b.id === 'm-weight') { S.mode = b.id === 'm-cost' ? 'cost' : 'weight'; buildSentence(); }
+  else if (b.dataset.y) { S.yield = b.dataset.y; $('yield').value = S.yield; document.querySelectorAll('#presets button').forEach(x => x.setAttribute('aria-pressed', x.dataset.y === S.yield)); renderAnswer(); }
+  else if (b.id === 'theme') { const d = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.dataset.theme = d ? 'light' : 'dark'; }
+});
+buildSentence();
+</script>
+</body>
+</html>
