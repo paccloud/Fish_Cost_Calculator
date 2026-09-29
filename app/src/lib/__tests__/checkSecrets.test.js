@@ -5526,3 +5526,569 @@ describe('review round 11 (3): --range and --history skip a verified binary of a
 function hasGit() {
   return spawnSync('git', ['--version']).status === 0;
 }
+
+// ---------------------------------------------------------------------------
+// Review round 12: assignment operators, block scalars in split pairs, SQL password literal forms, heredoc bodies.
+// Every value is assembled at runtime; the fixtures hold no secret-shaped literal.
+// ---------------------------------------------------------------------------
+
+describe('review round 12', () => {
+  const NAME = secretName('JWT_', 'SECRET');
+  const camel = secretName('jwt', 'Secret');
+  const value = randomString(24, 12001);
+  const passphrase = ['correct', 'horse', 'battery', 'staple'].join(' ');
+  const placeholder = ['your', 'secret', 'here'].join('_');
+  const count = (file, text) => scanText(file, text).length;
+  const rules = (file, text) => scanText(file, text).map((f) => f.rule);
+
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const scan = (cwd, ...args) => run(process.execPath, [SCANNER, ...args], cwd);
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const makeRepo = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r12-'));
+    dirs.push(dir);
+    expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+    return dir;
+  };
+  const commit = (dir, files) => {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    }
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', 'c').status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+
+  // -------------------------------------------------------------------------
+  describe('(1) every assignment operator', () => {
+    const q = (v) => `'${v}'`;
+    const dq = (v) => `"${v}"`;
+    const flagged = [
+      ['JS ||= on process.env', 'a.js', `process.env.${NAME} ||= ${q(value)};\n`],
+      ['TS ||= double quotes', 'a.ts', `process.env.${NAME} ||= ${dq(value)};\n`],
+      ['Ruby ||= on ENV[]', 'a.rb', `ENV['${NAME}'] ||= ${q(value)}\n`],
+      ['JS ??= on a config object', 'a.js', `config.${NAME} ??= ${q(value)};\n`],
+      ['JS ??= without blanks', 'a.js', `config.${NAME}??=${q(value)};\n`],
+      ['JS &&=', 'a.js', `config.${NAME} &&= ${q(value)};\n`],
+      ['Go :=', 'a.go', `${NAME} := ${dq(value)}\n`],
+      ['Python walrus', 'a.py', `if (${camel} := ${dq(value)}):\n    pass\n`],
+      ['Make :=', 'Makefile', `${NAME} := ${value}\n`],
+      ['Make ::=', 'Makefile', `${NAME} ::= ${value}\n`],
+      ['Make ?=', 'Makefile', `${NAME} ?= ${value}\n`],
+      ['shell +=', 'a.sh', `${NAME}+=${value}\n`],
+      ['JS +=', 'a.js', `${camel} += ${dq(value)};\n`],
+      ['JS -=', 'a.js', `${camel} -= ${dq(value)};\n`],
+      ['JS *=', 'a.js', `${camel} *= ${dq(value)};\n`],
+      ['JS **=', 'a.js', `${camel} **= ${dq(value)};\n`],
+      ['JS |=', 'a.js', `${camel} |= ${dq(value)};\n`],
+      ['PHP .=', 'a.php', `$${camel} .= ${q(value)};\n`],
+      ['PHP .= without a blank', 'a.php', `$${camel}.=${q(value)};\n`],
+      ['Perl .=', 'a.pl', `$${camel} .= ${dq(value)};\n`],
+      ['R <-', 'a.R', `${camel} <- ${dq(value)}\n`],
+      ['R <- without blanks', 'a.R', `${camel}<-${q(value)}\n`],
+      ['R <<-', 'a.R', `${camel} <<- ${dq(value)}\n`],
+      ['PHP array =>', 'a.php', `'${NAME}' => ${q(value)},\n`],
+      ['Ruby hash =>', 'a.rb', `{ :${camel} => ${q(value)} }\n`],
+      ['Scala ->', 'a.scala', `Map(${dq(NAME)} -> ${dq(value)})\n`],
+      ['Kotlin to', 'a.kt', `mapOf(${dq(NAME)} to ${dq(value)})\n`],
+      ['plain = with blanks', 'a.js', `${camel}   =   ${dq(value)};\n`],
+      ['JSON colon', 'a.json', `{"${NAME}": ${dq(value)}}\n`],
+      ['Lua local', 'a.lua', `local ${camel} = ${dq(value)}\n`],
+      ['Lua table key', 'a.lua', `config[${dq(NAME)}] = ${dq(value)}\n`],
+      ['Lua attribute', 'a.lua', `local ${camel} <const> = ${dq(value)}\n`],
+      ['Nim export marker', 'a.nim', `const ${camel}* = ${dq(value)}\n`],
+      ['Nim let', 'a.nim', `let ${camel} = ${dq(value)}\n`],
+      ['Kotlin val', 'a.kt', `val ${camel} = ${dq(value)}\n`],
+      ['Kotlin const val', 'a.kt', `const val ${NAME} = ${dq(value)}\n`],
+      ['Kotlin typed nullable', 'a.kt', `val ${camel}: String? = ${dq(value)}\n`],
+      ['Elixir keyword', 'a.ex', `config :app, ${camel}: ${dq(value)}\n`],
+      ['Elixir module attribute', 'a.ex', `@${camel} ${dq(value)}\n`],
+      ['Elixir map arrow', 'a.ex', `%{${dq(NAME)} => ${dq(value)}}\n`],
+      ['Scala val', 'a.scala', `val ${camel}: String = ${dq(value)}\n`],
+      ['Swift let', 'a.swift', `let ${camel} = ${dq(value)}\n`],
+      ['Swift static let typed', 'a.swift', `static let ${camel}: String = ${dq(value)}\n`],
+      ['Rust const &str', 'a.rs', `const ${NAME}: &str = ${dq(value)};\n`],
+      ['Rust static with a lifetime', 'a.rs', `static ${NAME}: &'static str = ${dq(value)};\n`],
+      ['Go const', 'a.go', `const ${NAME} = ${dq(value)}\n`],
+      ['Go const typed', 'a.go', `const ${NAME} string = ${dq(value)}\n`],
+      ['Go var typed', 'a.go', `var ${NAME} string = ${dq(value)}\n`],
+      ['Java static final', 'a.java', `static final String ${NAME} = ${dq(value)};\n`],
+      ['Java private static final', 'a.java', `private static final String ${NAME} = ${dq(value)};\n`],
+      ['C# const', 'a.cs', `const string ${NAME} = ${dq(value)};\n`],
+      ['C char array', 'a.c', `static const char ${NAME}[] = ${dq(value)};\n`],
+      ['Zig slice type', 'a.zig', `const ${camel}: []const u8 = ${dq(value)};\n`],
+      ['Clojure def', 'a.clj', `(def ${camel} ${dq(value)})\n`],
+      ['Clojure keyword map', 'a.clj', `{:${camel} ${dq(value)}}\n`],
+      ['Lisp setq', 'a.el', `(setq ${camel} ${dq(value)})\n`],
+    ];
+    it.each(flagged)('reports: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('secret-assignment');
+    });
+
+    it.each(flagged.filter((_case, index) => index % 5 === 0))('reports through --range: %s', SLOW, (_label, file, text) => {
+      const dir = makeRepo();
+      const from = commit(dir, { 'base.txt': 'base\n' });
+      const head = commit(dir, { [file]: text });
+      const found = scan(dir, '--range', `${from}..${head}`);
+      expect(found.status, found.stderr).toBe(1);
+      expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      expect(scan(dir).status).toBe(1);
+    });
+
+    const passes = [
+      ['||= a reference to another variable', 'a.js', `process.env.${NAME} ||= process.env.OTHER_SECRET;\n`],
+      ['??= the same variable', 'a.js', `config.${NAME} ??= process.env.${NAME};\n`],
+      ['Ruby ||= ENV', 'a.rb', `ENV['${NAME}'] ||= ENV['OTHER']\n`],
+      ['??= a placeholder', 'a.js', `config.${NAME} ??= ${q(placeholder)};\n`],
+      ['??= an angle-bracket marker', 'a.js', `config.${NAME} ??= '<jwt secret>';\n`],
+      ['??= a phrase in code (text, as with =)', 'a.js', `config.${NAME} ??= ${dq(passphrase)};\n`],
+      ['Go := reading the environment', 'a.go', `${NAME} := os.Getenv(${dq(NAME)})\n`],
+      ['R <- reading the environment', 'a.R', `${camel} <- Sys.getenv(${dq(NAME)})\n`],
+      ['Rust const from env!', 'a.rs', `const ${NAME}: &str = env!(${dq(NAME)});\n`],
+      ['+= a number', 'a.js', `${camel} += 1;\n`],
+      ['a comparison is not an assignment', 'a.js', `if (${camel} != ${dq(value)}) {}\n`],
+      ['-> without a quote after it', 'a.php', `$this->${camel} = $other;\n`],
+      ['a Go channel send of a name that is not secret-like', 'a.go', `events <- ${dq(value)}\n`],
+      ['to as an ordinary word in prose', 'a.md', `send the ${camel} to "${value}"\n`],
+      ['=> in a lambda over an identifier', 'a.js', `const f = (${camel}) => ${camel}.length;\n`],
+    ];
+    it.each(passes)('passes: %s', (_label, file, text) => {
+      expect(count(file, text)).toBe(0);
+    });
+
+    it('a type word or annotation in front of the operator does not hide a later assignment', () => {
+      expect(count('a.rs', `const A: &str = "x";\nconst ${NAME}: &str = ${dq(value)};\n`)).toBe(1);
+      expect(count('a.go', `var A string\nvar ${NAME} string = ${dq(value)}\n`)).toBe(1);
+    });
+
+    it('the new forms stay linear on hostile lines', SLOW, () => {
+      const hostile = [
+        ['a.ts', `${camel}: ${"&'a mut str ".repeat(30000)}\n`],
+        ['a.go', `${`${camel} string `.repeat(30000)}\n`],
+        ['a.js', `${`${camel} ||= ??= &&= ::= `.repeat(20000)}\n`],
+        ['a.kt', `${`${dq(camel)} to `.repeat(30000)}\n`],
+        ['a.clj', `${`(def ^:a ^:b ${camel} `.repeat(20000)}\n`],
+        ['a.ex', `${`@${camel} `.repeat(30000)}\n`],
+        ['a.nim', `${`${camel}* ${camel}? ${camel}[] ${camel} <const> `.repeat(15000)}\n`],
+        ['a.R', `${`${camel} <<- `.repeat(30000)}\n`],
+        ['a.js', `${camel}${' '.repeat(300000)}x\n`],
+      ];
+      const started = performance.now();
+      for (const [file, text] of hostile) scanText(file, text);
+      expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(2) block scalars and multi-line values in split name/value pairs', () => {
+    const markers = ['|', '>', '|-', '>-', '|+', '>+', '|2', '|2-', '>-2'];
+    const bodies = [
+      ['a passphrase', passphrase],
+      ['a random token', value],
+    ];
+    const cases = markers.flatMap((marker) =>
+      bodies.flatMap(([kind, body]) => [
+        [`Kubernetes name then value ${marker}, ${kind}`, 'd.yaml', `env:\n  - name: ${NAME}\n    value: ${marker}\n      ${body}\n`],
+        [`value ${marker} before the name, ${kind}`, 'd.yaml', `env:\n  - value: ${marker}\n      ${body}\n    name: ${NAME}\n`],
+      ]),
+    );
+    it.each(cases)('reports: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('secret-name-value-pair');
+    });
+
+    const siblings = [
+      ['secret on the second body line', 'd.yaml', `- name: ${NAME}\n  value: |\n    a line of ordinary text\n    ${value}\n`],
+      ['passphrase on the second body line', 'd.yaml', `- name: ${NAME}\n  value: |\n    first words\n    ${passphrase}\n`],
+      ['CRLF line ends', 'd.yaml', `- name: ${NAME}\r\n  value: |-\r\n    ${passphrase}\r\n`],
+      ['a YAML anchor before the header', 'd.yaml', `- name: ${NAME}\n  value: &a |\n    ${value}\n`],
+      ['a comment after the header', 'd.yaml', `- name: ${NAME}\n  value: | # note\n    ${passphrase}\n`],
+      ['Helm values: mapping key with a nested value block', 'values.yaml', `${NAME}:\n  value: |\n    ${passphrase}\n`],
+      ['Helm values: the same one level down', 'values.yaml', `secrets:\n  ${NAME}:\n    value: |-\n      ${value}\n`],
+      ['mapping key with a !!str value block', 'a.yaml', `${NAME}:\n  value: !!str |\n    ${value}\n`],
+      ['GitHub Actions with: name and value', '.github/workflows/ci.yml', `        with:\n          name: ${NAME}\n          value: |\n            ${value}\n`],
+      ['GitHub Actions with: value before name', '.github/workflows/ci.yml', `        with:\n          value: >-\n            ${passphrase}\n          name: ${NAME}\n`],
+      ['CloudFormation Value: !Sub |', 'stack.yaml', `Variables:\n  - Name: ${NAME}\n    Value: !Sub |\n      ${value}\n`],
+      ['CloudFormation Value: !Sub > passphrase', 'stack.yaml', `- Name: ${NAME}\n  Value: !Sub >-\n    ${passphrase}\n`],
+      ['CloudFormation Value first', 'stack.yaml', `- Value: !Sub |\n    ${value}\n  Name: ${NAME}\n`],
+      ['CloudFormation ParameterKey / ParameterValue', 'stack.yaml', `- ParameterKey: ${NAME}\n  ParameterValue: |\n    ${value}\n`],
+      ['docker-compose environment list of name/value maps', 'docker-compose.yml', `services:\n  a:\n    environment:\n      - name: ${NAME}\n        value: |\n          ${passphrase}\n`],
+      ['docker-compose environment map', 'docker-compose.yml', `services:\n  a:\n    environment:\n      ${NAME}: |\n        ${passphrase}\n`],
+      ['GitHub Actions env: map', '.github/workflows/ci.yml', `    env:\n      ${NAME}: >-\n        ${value}\n`],
+      ['a quote closed on a later line', 'a.yaml', `- name: ${NAME}\n  value: "first line\n    ${passphrase}"\n`],
+      ['a plain scalar folded over lines', 'a.yaml', `- name: ${NAME}\n  value: first\n    ${passphrase}\n`],
+      ['Terraform heredoc value after the name', 'a.tf', `variable {\n  name  = "${NAME}"\n  value = <<EOT\n${passphrase}\nEOT\n}\n`],
+      ['Terraform heredoc value before the name', 'a.tf', `x {\n  value = <<-EOT\n    ${value}\n  EOT\n  name  = "${NAME}"\n}\n`],
+      ['JSON string with \\n escapes, the secret on a later line', 'a.json', `[{"name":"${NAME}","value":"intro line\\n${value}"}]\n`],
+      ['JSON string with \\n escapes, a passphrase line', 'a.json', `{"name":"${NAME}","value":"${passphrase}\\nsecond line"}\n`],
+      ['JSON document stored as a string, escaped', 'a.json', `"{\\"name\\":\\"${NAME}\\",\\"value\\":\\"first\\\\n${passphrase}\\"}"\n`],
+      ['XML value element over lines', 'a.xml', `<property><name>${NAME}</name><value>\n  first\n  ${passphrase}\n</value></property>\n`],
+      ['value-first with a body of 30 lines', 'd.yaml', `env:\n  - value: |\n${'      a filler line of text\n'.repeat(30)}      ${passphrase}\n    name: ${NAME}\n`],
+      ['value-first with a blank line in the body', 'd.yaml', `env:\n  - value: |\n      first\n\n      ${passphrase}\n    name: ${NAME}\n`],
+      ['name-first with a body of 150 lines, the secret last', 'd.yaml', `env:\n  - name: ${NAME}\n    value: |\n${'      a filler line of text\n'.repeat(150)}      ${value}\n`],
+    ];
+    it.each(siblings)('reports: %s', (_label, file, text) => {
+      expect(count(file, text)).toBeGreaterThanOrEqual(1);
+    });
+
+    const clean = [
+      ['a placeholder body', 'd.yaml', `- name: ${NAME}\n  value: |\n    ${placeholder}\n`],
+      ['an empty block followed by a dedented key', 'd.yaml', `- name: ${NAME}\n  value: |\nnext: ${value}\n`],
+      ['documentation about the credential', 'd.yaml', `- name: ${NAME}\n  value: >\n    Set this to the signing secret from the dashboard.\n`],
+      ['a body that ends before a secret in a sibling key', 'd.yaml', `- name: ${NAME}\n  value: |\n    ${placeholder}\n  other: ${value}\n`],
+      ['a name that is not secret-like', 'd.yaml', `- name: FEATURE_FLAGS\n  value: |\n    ${passphrase}\n`],
+      ['a path in a *_FILE variable', 'd.yaml', `- name: ${NAME}_FILE\n  value: |\n    /var/run/secrets/jwt/key\n`],
+      ['valueFrom instead of a value', 'd.yaml', `- name: ${NAME}\n  valueFrom:\n    secretKeyRef:\n      name: app\n      key: jwt\n`],
+      ['a template reference', 'values.yaml', `${NAME}:\n  value: |\n    {{ .Values.jwt }}\n`],
+      ['a CloudFormation reference', 'stack.yaml', `- Name: ${NAME}\n  Value: !Sub |\n    \${SecretParam}\n`],
+      ['prose lines in an escaped JSON string', 'a.json', `[{"name":"${NAME}","value":"Set the value of this secret\\nfrom the dashboard"}]\n`],
+      ['a later, unrelated pair', 'd.yaml', `- name: ${NAME}\n  valueFrom: x\n- name: NOTE\n  value: |\n    ${passphrase}\n`],
+    ];
+    it.each(clean)('passes: %s', (_label, file, text) => {
+      expect(count(file, text)).toBe(0);
+    });
+
+    it('an allow marker on the header line, on a body line or on the name line silences the pair', () => {
+      const M = ALLOW_MARKER;
+      expect(count('d.yaml', `- name: ${NAME}\n  value: | # ${M}\n    ${passphrase}\n`)).toBe(0);
+      expect(count('d.yaml', `- name: ${NAME}\n  value: |\n    ${passphrase} # ${M}\n`)).toBe(0);
+      expect(count('d.yaml', `- name: ${NAME}\n  value: |\n    ${passphrase}\n    # ${M}\n`)).toBe(0);
+      expect(count('d.yaml', `- name: ${NAME} # ${M}\n  value: |\n    ${passphrase}\n`)).toBe(0);
+      // the fixtures are real: without the marker they are findings
+      expect(count('d.yaml', `- name: ${NAME}\n  value: |\n    ${passphrase} # note\n`)).toBe(1);
+    });
+
+    it('a marker on an unrelated line does not silence it', () => {
+      expect(count('d.yaml', `# ${ALLOW_MARKER}\n- name: ${NAME}\n  type: plain\n  value: |\n    ${passphrase}\n`)).toBe(1);
+    });
+
+    it('a block that does not end within the bounds is reported (fail closed), not skipped', () => {
+      const filler = '      a filler line of ordinary text\n';
+      expect(count('d.yaml', `env:\n  - name: ${NAME}\n    value: |\n${filler.repeat(300)}`)).toBeGreaterThanOrEqual(1);
+      // a long body under a name that is not secret-like is not reported
+      expect(count('d.yaml', `env:\n  - name: FEATURE_FLAGS\n    value: |\n${filler.repeat(300)}`)).toBe(0);
+    });
+
+    it('the report names the pair rule and the name line, never the value', () => {
+      const found = scanText('d.yaml', `env:\n  - name: ${NAME}\n    value: |\n      ${value}\n`);
+      expect(found).toEqual([{ path: 'd.yaml', line: 2, rule: 'secret-name-value-pair' }]);
+      expect(JSON.stringify(found)).not.toContain(value.slice(0, 8));
+    });
+
+    const order = ['name-first', 'value-first'];
+    const doc = (which, { name, marker, body }) =>
+      which === 'name-first'
+        ? `env:\n  - name: ${name}\n    value: ${marker}\n      ${body}\n`
+        : `env:\n  - value: ${marker}\n      ${body}\n    name: ${name}\n`;
+    const changes = [
+      ['the commit adds the body', { name: NAME, marker: '>-', body: placeholder }, { name: NAME, marker: '>-', body: passphrase }],
+      ['the commit adds the name', { name: 'FEATURE_NAME', marker: '>-', body: passphrase }, { name: NAME, marker: '>-', body: passphrase }],
+      ['the commit adds the marker', { name: NAME, marker: 'plain', body: passphrase }, { name: NAME, marker: '>-', body: passphrase }],
+    ];
+    const fixed = { name: 'FEATURE_NAME', marker: '|', body: 'unrelated' };
+    const historyCases = order.flatMap((which) => changes.flatMap(([label, before, after]) => ['--history', '--range'].map((mode) => [`${which}: ${label} (${mode})`, which, before, after, mode])));
+    it.each(historyCases)('blames the right commit: %s', SLOW, (_label, which, before, after, mode) => {
+      const dir = makeRepo();
+      const first = commit(dir, { 'd.yaml': doc(which, before) });
+      const leak = commit(dir, { 'd.yaml': doc(which, after) });
+      const tip = commit(dir, { 'd.yaml': doc(which, fixed) });
+      const args = mode === '--range' ? ['--range', `${first}..${tip}`] : ['--history'];
+      const found = scan(dir, ...args);
+      expect(found.status, found.stderr).toBe(1);
+      expect(`${found.stdout}${found.stderr}`).not.toContain(passphrase);
+      // a range that starts after the leak, and the clean tip itself, report nothing
+      expect(scan(dir, '--range', `${leak}..${tip}`).status).toBe(0);
+      expect(scan(dir).status).toBe(0);
+    });
+
+    it('the tree scan and --range agree on a block scalar pair', SLOW, () => {
+      const dir = makeRepo();
+      const from = commit(dir, { 'base.txt': 'base\n' });
+      const head = commit(dir, { 'k8s/deploy.yaml': doc('name-first', { name: NAME, marker: '|', body: passphrase }) });
+      expect(scan(dir).status).toBe(1);
+      const found = scan(dir, '--range', `${from}..${head}`);
+      expect(found.status).toBe(1);
+      expect(found.stderr).toContain('k8s/deploy.yaml  secret-name-value-pair');
+    });
+
+    it('dense secret-like names with block scalars are read within a budget', SLOW, () => {
+      const started = performance.now();
+      for (const text of [
+        `- name: ${NAME}\n  value: |\n`.repeat(20000),
+        `- value: |\n      x\n    name: ${NAME}\n`.repeat(20000),
+        `  ${NAME}:\n    value: |\n      a b\n`.repeat(20000),
+        `- name: ${NAME}\n  value: "a\n`.repeat(20000),
+        `      filler\n`.repeat(50000) + `    name: ${NAME}\n`,
+        `- name: ${NAME}\n  value: |\n${'      some words here\n'.repeat(40000)}`,
+      ]) {
+        scanText('d.yaml', text);
+      }
+      expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(3) SQL password literals in every quoted and unquoted form', () => {
+    const H = ['*', randomString(40, 12002, HEX.toUpperCase())].join('');
+    const newer = randomString(12, 12003);
+    const shortWord = ['hunter', '2hunter2'].join('');
+    const ref = (name) => ['$', '{', name, '}'].join('');
+    const D = '$';
+    const flagged = [
+      ['Oracle, double quotes', 'a.sql', `CREATE USER app IDENTIFIED BY "${value}";\n`],
+      ['Oracle, double quotes in a .txt', 'a.txt', `CREATE USER app IDENTIFIED BY "${value}";\n`],
+      ['Oracle, double quotes in Markdown', 'a.md', `CREATE USER app IDENTIFIED BY "${value}";\n`],
+      ['Oracle, double quotes inside Python', 'a.py', `cur.execute('create user app identified by "${value}"')\n`],
+      ['Oracle, unquoted', 'a.sql', `CREATE USER app IDENTIFIED BY ${value};\n`],
+      ['Oracle, unquoted in Markdown', 'a.md', `ALTER USER app IDENTIFIED BY ${value};\n`],
+      ['Oracle, GRANT with an unquoted password', 'a.md', `GRANT CONNECT TO app IDENTIFIED BY ${value};\n`],
+      ['Oracle, REPLACE clause (old password)', 'a.sql', `ALTER USER app IDENTIFIED BY '${newer}' REPLACE '${value}';\n`],
+      ['Oracle, unquoted REPLACE', 'a.sql', `ALTER USER app IDENTIFIED BY ${newer} REPLACE ${value};\n`],
+      ['Oracle, IDENTIFIED BY VALUES hash', 'a.sql', `CREATE USER app IDENTIFIED BY VALUES 'S:${value}';\n`],
+      ['MySQL, single quotes', 'a.sql', `CREATE USER 'app'@'%' IDENTIFIED BY '${value}';\n`],
+      ['MySQL, double quotes', 'a.sql', `CREATE USER 'app'@'%' IDENTIFIED BY "${value}";\n`],
+      ['MySQL, backticks', 'a.sql', `CREATE USER 'app'@'%' IDENTIFIED BY \`${value}\`;\n`],
+      ['MySQL, IDENTIFIED WITH plugin BY', 'a.sql', `CREATE USER 'app'@'%' IDENTIFIED WITH caching_sha2_password BY '${value}';\n`],
+      ['MySQL, IDENTIFIED WITH plugin AS hash', 'a.sql', `CREATE USER 'app'@'%' IDENTIFIED WITH mysql_native_password AS '${H}';\n`],
+      ['MySQL, IDENTIFIED BY PASSWORD hash', 'a.sql', `GRANT ALL ON *.* TO 'app'@'%' IDENTIFIED BY PASSWORD '${H}';\n`],
+      ['MySQL, GRANT ... IDENTIFIED BY', 'a.sql', `GRANT ALL ON db.* TO 'app'@'%' IDENTIFIED BY '${value}';\n`],
+      ['MariaDB, IDENTIFIED VIA ... USING PASSWORD()', 'a.sql', `CREATE USER app IDENTIFIED VIA mysql_native_password USING PASSWORD('${value}');\n`],
+      ['MySQL, SET PASSWORD FOR ... = PASSWORD()', 'a.sql', `SET PASSWORD FOR 'app'@'%' = PASSWORD('${value}');\n`],
+      ['MySQL, SET PASSWORD FOR ... = PASSWORD() inside Java', 'A.java', `stmt.execute("SET PASSWORD FOR 'app'@'%' = PASSWORD('${value}')");\n`],
+      ['MySQL, OLD_PASSWORD()', 'a.sql', `SET PASSWORD FOR 'app'@'%' = OLD_PASSWORD('${value}');\n`],
+      ['MySQL, SET PASSWORD FOR ... = literal', 'a.sql', `SET PASSWORD FOR 'app'@'%' = '${value}';\n`],
+      ['MySQL, SET PASSWORD = literal inside Python', 'a.py', `cur.execute("SET PASSWORD = '${value}'")\n`],
+      ['MySQL, ALTER USER ... IDENTIFIED BY', 'a.sql', `ALTER USER 'app'@'localhost' IDENTIFIED BY '${value}';\n`],
+      ['MySQL, UPDATE mysql.user SET ... = PASSWORD()', 'a.sql', `UPDATE mysql.user SET authentication_string=PASSWORD('${value}') WHERE User='root';\n`],
+      ['MySQL, UPDATE mysql.user inside PHP', 'a.php', `$db->query("UPDATE mysql.user SET Password=PASSWORD('${value}') WHERE User='root'");\n`],
+      ['PostgreSQL, single quotes', 'a.sql', `ALTER ROLE app WITH PASSWORD '${value}';\n`],
+      ['PostgreSQL, double quotes', 'a.sql', `ALTER ROLE app WITH PASSWORD "${value}";\n`],
+      ['PostgreSQL, $$dollar$$ quoting', 'a.sql', `ALTER ROLE app WITH PASSWORD ${D}${D}${value}${D}${D};\n`],
+      ['PostgreSQL, $tag$dollar$tag$ quoting', 'a.sql', `ALTER ROLE app WITH PASSWORD ${D}pw${D}${value}${D}pw${D};\n`],
+      ['PostgreSQL, E string', 'a.sql', `ALTER ROLE app WITH PASSWORD E'${value}';\n`],
+      ['PostgreSQL, N string', 'a.sql', `ALTER ROLE app WITH PASSWORD N'${value}';\n`],
+      ['PostgreSQL, U& string', 'a.sql', `ALTER ROLE app WITH PASSWORD U&'${value}';\n`],
+      ['PostgreSQL, ENCRYPTED PASSWORD', 'a.sql', `CREATE ROLE app WITH LOGIN ENCRYPTED PASSWORD '${value}';\n`],
+      ['PostgreSQL, ENCRYPTED PASSWORD without WITH', 'a.sql', `ALTER ROLE app ENCRYPTED PASSWORD '${value}';\n`],
+      ['PostgreSQL, UNENCRYPTED PASSWORD', 'a.sql', `CREATE ROLE app UNENCRYPTED PASSWORD '${value}';\n`],
+      ['PostgreSQL, LOGIN PASSWORD in Markdown', 'a.md', `CREATE ROLE app LOGIN PASSWORD '${value}';\n`],
+      ['PostgreSQL, CREATE USER with options and double quotes', 'a.md', `CREATE USER app SUPERUSER CREATEDB PASSWORD "${value}";\n`],
+      ['ALTER USER ... SET PASSWORD (Snowflake)', 'a.sql', `ALTER USER app SET PASSWORD = '${value}';\n`],
+      ['ALTER USER ... SET PASSWORD in Markdown', 'a.md', `ALTER USER app SET PASSWORD = '${value}';\n`],
+      ['ALTER USER ... SET PASSWORD with backticks', 'a.md', `ALTER USER app SET PASSWORD = \`${value}\`;\n`],
+      ['CREATE USER ... PASSWORD = (Snowflake)', 'a.md', `CREATE USER app PASSWORD = '${value}' MUST_CHANGE_PASSWORD = TRUE;\n`],
+      ['SQL Server, WITH PASSWORD =', 'a.sql', `CREATE LOGIN app WITH PASSWORD = '${value}';\n`],
+      ['SQL Server, N string', 'a.sql', `CREATE LOGIN app WITH PASSWORD = N'${value}';\n`],
+      ['SQL Server, N string in Markdown', 'a.md', `CREATE LOGIN app WITH PASSWORD = N'${value}' MUST_CHANGE;\n`],
+      ['SQL Server, CREATE USER WITH PASSWORD', 'a.md', `CREATE USER app WITH PASSWORD = '${value}';\n`],
+      ['SQL Server, OLD_PASSWORD', 'a.md', `ALTER LOGIN app WITH PASSWORD = '${newer}' OLD_PASSWORD = '${value}';\n`],
+      ['SQL Server, LOGIN ... PASSWORD with double quotes', 'a.md', `CREATE LOGIN app LOGIN PASSWORD = "${value}";\n`],
+      ['MongoDB, createUser with double quotes', 'a.js', `db.createUser({user: "app", pwd: "${value}", roles: ["readWrite"]});\n`],
+      ['MongoDB, createUser with single quotes', 'a.js', `db.createUser({user: 'app', pwd: '${value}', roles: []});\n`],
+      ['MongoDB, createUser with quoted keys', 'a.js', `db.createUser({"user": "app", "pwd": "${value}"});\n`],
+      ['MongoDB, a passphrase over lines', 'init.js', `db.getSiblingDB("admin").createUser({\n  user: "root",\n  pwd: "${passphrase}",\n  roles: ["root"]\n});\n`],
+      ['MongoDB, a short non-random password', 'init.js', `db.createUser({user: "u", pwd: "${shortWord}"});\n`],
+      ['MongoDB, mongosh --eval', 'init.sh', `mongosh --eval 'db.createUser({user:"app",pwd:"${value}",roles:[]})'\n`],
+      ['MongoDB, updateUser', 'a.js', `db.updateUser("app", {pwd: "${value}"});\n`],
+      ['MongoDB, changeUserPassword', 'a.js', `db.changeUserPassword("app", "${value}");\n`],
+    ];
+    it.each(flagged)('reports: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('sql-password-literal');
+    });
+
+    it.each(flagged.filter((_case, index) => index % 6 === 0))('reports through --range: %s', SLOW, (_label, file, text) => {
+      const dir = makeRepo();
+      const from = commit(dir, { 'base.txt': 'base\n' });
+      const head = commit(dir, { [file]: text });
+      const found = scan(dir, '--range', `${from}..${head}`);
+      expect(found.status, found.stderr).toBe(1);
+      expect(found.stderr).toContain('sql-password-literal');
+      expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+    });
+
+    const clean = [
+      ['Oracle placeholder in angle brackets', 'a.sql', `CREATE USER app IDENTIFIED BY '<password>';\n`],
+      ['Oracle placeholder in double quotes', 'a.sql', `CREATE USER app IDENTIFIED BY "<password>";\n`],
+      ['Oracle ${...} reference', 'a.sql', `CREATE USER app IDENTIFIED BY "${ref('DB_PASSWORD')}";\n`],
+      ['Oracle bind :name', 'a.sql', 'CREATE USER app IDENTIFIED BY :pw;\n'],
+      ['quoted :name', 'a.sql', `ALTER ROLE app WITH PASSWORD ':pw';\n`],
+      ['question mark', 'a.sql', `ALTER ROLE app WITH PASSWORD '?';\n`],
+      ['positional $1, quoted', 'a.sql', `ALTER ROLE app WITH PASSWORD '${D}1';\n`],
+      ['positional $1, bare', 'a.sql', `ALTER ROLE app WITH PASSWORD ${D}1;\n`],
+      ['%s format marker', 'a.py', `cur.execute("ALTER ROLE app WITH PASSWORD '%s'")\n`],
+      ['Oracle ?', 'a.sql', 'CREATE USER app IDENTIFIED BY ?;\n'],
+      ['SQL*Plus &var', 'a.sql', 'CREATE USER app IDENTIFIED BY &pw;\n'],
+      ['SQL*Plus &&var', 'a.sql', 'CREATE USER app IDENTIFIED BY &&pw;\n'],
+      ['changeme in double quotes', 'a.sql', `CREATE USER app IDENTIFIED BY "changeme";\n`],
+      ['your_password unquoted', 'a.sql', 'CREATE USER app IDENTIFIED BY your_password;\n'],
+      ['a placeholder in $$ quoting', 'a.sql', `ALTER ROLE app WITH PASSWORD ${D}${D}<password>${D}${D};\n`],
+      ['a placeholder in backticks', 'a.sql', "CREATE USER 'a'@'%' IDENTIFIED BY `changeme`;\n"],
+      ['MongoDB placeholder', 'a.js', 'db.createUser({user: "app", pwd: "<password>", roles: []});\n'],
+      ['MongoDB env reference', 'a.js', 'db.createUser({user: "app", pwd: process.env.MONGO_PWD, roles: []});\n'],
+      ['MongoDB ${...} reference', 'a.js', `db.createUser({user: "app", pwd: "${ref('MONGO_PWD')}", roles: []});\n`],
+      ['PASSWORD() with a placeholder', 'a.sql', `SET PASSWORD FOR 'a'@'h' = PASSWORD('<password>');\n`],
+      ['prose: identified by', 'a.md', 'Users are identified by their email address.\n'],
+      ['prose: identified by a word', 'a.md', `Each user is identified by ${value} in the logs.\n`],
+      ['prose: a bare password in Markdown', 'a.md', `the password '${value}' was shown\n`],
+      ['password_encryption setting', 'a.sql', "SET password_encryption = 'scram-sha-256';\n"],
+      ['IDENTIFIED BY VALUES with nothing after', 'a.sql', 'CREATE USER app IDENTIFIED BY VALUES ;\n'],
+      ['IDENTIFIED EXTERNALLY', 'a.sql', 'CREATE USER app IDENTIFIED EXTERNALLY;\n'],
+      ['IDENTIFIED BY RANDOM PASSWORD', 'a.sql', 'CREATE USER app IDENTIFIED BY RANDOM PASSWORD;\n'],
+      ['IDENTIFIED WITH a plugin only', 'a.sql', 'CREATE USER app IDENTIFIED WITH auth_socket;\n'],
+      ['Markdown code spans around the word password', 'a.md', 'Use `WITH PASSWORD` and then `the value` in the statement.\n'],
+      ['a password() helper in JavaScript', 'a.js', `form.password('${value}');\n`],
+      ['set password in prose', 'a.md', "Then set password to something else, for example 'x1'\n"],
+    ];
+    it.each(clean)('passes: %s', (_label, file, text) => {
+      expect(rules(file, text)).not.toContain('sql-password-literal');
+    });
+
+    it('the report names the rule and the line, never the password', () => {
+      const found = scanText('a.sql', `-- users\nCREATE USER app IDENTIFIED BY "${value}";\n`);
+      expect(found).toEqual([{ path: 'a.sql', line: 2, rule: 'sql-password-literal' }]);
+    });
+
+    it('an allow marker silences a statement', () => {
+      expect(count('a.sql', `CREATE USER app IDENTIFIED BY "${value}"; -- ${ALLOW_MARKER}\n`)).toBe(0);
+    });
+
+    it('the new forms stay linear on hostile input', SLOW, () => {
+      const rep = (s, n) => s.repeat(n);
+      const hostile = [
+        rep('create user ', 30000),
+        rep('identified by ', 30000),
+        rep('identified with a by ', 20000),
+        rep('password ', 30000),
+        rep('set password for ', 20000),
+        `set password for ${rep("'a' ", 60000)}`,
+        rep(`password ${D}a${D}`, 20000),
+        rep(`password ${D}${D}${'x'.repeat(4000)}\n`, 300),
+        `password '${"''".repeat(150000)}`,
+        `identified by "${'a'.repeat(300000)}`,
+        `identified by \`${'a'.repeat(300000)}`,
+        `identified by ${rep('replace ', 30000)}`,
+        rep('pwd: ', 60000),
+        `createUser ${rep('pwd: ', 60000)}`,
+        rep('db.auth(', 40000),
+        rep('password(', 40000),
+      ];
+      const started = performance.now();
+      for (const file of ['a.sql', 'a.md', 'a.js']) for (const text of hostile) scanText(file, text);
+      expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(4) heredoc bodies with whitespace in secret CLI commands', () => {
+    const tools = [
+      ['vercel env add', `vercel env add ${NAME} production`],
+      ['gh secret set', `gh secret set ${NAME}`],
+      ['wrangler secret put', `wrangler secret put ${NAME}`],
+      ['fly secrets set', `fly secrets set ${NAME}`],
+      ['docker secret create', `docker secret create ${NAME} -`],
+      ['firebase functions:secrets:set', `firebase functions:secrets:set ${NAME}`],
+      ['netlify env:set', `netlify env:set ${NAME}`],
+      ['doppler secrets set', `doppler secrets set ${NAME}`],
+      ['heroku config:set', `heroku config:set ${NAME}`],
+      ['railway variables set', `railway variables set ${NAME}`],
+    ];
+    const tags = [
+      ['plain tag', '<<EOF', 'EOF', ''],
+      ['<<- with a tab-indented body', '<<-EOF', '\tEOF', '\t'],
+      ['single-quoted tag', "<<'EOF'", 'EOF', ''],
+      ['double-quoted tag', '<<"END"', 'END', ''],
+    ];
+    const direct = tools.flatMap(([tool, command]) =>
+      tags.map(([tag, opener, closer, indent]) => [`${tool}, ${tag}`, `${command} ${opener}\n${indent}${passphrase}\n${closer}\n`]),
+    );
+    it.each(direct)('reports a passphrase body: %s', (_label, text) => {
+      expect(rules('deploy.sh', text)).toContain('secret-cli-command');
+    });
+
+    const piped = tools.flatMap(([tool, command]) =>
+      tags.map(([tag, opener, closer, indent]) => [`cat ${opener} | ${tool}, ${tag}`, `cat ${opener} | ${command}\n${indent}${passphrase}\n${closer}\n`]),
+    );
+    it.each(piped)('reports a passphrase body piped in: %s', (_label, text) => {
+      expect(rules('deploy.sh', text)).toContain('secret-cli-command');
+    });
+
+    const hereStrings = tools.flatMap(([tool, command]) => [
+      [`${tool}, double-quoted here-string`, `${command} <<< "${passphrase}"\n`],
+      [`${tool}, single-quoted here-string`, `${command} <<< '${passphrase}'\n`],
+      [`${tool}, ANSI-C here-string`, `${command} <<< $'${passphrase}'\n`],
+    ]);
+    it.each(hereStrings)('reports a here-string: %s', (_label, text) => {
+      expect(rules('deploy.sh', text)).toContain('secret-cli-command');
+    });
+
+    const bodies = [
+      ['a multi-line body, the passphrase on the last line', `vercel env add ${NAME} <<EOF\nsome intro words\n${passphrase}\nEOF\n`],
+      ['a single random token (as before)', `vercel env add ${NAME} <<EOF\n${value}\nEOF\n`],
+      ['a body with padding blanks', `vercel env add ${NAME} <<EOF\n  ${passphrase}  \nEOF\n`],
+      ['CRLF line ends', `vercel env add ${NAME} <<EOF\r\n${passphrase}\r\nEOF\r\n`],
+      ['a value-preserving filter in the pipe', `cat <<EOF | tr -d '\\n' | ${tools[0][1]}\n${passphrase}\nEOF\n`],
+      ['code lines before and after the command', `echo start\ncat <<EOF | vercel env add ${NAME}\n${value}\nEOF\necho done with the deploy step here\nls -la /tmp\n`],
+      ['an earlier, unrelated heredoc', `cat <<A >/dev/null\nnoise\nA\nvercel env add ${NAME} <<B\n${passphrase}\nB\n`],
+    ];
+    it.each(bodies)('reports: %s', (_label, text) => {
+      expect(rules('deploy.sh', text)).toContain('secret-cli-command');
+    });
+
+    it('reports in a CI step, a Markdown fence and through --range', SLOW, () => {
+      const inner = `vercel env add ${NAME} <<EOF\n${passphrase}\nEOF\n`;
+      expect(rules('ci.yml', `steps:\n  - run: |\n${inner.replace(/^/gm, '      ')}`)).toContain('secret-cli-command');
+      expect(rules('README.md', `\`\`\`bash\n${inner}\`\`\`\n`)).toContain('secret-cli-command');
+      const dir = makeRepo();
+      const from = commit(dir, { 'base.txt': 'base\n' });
+      const head = commit(dir, { 'scripts/deploy.sh': inner });
+      const found = scan(dir, '--range', `${from}..${head}`);
+      expect(found.status, found.stderr).toBe(1);
+      expect(found.stderr).toContain('scripts/deploy.sh  secret-cli-command');
+      expect(`${found.stdout}${found.stderr}`).not.toContain(passphrase);
+      // the finding is blamed on the body line as well: a commit that only adds the body to an existing command is reported
+      const only = makeRepo();
+      const first = commit(only, { 'deploy.sh': `vercel env add ${NAME} <<EOF\n${placeholder}\nEOF\n` });
+      const second = commit(only, { 'deploy.sh': inner });
+      expect(scan(only, '--range', `${first}..${second}`).status).toBe(1);
+      expect(scan(only, '--history').status).toBe(1);
+    });
+
+    const clean = [
+      ['a placeholder body', `vercel env add ${NAME} <<EOF\nyour secret here\nEOF\n`],
+      ['a documentation body', `vercel env add ${NAME} <<EOF\nEnter the signing secret from the dashboard.\nEOF\n`],
+      ['a name that is not secret-like', `vercel env add FEATURE_NAME <<EOF\n${passphrase}\nEOF\n`],
+      ['prose after the terminator is not part of the body', `vercel env add ${NAME} <<EOF\n${placeholder}\nEOF\nnpm run build --prefix app and then deploy it now\n`],
+      ['a template reference', `vercel env add ${NAME} <<EOF\n$\{JWT_FROM_VAULT}\nEOF\n`],
+    ];
+    it.each(clean)('passes: %s', (_label, text) => {
+      expect(count('deploy.sh', text)).toBe(0);
+    });
+
+    it('a body without a terminator, or with one beyond the bounds, is reported (fail closed)', () => {
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF\n${passphrase}\n`)).toBe(1);
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF\n${placeholder}\nnpm run build now please\n`)).toBe(1);
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF\n${'filler text here\n'.repeat(300)}EOF\n`)).toBe(1);
+      // inside the bound it is judged as a body, not reported for its length
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF\n${'filler text here\n'.repeat(100)}EOF\n`)).toBe(0);
+      // a name that is not secret-like is never reported for a missing terminator
+      expect(count('deploy.sh', `vercel env add FEATURE_NAME <<EOF\n${passphrase}\n`)).toBe(0);
+    });
+
+    it('an allow marker on the command line or on a body line silences it', () => {
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF # ${ALLOW_MARKER}\n${passphrase}\nEOF\n`)).toBe(0);
+      expect(count('deploy.sh', `vercel env add ${NAME} <<EOF\n${passphrase} # ${ALLOW_MARKER}\nEOF\n`)).toBe(0);
+    });
+
+    it('many heredoc commands are read within a budget', SLOW, () => {
+      const started = performance.now();
+      scanText('deploy.sh', `vercel env add ${NAME} <<EOF\n`.repeat(60000));
+      scanText('deploy.sh', `cat <<EOF | vercel env add ${NAME}\n`.repeat(60000));
+      scanText('deploy.sh', `vercel env add ${NAME} <<EOF\n${'some words here\n'.repeat(150)}EOF\n`.repeat(2000));
+      expect(performance.now() - started).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+});

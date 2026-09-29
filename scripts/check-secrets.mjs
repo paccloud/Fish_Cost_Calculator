@@ -1332,18 +1332,36 @@ function yamlBlockWindow(input, index) {
   const above = [];
   if (!ownItem) {
     let cursor = lineStart;
-    for (let n = 0; n < PAIR_YAML_LINES && cursor > 0; n += 1) {
+    // Lines indented deeper than the key (the body of a block scalar such as `value: |` above the name) do not use up the
+    // PAIR_YAML_LINES allowance, so a long body cannot push its `value:` header out of the window; they have their own bound,
+    // and a blank line inside such a body (legal in a block scalar) does not end the walk.
+    let ordinary = 0;
+    let deep = 0;
+    let insideBody = false;
+    while (cursor > 0 && ordinary < PAIR_YAML_LINES && deep < MULTILINE_MAX_LINES) {
       const previousStart = startOfLine(cursor - 1);
       if (previousStart === -1) break;
       const line = lineFrom(previousStart);
       cursor = previousStart;
-      if (line.text.trim() === '' || isMarker(line.text)) break;
+      if (line.text.trim() === '') {
+        if (!insideBody) break;
+        deep += 1;
+        continue;
+      }
+      if (isMarker(line.text)) break;
       if (isDash(line.text) && /^[ \t]*-[ \t]+/.exec(line.text)[0].length === keyCol) {
         above.push(line);
         break;
       }
       if (indentOf(line.text) < keyCol || (isDash(line.text) && indentOf(line.text) <= keyCol)) break;
       above.push(line);
+      if (indentOf(line.text) > keyCol) {
+        insideBody = true;
+        deep += 1;
+      } else {
+        insideBody = false;
+        ordinary += 1;
+      }
     }
   }
   const below = [];
@@ -1408,35 +1426,116 @@ const PAIR_VALUE_FIELD =
 // The same field as an XML element: <value>V</value>
 const PAIR_XML_VALUE = /<(?:value|val|secret|content|data|default|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
 
-/** Is any value field (either order) in the window text a non-placeholder secret? */
-function windowHoldsSecretValue(window, kind, ctx, escaped) {
+// Where a value begins (the same field names as PAIR_VALUE_FIELD, whatever follows): read again from the input when it runs over
+// several lines (a YAML block scalar, a quote closed on a later line, a folded scalar, a heredoc).
+const PAIR_VALUE_START =
+  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?=\S)/gi;
+// A YAML block scalar header: | or > with an optional chomping (+ -) and indentation (1-9) indicator, then only a comment.
+const BLOCK_SCALAR_HEADER = /[|>](?:[-+][1-9]?|[1-9][-+]?)?(?=[ \t]*(?:#[^\n]*)?(?:\r?\n|$))/y;
+
+/**
+ * The body of a YAML block scalar whose header ends at `afterHeader`: the following lines indented deeper than the key (blank
+ * lines belong to it), as candidate values (each line, and all of them joined). Bounded like the other multi-line readers; a body
+ * that does not end within the bounds (or the file's budget) is reported as exhausted so the caller fails closed.
+ * @returns {{values: string[], end: number, exhausted: boolean, budget?: boolean}}
+ */
+function blockScalarValue(ctx, input, afterHeader, keyColumn) {
+  if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, afterHeader);
+  const lines = [];
+  let at = input.indexOf('\n', afterHeader);
+  let end = afterHeader;
+  let closed = at === -1;
+  let chars = 0;
+  at += 1;
+  for (let n = 0; !closed && n < MULTILINE_MAX_LINES && chars <= MULTILINE_MAX_CHARS; n += 1) {
+    if (at >= input.length) {
+      closed = true;
+      break;
+    }
+    const next = input.indexOf('\n', at);
+    const stop = next === -1 ? input.length : next;
+    const raw = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
+    chars += stop - at + 1;
+    if (raw.trim() !== '') {
+      if (/^[ \t]*/.exec(raw)[0].length <= keyColumn) {
+        closed = true;
+        break;
+      }
+      lines.push(raw.trim());
+      end = stop;
+    }
+    if (next === -1) {
+      closed = true;
+      break;
+    }
+    at = next + 1;
+  }
+  if (!closed) return exhaustedLiteral(ctx, input, afterHeader);
+  if (!spendMultiline(ctx, end - afterHeader + 1)) return exhaustedLiteral(ctx, input, afterHeader);
+  return { values: bodyValues(lines.join('\n')), end, exhausted: false };
+}
+
+/** The lines of a JSON string value whose line breaks are written as \n escapes, as candidate values (each line, and all joined). */
+function escapedLineValues(raw) {
+  if (!/\\[nr]/.test(raw)) return [];
+  const lines = raw.split(/\\r\\n|\\n|\\r/).map((line) => unescapeQuoted(line).trim()).filter((line) => line !== '');
+  return lines.length > 1 ? [...lines, lines.join(' ')] : [];
+}
+
+/**
+ * Value fields of the window whose value is not on the field's line: a block scalar (`value: |`, `>-`, `|2`, after a tag such as
+ * `!Sub`), a quote closed on a later line, a heredoc or triple-quoted string, a scalar folded over indented lines. The value is
+ * read from the input (the window only says where it starts) and judged like a quoted value. Returns a hit ({ abs }), an
+ * unverifiable read ({ exhausted }) or null.
+ */
+function multilineFieldSecret(window, kind, ctx, input, read) {
+  for (const start of window.text.matchAll(PAIR_VALUE_START)) {
+    const keyAt = inputOffset(window, start.index);
+    const valueAt = inputOffset(window, start.index + start[0].length);
+    if (read.has(valueAt)) continue;
+    read.add(valueAt);
+    const keyColumn = keyAt - ctx.lineStart(keyAt);
+    BLOCK_SCALAR_HEADER.lastIndex = valueAt;
+    const header = BLOCK_SCALAR_HEADER.exec(input);
+    const body =
+      header !== null
+        ? blockScalarValue(ctx, input, valueAt + header[0].length, keyColumn)
+        : (multilineValue(ctx, input, valueAt) ?? continuedValue(ctx, input, keyAt, valueAt));
+    if (body === null) continue;
+    if (body.exhausted) return { exhausted: true, budget: body.budget === true };
+    const judged = body.values.some((value) =>
+      isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
+    );
+    if (judged) return { abs: { start: valueAt, end: body.end } };
+  }
+  return null;
+}
+
+/**
+ * Is any value field (either order) in the window text a non-placeholder secret? Returns where it sits ({ index, length } in the
+ * window text, or { abs } for a value read from the input), { exhausted } when a multi-line value cannot be verified, or null.
+ */
+function windowHoldsSecretValue(window, kind, ctx, escaped, input, read = new Set()) {
   const text = window.text;
   const unescaped = escaped ? text.replace(/\\(["'])/g, '$1') : text;
   // Where the offending value sits (offset and length in the window's text). An escaped window changes its length, so the
   // whole window stands for it then.
   const at = (field) => (escaped ? { index: 0, length: text.length } : { index: field.index, length: field[0].length });
+  const judge = (value, quoted) =>
+    isSecretValue({ kind, value, quoted, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
   for (const field of unescaped.matchAll(PAIR_VALUE_FIELD)) {
     const quotedValue = field[2] ?? field[3];
     const quoted = quotedValue !== undefined;
-    if (
-      isSecretValue({
-        kind,
-        value: quoted ? unescapeQuoted(quotedValue) : field[4],
-        quoted,
-        separator: ':',
-        mode: ctx.mode,
-        minLength: ctx.minStrong,
-        catalog: ctx.catalog,
-      })
-    ) {
+    if (quoted ? judge(unescapeQuoted(quotedValue), true) || escapedLineValues(quotedValue).some((line) => judge(line, true)) : judge(field[4], false)) {
       return at(field);
     }
   }
   if (unescaped.includes('</')) {
     for (const field of unescaped.matchAll(PAIR_XML_VALUE)) {
-      if (isSecretValue({ kind, value: field[1], quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog })) return at(field);
+      if (judge(field[1], true) || bodyValues(field[1]).some((line) => judge(line, true))) return at(field);
     }
   }
+  if (!escaped) return multilineFieldSecret(window, kind, ctx, input, read);
   return null;
 }
 
@@ -1446,6 +1545,13 @@ function windowHoldsSecretValue(window, kind, ctx, escaped) {
  * line in between (the reported line and `spanEnd` are untouched, so the tree report and the inline allow marker behave as before).
  */
 function attributeTo(m, window, found, coarse = false) {
+  if (found.abs !== undefined) {
+    // A value read straight from the input (a block scalar, a multi-line literal): the marker line through its last line.
+    m.attrStart = found.abs.start;
+    m.attrEnd = Math.max(found.abs.end, found.abs.start + 1);
+    m.attrCoarse = false;
+    return;
+  }
   const first = inputOffset(window, found.index);
   const last = inputOffset(window, found.index + Math.max(found.length - 1, 0));
   m.attrStart = first;
@@ -1494,14 +1600,27 @@ function pairValueIsSecret(m, kind, ctx) {
     return true;
   }
   const escaped = m[1].startsWith('\\'); // a JSON document stored as a string: {\"key\":\"X\",\"value\":\"Y\"}
+  const read = new Set(); // the same value is found through several windows: read it once
   for (const window of windows) {
-    const found = windowHoldsSecretValue(window, kind, ctx, escaped);
-    if (found !== null) {
-      attributeTo(m, window, found, escaped);
-      return true;
-    }
+    const found = windowHoldsSecretValue(window, kind, ctx, escaped, m.input, read);
+    if (found !== null) return pairHit(m, window, found, ctx, escaped);
   }
   return false;
+}
+
+/** A window search found a value (or could not verify one): record where, and report the pair. */
+function pairHit(m, window, found, ctx, coarse = false) {
+  if (found.exhausted !== true) {
+    attributeTo(m, window, found, coarse);
+    return true;
+  }
+  // A multi-line value that does not end within the bounds cannot be verified: reported (fail closed), once per file when the
+  // file's budget is what ran out.
+  attributeToFile(m);
+  if (!found.budget) return true;
+  if (ctx.multilineReported) return false;
+  ctx.multilineReported = true;
+  return true;
 }
 
 /** Value fields inside the child block or object that belongs to a name: `NAME:` followed by indented lines, or `NAME: {`. */
@@ -1541,10 +1660,8 @@ function childHoldsSecretValue(m, kind, ctx, keyIndent) {
     attributeToFile(m);
     return true;
   }
-  const found = windowHoldsSecretValue(window, kind, ctx, false);
-  if (found === null) return false;
-  attributeTo(m, window, found);
-  return true;
+  const found = windowHoldsSecretValue(window, kind, ctx, false, input);
+  return found !== null && pairHit(m, window, found, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -1688,21 +1805,33 @@ function pipeTailReachesCli(tail) {
   return stages.every((stage) => PIPE_FILTER.test(stage.trim())) && /^[^;&<>]{0,200}$/.test(last);
 }
 
-/** The lines of a heredoc body that starts after `from`, up to its delimiter (at most 50 lines, blank ones dropped). */
-function heredocLines(input, from, word, stripTabs) {
+/**
+ * The body of a heredoc that starts at `from`, up to the line that is its delimiter. Reads at most MULTILINE_MAX_LINES lines /
+ * MULTILINE_MAX_CHARS characters (and the file's multi-line budget). `closed` is false when the delimiter is not found within
+ * those bounds: the body cannot be verified, so the caller fails closed. `end` is the index where the read stopped.
+ * @returns {{lines: string[], end: number, closed: boolean}}
+ */
+function heredocBody(ctx, input, from, word) {
+  if (budgetSpent(ctx)) return { lines: [], end: from, closed: false }; // nothing left to read with: unverified
   const lines = [];
   let at = from;
-  for (let n = 0; n < 50 && at <= input.length; n += 1) {
-    const end = input.indexOf('\n', at);
-    let line = input.slice(at, end === -1 ? input.length : Math.min(end, at + 4096)).replace(/\r$/, '');
-    if (stripTabs) line = line.replace(/^\t+/, '');
-    if (line.trim() === word) break;
-    // A secret piped in is one token; a line with blanks in it is the code or text around a heredoc that is not one.
-    if (line.trim() !== '' && !/\s/.test(line.trim())) lines.push(line.trim());
-    if (end === -1) break;
-    at = end + 1;
+  let closed = false;
+  let end = from;
+  for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && at - from <= MULTILINE_MAX_CHARS; n += 1) {
+    const lineEnd = input.indexOf('\n', at);
+    const stop = lineEnd === -1 ? input.length : lineEnd;
+    const line = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
+    end = stop;
+    if (line.trim() === word) {
+      closed = true;
+      break;
+    }
+    lines.push(line);
+    if (lineEnd === -1) break;
+    at = lineEnd + 1;
   }
-  return lines;
+  if (!spendMultiline(ctx, end - from)) closed = false;
+  return { lines, end, closed };
 }
 
 /**
@@ -1710,7 +1839,10 @@ function heredocLines(input, from, word, stripTabs) {
  * (also mid-line after any `;`, `&&`, `||`, `|`, `(`, `then`, `do`, `sudo`, `env A=1`, a `bash -c "` quote or a YAML `run:`;
  * the source only has to be the word `echo`/`printf` before the pipe, so indentation, tabs, CRLF and list prefixes do not
  * matter), through value-preserving filters (`| tr -d '\n' |`), across a `\` or `|` line continuation, and heredocs
- * (`cat <<EOF | cli`, `cli <<EOF`, the body being the value).
+ * (`cat <<EOF | cli`, `cli <<EOF`, the body being the value). A heredoc body is judged as a whole value, like a quoted one (its
+ * lines and all of them joined), so a passphrase is found as well as a single token. `unterminated`: a heredoc whose delimiter is
+ * not found within the bounds cannot be verified. `end`: where the last heredoc body read stops (0 when there is none).
+ * @returns {{values: string[], end: number, unterminated: boolean}}
  */
 function stdinValues(m, ctx) {
   const input = m.input;
@@ -1726,6 +1858,14 @@ function stdinValues(m, ctx) {
     start = prevStart;
   }
   const values = [];
+  const heredoc = { end: 0, unterminated: false };
+  const bodyStart = ctx.lineEnd(m.index) + 1;
+  const readHeredoc = (word) => {
+    const body = heredocBody(ctx, input, bodyStart, word);
+    heredoc.end = Math.max(heredoc.end, body.end);
+    if (!body.closed) heredoc.unterminated = true;
+    values.push(...bodyValues(body.lines.join('\n')));
+  };
   // echo / printf: the last usable source before the pipe.
   const sources = [...before.matchAll(/(?<![A-Za-z0-9_$.-])(echo|printf)(?![A-Za-z0-9_-])/g)];
   for (let k = sources.length - 1; k >= 0 && k >= sources.length - 4 && values.length === 0; k -= 1) {
@@ -1740,17 +1880,19 @@ function stdinValues(m, ctx) {
     else values.push(words[0].replace(/(?:\\[nr])+$/, '')); // printf 'V\n'
   }
   // Heredocs: the body starts on the line after the one holding the CLI.
-  const bodyStart = ctx.lineEnd(m.index) + 1;
   const opener = /(?<!<)<<(-?)[ \t]*(["']?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
   const piped = [...before.matchAll(opener)].pop();
   if (piped !== undefined && /^[ \t]*\|/.test(before.slice(piped.index + piped[0].length))) {
     const tail = before.slice(piped.index + piped[0].length).replace(/^[ \t]*\|/, '');
-    if (pipeTailReachesCli(tail)) values.push(...heredocLines(input, bodyStart, piped[3], piped[1] === '-'));
+    if (pipeTailReachesCli(tail)) readHeredoc(piped[3]);
   }
   const attached = new RegExp(opener.source).exec(m[0]);
-  if (attached !== null) values.push(...heredocLines(input, bodyStart, attached[3], attached[1] === '-'));
-  return values;
+  if (attached !== null) readHeredoc(attached[3]);
+  return { values, end: heredoc.end, unterminated: heredoc.unterminated };
 }
+
+// Stands in for the value of a heredoc that could not be read to its end (never a real value: it is compared by identity).
+const HEREDOC_UNVERIFIED = ['\0heredoc', 'unverified'].join('');
 
 const CLI_TOOLS = [
   [/^gh[ \t]+(?:secret|variable)[ \t]+set/, {}],
@@ -2175,6 +2317,136 @@ const hasFormat = (tag) => (ctx) => ctx.formats.has(tag);
 /** Any secret-like environment variable name, strong or weak. */
 const isSecretLikeName = (name) => secretNameKind(name) !== null;
 
+// ---------------------------------------------------------------------------
+// The `name <operator> value` shape of secret-assignment
+// ---------------------------------------------------------------------------
+
+// What may sit between a name and its assignment operator, by language:
+//   a type annotation:  `: string`, `: &str`, `: &'static str`, `: []const u8`, `: String?` (TypeScript, Rust, Zig, Kotlin, Swift, Scala)
+//   a type word alone:  `NAME string = ...` (Go var / const), `NAME char = ...`
+//   a marker:           Nim `NAME* =`, TypeScript `name?: T =` / `name!: T =`, C `NAME[] =`, Lua `NAME <const> =`
+// Every part is bounded, starts with a character the previous part cannot end in, and is optional as a whole.
+const ASSIGN_TYPE_COLON = String.raw`:[ \t]*(?:&(?:'[A-Za-z_]{1,16}[ \t]{1,4}|mut[ \t]{1,4})?|\*(?:const[ \t]{1,4}|mut[ \t]{1,4})?|\[\d{0,4}\](?:const[ \t]{1,4})?)?[A-Za-z_][A-Za-z0-9_<>[\]|.?!&*]{0,40}(?!:\/\/)`;
+const ASSIGN_TYPE_WORD = String.raw`[ \t]{1,4}(?:\*|\[\d{0,4}\])?(?:string|String|str|byte|bytes|char|text|any|auto|dynamic|object|Object)(?![A-Za-z0-9_])`;
+const ASSIGN_MARKER = String.raw`(?:\*|[?!](?=[ \t]*:)|\[[A-Za-z0-9_]{0,20}\]|[ \t]*<(?:const|close)>)`;
+// Every assignment operator that carries a value: = := ::= ?= += -= .= *= **= |= &= ^= %= ||= &&= ??= => and the arrows <- <<- -> (R, Scala) and the
+// infix `to` (Kotlin `"NAME" to "value"`). An arrow or `to` counts only in front of a quote, so `a->b`, `x<-1` and prose stay out.
+const ASSIGN_OPERATOR = String.raw`(\|\|=|&&=|\?\?=|\*\*=|:{1,3}=|\?=|[-+.*|&^%]=|=>|<{1,2}-(?=[ \t]*["'\x60])|->(?=[ \t]*["'\x60])|(?<=["'\x60][ \t]{1,8})to(?=[ \t]{1,8}["'\x60])|=|:(?!:))`;
+const ASSIGNMENT_PATTERN = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'\x60]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'\x60])[ \t]*\])?${ASSIGN_MARKER}?(?:[ \t]*${ASSIGN_TYPE_COLON}|${ASSIGN_TYPE_WORD}(?=[ \t]*=(?!=)))?[ \t]*${ASSIGN_OPERATOR}[ \t]*(?=\S)`,
+  'g',
+);
+
+// ---------------------------------------------------------------------------
+// SQL statements that set a password to a literal
+// ---------------------------------------------------------------------------
+
+// Every literal form a SQL dialect accepts for a password: 'single' (also N'national', U&'unicode'), E'escape', "double"
+// (Oracle), `backtick` (MySQL / MariaDB) and $$dollar$$ / $tag$dollar$tag$ (PostgreSQL). Each alternative is a named group; every
+// character has exactly one reading (a doubled quote is the escape), so a match is linear in the literal.
+const SQL_QUOTED = String.raw`(?:(?:[Nn]|[Uu]&)?'(?<sq>(?:[^'\n]|''){1,4096})'|[Ee]'(?<esc>(?:[^'\\\n]|''|\\.){1,4096})'|"(?<dq>(?:[^"\n]|""){1,4096})"|\x60(?<bt>(?:[^\x60\n]|\x60\x60){1,4096})\x60|\$(?<tag>[A-Za-z_][A-Za-z0-9_]{0,32})?\$(?<dl>(?:(?!\$\k<tag>\$)[^\n]){1,4096}?)\$\k<tag>\$)`;
+// Oracle also takes the password as a bare identifier: IDENTIFIED BY hunter2 (only read inside a CREATE / ALTER / GRANT statement).
+const SQL_BARE = String.raw`(?<id>[A-Za-z][A-Za-z0-9_#$]{0,127})`;
+// Words that follow IDENTIFIED BY and are syntax, not a password.
+const SQL_SYNTAX_WORDS = new Set(['values', 'password', 'random', 'externally', 'globally', 'replace', 'default', 'null', 'using', 'with']);
+// Bind parameters and substitution variables: ?, $1, :name, :1, @name, %s, %(name)s, %L, {0}, {name}, &pw (SQL*Plus).
+const SQL_PARAMETER =
+  /^(?:\?|\$\d{1,3}|:[A-Za-z_][A-Za-z0-9_]{0,63}|:\d{1,3}|@[A-Za-z_][A-Za-z0-9_]{0,63}|%(?:\([A-Za-z_][A-Za-z0-9_]{0,63}\))?[sdLI]|\{\d{0,3}\}|\{[A-Za-z_][A-Za-z0-9_.]{0,63}\}|&&?[A-Za-z_][A-Za-z0-9_]{0,63}\.?)$/;
+
+/** The password literal of a SQL match, unquoted (doubled quotes undone), or undefined. */
+function sqlLiteral(groups) {
+  if (groups.sq !== undefined) return groups.sq.replace(/''/g, "'");
+  if (groups.esc !== undefined) return groups.esc.replace(/''/g, "'").replace(/\\(.)/g, '$1');
+  if (groups.dq !== undefined) return groups.dq.replace(/""/g, '"');
+  if (groups.bt !== undefined) return groups.bt.replace(/\x60\x60/g, '\x60');
+  return groups.dl ?? groups.id;
+}
+
+const isSqlPath = (ctx) => /\.(?:sql|psql|pgsql|mysql|ddl)$/i.test(ctx.path);
+
+/** The statement text before the match (back to the previous `;`, at most 400 characters). */
+function sqlStatementBefore(m) {
+  const before = m.input.slice(Math.max(0, m.index - 400), m.index);
+  return before.slice(before.lastIndexOf(';') + 1);
+}
+
+const sqlValueIsSecret = (value) => value !== undefined && !placeholderOf(value) && !SQL_PARAMETER.test(value.trim());
+
+const SQL_RULE = {
+  id: 'sql-password-literal',
+  description:
+    "SQL statement that sets a role or user password to a literal (ALTER ROLE ... PASSWORD '...', CREATE USER ... IDENTIFIED BY \"...\", MongoDB createUser({pwd: \"...\"}))",
+  matchers: [
+    {
+      // Oracle / MySQL / MariaDB: IDENTIFIED BY '<pw>' / "<pw>" / <pw>, IDENTIFIED WITH plugin BY '<pw>' | AS '<hash>', IDENTIFIED BY PASSWORD '<hash>',
+      // IDENTIFIED VIA plugin USING PASSWORD('<pw>'); also in GRANT ... IDENTIFIED BY. A hash is judged like any other literal.
+      hint: /identified/i,
+      pattern: new RegExp(
+        String.raw`\bidentified[ \t]+(?:(?:with|via)[ \t]+[A-Za-z_][A-Za-z0-9_]{0,63}[ \t]+(?:by|as|using)|by)[ \t]+(?:(?:values|password)[ \t]*(?:\([ \t]*)?)?(?:${SQL_QUOTED}|${SQL_BARE})`,
+        'gi',
+      ),
+      accept: (m, ctx) => {
+        if (m.groups.id !== undefined) {
+          // A bare word is a password only in a statement (a .sql file, or CREATE / ALTER / GRANT before it), never in prose.
+          const id = m.groups.id.toLowerCase();
+          if (SQL_SYNTAX_WORDS.has(id) || !(isSqlPath(ctx) || /\b(?:create|alter|grant)\b/i.test(sqlStatementBefore(m)))) return false;
+        }
+        return sqlValueIsSecret(sqlLiteral(m.groups));
+      },
+    },
+    {
+      // PostgreSQL / SQL Server / Snowflake / MySQL: [CREATE|ALTER USER|ROLE|LOGIN ...] [WITH] [ENCRYPTED] PASSWORD [=] '<pw>',
+      // SET PASSWORD [FOR user] = '<pw>' | PASSWORD('<pw>'), OLD_PASSWORD = '<pw>'. A bare `password '...'` is only SQL in a .sql file.
+      hint: /password/i,
+      pattern: new RegExp(
+        String.raw`\b(?<pre>(?:alter|create)[ \t]+(?:user|role|login|group|server)\b[^;'\n]{0,160}?\b|with[ \t]+(?:(?:encrypted|unencrypted)[ \t]+)?|login[ \t]+(?:(?:encrypted|unencrypted)[ \t]+)?|(?:encrypted|unencrypted)[ \t]+|old_|set[ \t]+)?password(?![A-Za-z0-9_])(?:[ \t]+(?<for>for[ \t]+[^=;\s][^=;\n]{0,119})=[ \t]*|[ \t]*(?<eq>=[ \t]*)?(?<=[ \t=]))(?:(?:old_)?password[ \t]*\([ \t]*)?${SQL_QUOTED}`,
+        'gi',
+      ),
+      accept: (m, ctx) => {
+        const pre = m.groups.pre ?? '';
+        const qualified = /^(?:alter|create|with|login)\b/i.test(pre) || (/^set\b/i.test(pre) && (m.groups.for !== undefined || m.groups.eq !== undefined));
+        if (!qualified && !isSqlPath(ctx)) return false;
+        return sqlValueIsSecret(sqlLiteral(m.groups));
+      },
+    },
+    {
+      // MySQL / MariaDB: UPDATE mysql.user SET authentication_string = PASSWORD('<pw>'), ... USING PASSWORD('<pw>').
+      hint: /password[ \t]*\(/i,
+      pattern: new RegExp(String.raw`(?<![A-Za-z0-9_])(?:old_)?password[ \t]*\([ \t]*${SQL_QUOTED}`, 'gi'),
+      accept: (m, ctx) => {
+        const before = m.input.slice(Math.max(0, m.index - 16), m.index);
+        if (!isSqlPath(ctx) && !/(?:=|\b(?:using|by|as))[ \t]*$/i.test(before)) return false;
+        return sqlValueIsSecret(sqlLiteral(m.groups));
+      },
+    },
+    {
+      // Oracle / MySQL: IDENTIFIED BY '<new>' REPLACE '<old>' (the old password is a password too).
+      hint: /replace/i,
+      pattern: new RegExp(String.raw`\breplace[ \t]+(?:${SQL_QUOTED}|${SQL_BARE})`, 'gi'),
+      accept: (m) => {
+        if (!/\bidentified\b/i.test(sqlStatementBefore(m))) return false;
+        if (m.groups.id !== undefined && SQL_SYNTAX_WORDS.has(m.groups.id.toLowerCase())) return false;
+        return sqlValueIsSecret(sqlLiteral(m.groups));
+      },
+    },
+    {
+      // MongoDB: db.createUser({user: "a", pwd: "<pw>", roles: [...]}), db.updateUser("a", {pwd: "<pw>"}); the key is `pwd`.
+      hint: /pwd/i,
+      pattern: new RegExp(String.raw`(?<![A-Za-z0-9_$.-])["']?pwd["']?[ \t]*:[ \t]*${SQL_QUOTED}`, 'gi'),
+      accept: (m, ctx) => {
+        const near = ['createUser', 'updateUser', 'changeUserPassword', 'addUser'].some((call) => ctx.hasBefore(call, m.index, 2000));
+        return near && sqlValueIsSecret(sqlLiteral(m.groups));
+      },
+    },
+    {
+      // MongoDB legacy helpers: db.changeUserPassword("user", "<pw>"), db.addUser("user", "<pw>"), db.auth("user", "<pw>").
+      hint: /changeUserPassword|addUser|\.auth\(/,
+      pattern: new RegExp(String.raw`\b(?:changeUserPassword|addUser|db\.auth)[ \t]*\([ \t]*(?:"[^"\n]{1,200}"|'[^'\n]{1,200}')[ \t]*,[ \t]*${SQL_QUOTED}`, 'g'),
+      accept: (m) => sqlValueIsSecret(sqlLiteral(m.groups)),
+    },
+  ],
+};
+
 /**
  * Each rule: id, description, matchers[{ pattern (global regex), accept(match, ctx), optional appliesTo(ctx) and hint }],
  * optional appliesTo(ctx) and hint (a cheap regex the file must match before the rule runs).
@@ -2505,6 +2777,97 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
 }
 
+const SECRET_ASSIGNMENT_MATCHER = {
+  // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
+  // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
+  // matching resumes right after it, so `cfg['a']={"K":"v"}`, `x=1;K='v'` and minified JSON are still examined.
+  // Not a name: "${NAME:-x}" (an expansion, judged by its outer assignment) or "://NAME:x@" (a URL, judged by url-password).
+  pattern: ASSIGNMENT_PATTERN,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[2], ctx);
+    if (!kind) return false;
+    const input = m.input;
+    let valueStart = m.index + m[0].length;
+    if (ctx.mode !== 'code' && m[3] === ':') {
+      // A YAML tag or anchor before the scalar (`!!str V`, `&anchor V`, `!vault V`) is not part of the value.
+      YAML_NODE_PROPERTIES.lastIndex = valueStart;
+      const properties = YAML_NODE_PROPERTIES.exec(input);
+      if (properties) valueStart += properties[0].length;
+    }
+    // A literal over several lines (heredoc, triple quotes, a quote closed on a later line, a template literal) is judged
+    // as a whole. One that does not end within the bounds is reported: it cannot be verified.
+    const multiline = multilineValue(ctx, input, valueStart);
+    if (multiline !== null) {
+      m.spanEnd = multiline.end;
+      if (multiline.exhausted) return exhaustedVerdict(m, ctx, multiline);
+      return multiline.values.some((text) =>
+        isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
+      );
+    }
+    // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
+    // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
+    const nested = valueStart < (ctx.bareRunEnd ?? 0);
+    const reader = nested ? NESTED_VALUE_AT : VALUE_AT;
+    reader.lastIndex = valueStart;
+    const value = reader.exec(input);
+    if (!value) return false;
+    const quotedValue = value[1] ?? value[2] ?? value[3];
+    const quoted = quotedValue !== undefined;
+    m.spanEnd = valueStart + value[0].length;
+    // `NAME=\`cat file\`` in a shell script is a command substitution, not a string literal (in code it is a template literal).
+    if (value[3] !== undefined && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false;
+    const check = (text, isQuoted) =>
+      isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+    if (quoted) return check(unescapeQuoted(quotedValue), true);
+    const bare = value[4];
+    if (!nested) ctx.bareRunEnd = valueStart + bare.length;
+    let token = bare.replace(/^["'`]+/, '');
+    if (ctx.mode === 'config' && bare.includes('${')) {
+      // The value is the whole shell word, so ${A:-two words} and ${A}suffix stay in one piece.
+      const wordEnd = bareShellWordEnd(input, valueStart);
+      token = input.slice(valueStart, wordEnd);
+      m.spanEnd = Math.max(m.spanEnd, wordEnd);
+    }
+    if (bare.startsWith('`') && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false; // an unquoted command substitution
+    if (ctx.mode !== 'config') return check(token, false);
+    const extras = unquotedContinuations(ctx, input, m.index, valueStart + bare.length, bare);
+    // A backslash at the end of the line, an INI continuation line, a YAML scalar folded over indented lines.
+    const continued = /^[|>][-+0-9]*$/.test(bare) ? null : continuedValue(ctx, input, m.index, valueStart);
+    if (continued !== null) {
+      m.spanEnd = continued.end;
+      if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
+      for (const text of continued.values) if (check(text, true)) return true;
+    }
+    // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
+    // the first word alone says nothing about it.
+    const wholeLine = extras.find((extra) => extra.value.length > bare.length && extra.value.startsWith(bare));
+    if (wholeLine) {
+      m.spanEnd = wholeLine.end;
+      return check(wholeLine.value, true);
+    }
+    if (check(token, false)) return true;
+    for (const extra of extras) {
+      if (check(extra.value, true)) {
+        m.spanEnd = extra.end;
+        return true;
+      }
+    }
+    return false;
+  },
+};
+
+
+// Definition forms with no operator, where the name follows a keyword or sigil and the value is a quoted literal after a blank:
+// Elixir `@jwt_secret "v"`, Clojure `(def jwt-secret "v")` / `{:jwt-secret "v"}`, Lisp `(setq jwt-secret "v")` / `(defvar ...)`.
+// Source code only (in prose these read as ordinary text); the value is judged like any other quoted literal in code.
+const DEFINITION_ASSIGNMENT_MATCHER = {
+  appliesTo: (ctx) => ctx.mode === 'code',
+  hint: /[@(:]/,
+  pattern:
+    /(?<![A-Za-z0-9_$.\/-])(@|\((?:def|defonce|defvar|defparameter|defconstant|defcustom|setq|setf|define)(?![A-Za-z0-9_-])[ \t]{1,8}(?:\^[^\s()]{1,30}[ \t]{1,8}){0,2}|:)([A-Za-z_][A-Za-z0-9_.-]{0,255})()[ \t]{1,64}(?=["'\x60])/g,
+  accept: (m, ctx) => SECRET_ASSIGNMENT_MATCHER.accept(m, ctx),
+};
+
 export const RULES = [
   {
     id: 'url-password',
@@ -2674,21 +3037,7 @@ export const RULES = [
   },
   ...PROVIDER_RULES,
   LOCKFILE_RULE,
-  {
-    id: 'sql-password-literal',
-    description: "SQL statement that sets a role or user password to a literal (ALTER ROLE ... PASSWORD '...')",
-    matchers: [
-      {
-        pattern:
-          /\b(?:(?:(?:alter|create)[ \t]+(?:user|role)\b[^;'\n]{0,160}?\b|with[ \t]+(?:encrypted[ \t]+)?|login[ \t]+)?password|identified[ \t]+by)[ \t]*=?[ \t]*'((?:[^'\n]|''){1,4096})'/gi,
-        accept: (m, ctx) => {
-          // A bare `password '...'` is only SQL in a .sql file; elsewhere it is prose.
-          if (/^password/i.test(m[0]) && !ctx.path.toLowerCase().endsWith('.sql')) return false;
-          return !placeholderOf(m[1].replace(/''/g, "'"));
-        },
-      },
-    ],
-  },
+  SQL_RULE,
   {
     id: 'webhook-url',
     lockfile: true,
@@ -2753,85 +3102,8 @@ export const RULES = [
       'secret-like name (SECRET, PASSWORD, TOKEN, API_KEY, ...) set to a non-placeholder literal: any 8+ character value in env/config files, a random-looking quoted literal in code',
     hint: SECRET_HINT,
     matchers: [
-      {
-        // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
-        // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
-        // matching resumes right after it, so `cfg['a']={"K":"v"}`, `x=1;K='v'` and minified JSON are still examined.
-        // Not a name: "${NAME:-x}" (an expansion, judged by its outer assignment) or "://NAME:x@" (a URL, judged by url-password).
-        pattern:
-          /(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'`]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'`])[ \t]*\])?(?:[ \t]*:[ \t]*[A-Za-z_][A-Za-z0-9_<>[\]|.]{0,40}(?!:\/\/))?[ \t]*(:=|=>|\?=|\+=|=|:(?!:))[ \t]*(?=\S)/g,
-        accept: (m, ctx) => {
-          const kind = nameKindFor(m[2], ctx);
-          if (!kind) return false;
-          const input = m.input;
-          let valueStart = m.index + m[0].length;
-          if (ctx.mode !== 'code' && m[3] === ':') {
-            // A YAML tag or anchor before the scalar (`!!str V`, `&anchor V`, `!vault V`) is not part of the value.
-            YAML_NODE_PROPERTIES.lastIndex = valueStart;
-            const properties = YAML_NODE_PROPERTIES.exec(input);
-            if (properties) valueStart += properties[0].length;
-          }
-          // A literal over several lines (heredoc, triple quotes, a quote closed on a later line, a template literal) is judged
-          // as a whole. One that does not end within the bounds is reported: it cannot be verified.
-          const multiline = multilineValue(ctx, input, valueStart);
-          if (multiline !== null) {
-            m.spanEnd = multiline.end;
-            if (multiline.exhausted) return exhaustedVerdict(m, ctx, multiline);
-            return multiline.values.some((text) =>
-              isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
-            );
-          }
-          // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
-          // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
-          const nested = valueStart < (ctx.bareRunEnd ?? 0);
-          const reader = nested ? NESTED_VALUE_AT : VALUE_AT;
-          reader.lastIndex = valueStart;
-          const value = reader.exec(input);
-          if (!value) return false;
-          const quotedValue = value[1] ?? value[2] ?? value[3];
-          const quoted = quotedValue !== undefined;
-          m.spanEnd = valueStart + value[0].length;
-          // `NAME=\`cat file\`` in a shell script is a command substitution, not a string literal (in code it is a template literal).
-          if (value[3] !== undefined && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false;
-          const check = (text, isQuoted) =>
-            isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
-          if (quoted) return check(unescapeQuoted(quotedValue), true);
-          const bare = value[4];
-          if (!nested) ctx.bareRunEnd = valueStart + bare.length;
-          let token = bare.replace(/^["'`]+/, '');
-          if (ctx.mode === 'config' && bare.includes('${')) {
-            // The value is the whole shell word, so ${A:-two words} and ${A}suffix stay in one piece.
-            const wordEnd = bareShellWordEnd(input, valueStart);
-            token = input.slice(valueStart, wordEnd);
-            m.spanEnd = Math.max(m.spanEnd, wordEnd);
-          }
-          if (bare.startsWith('`') && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false; // an unquoted command substitution
-          if (ctx.mode !== 'config') return check(token, false);
-          const extras = unquotedContinuations(ctx, input, m.index, valueStart + bare.length, bare);
-          // A backslash at the end of the line, an INI continuation line, a YAML scalar folded over indented lines.
-          const continued = /^[|>][-+0-9]*$/.test(bare) ? null : continuedValue(ctx, input, m.index, valueStart);
-          if (continued !== null) {
-            m.spanEnd = continued.end;
-            if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
-            for (const text of continued.values) if (check(text, true)) return true;
-          }
-          // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
-          // the first word alone says nothing about it.
-          const wholeLine = extras.find((extra) => extra.value.length > bare.length && extra.value.startsWith(bare));
-          if (wholeLine) {
-            m.spanEnd = wholeLine.end;
-            return check(wholeLine.value, true);
-          }
-          if (check(token, false)) return true;
-          for (const extra of extras) {
-            if (check(extra.value, true)) {
-              m.spanEnd = extra.end;
-              return true;
-            }
-          }
-          return false;
-        },
-      },
+      SECRET_ASSIGNMENT_MATCHER,
+      DEFINITION_ASSIGNMENT_MATCHER,
       {
         // The value starts on a later line: YAML `NAME:` + an indented scalar, INI / configparser `NAME =` + indented
         // continuation lines. A nested mapping (`NAME:` + `value: V`) is the name/value pair rule's business.
@@ -3065,10 +3337,8 @@ export const RULES = [
             attributeToFile(m);
             return true;
           }
-          const found = window === null ? null : windowHoldsSecretValue(window, kind, ctx, false);
-          if (found === null) return false;
-          attributeTo(m, window, found);
-          return true;
+          const found = window === null ? null : windowHoldsSecretValue(window, kind, ctx, false, m.input);
+          return found !== null && pairHit(m, window, found, ctx);
         },
       },
       {
@@ -3127,12 +3397,20 @@ export const RULES = [
           const stdin = stdinValues(m, ctx);
           const options = { positionalValue: tool[1].positionalValue ?? false, assignments: ctx.mode === 'code' };
           const words = shellWords(m[0].slice(tool[0].exec(m[0])[0].length));
-          return (stdin.length === 0 ? [null] : stdin).some((piped) =>
+          const judge = (piped) =>
             cliPairs(words, options, piped).some(([name, value]) => {
               const kind = secretNameKind(name);
               return kind !== null && isSecretValue({ kind, value: value.trim(), quoted: true, separator: '=', mode: 'config', catalog: false });
-            }),
-          );
+            });
+          const found = (stdin.values.length === 0 ? [null] : stdin.values).some(judge);
+          // A heredoc whose delimiter is not found within the bounds is not verified: fail closed for a secret-like name.
+          const unverified = !found && stdin.unterminated && cliPairs(words, options, HEREDOC_UNVERIFIED).some(([name, value]) => value === HEREDOC_UNVERIFIED && secretNameKind(name) !== null);
+          if (found || unverified) {
+            // The heredoc body is part of the match: an allow marker on one of its lines counts, and so does a change to one of them.
+            if (stdin.end > m.index + m[0].length) m.spanEnd = stdin.end;
+            return true;
+          }
+          return false;
         },
       },
     ],
