@@ -6,7 +6,8 @@ status: accepted
 
 Submitting a yield means its owner agrees that, once approved, it is released
 under CC BY 4.0 with attribution by display name or "Anonymous"; the submit
-dialog says so. The code stays MIT. A licence on contributed data cannot be
+dialog says so. No other identifying field (such as the organization from the
+old contributor profiles) is published or exported. The code stays MIT. A license on contributed data cannot be
 narrowed after the fact, so this is set before any submissions under the new
 flow. For now the Community page offers a CSV/JSON download built from the
 approved yields. Scheduled, versioned releases (a GitHub Action exporting a

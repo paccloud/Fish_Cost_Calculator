@@ -13,6 +13,13 @@ calculator never get an account.
 
 ## Consequences
 
+- Guest data saved by the current app (in the browser, not Firestore) is not
+  read by the new app. It moves over the existing way before the switch: the
+  current app asks guests to sign in, its adoption code moves their records
+  into the account, and they reach Firestore with the one-time copy from Neon
+  (see ADR 0001). The old guest storage and adoption code are removed only
+  after that.
+
 - If the guest signs in with a Google account or email that already belongs to
   an account, Firebase cannot link it to the anonymous user. In that case the
   app reads the guest's custom yields and saved calculations while still signed
