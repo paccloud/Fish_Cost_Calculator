@@ -3557,6 +3557,160 @@ function aclRulesHoldSecret(rules) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Private JSON Web Keys (RFC 7517/7518/8037): an object with a `kty` member whose private members hold key material. One linear
+// pass per file finds every such member; the rule's matcher then reports on the line of the private member. Two readers:
+//  - a brace reader for JSON, JSON escaped inside a string (\"kty\"), JS / Python object literals (quoted or bare keys) and YAML flow maps;
+//  - a line reader for YAML block mappings (`kty: EC` ... `d: ...`, also as `- ` list items), which also covers pretty-printed JSON.
+// ---------------------------------------------------------------------------
+
+const JWK_PRIVATE_MEMBERS = new Map([
+  ['EC', new Set(['d'])],
+  ['OKP', new Set(['d'])],
+  ['RSA', new Set(['d', 'p', 'q', 'dp', 'dq', 'qi'])],
+  ['oct', new Set(['k'])],
+]);
+const JWK_WATCHED = new Set(['kty', 'd', 'p', 'q', 'dp', 'dq', 'qi', 'k']);
+const JWK_WINDOW_CHARS = 16 * 1024; // an object (or YAML mapping) longer than this is not read as a key (an 8192-bit RSA JWK is ~6.5 KB)
+const JWK_MAX_DEPTH = 64;
+const JWK_MAX_MEMBERS = 32; // watched members kept per object
+// A member name: optionally quoted (', ", or a quote escaped one to three times), the same quote closing it, then a colon.
+const JWK_KEY = /(\\{0,3}["']?)([A-Za-z_$][A-Za-z0-9_$]{0,31})\1[ \t]*:[ \t\r\n]{0,64}/y;
+// A quoted value made only of base64 / base64url characters; anything else (`<private-key>`, `${D}`, `...`) is not key material.
+const JWK_QUOTED_VALUE = /(\\{0,3}["'`])([A-Za-z0-9_+/=-]{0,8192})\1/y;
+const JWK_BARE_VALUE = /[A-Za-z0-9_+/=-]{1,8192}/y;
+const JWK_IDENTIFIER_CHAR = /[A-Za-z0-9_$]/;
+
+/** Is a private member's literal key material: base64url of 16+ characters that looks random and is not a placeholder? */
+function jwkValueIsKeyMaterial(value) {
+  const body = value.replace(/=+$/, '');
+  if (body.length < 16 || !/^[A-Za-z0-9_+/-]+$/.test(body)) return false;
+  return !placeholderOf(body) && looksRandom(body, { minLength: 16, minEntropy: 3.0 });
+}
+
+/** Record the private members of a closed object or mapping that has a known `kty` (index of the name -> end of the value). */
+function jwkCollect(object, found) {
+  if (object.kty === null) return;
+  const names = JWK_PRIVATE_MEMBERS.get(object.kty);
+  if (names === undefined) return;
+  for (const member of object.members) {
+    if (names.has(member.name) && jwkValueIsKeyMaterial(member.value)) found.set(member.at, member.end);
+  }
+}
+
+function jwkAddMember(object, name, value, at, end) {
+  if (name === 'kty') object.kty = value;
+  else if (object.members.length < JWK_MAX_MEMBERS) object.members.push({ name, value, at, end });
+}
+
+/** Brace reader: one left-to-right pass with a stack of open objects. Each position is tried once; a value is read once. */
+function jwkBraceMembers(text, found) {
+  const stack = [];
+  let overflow = 0;
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '{') {
+      if (stack.length >= JWK_MAX_DEPTH) overflow += 1;
+      else stack.push({ start: i, kty: null, members: [] });
+      i += 1;
+      continue;
+    }
+    if (c === '}') {
+      if (overflow > 0) overflow -= 1;
+      else if (stack.length > 0) {
+        const object = stack.pop();
+        if (i - object.start <= JWK_WINDOW_CHARS) jwkCollect(object, found);
+      }
+      i += 1;
+      continue;
+    }
+    if (stack.length === 0 || (i > 0 && JWK_IDENTIFIER_CHAR.test(text[i - 1]))) {
+      i += 1;
+      continue;
+    }
+    JWK_KEY.lastIndex = i;
+    const key = JWK_KEY.exec(text);
+    if (key === null) {
+      i += 1;
+      continue;
+    }
+    const at = i + key[1].length;
+    i = JWK_KEY.lastIndex;
+    if (!JWK_WATCHED.has(key[2])) continue;
+    JWK_QUOTED_VALUE.lastIndex = i;
+    let value = JWK_QUOTED_VALUE.exec(text);
+    let literal = value === null ? null : value[2];
+    if (value === null) {
+      JWK_BARE_VALUE.lastIndex = i;
+      value = JWK_BARE_VALUE.exec(text);
+      // A bare value is a YAML flow scalar or a JS identifier: a name like privateKeyMaterial is not key material (looksRandom decides).
+      literal = value === null ? null : value[0];
+    }
+    if (value === null) continue;
+    const end = i + value[0].length;
+    i = end;
+    jwkAddMember(stack[stack.length - 1], key[2], literal, at, end);
+  }
+  for (const object of stack) if (text.length - object.start <= JWK_WINDOW_CHARS) jwkCollect(object, found); // unclosed at the end: read anyway
+}
+
+// One YAML (or pretty-printed JSON) line: indentation, list dashes, an optionally quoted key, the rest of the line.
+const JWK_YAML_LINE = /^([ \t]*)((?:-[ \t]+)*)(["']?)([A-Za-z_$][A-Za-z0-9_$]{0,31})\3[ \t]*:(?:[ \t]+([^\r\n]*))?\r?$/;
+
+/** The scalar of a YAML line's value: quotes, a trailing comma (JSON) and a trailing comment removed. */
+function jwkYamlScalar(raw) {
+  const text = (raw ?? '').replace(/[ \t]+#.*$/, '').trim().replace(/,$/, '').trim();
+  const quoted = /^(["'])([^"']*)\1$/.exec(text);
+  return quoted === null ? text : quoted[2];
+}
+
+/** Line reader for block mappings: a stack of mappings keyed by the column of their keys. */
+function jwkYamlMembers(text, found) {
+  const stack = [];
+  const close = (minColumn) => {
+    while (stack.length > 0 && stack[stack.length - 1].column >= minColumn) jwkCollect(stack.pop(), found);
+  };
+  let offset = 0;
+  while (offset <= text.length) {
+    let lineEnd = text.indexOf('\n', offset);
+    if (lineEnd === -1) lineEnd = text.length;
+    const line = text.slice(offset, lineEnd);
+    const m = JWK_YAML_LINE.exec(line);
+    if (m === null) {
+      const content = /\S/.exec(line);
+      if (content !== null && line[content.index] !== '#') close(content.index);
+    } else {
+      const column = m[1].length + m[2].length;
+      close(m[2] === '' ? column + 1 : column);
+      let top = stack[stack.length - 1];
+      if (top === undefined || top.column !== column || offset - top.start > JWK_WINDOW_CHARS) {
+        if (top !== undefined && top.column === column) jwkCollect(stack.pop(), found);
+        top = { column, start: offset, kty: null, members: [] };
+        stack.push(top);
+      }
+      if (JWK_WATCHED.has(m[4])) {
+        const at = offset + column + m[3].length;
+        jwkAddMember(top, m[4], jwkYamlScalar(m[5]), at, lineEnd);
+      }
+    }
+    offset = lineEnd + 1;
+  }
+  close(0);
+}
+
+/** Every private JWK member in `text`: index of its name -> end of its value. Computed once per scanned text. */
+function privateJwkMembers(ctx, text) {
+  if (ctx.jwkText !== text) {
+    const found = new Map();
+    jwkBraceMembers(text, found);
+    jwkYamlMembers(text, found);
+    ctx.jwkText = text;
+    ctx.jwkFound = found;
+  }
+  return ctx.jwkFound;
+}
+
 export const RULES = [
   {
     id: 'url-password',
@@ -4497,6 +4651,23 @@ export const RULES = [
         // Python defaults: os.getenv("NAME", "x") and os.environ.get("NAME", "x"), with a secret-like NAME
         pattern: /\b(?:os\.environ\.get|os\.getenv|environ\.get|getenv)\(\s*(["'])([A-Za-z0-9_]{1,1023})\1\s*,\s*(["'])([^"'\n]{1,4096})\3/g,
         accept: (m) => isSecretLikeName(m[2]),
+      },
+    ],
+  },
+  {
+    id: 'private-jwk',
+    description: 'JSON Web Key with private key material: d (EC, OKP, RSA), p/q/dp/dq/qi (RSA) or k (oct), as JSON, escaped JSON, YAML or an object literal',
+    hint: /kty/,
+    matchers: [
+      {
+        // Candidates: a private member name followed by a colon; accept() asks the per-file structural pass whether it sits in a JWK.
+        pattern: /(?<![A-Za-z0-9_$])(?:dp|dq|qi|[dpqk])(?=\\{0,3}["']?[ \t]*:)/g,
+        accept: (m, ctx) => {
+          const end = privateJwkMembers(ctx, m.input).get(m.index);
+          if (end === undefined) return false;
+          m.spanEnd = end;
+          return true;
+        },
       },
     ],
   },
