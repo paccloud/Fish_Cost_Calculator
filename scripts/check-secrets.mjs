@@ -940,6 +940,17 @@ const XML_CONFIG_EXTENSIONS = new Set([
   '.projitems', '.cscfg', '.csdef', '.jmx', '.mobileconfig', '.entitlements', '.iml', '.launch', '.ruleset', '.appxmanifest',
   '.wxs', '.wxi', '.pom', '.jnlp',
 ]);
+// systemd units (and Podman Quadlet units, which share their syntax) are INI-like settings: `Environment=NAME=value` sets a
+// variable of the service, so they are configuration, not source code. A drop-in (`app.service.d/override.conf`) is `.conf` already.
+const SYSTEMD_UNIT_EXTENSIONS = new Set([
+  '.service', '.socket', '.timer', '.target', '.mount', '.automount', '.path', '.slice', '.swap', '.scope', '.container', '.pod',
+  '.volume', '.kube', '.network', '.netdev', '.nspawn',
+]);
+/** Is this a systemd (or Quadlet) unit file, or a `.conf` drop-in in a `*.d/` directory? */
+const isSystemdUnitPath = (filePath) => {
+  const normalized = filePath.toLowerCase();
+  return SYSTEMD_UNIT_EXTENSIONS.has(path.posix.extname(normalized)) || /\.d\/[^/]{1,255}\.conf$/.test(normalized);
+};
 // Markup and schema formats stay in code mode on purpose: .svg .html .htm .xhtml .xsl .xslt .xaml .xsd .rss .atom .kml hold
 // content, styling or structure, not settings, and a <password> label or a form field there is not a credential.
 // A template or backup suffix (settings.xml.template, web.xml.erb, pom.xml.bak) does not change what the file is.
@@ -1051,6 +1062,7 @@ export function fileMode(filePath) {
     isXmlConfigPath(filePath) ||
     CONFIG_EXTENSIONS.has(path.posix.extname(baseWithoutTemplateSuffix(base))) ||
     isPropertiesPath(filePath) ||
+    SYSTEMD_UNIT_EXTENSIONS.has(ext) ||
     credentialFormats(filePath).size > 0
   ) {
     return 'config';
@@ -1724,6 +1736,13 @@ function windowHoldsSecretValue(window, kind, ctx, escaped, input, read = new Se
     const quoted = quotedValue !== undefined;
     if (quoted ? judge(unescapeQuoted(quotedValue), true) || escapedLineValues(quotedValue).some((line) => judge(line, true)) : judge(bareValue(kind, unescaped, field), false)) {
       return at(field);
+    }
+    if (!quoted) {
+      // `value = sensitive("v")`, `default = pulumi.secret("v")`: the literal argument of a wrapper call is the value.
+      const callAt = field.index + field[0].length - field[4].length;
+      const literalAt = unwrapLiteralCall(unescaped, callAt);
+      const literal = literalAt === callAt ? null : quotedArgument(unescaped, literalAt);
+      if (literal !== null && judge(unescapeQuoted(literal.raw), true)) return escaped ? at(field) : { index: field.index, length: literal.end - field.index };
     }
   }
   if (unescaped.includes('</')) {
@@ -3307,6 +3326,40 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
 /** A multi-line value that is an ansible-vault ciphertext ($ANSIBLE_VAULT;1.1;AES256 and its hex lines): encrypted, so not a credential. */
 const isVaultBody = (values) => values.length > 0 && /^\$ANSIBLE_VAULT[;\s]/.test(values[0]);
 
+// Calls that mark or convert a value without hiding it: the literal they are given is still in the file. Terraform sensitive() /
+// nonsensitive() / tostring() / trimspace() / chomp(), Pulumi pulumi.secret() / Output.secret(), CDK SecretValue.unsafePlainText() /
+// plainText(), Pydantic / Starlette SecretStr() / SecretBytes() / Secret(). One call name per alternative, then `(`.
+const LITERAL_WRAPPER_CALL =
+  /(?:(?:pulumi\.(?:Output\.)?|Output\.)secret|(?:cdk\.)?SecretValue\.(?:unsafePlainText|plainText)|nonsensitive|sensitive|tostring|trimspace|chomp|(?:pydantic\.)?Secret(?:Str|Bytes)?)\([ \t]{0,64}/y;
+const LITERAL_WRAPPER_DEPTH = 4;
+
+// systemd settings whose value is a list of assignments, a credential, a file or only names. A `NAME=` inside one of them is not an
+// assignment of its own: Environment= and SetCredential= are judged by SYSTEMD_SETTING_MATCHER, the rest hold no literal.
+const SYSTEMD_SETTING_KEY =
+  /[ \t]{0,64}(?:Environment|EnvironmentFile|PassEnvironment|UnsetEnvironment|SetCredential|SetCredentialEncrypted|LoadCredential|LoadCredentialEncrypted|ImportCredential)[ \t]{0,64}=/y;
+/** Is the match `m` inside the value of one of those settings, in a systemd unit? */
+function isSystemdSettingLine(m, ctx) {
+  if (!isSystemdUnitPath(ctx.path)) return false;
+  SYSTEMD_SETTING_KEY.lastIndex = ctx.lineStart(m.index);
+  return SYSTEMD_SETTING_KEY.exec(m.input) !== null && SYSTEMD_SETTING_KEY.lastIndex <= m.index;
+}
+
+/**
+ * Where the literal inside wrapper calls that start at `start` begins (`sensitive(trimspace("v"))` -> the quote of "v"), or `start`
+ * itself when there is no wrapper or its argument is not a quoted literal (`sensitive(var.x)` stays an expression). At most
+ * LITERAL_WRAPPER_DEPTH calls, each matched once: linear.
+ */
+function unwrapLiteralCall(input, start) {
+  let at = start;
+  for (let n = 0; n < LITERAL_WRAPPER_DEPTH; n += 1) {
+    LITERAL_WRAPPER_CALL.lastIndex = at;
+    const call = LITERAL_WRAPPER_CALL.exec(input);
+    if (call === null) break;
+    at += call[0].length;
+  }
+  return at !== start && /["'\x60]/.test(input[at] ?? '') ? at : start;
+}
+
 const SECRET_ASSIGNMENT_MATCHER = {
   // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
   // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
@@ -3316,6 +3369,7 @@ const SECRET_ASSIGNMENT_MATCHER = {
   accept: (m, ctx) => {
     const kind = nameKindFor(m[2], ctx);
     if (!kind) return false;
+    if (isSystemdSettingLine(m, ctx)) return false; // Environment= / SetCredential= are SYSTEMD_SETTING_MATCHER's; the others name files
     const input = m.input;
     let valueStart = m.index + m[0].length;
     if (ctx.mode !== 'code' && m[3] === ':') {
@@ -3328,6 +3382,7 @@ const SECRET_ASSIGNMENT_MATCHER = {
         valueStart += properties[0].length;
       }
     }
+    valueStart = unwrapLiteralCall(input, valueStart); // sensitive("v"), pulumi.secret("v"), SecretStr("v"): the literal is the value
     // A literal over several lines (heredoc, triple quotes, a quote closed on a later line, a template literal) is judged
     // as a whole. One that does not end within the bounds is reported: it cannot be verified.
     const multiline = multilineValue(ctx, input, valueStart);
@@ -3444,6 +3499,228 @@ const PROPERTIES_BLANK_MATCHER = {
     const token = first.trimEnd();
     if (/\s/.test(token)) return check(token, true) || check(token.split(/\s/, 1)[0], false);
     return check(token, false);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Definitions with no `name = value` shape: systemd Environment= / SetCredential=, C #define, Makefile define ... endef,
+// CMake set(), Gradle buildConfigField / resValue. Each reads its value with a small linear reader and judges it with isSecretValue.
+// ---------------------------------------------------------------------------
+
+/**
+ * A literal string defined as a constant (#define, CMake set, Gradle field): text with blanks is judged like a configuration value
+ * (a passphrase counts), a single word like a quoted literal in code (it must look random).
+ */
+// Text that names the credential it is about ("Invalid token", "Missing API key") is a message in source code, not a passphrase.
+const MESSAGE_ABOUT_CREDENTIAL = /(?:^|[^A-Za-z])(?:password|passphrase|passwd|token|secret|key|credentials?|login|auth|api)(?![A-Za-z])/i;
+
+function definitionValueIsSecret(kind, text, ctx) {
+  const mode = /\s/.test(text.trim()) ? 'config' : 'code';
+  if (mode === 'config' && MESSAGE_ABOUT_CREDENTIAL.test(text)) return false;
+  return isSecretValue({ kind, value: text, quoted: true, separator: '=', mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+}
+
+const SYSTEMD_MAX_LINES = 20;
+const SYSTEMD_LINE_CHARS = 4096;
+/** The value of a systemd setting that starts at `from`: the rest of the line, joined with the next ones while a line ends in `\`. */
+function systemdSettingValue(input, from) {
+  let text = '';
+  let at = from;
+  let end = from;
+  for (let n = 0; n < SYSTEMD_MAX_LINES; n += 1) {
+    let lineEnd = input.indexOf('\n', at);
+    if (lineEnd === -1) lineEnd = input.length;
+    end = Math.min(lineEnd, at + SYSTEMD_LINE_CHARS);
+    const line = input.slice(at, end).replace(/\r$/, '');
+    if (!line.endsWith('\\') || lineEnd === input.length) return { text: text + line, end };
+    text += `${line.slice(0, -1)} `;
+    at = lineEnd + 1;
+  }
+  return { text, end };
+}
+
+/** The words of a systemd value: blank-separated, "double" or 'single' quoted parts (with backslash escapes) joined into their word. One pass. */
+function systemdWords(text) {
+  const words = [];
+  let word = null;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === ' ' || c === '\t') {
+      if (word !== null) words.push(word);
+      word = null;
+      continue;
+    }
+    word ??= { text: '', quoted: false };
+    if (c === '"' || c === "'") {
+      word.quoted = true;
+      for (i += 1; i < text.length && text[i] !== c; i += 1) {
+        if (text[i] === '\\' && i + 1 < text.length) i += 1;
+        word.text += text[i];
+      }
+    } else if (c === '\\' && i + 1 < text.length) {
+      i += 1;
+      word.text += text[i];
+    } else {
+      word.text += c;
+    }
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
+
+// A systemd specifier (%d the credentials directory, %h the home directory, ...) or a $VARIABLE: a reference, not a literal.
+const SYSTEMD_REFERENCE = /^(?:%[A-Za-z]|\$)/;
+const systemdValueIsSecret = (kind, value, ctx) =>
+  !SYSTEMD_REFERENCE.test(value) &&
+  isSecretValue({ kind, value, quoted: true, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
+
+/** Does a systemd `Environment=` value (`A=1 "NAME=two words" 'B=x'`) set a secret-like name to a literal? */
+function systemdEnvironmentIsSecret(text, ctx) {
+  const words = systemdWords(text);
+  for (let i = 0; i < words.length; i += 1) {
+    const eq = words[i].text.indexOf('=');
+    const name = eq > 0 ? words[i].text.slice(0, eq) : '';
+    const kind = /^[A-Za-z_][A-Za-z0-9_]{0,255}$/.test(name) ? nameKindFor(name, ctx) : null;
+    if (!kind) continue;
+    let value = words[i].text.slice(eq + 1);
+    // `Environment=NAME=correct horse battery` meant one value: unquoted words that are not assignments belong to it.
+    for (let j = i + 1; !words[i].quoted && j < words.length && !words[j].quoted && !words[j].text.includes('='); j += 1) value += ` ${words[j].text}`;
+    if (systemdValueIsSecret(kind, value, ctx)) return true;
+  }
+  return false;
+}
+
+// systemd / Quadlet units: `Environment=` (one or more NAME=value words) and `SetCredential=ID:value` hold literals.
+// EnvironmentFile= and LoadCredential= name files, PassEnvironment= only names: none of them is matched.
+const SYSTEMD_SETTING_MATCHER = {
+  appliesTo: (ctx) => isSystemdUnitPath(ctx.path),
+  pattern: /^[ \t]{0,64}(Environment|SetCredential)[ \t]{0,64}=[ \t]{0,64}/gm,
+  accept: (m, ctx) => {
+    const value = systemdSettingValue(m.input, m.index + m[0].length);
+    m.spanEnd = Math.max(value.end, m.index + m[0].length);
+    if (m[1] === 'Environment') return systemdEnvironmentIsSecret(value.text, ctx);
+    const colon = value.text.indexOf(':');
+    if (colon <= 0) return false;
+    const kind = nameKindFor(value.text.slice(0, colon), ctx) ?? 'weak'; // a credential of any name: random-looking text counts
+    return systemdValueIsSecret(kind, value.text.slice(colon + 1).trim(), ctx);
+  },
+};
+
+/** The double-quoted literal at `at` (after an optional `(` and an L / u8 / u / U / @ prefix): its unescaped text and end, or null. */
+function definitionLiteral(input, at) {
+  let i = at;
+  if (input[i] === '(') i += 1;
+  while (i < input.length && i - at < 70 && (input[i] === ' ' || input[i] === '\t')) i += 1;
+  const prefix = /^(?:u8|[LuU@])"/.exec(input.slice(i, i + 3));
+  if (prefix !== null) i += prefix[0].length - 1;
+  if (input[i] !== '"') return null;
+  VALUE_AT.lastIndex = i;
+  const value = VALUE_AT.exec(input);
+  if (value === null || value[1] === undefined) return null;
+  return { text: unescapeQuoted(value[1]), end: i + value[0].length };
+}
+
+// C / C++ / Objective-C: `#define NAME "literal"` (`#  define`, a `\` continuation before the value, L"..." / u8"..." / @"...").
+// A function-like macro (`NAME(x)`) or a value that is an expression does not match.
+const C_DEFINE_MATCHER = {
+  appliesTo: (ctx) => ctx.mode !== 'prose',
+  hint: /#[ \t]{0,64}define/,
+  pattern: /^[ \t]{0,64}#[ \t]{0,64}define[ \t]{1,64}([A-Za-z_][A-Za-z0-9_]{0,255})(?:[ \t]|\\\r?\n){1,64}(?=\(?[ \t]{0,64}(?:u8|[LuU@])?")/gm,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[1], ctx);
+    if (!kind) return false;
+    const literal = definitionLiteral(m.input, m.index + m[0].length);
+    if (literal === null) return false;
+    m.spanEnd = literal.end;
+    return definitionValueIsSecret(kind, literal.text, ctx);
+  },
+};
+
+const isMakefilePath = (filePath) => /(?:^|\/)(?:gnu)?makefile$|\.(?:mk|mak)$/i.test(filePath);
+const MAKE_DEFINE_LINE = /^[ \t]{0,64}(?:override[ \t]{1,8})?(?:export[ \t]{1,8})?define[ \t]/;
+const MAKE_DEFINE_BODY_LINES = 200;
+const MAKE_DEFINE_BODY_CHARS = 32_768;
+
+// Makefile `define NAME` ... `endef`: a one-line body is the value (a longer body is a recipe or a template). The body is read up to
+// `endef` or the next `define` line, so the reads of two definitions never overlap.
+const MAKE_DEFINE_MATCHER = {
+  appliesTo: (ctx) => isMakefilePath(ctx.path),
+  hint: /define/,
+  pattern: /^[ \t]{0,64}(?:override[ \t]{1,8})?(?:export[ \t]{1,8})?define[ \t]{1,64}([A-Za-z_][A-Za-z0-9_.-]{0,255})[ \t]{0,64}(?:[:+?!]{0,2}=[ \t]{0,64})?\r?\n/gm,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[1], ctx);
+    if (!kind) return false;
+    const input = m.input;
+    const body = [];
+    let at = m.index + m[0].length;
+    for (let n = 0; n < MAKE_DEFINE_BODY_LINES && at < input.length && at - m.index < MAKE_DEFINE_BODY_CHARS; n += 1) {
+      let lineEnd = input.indexOf('\n', at);
+      if (lineEnd === -1) lineEnd = input.length;
+      const line = input.slice(at, Math.min(lineEnd, at + SYSTEMD_LINE_CHARS)).replace(/\r$/, '');
+      if (/^[ \t]{0,64}endef(?![A-Za-z0-9_.-])/.test(line)) {
+        const lines = body.filter((text) => text.trim() !== '');
+        // A recipe line (tab first) or one built from variables ($(...), ${...}, $@) is not a literal.
+        if (lines.length !== 1 || lines[0].startsWith('\t') || lines[0].includes('$')) return false;
+        m.spanEnd = lineEnd;
+        return definitionValueIsSecret(kind, lines[0].trim(), ctx);
+      }
+      if (MAKE_DEFINE_LINE.test(line)) return false;
+      body.push(line);
+      at = lineEnd + 1;
+    }
+    return false;
+  },
+};
+
+const isCmakePath = (filePath) => /(?:^|\/)cmakelists\.txt$|\.cmake$/i.test(filePath);
+// CMake `set(NAME value)` and `set(ENV{NAME} value)`: the first argument after the name. A value built from ${...}, $ENV{...},
+// $CACHE{...} or a generator expression $<...> is a reference.
+const CMAKE_SET_MATCHER = {
+  appliesTo: (ctx) => isCmakePath(ctx.path),
+  hint: /set/i,
+  pattern: /(?<![A-Za-z0-9_])set[ \t]{0,64}\([ \t\r\n]{0,64}(?:ENV\{([A-Za-z_][A-Za-z0-9_]{0,255})\}|([A-Za-z_][A-Za-z0-9_.-]{0,255}))[ \t\r\n]{1,64}/gi,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[1] ?? m[2], ctx);
+    if (!kind) return false;
+    const input = m.input;
+    const at = m.index + m[0].length;
+    let text;
+    if (input[at] === '"') {
+      const literal = definitionLiteral(input, at);
+      if (literal === null) return false;
+      text = literal.text;
+      m.spanEnd = literal.end;
+    } else {
+      const bare = /[^\s()"#]{1,4096}/y;
+      bare.lastIndex = at;
+      const word = bare.exec(input);
+      if (word === null) return false;
+      text = word[0];
+      m.spanEnd = at + text.length;
+    }
+    return !text.includes('$') && definitionValueIsSecret(kind, text, ctx);
+  },
+};
+
+// Gradle (Groovy or Kotlin DSL): buildConfigField "String", "NAME", "\"literal\"" puts a Java expression into BuildConfig (only a string
+// literal is a value), resValue "string", "name", "literal" puts the text itself into the app's resources.
+const GRADLE_FIELD_MATCHER = {
+  appliesTo: (ctx) => /\.gradle(?:\.kts)?$/i.test(ctx.path),
+  hint: /buildConfigField|resValue/,
+  pattern:
+    /(?<![A-Za-z0-9_$.])(buildConfigField|resValue)[ \t]{0,64}(?:\([ \t]{0,64})?["']([A-Za-z_.]{1,64})["'][ \t]{0,64},[ \t\r\n]{0,64}["']([A-Za-z_][A-Za-z0-9_.]{0,255})["'][ \t]{0,64},[ \t\r\n]{0,64}(?=")/g,
+  accept: (m, ctx) => {
+    const kind = nameKindFor(m[3], ctx);
+    if (!kind || m[2].toLowerCase() !== 'string') return false;
+    const literal = definitionLiteral(m.input, m.index + m[0].length);
+    if (literal === null) return false;
+    m.spanEnd = literal.end;
+    let text = literal.text;
+    if (m[1] === 'buildConfigField') {
+      if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"') || text.slice(1, -1).includes('"')) return false; // an expression
+      text = text.slice(1, -1);
+    }
+    return !text.includes('$') && definitionValueIsSecret(kind, text, ctx);
   },
 };
 
@@ -3794,6 +4071,11 @@ export const RULES = [
       SECRET_ASSIGNMENT_MATCHER,
       DEFINITION_ASSIGNMENT_MATCHER,
       PROPERTIES_BLANK_MATCHER,
+      SYSTEMD_SETTING_MATCHER,
+      C_DEFINE_MATCHER,
+      MAKE_DEFINE_MATCHER,
+      CMAKE_SET_MATCHER,
+      GRADLE_FIELD_MATCHER,
       {
         // Pulumi.<stack>.yaml: `config:` keys are `<namespace>:<name>: value` (app:apiToken: V). The name is the part after the namespace; a
         // secret stored by `pulumi config set --secret` is a `secure:` ciphertext mapping and passes.
