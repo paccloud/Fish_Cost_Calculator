@@ -170,7 +170,7 @@ export function createSyncCoordinator(repo, client = defaultApiClient, telemetry
         if (res.ok) {
           const data = await res.json();
           if (yld.serverId) {
-            await repo.markYieldSynced(yld.id, data.id ?? yld.serverId, data.revision);
+            await repo.markYieldSynced(yld.id, data.id ?? yld.serverId, data.revision, yld);
           } else {
             // Reconciling PUT: ensure server holds current field values after idempotent POST.
             const putRes = await client.updateUserDataRaw(data.id, {
@@ -190,7 +190,7 @@ export function createSyncCoordinator(repo, client = defaultApiClient, telemetry
               continue;
             }
             const finalRevision = (await putRes.json()).revision;
-            await repo.markYieldSynced(yld.id, data.id, finalRevision);
+            await repo.markYieldSynced(yld.id, data.id, finalRevision, yld);
           }
           stats.pushed++;
         } else {

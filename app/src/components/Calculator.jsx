@@ -237,7 +237,7 @@ const NO_YIELDS = [];
 const Calculator = () => {
   const { user, getAuthHeaders } = useAuth();
   // Custom yields kept on this device and synced when there is signal, so they work offline too
-  const { customYields, dataLoaded, retrySync } = useData();
+  const { customYields, refreshCustomYields } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -298,8 +298,8 @@ const Calculator = () => {
   // The provider pulls once when it loads; opening the calculator again pulls too, so a yield
   // edited on another device shows up here as it did when this page fetched its own copy
   useEffect(() => {
-    if (dataLoaded) retrySync();
-  }, [dataLoaded, retrySync]);
+    refreshCustomYields();
+  }, [refreshCustomYields]);
 
   // Only a signed-in person's own yields: the guest scope can hold records no one here owns
   const myYields = user ? customYields : NO_YIELDS;

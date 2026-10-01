@@ -38,15 +38,15 @@ function now() {
   return new Date().toISOString();
 }
 
-// Compares by value: the server sends yield as a decimal string ("48.00") and may include
-// fields a record made on this device never set (is_shared).
-function sameYieldValues(local, server) {
+// Compares by value: the server sends yield as a decimal string ("48.00"), and a record made on
+// this device may leave out fields the server fills in (source, is_shared).
+function sameYieldValues(a, b) {
   return (
-    local.species === server.species &&
-    local.product === server.product &&
-    Number(local.yield) === Number(server.yield) &&
-    (local.source || 'User Input') === server.source &&
-    Boolean(local.is_shared) === Boolean(server.is_shared)
+    a.species === b.species &&
+    a.product === b.product &&
+    Number(a.yield) === Number(b.yield) &&
+    (a.source || 'User Input') === (b.source || 'User Input') &&
+    Boolean(a.is_shared) === Boolean(b.is_shared)
   );
 }
 
@@ -497,13 +497,19 @@ class LocalRepository {
     });
   }
 
-  async markYieldSynced(id, serverId, serverRevision) {
+  // `pushed` is the record as it was sent. If it was edited or deleted again while the request was
+  // out, only the server ids are taken and the newer change stays queued for the next push.
+  async markYieldSynced(id, serverId, serverRevision, pushed) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
-      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, serverRevision, updatedAt: now() };
+      const rec = all[idx];
+      const changedSince = pushed && (rec.syncStatus !== pushed.syncStatus || !sameYieldValues(rec, pushed));
+      all[idx] = changedSince
+        ? { ...rec, serverId, serverRevision }
+        : { ...rec, syncStatus: 'synced', serverId, serverRevision, updatedAt: now() };
       await this._set(key, all);
     });
   }

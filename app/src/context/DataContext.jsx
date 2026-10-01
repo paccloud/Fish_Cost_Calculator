@@ -121,6 +121,7 @@ export function DataProvider({ children }) {
   // Without on-device storage there is nothing for the sync to fill, so read the account's custom
   // yields from the server instead and hold them in memory, tagged with the account they belong to.
   const [serverYields, setServerYields] = useState({ uid: null, rows: [] });
+  const [serverYieldsWanted, setServerYieldsWanted] = useState(0); // bumped to fetch them again
   useEffect(() => {
     if (!storageFailed || !uid || !isOnline) return;
     let cancelled = false;
@@ -130,7 +131,7 @@ export function DataProvider({ children }) {
       .then((rows) => { if (!cancelled && Array.isArray(rows)) setServerYields({ uid, rows }); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [storageFailed, uid, isOnline, getAuthHeaders]);
+  }, [storageFailed, uid, isOnline, getAuthHeaders, serverYieldsWanted]);
 
   // One-time legacy migration + recovery check. Runs once per session.
   useEffect(() => {
@@ -648,6 +649,13 @@ export function DataProvider({ children }) {
     return triggerSync();
   }, [user, triggerSync]);
 
+  // Get the account's latest custom yields: through the sync, or straight from the server when
+  // this device can't store them. The calculator calls this each time it opens.
+  const refreshCustomYields = useCallback(() => {
+    if (storageFailed) setServerYieldsWanted((n) => n + 1);
+    else if (dataLoaded) retrySync();
+  }, [storageFailed, dataLoaded, retrySync]);
+
   // Gate account data so consumers never see the previous scope's records
   // during the render cycle between a uid change and the clearing effect.
   const scopeReady = loadedScopeRef.current === scope;
@@ -670,6 +678,7 @@ export function DataProvider({ children }) {
     removeYield,
     updateCustomSpecies,
     retrySync,
+    refreshCustomYields,
     signOut,
     requestPublish,
     confirmPublish,
