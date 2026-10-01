@@ -561,9 +561,14 @@ class LocalRepository {
             ...rec,
             conflictServer: { serverId: sy.id, serverRevision: sy.revision, ...server },
           };
-        } else if (rec.syncStatus === 'synced' && !sameYieldValues(rec, server)) {
-          // Edited on another device: a synced record is a copy of the server's, so take its version.
-          all[idx] = { ...rec, ...server, serverRevision: sy.revision, updatedAt: now() };
+        } else if (rec.syncStatus === 'synced') {
+          if (!sameYieldValues(rec, server)) {
+            // Edited on another device: a synced record is a copy of the server's, so take its version.
+            all[idx] = { ...rec, ...server, serverRevision: sy.revision, updatedAt: now() };
+          } else if (sy.revision != null && rec.serverRevision !== sy.revision) {
+            // Same values at a newer revision: track it, or the next local edit is a false conflict.
+            all[idx] = { ...rec, serverRevision: sy.revision };
+          }
         }
         // pending-delete, local: the local change is still to be pushed, so keep it
       }

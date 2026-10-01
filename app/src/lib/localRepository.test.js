@@ -430,7 +430,7 @@ describe('mergeServerYields', () => {
 
   it('leaves a synced yield alone when the server copy only looks different', async () => {
     const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48, source: 'User Input' });
-    await repo.markYieldSynced(rec.id, 12); // a create reply carries no revision
+    await repo.markYieldSynced(rec.id, 12, 1);
     const [before] = await repo.getYields();
 
     await repo.mergeServerYields([
@@ -439,6 +439,25 @@ describe('mergeServerYields', () => {
 
     const [after] = await repo.getYields();
     expect(after).toEqual(before);
+  });
+
+  it('tracks a newer server revision even when the values are unchanged', async () => {
+    // Another device edited the yield and then put the old values back
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48, source: 'User Input' });
+    await repo.markYieldSynced(rec.id, 12, 1);
+    const [before] = await repo.getYields();
+
+    await repo.mergeServerYields([
+      { id: 12, revision: 3, species: 'Halibut', product: 'Skinless Fillet', yield: '48.00', source: 'User Input', is_shared: false },
+    ]);
+
+    const [after] = await repo.getYields();
+    expect(after).toEqual({ ...before, serverRevision: 3 });
+
+    // so the next local edit is pushed against the current revision, not a false conflict
+    await repo.updateYield(rec.id, { yield: 50 });
+    const pending = await repo.getPendingSync();
+    expect(pending.yields[0].serverRevision).toBe(3);
   });
 
   it('drops a synced yield the server no longer has (deleted on another device)', async () => {
