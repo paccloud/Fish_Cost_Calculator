@@ -54,6 +54,8 @@
  *     Each continuation line is read once per file (backslash continuations are cached), so the cost stays linear in the file.
  *   - String literals with a prefix, hashes or another delimiter are read wherever a literal value is (callStringLiteral): Rust r#"..."#,
  *     C# @"..." / $@"...", C++ R"(...)", Swift #"..."#, Python r'...', and by file type Lua [[...]], OCaml {|...|}, Perl q(), Ruby %q().
+ *     Rust raw strings (r"...", r#"..."#, any hash count) and backtick literals that run over lines, in an assignment or a setter call
+ *     (std::env::set_var, os.Setenv), are judged like a heredoc under the same bounds; one that does not end within them is reported.
  *   - Account passwords set from a script (chpasswd, passwd --stdin, smbpasswd -s, usermod -p, openssl passwd, mkpasswd, ldappasswd,
  *     net user, dscl -passwd) are read as whole shell words.
  *   - Credentials that are not `name = value`: HTTP `Authorization` values with a scheme (http-auth-credential; Basic is decoded and
@@ -2477,10 +2479,11 @@ const ENV_SETTER_CALL = new RegExp(String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_
 const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,255}$/;
 
 /**
- * The arguments of an environment setter call whose `(` and blanks end at `start`: { name, literal } for `("NAME", "value")` or
- * `("NAME=value")`, or null when they are not literals (a variable, a call, a name that is not a variable name).
+ * The arguments of an environment setter call whose `(` and blanks end at `start`: { name, literal, valueStart } for `("NAME", "value")`
+ * or `("NAME=value")`, or null when they are not literals (a variable, a call, a name that is not a variable name). The value may run
+ * over lines (Rust r#"..."#, a Go backtick literal) or be exhausted; the caller judges it through callLiteralTexts.
  */
-function envSetterArguments(input, start, filePath) {
+function envSetterArguments(input, start, filePath, ctx = null) {
   const nameLiteral = callStringLiteral(input, start, filePath);
   if (nameLiteral === null) return null;
   let at = nameLiteral.end;
@@ -2488,13 +2491,13 @@ function envSetterArguments(input, start, filePath) {
   if (input[at] === ',' && ENV_VARIABLE_NAME.test(nameLiteral.text)) {
     at += 1;
     while (input[at] === ' ' || input[at] === '\t') at += 1;
-    return { name: nameLiteral.text, literal: callStringLiteral(input, at, filePath) };
+    return { name: nameLiteral.text, literal: callStringLiteral(input, at, filePath, ctx), valueStart: at };
   }
   const equals = nameLiteral.text.indexOf('=');
   if (equals > 0 && ENV_VARIABLE_NAME.test(nameLiteral.text.slice(0, equals))) {
     // putenv("NAME=value"): the value runs to the closing quote of the same string
     const text = nameLiteral.text.slice(equals + 1);
-    return { name: nameLiteral.text.slice(0, equals), literal: { text, end: nameLiteral.end, interpolated: nameLiteral.interpolated } };
+    return { name: nameLiteral.text.slice(0, equals), literal: { text, end: nameLiteral.end, interpolated: nameLiteral.interpolated }, valueStart: start };
   }
   return null;
 }
@@ -2602,9 +2605,13 @@ function quoteLikeLiteral(input, start, filePath) {
  *   triple-quoted strings on one line
  *   the quote-less forms of quoteLikeLiteral (Lua, OCaml, Perl, Ruby, Elixir, Groovy), chosen by `filePath`.
  * Backslash escapes the next character unless the string is verbatim (@"..." doubles its quote) or raw (backtick, r"...", hashed).
+ * Raw forms whose grammar lets them run over lines (Rust r"..." / br"..." in a .rs file, r#"..."# with any number of hashes, backtick
+ * literals) are read over lines when `ctx` is given: the body comes back whole (the caller judges it like a heredoc, see
+ * callLiteralTexts), and one that does not end within the multi-line bounds (or once the file's budget is gone) comes back as
+ * { exhausted: true } so the caller reports it instead of reading the following lines as code. Without `ctx` they are one line.
  * Returns { text, end, interpolated } or null (not a literal, not closed within the bounds).
  */
-function callStringLiteral(input, start, filePath = '') {
+function callStringLiteral(input, start, filePath = '', ctx = null) {
   let i = start;
   let prefix = input.startsWith('u8', i) ? 'u8' : '';
   i += prefix.length;
@@ -2647,7 +2654,27 @@ function callStringLiteral(input, start, filePath = '') {
   const closer = '#'.repeat(hashes);
   if (raw && !verbatim) {
     // no escapes: the literal ends at the first closing quote (followed by its hashes); two native searches, no per-character work
-    const closing = indexWithin(input, quote + closer, i + 1, LITERAL_MAX_CHARS);
+    let closing = indexWithin(input, quote + closer, i + 1, LITERAL_MAX_CHARS);
+    // Rust raw strings and backtick literals may span lines (Python r"..." and Swift #"..."# may not: a line break there is a syntax
+    // error, so a newline in one of those is the next line of code, not the value). A spanning form that does not close on its line
+    // is looked for within the multi-line window, only after the short one failed, so an ordinary one-line literal never pays for
+    // the wide search; one that is still not closed, or that exceeds the line bound, is exhausted (reported by the caller, fail
+    // closed). Once the file's multi-line budget is gone nothing more is read: a file of unterminated openers costs one window per
+    // opener until then and a constant after.
+    const spansLines = ctx !== null && (hashes > 0 || quote === '`' || (/^b?r$/.test(prefix) && /\.rs$/i.test(filePath)));
+    if (spansLines && (closing === -1 || input.slice(i + 1, closing).includes('\n'))) {
+      const exhausted = { text: '', end: Math.min(input.length, i + 1 + MULTILINE_MAX_CHARS), interpolated, exhausted: true };
+      if (budgetSpent(ctx)) return exhausted;
+      if (closing === -1) closing = indexWithin(input, quote + closer, i + 1, MULTILINE_MAX_CHARS);
+      if (closing === -1) return exhausted;
+      const text = input.slice(i + 1, closing);
+      let lines = 0;
+      for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
+        lines += 1;
+        if (lines > MULTILINE_MAX_LINES) return exhausted;
+      }
+      return { text: text.replace(/^\r?\n/, ''), end: closing + 1 + hashes, interpolated };
+    }
     if (closing === -1) return null;
     const text = input.slice(i + 1, closing);
     return text.includes('\n') ? null : { text, end: closing + 1 + hashes, interpolated };
@@ -2734,6 +2761,24 @@ function exhaustedVerdict(m, ctx, read) {
   ctx.multilineReported = true;
   attributeToFile(m);
   return true;
+}
+
+/**
+ * The texts a literal read by callStringLiteral (at `from`) is judged on, or the verdict when it cannot be verified. A one-line
+ * literal is its text. One that runs over lines (a Rust raw string, a backtick literal, a Lua / OCaml / C++ raw body) is judged like
+ * a heredoc: each line and the joined lines, charged to the file's multi-line budget. A word list (Perl qw, Ruby %w) adds its words.
+ * A literal that did not end within the bounds, or whose body the budget no longer covers, is reported (fail closed), once the
+ * budget is gone once per file, exactly as the other multi-line readers do.
+ * @returns {{texts: string[]} | {verdict: boolean}}
+ */
+function callLiteralTexts(m, ctx, literal, from) {
+  const multiline = literal.text.includes('\n');
+  if (literal.exhausted === true || (multiline && !spendMultiline(ctx, literal.text.length))) {
+    return { verdict: exhaustedVerdict(m, ctx, exhaustedLiteral(ctx, m.input, from)) };
+  }
+  const texts = multiline ? bodyValues(literal.text) : [literal.text];
+  if (literal.words === true) texts.push(...literal.text.split(/\s+/).filter((word) => word !== ''));
+  return { texts };
 }
 
 /**
@@ -3494,15 +3539,16 @@ const SECRET_ASSIGNMENT_MATCHER = {
       );
     }
     // A literal that does not start with a plain quote: Rust r#"..."#, C# @"...", C++ R"(...)", Swift #"..."#, Python r'...', Lua [[...]],
-    // Perl q(...), Ruby %q(...), OCaml {|...|}. A literal over several lines is judged like a heredoc.
+    // Perl q(...), Ruby %q(...), OCaml {|...|}. A literal over several lines is judged like a heredoc, and one that does not end within
+    // the bounds is reported (callLiteralTexts).
     if (ctx.mode === 'code' && !'"\'`'.includes(input[valueStart] ?? '')) {
-      const literal = callStringLiteral(input, valueStart, ctx.path);
-      if (literal !== null && (!literal.text.includes('\n') || spendMultiline(ctx, literal.text.length))) {
+      const literal = callStringLiteral(input, valueStart, ctx.path, ctx);
+      if (literal !== null) {
         m.spanEnd = literal.end;
+        const read = callLiteralTexts(m, ctx, literal, valueStart);
+        if (read.verdict !== undefined) return read.verdict;
         if (literal.interpolated && /[{}$]/.test(literal.text)) return false; // built from other values
-        const texts = literal.text.includes('\n') ? bodyValues(literal.text) : [literal.text];
-        if (literal.words === true) texts.push(...literal.text.split(/\s+/).filter((word) => word !== ''));
-        return texts.some((text) =>
+        return read.texts.some((text) =>
           isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
         );
       }
@@ -4501,15 +4547,17 @@ export const RULES = [
         pattern: ENV_SETTER_CALL,
         accept: (m, ctx) => {
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
-          const call = envSetterArguments(m.input, m.index + m[0].length, ctx.path);
+          const call = envSetterArguments(m.input, m.index + m[0].length, ctx.path, ctx);
           if (call === null) return false;
           const kind = nameKindFor(call.name, ctx);
           if (!kind) return false;
           const literal = call.literal;
           if (literal === null) return false;
           m.spanEnd = literal.end;
+          const read = callLiteralTexts(m, ctx, literal, call.valueStart); // a value over lines is judged like a heredoc; an unterminated one is reported
+          if (read.verdict !== undefined) return read.verdict;
           if (literal.interpolated && /[{}]/.test(literal.text)) return false; // an interpolated string is built from other values
-          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
+          return read.texts.some((text) => powershellValueIsSecret(kind, { text }, ctx));
         },
       },
       {
@@ -4519,10 +4567,12 @@ export const RULES = [
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
           const kind = nameKindFor(m[2], ctx);
           if (!kind) return false;
-          const literal = callStringLiteral(m.input, m.index + m[0].length, ctx.path);
+          const literal = callStringLiteral(m.input, m.index + m[0].length, ctx.path, ctx);
           if (literal === null) return false;
           m.spanEnd = literal.end;
-          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
+          const read = callLiteralTexts(m, ctx, literal, m.index + m[0].length);
+          if (read.verdict !== undefined) return read.verdict;
+          return read.texts.some((text) => powershellValueIsSecret(kind, { text }, ctx));
         },
       },
       {
@@ -4897,11 +4947,14 @@ export const RULES = [
         accept: (m, ctx) => {
           const start = m.index + m[0].length;
           if (!'"\'`'.includes(m.input[start])) {
-            // a prefixed or raw literal (r"pw", @"pw", r#"pw"#): read as a whole literal
-            const literal = callStringLiteral(m.input, start, ctx.path);
-            if (literal === null || literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
+            // a prefixed or raw literal (r"pw", @"pw", r#"pw"#): read as a whole literal; one over lines is judged like a heredoc
+            const literal = callStringLiteral(m.input, start, ctx.path, ctx);
+            if (literal === null) return false;
             m.spanEnd = literal.end;
-            return isSecretValue({ kind: 'strong', value: literal.text, quoted: true, separator: '=', mode: 'config' });
+            const read = callLiteralTexts(m, ctx, literal, start);
+            if (read.verdict !== undefined) return read.verdict;
+            if (literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
+            return read.texts.some((text) => isSecretValue({ kind: 'strong', value: text, quoted: true, separator: '=', mode: 'config' }));
           }
           const argument = quotedArgument(m.input, start);
           if (argument === null || argument.raw.length === 0) return false;
