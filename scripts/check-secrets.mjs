@@ -1640,7 +1640,7 @@ function xmlWindow(input, index) {
 const PAIR_VALUE_FIELD =
   /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|example|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}\]"']{1,4096}))/gi;
 // The same field as an XML element: <value>V</value>
-const PAIR_XML_VALUE = /<(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:value|val|secret|content|data|default|example|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
+const PAIR_XML_VALUE = /<(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:value|val|secret|content|data|default|example|string)(?:[ \t][^<>]{0,80})?>([^<>]{1,4096})<\//gi; // the body is trimmed in code: whitespace quantifiers around it would backtrack
 
 // Where a value begins (the same field names as PAIR_VALUE_FIELD, whatever follows): read again from the input when it runs over
 // several lines (a YAML block scalar, a quote closed on a later line, a folded scalar, a heredoc).
@@ -1788,7 +1788,8 @@ function windowHoldsSecretValue(window, kind, ctx, escaped, input, read = new Se
   }
   if (unescaped.includes('</')) {
     for (const field of unescaped.matchAll(PAIR_XML_VALUE)) {
-      if (judge(field[1], true) || bodyValues(field[1]).some((line) => judge(line, true))) return at(field);
+      const body = field[1].trim();
+      if (body !== '' && (judge(body, true) || bodyValues(body).some((line) => judge(line, true)))) return at(field);
     }
   }
   if (!escaped) return multilineFieldSecret(window, kind, ctx, input, read);
@@ -2308,6 +2309,9 @@ function shellTail(input, start) {
   return words;
 }
 
+/** A chpasswd account name (the part before the colon); a trailing $ is a machine account. */
+const CHPASSWD_USER = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}\$?$/;
+
 /**
  * The passwords a `chpasswd` / `passwd` / `smbpasswd` command at `m` receives on its standard input (a pipe from echo or printf, a
  * here-string, a heredoc), judged like any other literal password: references and placeholders pass, a crypt hash (`chpasswd -e`)
@@ -2316,18 +2320,26 @@ function shellTail(input, start) {
 function accountPasswordFromStdin(m, ctx) {
   const words = shellWords(m[0]);
   const tool = words[0];
+  // The command must be a word on its own: in code such as 'chpasswd', 'chpasswd <<< ' + x the shell reading glues the
+  // quoted pieces into one word that is no command at all.
+  if (tool !== 'chpasswd' && tool !== 'passwd' && tool !== 'smbpasswd') return false;
   const stdin = stdinValues(m, ctx);
   const inputs = [...stdin.values];
   const hereString = words.indexOf('<<<');
-  if (hereString !== -1 && words[hereString + 1] !== undefined) inputs.push(words[hereString + 1]);
+  const hereWord = hereString !== -1 ? words[hereString + 1] : undefined;
+  if (hereWord !== undefined) inputs.push(hereWord);
   if (stdin.end > m.index + m[0].length) m.spanEnd = stdin.end;
   if (stdin.unterminated) return true;
   if (tool === 'smbpasswd' && !words.some((w) => /^-[A-Za-z]*s/.test(w) && !w.startsWith('--'))) return false; // without -s it prompts
   const passwords = [];
   for (const input of inputs) {
     if (tool === 'chpasswd') {
-      // user:password, one account per line; printf 'user:%s\n' P leaves the password alone
+      // user:password, one account per line; printf 'user:%s\n' P passes the password alone (stdinValues drops the
+      // format). Where a colon is present, the part before it must be an account name, and a here-string word is the
+      // literal input, so it needs that shape: shell-word reading of code (a JS string such as 'chpasswd <<< ' + x)
+      // yields text that is neither.
       const colon = input.indexOf(':');
+      if (colon > 0 ? !CHPASSWD_USER.test(input.slice(0, colon)) : input === hereWord) continue;
       passwords.push(colon > 0 ? input.slice(colon + 1) : input);
     } else {
       // the password, typed twice: two lines, or one text with the line break written as \n
@@ -3953,7 +3965,9 @@ const JWK_IDENTIFIER_CHAR = /[A-Za-z0-9_$]/;
 
 /** Is a private member's literal key material: base64url of 16+ characters that looks random and is not a placeholder? */
 function jwkValueIsKeyMaterial(value) {
-  const body = value.replace(/=+$/, '');
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '=') end -= 1; // base64 padding, trimmed by hand: /=+$/ backtracks on long runs
+  const body = value.slice(0, end);
   if (body.length < 16 || !/^[A-Za-z0-9_+/-]+$/.test(body)) return false;
   return !placeholderOf(body) && looksRandom(body, { minLength: 16, minEntropy: 3.0 });
 }
@@ -4026,11 +4040,13 @@ function jwkBraceMembers(text, found) {
 }
 
 // One YAML (or pretty-printed JSON) line: indentation, list dashes, an optionally quoted key, the rest of the line.
-const JWK_YAML_LINE = /^([ \t]*)((?:-[ \t]+)*)(["']?)([A-Za-z_$][A-Za-z0-9_$]{0,31})\3[ \t]*:(?:[ \t]+([^\r\n]*))?\r?$/;
+const JWK_YAML_LINE = /^([ \t]*)((?:-[ \t]+)*)(["']?)([A-Za-z_$][A-Za-z0-9_$]{0,31})\3[ \t]*:(?:[ \t]([^\r\n]*))?\r?$/;
 
 /** The scalar of a YAML line's value: quotes, a trailing comma (JSON) and a trailing comment removed. */
 function jwkYamlScalar(raw) {
-  const text = (raw ?? '').replace(/[ \t]+#.*$/, '').trim().replace(/,$/, '').trim();
+  const line = raw ?? '';
+  const comment = line.search(/[ \t]#/); // a comment starts at '#' after a blank; fixed-length search, no backtracking
+  const text = (comment === -1 ? line : line.slice(0, comment)).trim().replace(/,$/, '').trim();
   const quoted = /^(["'])([^"']*)\1$/.exec(text);
   return quoted === null ? text : quoted[2];
 }

@@ -7647,6 +7647,14 @@ describe('review round 16', () => {
       expect(count('a.sh', `echo ${account}:${phrase.replace(/ /g, '\\ ')} | ${CHPASSWD}\n`)).toBe(1);
     });
 
+    it('does not read code that builds a command string as an account and password', () => {
+      // The hostile-input list in an earlier commit of this file (the --range scan of this PR flagged it): shell-word
+      // reading glues the JS pieces into a "command" that is no command and a "user" no account name can be.
+      const code = `  'echo ' + 'a:'.repeat(50000) + ' | ${CHPASSWD}', '${CHPASSWD} <<< ' + 'a:'.repeat(100000), 'docker login ' + '-p '.repeat(N),\n`;
+      for (const file of ['a.test.js', 'a.js', 'a.sh', 'a.md']) expect(count(file, code), file).toBe(0);
+      expect(count('a.sh', `echo 'svc$:${value}' | ${CHPASSWD}\n`)).toBe(1); // a machine account name is still an account
+    });
+
     it('passes references and placeholders', () => {
       for (const p of ['${PASSWORD}', '$PASSWORD', '$(cat /run/secrets/pw)', 'changeme', '']) {
         for (const [label, , form] of [['pipe', 0, stdinForms[0][1]], ['here-string', 0, stdinForms[3][1]], ['double', 0, stdinForms[1][1]]]) {
