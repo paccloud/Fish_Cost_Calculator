@@ -56,7 +56,8 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
   the app, so it works on a boat with no connection. `/api/fish-data` replaces that data only when it
   sends usable yields, and what is already picked stays picked. A signed-in person's custom yields come
   from the copy `DataContext` keeps on the device (merged by `app/src/lib/fishDataMerge.js`), which the
-  sync refreshes when there is signal, so they work offline too.
+  sync refreshes when there is signal (and each time the calculator opens), so they work offline too.
+  If a sync changes the yield you picked, the yield box follows it, unless you typed your own.
 - **Nothing hides behind the bar.** The calculator sets the page's `scroll-padding-bottom` to the bar's
   height, so whatever you Tab to scrolls into view above it (WCAG 2.4.11).
 

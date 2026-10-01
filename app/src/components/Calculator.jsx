@@ -232,11 +232,12 @@ const StepHeading = ({ number, children, id }) => (
 );
 
 const TO_LIMIT = 6;
+const NO_YIELDS = [];
 
 const Calculator = () => {
   const { user, getAuthHeaders } = useAuth();
   // Custom yields kept on this device and synced when there is signal, so they work offline too
-  const { customYields } = useData();
+  const { customYields, dataLoaded, retrySync } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -294,7 +295,15 @@ const Calculator = () => {
     }
   }, [user, getAuthHeaders]);
 
-  const combinedData = useMemo(() => mergeFishData(fishData, customYields), [fishData, customYields]);
+  // The provider pulls once when it loads; opening the calculator again pulls too, so a yield
+  // edited on another device shows up here as it did when this page fetched its own copy
+  useEffect(() => {
+    if (dataLoaded) retrySync();
+  }, [dataLoaded, retrySync]);
+
+  // Only a signed-in person's own yields: the guest scope can hold records no one here owns
+  const myYields = user ? customYields : NO_YIELDS;
+  const combinedData = useMemo(() => mergeFishData(fishData, myYields), [fishData, myYields]);
 
   const speciesList = Object.keys(combinedData).sort();
 
@@ -320,6 +329,19 @@ const Calculator = () => {
       conv => conv.from === fromState && conv.to === toState
     );
   }, [species, fromState, toState, combinedData]);
+
+  // When a sync changes the chosen conversion (edited or deleted on another device), follow it,
+  // unless the yield was typed in by hand
+  const conversionYield = currentConversion ? String(currentConversion.yield) : null;
+  const [followedYield, setFollowedYield] = useState(conversionYield);
+  if (conversionYield !== followedYield) {
+    setFollowedYield(conversionYield);
+    if (conversionYield === null && toState) {
+      setToState(''); setYieldPercent('');
+    } else if (conversionYield !== null && yieldPercent === followedYield) {
+      setYieldPercent(conversionYield);
+    }
+  }
 
   const profile = species ? profilesData[species] : null;
   const scientificName = species && combinedData[species] ? combinedData[species].scientific_name : null;
