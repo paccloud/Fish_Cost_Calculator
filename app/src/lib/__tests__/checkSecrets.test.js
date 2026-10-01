@@ -6613,7 +6613,7 @@ describe('review round 13', () => {
           ('password_a ' + 'b'.repeat(200) + '\\n').repeat(2000), 'userlist\\n' + 'user a '.repeat(N), 'proxy_set_header '.repeat(N),
           'proxy_set_header ' + 'a'.repeat(200000), 'set $' + 'a'.repeat(200000), "ssl_passphrase_command = '" + 'echo '.repeat(N),
           '{a,'.repeat(N) + '"', '{' + ' '.repeat(100000) + 'a', '<auth-user-pass>\\n' + 'a\\n'.repeat(N),
-          'echo ' + 'a:'.repeat(50000) + ' | chpasswd', 'chpasswd <<< ' + 'a:'.repeat(100000), 'docker login ' + '-p '.repeat(N),
+          'echo ' + 'a:'.repeat(50000) + ' | chp' + 'asswd', 'chp' + 'asswd <<< ' + 'a:'.repeat(100000), 'docker login ' + '-p '.repeat(N),
         ];
         for (const file of ['a.md', 'a.sh', 'redis.conf', 'mosquitto.conf', 'haproxy.cfg', 'advanced.config', 'nginx.conf']) for (const text of texts) {
           const started = performance.now();
@@ -7194,6 +7194,546 @@ describe('review round 15', () => {
         expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
         expect(found.stderr).toContain('Program.cs');
         expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 16: linear continuation and multi-line readers, every string-literal form, Authorization pairs, namespace prefixes, account passwords.
+// Every value is generated or assembled at run time; the names and commands that would look like secrets are split.
+// ---------------------------------------------------------------------------
+describe('review round 16', () => {
+  const value = randomString(28, 16001);
+  const JWT = ['JWT_', 'SECRET'].join('');
+  const jwtDotted = ['jwt.', 'secret'].join('');
+  const DB = ['db_', 'password'].join('');
+  const CHPASSWD = ['chp', 'asswd'].join('');
+  const count = (file, text) => scanText(file, text).length;
+
+  const dirs = [];
+  afterEach(() => {
+    while (dirs.length > 0) rmSync(dirs.pop(), { recursive: true, force: true });
+  });
+  const run = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024 });
+  const git = (cwd, ...args) => run('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', ...args], cwd);
+  const commit = (dir, files) => {
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      writeFileSync(path.join(dir, file), content);
+    }
+    git(dir, 'add', '-A');
+    expect(git(dir, 'commit', '-q', '-m', 'c').status).toBe(0);
+    return git(dir, 'rev-parse', 'HEAD').stdout.trim();
+  };
+
+  // -------------------------------------------------------------------------
+  describe('(1) multi-line readers read each line once', () => {
+    // A quadratic reader took 6 to 8 seconds on the first two of these at 400 KB; every case is linear now. `limit` is generous
+    // for a slow runner but far below what the quadratic reader needs; the second test compares two sizes of the same input.
+    const cases = [
+      ['a chain of backslash-continued properties lines (never closed)', 3000, "('jwt.' + 'secret ' + 'x '.repeat(500) + '\\\\\\n').repeat(400)", 'a.properties'],
+      ['a chain of 150 continued properties lines, closed', 3000, "(('jwt.' + 'secret ' + 'x '.repeat(500) + '\\\\\\n').repeat(150) + 'end\\n').repeat(3)", 'a.properties'],
+      ['a chain of continued names in a shell file', 3000, "('JWT_' + 'SECRET=' + 'x'.repeat(80) + '\\\\\\n').repeat(4000)", 'a.sh'],
+      ['name/value pairs whose value starts a template literal', 3000, "('{name:\"JWT_' + 'SECRET\",value:`a\\n').repeat(10000)", 'a.js'],
+      ['an unclosed double quote after a backslash on every line', 8000, "('JWT_' + 'SECRET=\"\\\\\"\\n').repeat(25000)", 'a.env'],
+      ['a heredoc opener on every line', 8000, "('JWT_' + 'SECRET' + '=<<EOF\\nabc\\n').repeat(20000)", 'a.sh'],
+      ['a triple-quote opener on every line', 8000, "('JWT_' + 'SECRET = \"\"\"\\nabc\\n').repeat(20000)", 'a.py'],
+      ['a backtick opener on every line', 8000, "('JWT_' + 'SECRET = `\\nabc\\n').repeat(20000)", 'a.js'],
+      ['folded YAML scalars under every key', 8000, "('db_' + 'password: x\\n' + '  y' + 'z '.repeat(100) + '\\n').repeat(2000)", 'a.yml'],
+      ['INI continuation lines under every key', 8000, "('db_' + 'password = x\\n' + '    y' + 'z '.repeat(100) + '\\n').repeat(2000)", 'a.ini'],
+      ['block scalars under every pair', 8000, "('- name: JWT_' + 'SECRET\\n  value: |\\n' + '    a\\n'.repeat(150)).repeat(500)", 'a.yml'],
+      ['a single line of near-miss openers', 8000, "('JWT_' + 'SECRET' + '=<<EOF ').repeat(40000)", 'a.sh'],
+    ];
+    it.each(cases)('scans %s in linear time', SLOW, (label, limit, expression, file) => {
+      const timings = timeInChild(`
+        const text = ${expression};
+        const started = performance.now();
+        scanText(${JSON.stringify(file)}, text);
+        timings.push(Math.round(performance.now() - started));`);
+      expect(timings[0], label).toBeLessThan(limit);
+    });
+
+    it('takes about four times as long for four times the text, not sixteen', SLOW, () => {
+      const timings = timeInChild(`
+        const unit = ('jwt.' + 'secret ' + 'x '.repeat(500) + '\\\\\\n');
+        for (const lines of [100, 400]) {
+          const text = unit.repeat(lines);
+          const started = performance.now();
+          scanText('a.properties', text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      expect(timings[1]).toBeLessThan(3000);
+      expect(timings[1]).toBeLessThan(10 * Math.max(timings[0], 40));
+    });
+
+    it('still finds a secret inside a continuation, with the line of its name', () => {
+      const line = (n) => `key${n} filler \\\n`;
+      for (const file of ['a.properties', 'a.properties.local']) {
+        const text = `${line(1)}   more\n${jwtDotted} first \\\n   ${value}\nother=1\n`;
+        const found = scanText(file, text);
+        expect(found.map((f) => f.line), file).toEqual([3]);
+      }
+      // a secret on the last line of a long chain is found from the first name
+      const chain = `${jwtDotted} start \\\n${'   filler \\\n'.repeat(60)}   ${value}\n`;
+      expect(count('a.properties', chain)).toBeGreaterThan(0);
+    });
+
+    it('does not lose a finding when a second secret name starts inside a continuation', () => {
+      // the first name is a weak one and holds nothing; the name inside its continuation is strong and holds the value
+      const weak = ['auth', '.mode'].join('');
+      const text = `${weak} basic \\\n   ${jwtDotted} ${value}\n`;
+      expect(count('a.properties', text)).toBeGreaterThan(0);
+      const two = `${jwtDotted} ${'a '.repeat(3)}\\\n   ${DB} ${value}\n`;
+      expect(count('a.properties', two)).toBeGreaterThan(0);
+      // both names hold a secret: each is reported
+      const both = `${jwtDotted} ${value} \\\n   ${DB} ${value}\n`;
+      expect(count('a.properties', both)).toBeGreaterThan(0);
+    });
+
+    it('keeps the verdict of an exhausted chain', () => {
+      const text = `${jwtDotted} x \\\n${'   filler \\\n'.repeat(250)}   end\n`;
+      expect(count('a.properties', text)).toBeGreaterThan(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(2) string literals with a prefix, hashes or another delimiter', () => {
+    const settersRust = [
+      ['r#', (n, v) => `std::env::set_var(r#"${n}"#, r#"${v}"#);`],
+      ['r"', (n, v) => `std::env::set_var(r"${n}", r"${v}");`],
+      ['r##', (n, v) => `std::env::set_var(r##"${n}"##, r##"${v}"##);`],
+      ['b"', (n, v) => `std::env::set_var(b"${n}", b"${v}");`],
+      ['br#', (n, v) => `std::env::set_var(br#"${n}"#, br#"${v}"#);`],
+      ['a raw name and a plain value', (n, v) => `env::set_var(r#"${n}"#, "${v}");`],
+      ['a plain name and a raw value', (n, v) => `env::set_var("${n}", r#"${v}"#);`],
+      ['a raw putenv string', (n, v) => `libc_putenv(r#"${n}=${v}"#);`.replace('libc_putenv', 'putenv')],
+      ['a raw string with a quote inside', (n, v) => `env::set_var("${n}", r#"${v}"quoted"#);`],
+    ];
+    it.each(settersRust)('reports a Rust setter with %s', (label, form) => {
+      expect(count('a.rs', `${form(JWT, value)}\n`), label).toBe(1);
+    });
+
+    it('reports the Swift and C++ setters with their own delimiters', () => {
+      expect(count('a.swift', `setenv(#"${JWT}"#, #"${value}"#, 1)\n`)).toBe(1);
+      expect(count('a.cpp', `setenv(R"(${JWT})", R"(${value})", 1);\n`)).toBe(1);
+      expect(count('a.cpp', `setenv(u8"${JWT}", u8"${value}", 1);\n`)).toBe(1);
+      expect(count('a.cs', `Environment.SetEnvironmentVariable($"${JWT}", $@"${value}");\n`)).toBe(1);
+    });
+
+    it('passes placeholders and references in the same forms', () => {
+      for (const v of ['changeme', '${OTHER}', '$OTHER', '']) {
+        expect(count('a.rs', `std::env::set_var(r#"${JWT}"#, r#"${v}"#);\n`), v).toBe(0);
+      }
+      expect(count('a.rs', `std::env::set_var(r#"PATH"#, r#"${value}"#);\n`)).toBe(0);
+      expect(count('a.rs', `std::env::set_var(r#"${JWT}"#, other);\n`)).toBe(0);
+    });
+
+    // [label, file, source of the assignment]
+    const assignments = [
+      ['Rust raw string', 'a.rs', (n, v) => `const ${n}: &str = r#"${v}"#;`],
+      ['Rust raw string, no hashes', 'a.rs', (n, v) => `const ${n}: &str = r"${v}";`],
+      ['Rust raw string, two hashes', 'a.rs', (n, v) => `static ${n}: &str = r##"${v}"##;`],
+      ['Rust byte string', 'a.rs', (n, v) => `const ${n}: &[u8] = b"${v}";`],
+      ['Rust raw byte string', 'a.rs', (n, v) => `const ${n}: &[u8] = br#"${v}"#;`],
+      ['Rust let with a method', 'a.rs', (n, v) => `let ${n.toLowerCase()} = r#"${v}"#.to_string();`],
+      ['C# verbatim string', 'a.cs', (n, v) => `const string ${n} = @"${v}";`],
+      ['C# raw string literal', 'a.cs', (n, v) => `const string ${n} = """${v}""";`],
+      ['C# raw string literal over lines', 'a.cs', (n, v) => `var ${n} = """\n    ${v}\n    """;`],
+      ['C# interpolated verbatim string', 'a.cs', (n, v) => `var ${n} = $@"${v}";`],
+      ['Go raw string', 'a.go', (n, v) => `const ${n} = \`${v}\``],
+      ['Swift extended delimiter', 'a.swift', (n, v) => `let ${n.toLowerCase()} = #"${v}"#`],
+      ['Swift two hashes', 'a.swift', (n, v) => `let ${n.toLowerCase()} = ##"${v}"##`],
+      ['Swift multi-line extended delimiter', 'a.swift', (n, v) => `let ${n.toLowerCase()} = #"""\n${v}\n"""#`],
+      ['Python raw string', 'a.py', (n, v) => `${n} = r'${v}'`],
+      ['Python raw string, double quotes', 'a.py', (n, v) => `${n} = r"${v}"`],
+      ['Python bytes', 'a.py', (n, v) => `${n} = b'${v}'`],
+      ['Python raw bytes', 'a.py', (n, v) => `${n} = rb'${v}'`],
+      ['Python raw triple quotes', 'a.py', (n, v) => `${n} = r"""${v}"""`],
+      ['Kotlin raw string', 'a.kt', (n, v) => `val ${n.toLowerCase()} = """${v}"""`],
+      ['Java text block', 'A.java', (n, v) => `String ${n.toLowerCase()} = """\n    ${v}\n    """;`],
+      ['Lua long bracket', 'a.lua', (n, v) => `local ${n.toLowerCase()} = [[${v}]]`],
+      ['Lua long bracket with a level', 'a.lua', (n, v) => `local ${n.toLowerCase()} = [==[${v}]==]`],
+      ['Lua long bracket over lines', 'a.lua', (n, v) => `local ${n.toLowerCase()} = [[\n${v}\n]]`],
+      ['PHP nowdoc', 'a.php', (n, v) => `$${n.toLowerCase()} = <<<'EOT'\n${v}\nEOT;`],
+      ['PHP heredoc', 'a.php', (n, v) => `$${n.toLowerCase()} = <<<EOT\n${v}\nEOT;`],
+      ['Perl q()', 'a.pl', (n, v) => `my $${n.toLowerCase()} = q(${v});`],
+      ['Perl qq{}', 'a.pl', (n, v) => `my $${n.toLowerCase()} = qq{${v}};`],
+      ['Perl q//', 'a.pl', (n, v) => `my $${n.toLowerCase()} = q/${v}/;`],
+      ['Perl q!!', 'a.pl', (n, v) => `my $${n.toLowerCase()} = q!${v}!;`],
+      ['Perl q<>', 'a.pl', (n, v) => `my $${n.toLowerCase()} = q<${v}>;`],
+      ['Perl heredoc', 'a.pl', (n, v) => `my $${n.toLowerCase()} = <<'EOT';\n${v}\nEOT\n`],
+      ['Ruby %q()', 'a.rb', (n, v) => `${n} = %q(${v})`],
+      ['Ruby %Q{}', 'a.rb', (n, v) => `${n} = %Q{${v}}`],
+      ['Ruby %()', 'a.rb', (n, v) => `${n} = %(${v})`],
+      ['Ruby %w[] with two words', 'a.rb', (n, v) => `${n} = %w[${v} other]`],
+      ['Ruby squiggly heredoc', 'a.rb', (n, v) => `${n} = <<~EOS\n  ${v}\nEOS\n`],
+      ['Ruby quoted symbol', 'a.rb', (n, v) => `${n} = :"${v}"`],
+      ['Elixir sigil', 'a.ex', (n, v) => `@${n.toLowerCase()} ~s(${v})`],
+      ['Scala interpolator', 'a.scala', (n, v) => `val ${n.toLowerCase()} = s"${v}"`],
+      ['Scala triple quotes', 'a.scala', (n, v) => `val ${n.toLowerCase()} = """${v}"""`],
+      ['JavaScript String.raw', 'a.js', (n, v) => `const ${n.toLowerCase()} = String.raw\`${v}\`;`],
+      ['Dart raw string', 'a.dart', (n, v) => `const ${n.toLowerCase()} = r'${v}';`],
+      ['Nim raw string', 'a.nim', (n, v) => `const ${n.toLowerCase()} = r"${v}"`],
+      ['OCaml quoted string', 'a.ml', (n, v) => `let ${n.toLowerCase()} = {|${v}|}`],
+      ['OCaml quoted string with an id', 'a.ml', (n, v) => `let ${n.toLowerCase()} = {id|${v}|id}`],
+      ['C++ raw string', 'a.cpp', (n, v) => `const char* ${n} = R"(${v})";`],
+      ['C++ raw string with a delimiter', 'a.cpp', (n, v) => `const char* ${n} = R"x(${v})x";`],
+      ['C++ UTF-8 string', 'a.cpp', (n, v) => `const char* ${n} = u8"${v}";`],
+      ['C++ wide string', 'a.cpp', (n, v) => `const wchar_t* ${n} = L"${v}";`],
+      ['Objective-C string', 'a.m', (n, v) => `NSString *${n} = @"${v}";`],
+      ['Visual Basic typed constant', 'a.vb', (n, v) => `Const ${n} As String = "${v}"`],
+      ['Groovy dollar-slashy string', 'a.groovy', (n, v) => `def ${n.toLowerCase()} = $/${v}/$`],
+      ['R raw string', 'a.R', (n, v) => `${n.toLowerCase()} <- r"(${v})"`],
+    ];
+    it.each(assignments)('reports a hardcoded value written as a %s', (label, file, form) => {
+      expect(count(file, `${form(JWT, value)}\n`), label).toBe(1);
+    });
+
+    it('passes placeholders and references in the same forms', () => {
+      for (const [label, file, form] of assignments) {
+        if (label.includes('Perl heredoc') || label.includes('heredoc')) continue;
+        expect(count(file, `${form(JWT, 'changeme')}\n`), label).toBe(0);
+        expect(count(file, `${form(JWT, '')}\n`), label).toBe(0);
+      }
+      expect(count('a.rs', `const ${JWT}: &str = r#"\${OTHER}"#;\n`)).toBe(0);
+      expect(count('a.py', `${JWT} = f'{other}${value}'\n`)).toBe(0);
+      expect(count('a.scala', `val x = s"$other${value}"\n`)).toBe(0);
+    });
+
+    it('reads a prefixed or raw literal as the password of a Basic-auth call', () => {
+      expect(count('a.py', `requests.get(u, auth=("bob", r"${value}"))\n`)).toBe(1);
+      expect(count('A.cs', `var c = Credentials.basic("bob", @"${value}");\n`)).toBe(1);
+      expect(count('a.rs', `x(HTTPBasicAuth("bob", r#"${value}"#))\n`)).toBe(1);
+      expect(count('a.py', 'requests.get(u, auth=("bob", f"{x}"))\n')).toBe(0);
+      expect(count('a.py', 'requests.get(u, auth=("bob", b"changeme"))\n')).toBe(0);
+    });
+
+    it('does not read the quote-less forms in files of other languages', () => {
+      // q(...) is a call in Python, [[...]] a nested list in JavaScript, %q a format in C: none is a string literal there
+      expect(count('a.py', `${JWT} = q(${value})\n`)).toBe(0);
+      expect(count('a.js', `const ${JWT} = [[${value}]];\n`)).toBe(0);
+    });
+
+    it('scans hostile literal text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const J = 'JWT_' + 'SECRET';
+        const texts = [
+          (J + ' = r' + '#'.repeat(16) + '"a"\\n').repeat(10000), J + ' = r' + '#'.repeat(200000) + '"', J + ' = R"' + 'x'.repeat(200000),
+          (J + ' = [' + '='.repeat(20) + '[a\\n').repeat(10000), J + ' = [[' + 'a'.repeat(200000), J + ' = {' + 'a'.repeat(200000),
+          (J + ' = q(' + '('.repeat(50) + '\\n').repeat(5000), J + ' = %w(' + '('.repeat(200000), J + ' = ~s(' + 'a'.repeat(200000),
+          (J + ' = @"a"" \\n').repeat(10000), (J + ' = $/a\\n').repeat(10000), J + ' = u8' + 'R'.repeat(200000),
+        ];
+        for (const file of ['a.rs', 'a.swift', 'a.cpp', 'a.lua', 'a.ml', 'a.pl', 'a.rb', 'a.ex', 'a.groovy', 'a.R', 'a.cs']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r16a-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'src/main.rs': 'fn main() { }\n' });
+      const head = commit(dir, { 'src/main.rs': `fn main() { std::env::set_var(r#"${JWT}"#, r#"${value}"#); }\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('main.rs');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(3) an Authorization value in an XML, JSON or YAML entry', () => {
+    const bearer = `Bearer ${value}`;
+    const xmlFiles = ['a.config', 'a.xml', 'a.csproj', 'a.wsdl', 'a.plist'];
+    const xmlForms = [
+      ['an add entry with key and value', (v) => `<add key="Authorization" value="${v}"/>`],
+      ['an add entry with single quotes', (v) => `<add key='Authorization' value='${v}'/>`],
+      ['an add entry with name and value', (v) => `<add name="Authorization" value="${v}" />`],
+      ['an add entry with the value first', (v) => `<add value="${v}" key="Authorization"/>`],
+      ['a Proxy-Authorization entry', (v) => `<add key="Proxy-Authorization" value="${v}"/>`],
+      ['nested name and value elements', (v) => `<header><name>Authorization</name><value>${v}</value></header>`],
+      ['nested elements with a namespace prefix', (v) => `<h:header><h:name>Authorization</h:name><h:value>${v}</h:value></h:header>`],
+      ['a name attribute and the text', (v) => `<header name="Authorization">${v}</header>`],
+      ['an element named Authorization', (v) => `<Authorization>${v}</Authorization>`],
+    ];
+    const cases = xmlFiles.flatMap((file) => xmlForms.map(([label, form]) => [file, label, form]));
+    it.each(cases)('reports a hardcoded token in %s: %s', (file, label, form) => {
+      expect(count(file, `${form(`Bearer ${value}`)}\n`), label).toBe(1);
+      expect(count(file, `${form(`Basic ${value}`)}\n`), label).toBe(1);
+    });
+
+    it('passes references, placeholders, a bare scheme, a JWT and an empty value', () => {
+      const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'abcdefghijklmnop'].join('.');
+      for (const [file, , form] of cases.filter(([, label]) => label !== 'an element named Authorization')) {
+        for (const v of ['Bearer ${TOKEN}', 'Bearer {{token}}', 'Bearer YOUR_TOKEN_HERE', 'Bearer $TOKEN', 'Bearer', '', `Bearer ${jwt}`]) {
+          expect(count(file, `${form(v)}\n`), `${file} ${v}`).toBe(0);
+        }
+      }
+    });
+
+    it('reports a plist header and the API key headers of the same forms', () => {
+      expect(count('a.plist', `<dict><key>Authorization</key><string>${bearer}</string></dict>\n`)).toBe(1);
+      expect(count('a.plist', '<dict><key>Authorization</key><string>Bearer $(TOKEN)</string></dict>\n')).toBe(0);
+      for (const header of ['X-API-Key', 'X-Auth-Token', 'Api-Key', 'Ocp-Apim-Subscription-Key']) {
+        expect(count('a.config', `<add key="${header}" value="${value}"/>\n`), header).toBe(1);
+        expect(count('a.xml', `<header><name>${header}</name><value>${value}</value></header>\n`), header).toBe(1);
+        expect(count('a.plist', `<dict><key>${header}</key><string>${value}</string></dict>\n`), header).toBe(1);
+        expect(count('a.json', `{"name":"${header}","value":"${value}"}\n`), header).toBe(1);
+        expect(count('a.yml', `- name: ${header}\n  value: ${value}\n`), header).toBe(1);
+      }
+    });
+
+    const dataForms = [
+      ['a.json', 'a JSON name and value', (v) => `{"name":"Authorization","value":"${v}"}`],
+      ['a.json', 'a JSON key and value', (v) => `{"key":"Authorization","value":"${v}"}`],
+      ['a.json', 'a JSON value before the key', (v) => `{"value":"${v}","key":"Authorization"}`],
+      ['a.json', 'a Postman header', (v) => `{"header":[{"key":"Authorization","value":"${v}","type":"text"}]}`],
+      ['a.json', 'an OpenAPI header example', (v) => `{"name":"Authorization","in":"header","example":"${v}"}`],
+      ['a.yml', 'a YAML name and value', (v) => `headers:\n  - name: Authorization\n    value: ${v}`],
+      ['a.yml', 'a quoted YAML name and value', (v) => `headers:\n  - name: "Authorization"\n    value: "${v}"`],
+      ['a.yml', 'a YAML value before the name', (v) => `headers:\n  - value: ${v}\n    name: Authorization`],
+      ['a.yaml', 'a YAML key and value', (v) => `- key: Authorization\n  value: ${v}`],
+      ['a.yml', 'a mapping of headers', (v) => `headers:\n  Authorization: ${v}`],
+      ['a.yml', 'a nginx ingress snippet', (v) => `annotations:\n  nginx.ingress.kubernetes.io/configuration-snippet: |\n    proxy_set_header Authorization "${v}";`],
+      ['a.yml', 'a GitHub Actions headers input', (v) => `with:\n  headers: '{"Authorization": "${v}"}'`],
+    ];
+    it.each(dataForms)('reports a hardcoded token in %s: %s', (file, label, form) => {
+      expect(count(file, `${form(bearer)}\n`), label).toBe(1);
+    });
+
+    it('passes references and placeholders in JSON and YAML', () => {
+      for (const [file, label, form] of dataForms) {
+        for (const v of ['Bearer {{token}}', 'Bearer ${{ secrets.TOKEN }}', 'Bearer $TOKEN', 'Bearer ${TOKEN}', 'Bearer <token>']) {
+          expect(count(file, `${form(v)}\n`), `${label}: ${v}`).toBe(0);
+        }
+      }
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r16b-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'web.config': '<configuration>\n</configuration>\n' });
+      const head = commit(dir, { 'web.config': `<configuration>\n  <add key="Authorization" value="${bearer}"/>\n</configuration>\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('web.config');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+
+    it('scans hostile header text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const A = 'Author' + 'ization';
+        const texts = [
+          ('<add key="' + A + '" value="').repeat(20000), ('<h><name>' + A + '</name>').repeat(20000), ('{"name":"' + A + '",').repeat(20000),
+          ('- name: ' + A + '\\n  x: y\\n').repeat(20000), '<' + 'a:'.repeat(50000) + 'name>' + A, ('<ns:name>' + A + '</ns:name>').repeat(20000),
+        ];
+        for (const file of ['a.config', 'a.json', 'a.yml', 'a.plist']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(4) a namespace prefix on the elements of an XML pair', () => {
+    const files = ['a.xml', 'settings.xml', 'a.config', 'pom.xml', 'a.csproj'];
+    const pairs = [
+      ['prefixed name and value', (n, v) => `<ns:property><ns:name>${n}</ns:name><ns:value>${v}</ns:value></ns:property>`],
+      ['prefixed name and value without a wrapper', (n, v) => `<m:name>${n}</m:name><m:value>${v}</m:value>`],
+      ['a prefixed name and an unprefixed value', (n, v) => `<ns:name>${n}</ns:name><value>${v}</value>`],
+      ['an unprefixed name and a prefixed value', (n, v) => `<name>${n}</name><ns:value>${v}</ns:value>`],
+      ['a prefixed key and value', (n, v) => `<ns:setting><ns:key>${n}</ns:key><ns:value>${v}</ns:value></ns:setting>`],
+      ['a prefixed pair over lines', (n, v) => `<ns:property>\n  <ns:name>${n}</ns:name>\n  <ns:value>${v}</ns:value>\n</ns:property>`],
+      ['a prefixed value before the name', (n, v) => `<p:property><p:value>${v}</p:value><p:name>${n}</p:name></p:property>`],
+      ['a prefixed entry with attributes', (n, v) => `<ns:add key="${n}" value="${v}"/>`],
+      ['a prefixed entry with text', (n, v) => `<ns:entry key="${n}">${v}</ns:entry>`],
+    ];
+    const cases = files.flatMap((file) => pairs.map(([label, form]) => [file, label, form]));
+    it.each(cases)('reports a secret in %s: %s', (file, label, form) => {
+      expect(count(file, `${form(JWT, value)}\n`), label).toBe(1);
+    });
+
+    it('passes references, placeholders and names that are not secrets', () => {
+      for (const [file, label, form] of cases) {
+        for (const v of ['${JWT_SECRET}', 'changeme', '@jwt.secret@', '']) expect(count(file, `${form(JWT, v)}\n`), `${label}: ${v}`).toBe(0);
+        expect(count(file, `${form('LOG_LEVEL', value)}\n`), label).toBe(0);
+      }
+      // a closing tag with another prefix is another element
+      expect(count('a.xml', `<a:name>${JWT}</b:name>\n<a:value>${value}</a:value>\n`)).toBe(0);
+    });
+
+    it('reports a secret-named element with a prefix, and WS-Security', () => {
+      expect(count('a.xml', `<ns:password>${value}</ns:password>\n`)).toBe(1);
+      expect(count('a.xml', `<wsse:Password>${value}</wsse:Password>\n`)).toBe(1);
+      expect(count('a.wsdl', `<wsse:Password Type="PasswordText">${value}</wsse:Password>\n`)).toBe(1);
+      const header = `<soap:Header><wsse:Security><wsse:UsernameToken><wsse:Username>bob</wsse:Username><wsse:Password>${value}</wsse:Password></wsse:UsernameToken></wsse:Security></soap:Header>`;
+      expect(count('a.xml', `${header}\n`)).toBe(1);
+      expect(count('a.xml', `<ns:password>\${DB_PASSWORD}</ns:password>\n`)).toBe(0);
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r16c-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'settings.xml': '<settings>\n</settings>\n' });
+      const head = commit(dir, { 'settings.xml': `<settings>\n  <ns:name>${JWT}</ns:name>\n  <ns:value>${value}</ns:value>\n</settings>\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('settings.xml');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(value);
+      }
+    });
+
+    it('scans hostile prefixed text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const J = 'JWT_' + 'SECRET';
+        const texts = [
+          ('<ns:name>' + J + '</ns:name>').repeat(20000), '<' + 'a'.repeat(200000) + ':name>' + J, ('<a:' + 'b'.repeat(30) + ':name>').repeat(10000),
+          ('<x:' + 'a.'.repeat(16) + ':add ').repeat(10000), '<ns:name>' + J + '</ns:name>' + '<ns:value>'.repeat(20000),
+          ('<ns:name>' + J + '</ns:name><ns:value>a</ns:value>').repeat(10000),
+        ];
+        for (const file of ['a.xml', 'a.config']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('(5) account passwords set from a script', () => {
+    const phrase = ['correct horse', ' battery staple'].join('');
+    const account = 'admin';
+    const stdinForms = [
+      ['a single-quoted user:password pair', (p) => `echo '${account}:${p}' | ${CHPASSWD}`],
+      ['a double-quoted pair', (p) => `echo "${account}:${p}" | ${CHPASSWD}`],
+      ['a here-string in single quotes', (p) => `${CHPASSWD} <<< '${account}:${p}'`],
+      ['a here-string in double quotes', (p) => `${CHPASSWD} <<< "${account}:${p}"`],
+      ['an ANSI-C here-string', (p) => `${CHPASSWD} <<< $'${account}:${p}'`],
+      ['sudo before the command', (p) => `echo '${account}:${p}' | sudo ${CHPASSWD}`],
+      ['a Dockerfile RUN line', (p) => `RUN echo '${account}:${p}' | ${CHPASSWD}`],
+      ['printf with the pair in the format', (p) => `printf "${account}:${p}\\n" | ${CHPASSWD}`],
+      ['printf with the password as an argument', (p) => `printf '${account}:%s\\n' '${p}' | ${CHPASSWD}`],
+      ['the encrypted flag', (p) => `echo '${account}:${p}' | ${CHPASSWD} -e`],
+    ];
+    it.each(stdinForms)('reports a passphrase in %s', (label, form) => {
+      expect(count('Dockerfile', `${form(phrase)}\n`), label).toBe(1);
+      expect(count('a.sh', `${form(value)}\n`), label).toBe(1);
+    });
+
+    it('reports a passphrase written with escaped spaces', () => {
+      expect(count('a.sh', `echo ${account}:${phrase.replace(/ /g, '\\ ')} | ${CHPASSWD}\n`)).toBe(1);
+    });
+
+    it('passes references and placeholders', () => {
+      for (const p of ['${PASSWORD}', '$PASSWORD', '$(cat /run/secrets/pw)', 'changeme', '']) {
+        for (const [label, , form] of [['pipe', 0, stdinForms[0][1]], ['here-string', 0, stdinForms[3][1]], ['double', 0, stdinForms[1][1]]]) {
+          expect(count('a.sh', `${form(p)}\n`), `${label}: ${p}`).toBe(0);
+        }
+      }
+    });
+
+    it('judges a crypt hash like any other literal, and a reference to one not at all', () => {
+      const hash = ['$6', '$', randomString(8, 16002), '$', randomString(86, 16003, `${ALNUM}./`)].join('');
+      expect(count('a.sh', `echo '${account}:${hash}' | ${CHPASSWD} -e\n`)).toBe(1);
+      expect(count('a.sh', `usermod -p '${hash}' ${account}\n`)).toBe(1);
+      expect(count('a.sh', `usermod -p "$HASH" ${account}\n`)).toBe(0);
+    });
+
+    const passwd = ['pass', 'wd'].join('');
+    const smb = ['smb', passwd].join('');
+    const tools = [
+      ['passwd --stdin with a pipe', 'a.sh', (p) => `echo '${p}' | ${passwd} --stdin ${account}`],
+      ['passwd --stdin with a bare word', 'a.sh', (p) => `echo ${p} | ${passwd} --stdin ${account}`],
+      ['passwd typed twice with echo -e', 'a.sh', (p) => `echo -e "${p}\\n${p}" | ${passwd} ${account}`],
+      ['passwd typed twice in single quotes', 'a.sh', (p) => `echo -e '${p}\\n${p}' | ${passwd} ${account}`],
+      ['passwd typed twice with printf', 'a.sh', (p) => `printf '%s\\n%s\\n' '${p}' '${p}' | ${passwd} ${account}`],
+      ['smbpasswd -s with two echos', 'a.sh', (p) => `(echo '${p}'; echo '${p}') | ${smb} -s -a ${account}`],
+      ['smbpasswd -s with printf', 'a.sh', (p) => `printf '${p}\\n${p}\\n' | ${smb} -s -a ${account}`],
+      ['usermod -p', 'a.sh', (p) => `usermod -p '${p}' ${account}`],
+      ['usermod --password', 'a.sh', (p) => `usermod --password ${p} ${account}`],
+      ['htpasswd -bn', 'a.sh', (p) => `htpasswd -bn ${account} ${p}`],
+      ['htpasswd -bc with a passphrase', 'a.sh', (p) => `htpasswd -bc .htpasswd ${account} '${p}'`],
+      ['openssl passwd with a method flag', 'a.sh', (p) => `openssl ${passwd} -1 '${p}'`],
+      ['openssl passwd with a salt', 'a.sh', (p) => `openssl ${passwd} -6 -salt abcdefgh ${p}`],
+      ['mkpasswd', 'a.sh', (p) => `mk${passwd} '${p}'`],
+      ['mkpasswd with a method', 'a.sh', (p) => `mk${passwd} -m sha-512 ${p}`],
+      ['ldappasswd -s', 'a.sh', (p) => `ldap${passwd} -x -D cn=admin -s '${p}' uid=bob`],
+      ['ldappasswd -w', 'a.sh', (p) => `ldap${passwd} -x -D cn=admin -w '${p}' -S uid=bob`],
+      ['net user in a batch file', 'a.bat', (p) => `net user ${account} ${p} /add`],
+      ['net user with a quoted passphrase', 'a.bat', (p) => `net user ${account} "${p}" /add`],
+      ['net user in a shell file', 'a.sh', (p) => `net user ${account} ${p} /add`],
+      ['dscl -passwd', 'a.sh', (p) => `dscl . -${passwd} /Users/bob ${p}`],
+      ['dscl -passwd with an old password', 'a.sh', (p) => `dscl . -${passwd} /Users/bob old ${p}`],
+    ];
+    it.each(tools)('reports a literal password given to %s', (label, file, form) => {
+      expect(count(file, `${form(value)}\n`), label).toBe(1);
+    });
+
+    it('reports a passphrase given to the tools that take one as an argument', () => {
+      for (const [label, file, form] of tools.filter(([label]) => /mkpasswd|openssl|usermod -p|net user with|ldappasswd -s|htpasswd -bc/.test(label))) {
+        expect(count(file, `${form(phrase)}\n`), label).toBe(1);
+      }
+    });
+
+    it('passes references, prompts and placeholders for the same tools', () => {
+      const ref = ['"$PW"', '${PW}', '$PW', '%PW%'];
+      for (const [label, file, form] of tools) {
+        for (const p of ['changeme', ...ref]) expect(count(file, `${form(p)}\n`), `${label}: ${p}`).toBe(0);
+      }
+      expect(count('a.sh', `openssl ${passwd} -1 -stdin\n`)).toBe(0);
+      expect(count('a.bat', `net user ${account} * /add\n`)).toBe(0);
+      expect(count('a.sh', `${smb} -a ${account}\n`)).toBe(0);
+      expect(count('a.sh', `cat /etc/${passwd}\n`)).toBe(0);
+      expect(count('a.md', `Run ${passwd} to change your password when you log in.\n`)).toBe(0);
+    });
+
+    it('reads a heredoc body given to the command', () => {
+      expect(count('a.sh', `${CHPASSWD} <<EOF\n${account}:${value}\nEOF\n`)).toBe(1);
+      expect(count('a.sh', `${CHPASSWD} <<EOF\n${account}:\${PW}\nEOF\n`)).toBe(0);
+    });
+
+    it('scans hostile command text in linear time', SLOW, () => {
+      const timings = timeInChild(`
+        const C = 'chp' + 'asswd';
+        const texts = [
+          ('echo a:b | ' + C + ' ').repeat(20000), C + ' <<< ' + '"'.repeat(100000), 'echo ' + "'".repeat(100000) + ' | ' + C,
+          ('echo -e "a\\\\n' + 'b\\\\n'.repeat(50) + '" | pass' + 'wd\\n').repeat(3000), ('(echo a; ').repeat(20000) + 'echo b) | smb' + 'passwd -s',
+          ('user' + 'mod -p ').repeat(30000), ('openssl pass' + 'wd ' + '-1 '.repeat(50) + '\\n').repeat(5000), 'ne' + 't user ' + 'a '.repeat(100000),
+          ('dscl . -pass' + 'wd ' + '/x '.repeat(50) + '\\n').repeat(5000), 'mkpass' + 'wd ' + '-m x '.repeat(50000),
+        ];
+        for (const file of ['a.sh', 'a.bat', 'a.md', 'Dockerfile']) for (const text of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it('is reported by the tree scan and --range without printing the value', SLOW, () => {
+      const dir = mkdtempSync(path.join(tmpdir(), 'check-secrets-r16d-'));
+      dirs.push(dir);
+      expect(run('git', ['init', '-q', '-b', 'main'], dir).status).toBe(0);
+      const base = commit(dir, { 'Dockerfile': 'FROM scratch\n' });
+      const head = commit(dir, { 'Dockerfile': `FROM scratch\nRUN echo '${account}:${phrase}' | ${CHPASSWD}\n` });
+      for (const args of [[], ['--range', `${base}..${head}`]]) {
+        const found = run(process.execPath, [SCANNER, ...args], dir);
+        expect(found.status, `${args.join(' ')}: ${found.stderr}`).toBe(1);
+        expect(found.stderr).toContain('Dockerfile');
+        expect(`${found.stdout}${found.stderr}`).not.toContain(phrase);
       }
     });
   });

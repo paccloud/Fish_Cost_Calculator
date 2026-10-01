@@ -51,6 +51,11 @@
  *   - Literals over several lines are judged like a quoted value: TOML/Python triple quotes, HCL/Ruby/Perl/PHP heredocs, PowerShell
  *     here-strings, template literals, quotes closed on a later line, backslash / INI continuation lines, YAML scalars on the next line.
  *     They are read up to 200 lines / 32 KB; a literal that does not end within that is reported (fail closed).
+ *     Each continuation line is read once per file (backslash continuations are cached), so the cost stays linear in the file.
+ *   - String literals with a prefix, hashes or another delimiter are read wherever a literal value is (callStringLiteral): Rust r#"..."#,
+ *     C# @"..." / $@"...", C++ R"(...)", Swift #"..."#, Python r'...', and by file type Lua [[...]], OCaml {|...|}, Perl q(), Ruby %q().
+ *   - Account passwords set from a script (chpasswd, passwd --stdin, smbpasswd -s, usermod -p, openssl passwd, mkpasswd, ldappasswd,
+ *     net user, dscl -passwd) are read as whole shell words.
  *   - Credentials that are not `name = value`: HTTP `Authorization` values with a scheme (http-auth-credential; Basic is decoded and
  *     judged by its password), Terraform `variable "api_token" { default = ... }` labels, and whitespace-delimited service directives
  *     keyed on their own names (config-directive-secret: Redis requirepass / ACL, HAProxy userlist, Mosquitto, nginx / Apache header
@@ -1182,7 +1187,28 @@ function shellArgument(input, start) {
 
 // Commands that take a password on their command line, and the rest of that line (see cliPasswordArguments).
 const CLI_PASSWORD_COMMAND =
-  /(?<![A-Za-z0-9_.-])(?:curl|wget2?|mysql(?:dump|admin|pump|import|show|check|slap)?|mariadb(?:-dump|-admin)?|mongo(?:sh|dump|restore|export|import|stat|top)?|redis6?-cli|valkey-cli|sshpass|smbclient|xhs?|https?|ldap(?:search|modify|add|delete|passwd|compare|whoami)|mosquitto_(?:pub|sub|rr|passwd)|htpasswd|rabbitmq(?:ctl|admin)|sqlcmd|keytool|gpg2?|(?:docker|podman|az|vault)(?=[ \t]+login))(?=[ \t])[^\n]{0,600}/g;
+  /(?<![A-Za-z0-9_.-])(?:curl|wget2?|mysql(?:dump|admin|pump|import|show|check|slap)?|mariadb(?:-dump|-admin)?|mongo(?:sh|dump|restore|export|import|stat|top)?|redis6?-cli|valkey-cli|sshpass|smbclient|xhs?|https?|ldap(?:search|modify|add|delete|passwd|compare|whoami)|mosquitto_(?:pub|sub|rr|passwd)|htpasswd|user(?:mod|add)|mkpasswd|dscl|(?:openssl(?=[ \t]+passwd)|net(?=[ \t]+use(?:r)?[ \t]))|rabbitmq(?:ctl|admin)|sqlcmd|keytool|gpg2?|(?:docker|podman|az|vault)(?=[ \t]+login))(?=[ \t])[^\n]{0,600}/g;
+
+// crypt(3) hashes: $1$ (MD5), $2a$ / $2y$ (bcrypt), $5$ / $6$ (SHA-2), $y$ (yescrypt), $apr1$ (Apache): a value that starts with `$`
+// and is not a shell variable. A hash committed with its account is a credential like any other literal password.
+const CRYPT_HASH = /^\$(?:1|2[abxy]?|5|6|7|y|gy|apr1|md5|sha1|sha256|sha512|pbkdf2[-a-z0-9]{0,16}|argon2[a-z0-9]{0,4})\$[A-Za-z0-9./$,=+-]{8,1024}$/;
+
+/** A password given on a command line: text, or a crypt hash; not a variable reference ($PW, ${PW}, %PW%). */
+const shellPasswordIsLiteral = (value) => CRYPT_HASH.test(value) || !SHELL_REFERENCE.test(value);
+
+const OPENSSL_PASSWD_ARGUMENT_FLAGS = new Set(['-salt', '-in', '-rand', '-writerand', '-engine', '-random', '-provider', '-propquery']);
+const MKPASSWD_ARGUMENT_FLAGS = new Set(['-m', '--method', '-S', '--salt', '-R', '--rounds', '-P', '--password-fd']);
+
+/** The words that are neither options nor the argument of an option that takes one (`flagsWithArgument`). */
+function optionOperands(words, flagsWithArgument) {
+  const operands = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (words[i].startsWith('-') && words[i] !== '-') {
+      if (flagsWithArgument.has(words[i])) i += 1;
+    } else operands.push(words[i]);
+  }
+  return operands;
+}
 
 /** The password arguments of one command line for the tools in CLI_PASSWORD_COMMAND (`words` are its shell words, tool first). */
 function cliPasswordArguments(allWords) {
@@ -1193,9 +1219,9 @@ function cliPasswordArguments(allWords) {
   const tool = words[0].replace(/[0-9]+$/, '');
   const found = [];
   const next = (i) => (i + 1 < words.length && !words[i + 1].startsWith('-') ? words[i + 1] : null);
-  // A password given as a shell variable ($PW, %PW%) is a reference, not a literal.
+  // A password given as a shell variable ($PW, %PW%) is a reference, not a literal. A crypt(3) hash ($6$salt$...) is a literal.
   const literal = (value) => {
-    if (value !== null && value !== undefined && !SHELL_REFERENCE.test(value)) found.push(value);
+    if (value !== null && value !== undefined && shellPasswordIsLiteral(value)) found.push(value);
   };
   const auth = (value) => {
     // user:password; a value without a colon is a bearer token only when the command says so.
@@ -1236,6 +1262,7 @@ function cliPasswordArguments(allWords) {
     } else if (tool.startsWith('ldap')) {
       if (word === '-w') found.push(next(i) ?? '');
       else if (/^-w./.test(word)) found.push(word.slice(2));
+      else if (tool === 'ldappasswd' && (word === '-s' || word === '-a')) literal(next(i)); // the new and the old password
     } else if (tool === 'mosquitto_pub' || tool === 'mosquitto_sub' || tool === 'mosquitto_rr') {
       if (word === '-P' || flag === '--pw') literal(value());
     } else if (tool === 'mosquitto_passwd') {
@@ -1251,6 +1278,27 @@ function cliPasswordArguments(allWords) {
         const password = /^-[A-Za-z]*n/.test(word) ? operands[1] : operands[2];
         if (password !== undefined) literal(password);
       }
+    } else if (tool === 'usermod' || tool === 'useradd') {
+      // usermod -p PASSWORD (a crypt(3) hash, or the plain text by mistake), --password PASSWORD
+      if (word === '-p' || flag === '--password') literal(value());
+    } else if (tool === 'openssl') {
+      // openssl passwd: the password is the first operand that is not an option or an option's argument (-salt and -in take one)
+      if (words[1] === 'passwd' && i === 2) {
+        const operands = optionOperands(words.slice(2), OPENSSL_PASSWD_ARGUMENT_FLAGS);
+        literal(operands[0]);
+      }
+    } else if (tool === 'mkpasswd') {
+      // mkpasswd: the password is the first operand that is not an option or an option's argument (the second operand is the salt)
+      if (i === 1) literal(optionOperands(words.slice(1), MKPASSWD_ARGUMENT_FLAGS)[0]);
+    } else if (tool === 'net') {
+      // net user NAME PASSWORD [/add ...], net use \\host\share PASSWORD [/user:NAME]: a bare `*` prompts
+      if ((words[1] === 'user' || words[1] === 'use') && i === 2) {
+        const operands = words.slice(2).filter((w) => !w.startsWith('/') && w !== '*');
+        if (operands.length >= 2) literal(operands[1]);
+      }
+    } else if (tool === 'dscl') {
+      // dscl . -passwd /Users/NAME [OLD] NEW
+      if (word === '-passwd') for (const operand of words.slice(i + 2)) literal(operand);
     } else if (tool === 'rabbitmqctl') {
       // rabbitmqctl add_user USER PASSWORD, change_password USER PASSWORD, authenticate_user USER PASSWORD
       if (/^(?:add_user|change_password|authenticate_user)$/.test(word) && i + 2 < words.length) literal(words[i + 2]);
@@ -1493,10 +1541,11 @@ function yamlBlockWindow(input, index) {
 
 // The entry tags of XML/properties-style configuration: <add key= value=/>, <setting name=><value/></setting>,
 // <property><name/><value/></property>, <entry key=>V</entry>.
-const XML_ENTRY_TAG = /<(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)(?![A-Za-z0-9_-])/gi;
+// An element name may carry a namespace prefix (`<ns:add>`); the prefix ends in a colon, which no name character is, so each tag has one reading.
+const XML_ENTRY_TAG = /<(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)(?![A-Za-z0-9_-])/gi;
 
-const XML_ENTRY_CLOSE = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/gi;
-const XML_ENTRY_CLOSE_ONCE = /<\/(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/i;
+const XML_ENTRY_CLOSE = /<\/(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/gi;
+const XML_ENTRY_CLOSE_ONCE = /<\/(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:add|setting|property|entry|item|param|parameter|variable|var|env|envvar|option|appsetting|pair|element|secret)[ \t\r\n]*>/i;
 /**
  * The XML entry around `index`: from the nearest opening entry tag before it (or the tag that holds it) to the end of that
  * entry (`/>`, or its closing tag, or the start of the next entry), at most PAIR_XML_CHARS. Null when `index` is not in XML.
@@ -1504,10 +1553,11 @@ const XML_ENTRY_CLOSE_ONCE = /<\/(?:add|setting|property|entry|item|param|parame
 function xmlWindow(input, index) {
   const from = Math.max(0, index - PAIR_XML_CHARS);
   const back = input.slice(from, index);
-  if (!back.includes('<')) return null;
+  // `index` at a `<` is an element that starts the document or follows only text: its own entry starts there.
+  if (!back.includes('<') && input[index] !== '<') return null;
   let start = -1;
   for (const tag of back.matchAll(XML_ENTRY_TAG)) start = from + tag.index;
-  if (start === -1) start = from + back.lastIndexOf('<');
+  if (start === -1) start = back.includes('<') ? from + back.lastIndexOf('<') : index;
   // An entry that already ended before `index` (a "/>" or a closing entry tag between its start and `index`) is a different
   // element: the window starts at the first tag after that end, so its value= is never paired with a later name=.
   const between = input.slice(start, index);
@@ -1535,14 +1585,14 @@ function xmlWindow(input, index) {
 // The value-carrying field of a name/value object. `valueFrom`, `values` and other longer names do not match. A YAML tag
 // or anchor before the scalar (`!!str V`, `&a V`) is skipped.
 const PAIR_VALUE_FIELD =
-  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}\]"']{1,4096}))/gi;
+  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|example|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?:"((?:[^"\\\n]|\\.){0,4096})"|'((?:[^'\\\n]|\\.){0,4096})'|([^\s,}\]"']{1,4096}))/gi;
 // The same field as an XML element: <value>V</value>
-const PAIR_XML_VALUE = /<(?:value|val|secret|content|data|default|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
+const PAIR_XML_VALUE = /<(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:value|val|secret|content|data|default|example|string)(?:[ \t][^<>]{0,80})?>[ \t\r\n]*([^<>]{1,4096}?)[ \t\r\n]*<\//gi;
 
 // Where a value begins (the same field names as PAIR_VALUE_FIELD, whatever follows): read again from the input when it runs over
 // several lines (a YAML block scalar, a quote closed on a later line, a folded scalar, a heredoc).
 const PAIR_VALUE_START =
-  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?=\S)/gi;
+  /(?<![A-Za-z0-9_$.-])(["']?)(?:value|val|secret|secretvalue|stringvalue|plaintext|content|data|default|defaultvalue|example|parametervalue)\1[ \t]*[:=][ \t]*(?:(?:![^\s,}\]]{0,60}|&[A-Za-z0-9_-]{1,60})[ \t]+){0,3}(?=\S)/gi;
 // A YAML block scalar header: | or > with an optional chomping (+ -) and indentation (1-9) indicator, then only a comment.
 const BLOCK_SCALAR_HEADER = /[|>](?:[-+][1-9]?|[1-9][-+]?)?(?=[ \t]*(?:#[^\n]*)?(?:\r?\n|$))/y;
 
@@ -1595,6 +1645,36 @@ function escapedLineValues(raw) {
   return lines.length > 1 ? [...lines, lines.join(' ')] : [];
 }
 
+// The `kind` of a name that stands for an HTTP authorization header: its value is `<scheme> <credential>` (httpCredentialIsSecret), not a plain secret.
+const AUTHORIZATION_KIND = 'authorization';
+const isAuthorizationName = (name) => /^(?:[A-Za-z]{1,20}-)?authorization$/i.test(name);
+
+/** Is the value of an Authorization header (`Bearer <token>`, `Basic <base64>`, or a bare token) a hardcoded credential? References and placeholders are not. */
+function authorizationValueIsSecret(raw) {
+  const value = raw.trim();
+  const scheme = /^([A-Za-z][A-Za-z0-9_-]{0,30})[ \t]{1,8}(\S{12,4096})$/.exec(value);
+  if (scheme !== null) return scheme[1].toLowerCase() !== 'digest' && httpCredentialIsSecret(scheme[1], scheme[2]);
+  return /^\S{12,4096}$/.test(value) && httpCredentialIsSecret(undefined, value);
+}
+
+/**
+ * The unquoted value of a value field. An authorization value is `<scheme> <credential>`, so a plain YAML scalar reads on past its
+ * first blank to the end of the line (or the next `,` / `}` / `#`); every other kind judges the first word.
+ */
+function bareValue(kind, text, field) {
+  if (kind !== AUTHORIZATION_KIND) return field[4];
+  const from = field.index + field[0].length;
+  let end = from;
+  while (end < text.length && end - from < 256 && !',}]#"\'\n'.includes(text[end])) end += 1;
+  return field[4] + text.slice(from, end).trimEnd();
+}
+
+/** The judge for the value fields paired with a name of this `kind`: (value, quoted) => is it a secret. */
+function valueJudge(kind, ctx) {
+  if (kind === AUTHORIZATION_KIND) return (value) => authorizationValueIsSecret(value);
+  return (value, quoted) => isSecretValue({ kind, value, quoted, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+}
+
 /**
  * Value fields of the window whose value is not on the field's line: a block scalar (`value: |`, `>-`, `|2`, after a tag such as
  * `!Sub`), a quote closed on a later line, a heredoc or triple-quoted string, a scalar folded over indented lines. The value is
@@ -1602,11 +1682,17 @@ function escapedLineValues(raw) {
  * unverifiable read ({ exhausted }) or null.
  */
 function multilineFieldSecret(window, kind, ctx, input, read) {
+  const judgeValue = valueJudge(kind, ctx);
   for (const start of window.text.matchAll(PAIR_VALUE_START)) {
     const keyAt = inputOffset(window, start.index);
     const valueAt = inputOffset(window, start.index + start[0].length);
     if (read.has(valueAt)) continue;
     read.add(valueAt);
+    // A window is far wider than a pair, so the next names of a dense file see this same value again: a value judged not to be a
+    // secret for this kind of name is not read a second time (the verdict of a read that ran out of a bound is never kept).
+    const judgedKey = `${kind}@${valueAt}`;
+    const judgedBefore = (ctx.judgedValueStarts ??= new Set());
+    if (judgedBefore.has(judgedKey)) continue;
     const keyColumn = keyAt - ctx.lineStart(keyAt);
     BLOCK_SCALAR_HEADER.lastIndex = valueAt;
     const header = BLOCK_SCALAR_HEADER.exec(input);
@@ -1616,10 +1702,8 @@ function multilineFieldSecret(window, kind, ctx, input, read) {
         : (multilineValue(ctx, input, valueAt) ?? continuedValue(ctx, input, keyAt, valueAt));
     if (body === null) continue;
     if (body.exhausted) return { exhausted: true, budget: body.budget === true };
-    const judged = body.values.some((value) =>
-      isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
-    );
-    if (judged) return { abs: { start: valueAt, end: body.end } };
+    if (body.values.some((value) => judgeValue(value, true))) return { abs: { start: valueAt, end: body.end } };
+    judgedBefore.add(judgedKey);
   }
   return null;
 }
@@ -1634,12 +1718,11 @@ function windowHoldsSecretValue(window, kind, ctx, escaped, input, read = new Se
   // Where the offending value sits (offset and length in the window's text). An escaped window changes its length, so the
   // whole window stands for it then.
   const at = (field) => (escaped ? { index: 0, length: text.length } : { index: field.index, length: field[0].length });
-  const judge = (value, quoted) =>
-    isSecretValue({ kind, value, quoted, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+  const judge = valueJudge(kind, ctx);
   for (const field of unescaped.matchAll(PAIR_VALUE_FIELD)) {
     const quotedValue = field[2] ?? field[3];
     const quoted = quotedValue !== undefined;
-    if (quoted ? judge(unescapeQuoted(quotedValue), true) || escapedLineValues(quotedValue).some((line) => judge(line, true)) : judge(field[4], false)) {
+    if (quoted ? judge(unescapeQuoted(quotedValue), true) || escapedLineValues(quotedValue).some((line) => judge(line, true)) : judge(bareValue(kind, unescaped, field), false)) {
       return at(field);
     }
   }
@@ -1719,6 +1802,22 @@ function pairValueIsSecret(m, kind, ctx) {
     if (found !== null) return pairHit(m, window, found, ctx, escaped);
   }
   return false;
+}
+
+/**
+ * The XML element form of a pair: the name element `m` (<name>X</name>, <key>X</key>) and its value in the same entry
+ * (<value>Y</value>, a plist <string>Y</string>, value="Y"). Reads are budgeted per file like the other window searches.
+ */
+function xmlPairIsSecret(m, kind, ctx) {
+  const window = xmlWindow(m.input, m.index);
+  ctx.pairBudget = (ctx.pairBudget ?? PAIR_BUDGET_CHARS) - (window?.text.length ?? 0) - 64;
+  if (ctx.pairBudget < 0) {
+    ctx.pairExhausted = true;
+    attributeToFile(m);
+    return true;
+  }
+  const found = window === null ? null : windowHoldsSecretValue(window, kind, ctx, false, m.input);
+  return found !== null && pairHit(m, window, found, ctx);
 }
 
 /** A window search found a value (or could not verify one): record where, and report the pair. */
@@ -1804,9 +1903,15 @@ function shellWords(line) {
   for (let i = 0; i < line.length; i += 1) {
     const ch = line[i];
     if (quote !== null) {
-      if (ch === '\\' && (quote === '"' || ansi) && i + 1 < line.length) {
+      if (ch === '\\' && ansi && i + 1 < line.length) {
         word += line[i + 1];
         i += 1;
+      } else if (ch === '\\' && quote === '"' && i + 1 < line.length) {
+        // inside "...", a backslash escapes only $ ` " \ and a line break; before any other character it stays (echo -e "a\nb")
+        if ('$`"\\\n'.includes(line[i + 1])) {
+          word += line[i + 1];
+          i += 1;
+        } else word += ch;
       } else if (ch === quote) {
         quote = null;
         ansi = false;
@@ -2143,6 +2248,38 @@ function shellTail(input, start) {
   return words;
 }
 
+/**
+ * The passwords a `chpasswd` / `passwd` / `smbpasswd` command at `m` receives on its standard input (a pipe from echo or printf, a
+ * here-string, a heredoc), judged like any other literal password: references and placeholders pass, a crypt hash (`chpasswd -e`)
+ * is a literal. A heredoc whose end cannot be found within the bounds cannot be verified and is reported.
+ */
+function accountPasswordFromStdin(m, ctx) {
+  const words = shellWords(m[0]);
+  const tool = words[0];
+  const stdin = stdinValues(m, ctx);
+  const inputs = [...stdin.values];
+  const hereString = words.indexOf('<<<');
+  if (hereString !== -1 && words[hereString + 1] !== undefined) inputs.push(words[hereString + 1]);
+  if (stdin.end > m.index + m[0].length) m.spanEnd = stdin.end;
+  if (stdin.unterminated) return true;
+  if (tool === 'smbpasswd' && !words.some((w) => /^-[A-Za-z]*s/.test(w) && !w.startsWith('--'))) return false; // without -s it prompts
+  const passwords = [];
+  for (const input of inputs) {
+    if (tool === 'chpasswd') {
+      // user:password, one account per line; printf 'user:%s\n' P leaves the password alone
+      const colon = input.indexOf(':');
+      passwords.push(colon > 0 ? input.slice(colon + 1) : input);
+    } else {
+      // the password, typed twice: two lines, or one text with the line break written as \n
+      passwords.push(...input.split(/\\n|\r?\n/));
+    }
+  }
+  return passwords.some((password) => {
+    const text = password.trim();
+    return text !== '' && shellPasswordIsLiteral(text) && directiveIsSecret({ text, quoted: /\s/.test(text) });
+  });
+}
+
 /** Is any word (or all of them together, as one passphrase) a secret value for a name of this kind? */
 function shellWordsAreSecret(kind, words, ctx) {
   const literal = words.filter(
@@ -2228,50 +2365,204 @@ const ENV_SETTER_CALLEE = [
   String.raw`SetEnvironmentVariable[AW]?`,
   String.raw`apache_setenv`,
 ].join('|');
-// The name, then either `, value` (two arguments) or `=value` inside the same string (putenv). Group 1 = the quote of the name, 2 = the name,
-// 3 = "=" for the one-string form.
-const ENV_SETTER_CALL = new RegExp(
-  String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_CALLEE})\([ \t]{0,64}[@$LuUrRbBfF]{0,2}(["'\x60])([A-Za-z_][A-Za-z0-9_.-]{0,255})(?:\1[ \t]{0,64},[ \t]{0,64}(?=[@$LuUrRbBfF]{0,2}["'\x60])|(=))`,
-  'g',
-);
+// The callee and its opening parenthesis; the arguments (a name literal, then `, value` or `=value` inside the same string for putenv)
+// are read by envSetterArguments with callStringLiteral, so every literal form of a language (Rust r#"..."#, C# @"...", C++ R"(...)") counts.
+const ENV_SETTER_CALL = new RegExp(String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_CALLEE})\([ \t]{0,64}(?=\S)`, 'g');
+const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,255}$/;
 
 /**
- * The string literal at `start` in call syntax: an optional prefix (C# @ $, C L, Python r b f u), then "...", '...' or \`...\`,
- * or a triple-quoted string, all on one line. Backslash escapes the next character unless the string is verbatim (@"..." doubles its
- * quote; \`...\` and r"..." are raw). Returns { text, end, interpolated } or null (not a literal, not closed within the bounds).
+ * The arguments of an environment setter call whose `(` and blanks end at `start`: { name, literal } for `("NAME", "value")` or
+ * `("NAME=value")`, or null when they are not literals (a variable, a call, a name that is not a variable name).
  */
-function callStringLiteral(input, start) {
+function envSetterArguments(input, start, filePath) {
+  const nameLiteral = callStringLiteral(input, start, filePath);
+  if (nameLiteral === null) return null;
+  let at = nameLiteral.end;
+  while (input[at] === ' ' || input[at] === '\t') at += 1;
+  if (input[at] === ',' && ENV_VARIABLE_NAME.test(nameLiteral.text)) {
+    at += 1;
+    while (input[at] === ' ' || input[at] === '\t') at += 1;
+    return { name: nameLiteral.text, literal: callStringLiteral(input, at, filePath) };
+  }
+  const equals = nameLiteral.text.indexOf('=');
+  if (equals > 0 && ENV_VARIABLE_NAME.test(nameLiteral.text.slice(0, equals))) {
+    // putenv("NAME=value"): the value runs to the closing quote of the same string
+    const text = nameLiteral.text.slice(equals + 1);
+    return { name: nameLiteral.text.slice(0, equals), literal: { text, end: nameLiteral.end, interpolated: nameLiteral.interpolated } };
+  }
+  return null;
+}
+
+const LITERAL_HASH_MAX = 16; // Rust r#"..."#, Swift #"..."#: at most this many hashes
+const LITERAL_MAX_CHARS = 4098;
+const CLOSING_DELIMITER = { '(': ')', '[': ']', '{': '}', '<': '>' };
+
+/**
+ * The body of a delimited literal whose opening delimiter is at `open`: { text, end } or null. A bracket delimiter nests; any other
+ * delimiter closes at its next occurrence; a backslash escapes the next character. One line, at most LITERAL_MAX_CHARS.
+ */
+function delimitedBody(input, open) {
+  const opener = input[open];
+  const closer = CLOSING_DELIMITER[opener] ?? opener;
+  let depth = 0;
+  let text = '';
+  for (let j = open + 1; j < input.length && j - open < LITERAL_MAX_CHARS; j += 1) {
+    const ch = input[j];
+    if (ch === '\n') return null;
+    if (ch === '\\' && j + 1 < input.length) {
+      text += input[j + 1];
+      j += 1;
+    } else if (ch === closer && depth === 0) {
+      return { text, end: j + 1, interpolated: false };
+    } else {
+      if (closer !== opener) {
+        if (ch === opener) depth += 1;
+        else if (ch === closer) depth -= 1;
+      }
+      text += ch;
+    }
+  }
+  return null;
+}
+
+/** A word-list literal (Perl qw(), Ruby %w[]) is a list of values: its words are candidates as well as the whole text. */
+function wordList(literal, words) {
+  return literal !== null && words ? { ...literal, words: true } : literal;
+}
+
+/**
+ * Index of `needle` in `input` at or after `from`, looking at most `max` characters ahead (-1 when it is not there). The search is
+ * bounded, so a file of unclosed openers costs a constant per opener, not a scan to the end of the file.
+ */
+function indexWithin(input, needle, from, max) {
+  const found = input.slice(from, from + max + needle.length).indexOf(needle);
+  return found === -1 ? -1 : from + found;
+}
+
+/** The body from `from` to the next `closer` (a literal that may run over lines: Lua [[...]], OCaml {|...|}, C++ R"(...)"), or null. */
+function bodyUntil(input, from, closer) {
+  const close = indexWithin(input, closer, from, MULTILINE_MAX_CHARS);
+  if (close === -1) return null;
+  return { text: input.slice(from, close).replace(/^\r?\n/, ''), end: close + closer.length, interpolated: false };
+}
+
+/**
+ * The literals that do not start with a quote, by language (the file's extension decides, since `q(x)` or `[[x]]` are ordinary code elsewhere):
+ * Lua [[...]] / [==[...]==], OCaml {|...|} / {id|...|id}, Perl q(...) qq{...} qw/.../, Ruby and Crystal %q(...) %Q[...] %w<...> %(...),
+ * Elixir ~s(...) ~S"...", Groovy slashy /.../ and dollar-slashy $/.../$.
+ */
+function quoteLikeLiteral(input, start, filePath) {
+  const c = input[start];
+  if (c === '[' && /\.lua$/i.test(filePath)) {
+    let level = 0;
+    while (level <= LITERAL_HASH_MAX && input[start + 1 + level] === '=') level += 1;
+    if (level > LITERAL_HASH_MAX || input[start + 1 + level] !== '[') return null;
+    return bodyUntil(input, start + 2 + level, `]${'='.repeat(level)}]`);
+  }
+  if (c === '{' && /\.(?:ml|mli|re|rei)$/i.test(filePath)) {
+    let end = start + 1;
+    while (end - start <= 17 && /[a-z_]/.test(input[end] ?? '')) end += 1;
+    if (input[end] !== '|') return null;
+    return bodyUntil(input, end + 1, `|${input.slice(start + 1, end)}}`);
+  }
+  if (c === 'q' && /\.(?:pl|pm|t|cgi|psgi)$/i.test(filePath)) {
+    let open = start + 1;
+    const words = input[open] === 'w';
+    if (input[open] === 'q' || words) open += 1;
+    return '([{<|!/^~\'"'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open), words) : null;
+  }
+  if (c === '%' && /\.(?:rb|rake|gemspec|podspec|cr|erb)$/i.test(filePath)) {
+    const open = 'qQwWiI'.includes(input[start + 1] ?? '\n') ? start + 2 : start + 1;
+    return '([{<|!/^'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open), 'wWiI'.includes(input[start + 1] ?? '\n')) : null;
+  }
+  if (c === '~' && /\.(?:ex|exs|eex|heex)$/i.test(filePath)) {
+    return /[A-Za-z]/.test(input[start + 1] ?? '') && '([{<|/"\''.includes(input[start + 2] ?? '\n') ? delimitedBody(input, start + 2) : null;
+  }
+  if ((c === '/' || (c === '$' && input[start + 1] === '/')) && /\.(?:groovy|gradle|gvy|gy)$/i.test(filePath)) {
+    const dollar = c === '$';
+    const open = dollar ? start + 1 : start;
+    const close = indexWithin(input, dollar ? '/$' : '/', open + 1, LITERAL_MAX_CHARS);
+    if (close === -1 || input.slice(open, close).includes('\n')) return null;
+    return { text: input.slice(open + 1, close), end: close + (dollar ? 2 : 1), interpolated: true };
+  }
+  return null;
+}
+
+/**
+ * The string literal at `start` in call or assignment syntax. Forms read, with their prefixes:
+ *   "..." '...' and backtick strings, with the prefixes C# @ $ $@, C / C++ L u U u8, Python / Rust r b br rb f fr u, Scala s raw
+ *   r#"..."# r##"..."##   Rust raw strings, and Swift #"..."# / ##"..."## (up to LITERAL_HASH_MAX hashes; no escapes)
+ *   R"delim(...)delim"    C++ raw strings, and r"(...)" in R files
+ *   triple-quoted strings on one line
+ *   the quote-less forms of quoteLikeLiteral (Lua, OCaml, Perl, Ruby, Elixir, Groovy), chosen by `filePath`.
+ * Backslash escapes the next character unless the string is verbatim (@"..." doubles its quote) or raw (backtick, r"...", hashed).
+ * Returns { text, end, interpolated } or null (not a literal, not closed within the bounds).
+ */
+function callStringLiteral(input, start, filePath = '') {
   let i = start;
-  let prefix = '';
-  while (i < start + 2 && /[@$LuUrRbBfF]/.test(input[i] ?? '')) {
+  let prefix = input.startsWith('u8', i) ? 'u8' : '';
+  i += prefix.length;
+  for (let n = 0; n < 2 && /[@$LuUrRbBfF]/.test(input[i] ?? ''); n += 1) {
     prefix += input[i];
     i += 1;
   }
-  const quote = input[i];
-  if (quote !== '"' && quote !== "'" && quote !== '`') return null;
+  if (prefix === '' && (input.startsWith('raw"', i) || input.startsWith('s"', i))) {
+    prefix = input[i] === 'r' ? 'raw' : 's';
+    i += prefix.length;
+  }
+  if (prefix === '' && input.startsWith('String.raw`', i)) i += 10; // JavaScript tagged template (raw)
+  else if (prefix === '' && input[i] === ':' && input[i + 1] === '"' && /\.(?:rb|rake|cr)$/i.test(filePath)) i += 1; // Ruby symbol :"..."
+  let hashes = 0;
+  while (hashes <= LITERAL_HASH_MAX && input[i + hashes] === '#') hashes += 1;
+  const quote = input[i + hashes];
+  if (hashes > LITERAL_HASH_MAX || (hashes > 0 && quote !== '"') || (quote !== '"' && quote !== "'" && quote !== '`')) {
+    return hashes === 0 ? quoteLikeLiteral(input, start, filePath) : null;
+  }
+  i += hashes;
   const verbatim = prefix.includes('@');
-  const raw = quote === '`' || /r/i.test(prefix);
-  const interpolated = /[$fF]/.test(prefix);
-  if (quote !== '`' && input[i + 1] === quote && input[i + 2] === quote) {
-    const close = input.indexOf(quote.repeat(3), i + 3);
-    if (close === -1 || close - i > 4098 || input.slice(i + 3, close).includes('\n')) return null;
+  const raw = quote === '`' || /r/i.test(prefix) || hashes > 0;
+  const interpolated = /[$fFs]/.test(prefix);
+  if (quote === '"' && hashes === 0 && /[rR]/.test(prefix)) {
+    // C++ R"delim(...)delim", and r"(...)" / r"[...]" / r"{...}" / r"-(...)-" in R files
+    const cpp = prefix.includes('R');
+    let open = i + 1;
+    while (open - i <= 17 && (cpp ? !/[()\\\s]/.test(input[open] ?? '(') : input[open] === '-')) open += 1;
+    const bracket = input[open];
+    if (cpp ? bracket === '(' : /\.r$/i.test(filePath) && (bracket === '(' || bracket === '[' || bracket === '{')) {
+      const closer = (cpp ? ')' : CLOSING_DELIMITER[bracket]) + input.slice(i + 1, open) + '"';
+      return bodyUntil(input, open + 1, closer);
+    }
+  }
+  if (quote !== '`' && hashes === 0 && input[i + 1] === quote && input[i + 2] === quote) {
+    const close = indexWithin(input, quote.repeat(3), i + 3, LITERAL_MAX_CHARS);
+    if (close === -1 || input.slice(i + 3, close).includes('\n')) return null;
     return { text: input.slice(i + 3, close), end: close + 3, interpolated };
   }
-  let out = '';
-  for (let j = i + 1; j < input.length && j - i < 4098; j += 1) {
+  const closer = '#'.repeat(hashes);
+  if (raw && !verbatim) {
+    // no escapes: the literal ends at the first closing quote (followed by its hashes); two native searches, no per-character work
+    const closing = indexWithin(input, quote + closer, i + 1, LITERAL_MAX_CHARS);
+    if (closing === -1) return null;
+    const text = input.slice(i + 1, closing);
+    return text.includes('\n') ? null : { text, end: closing + 1 + hashes, interpolated };
+  }
+  // One pass to the closing quote without building anything, so a line of unclosed openers costs a scan each, not an allocation each.
+  const limit = Math.min(input.length, i + LITERAL_MAX_CHARS);
+  let j = i + 1;
+  for (; j < limit; j += 1) {
     const ch = input[j];
     if (ch === '\n') return null;
     if (ch === quote) {
-      if (verbatim && input[j + 1] === quote) {
-        out += quote;
-        j += 1;
-      } else return { text: out, end: j + 1, interpolated };
-    } else if (ch === '\\' && !raw && !verbatim && j + 1 < input.length) {
-      out += input[j + 1];
-      j += 1;
-    } else out += ch;
+      if (hashes > 0) {
+        if (input.startsWith(closer, j + 1)) break;
+      } else if (verbatim && input[j + 1] === quote) j += 1;
+      else break;
+    } else if (ch === '\\' && !raw && !verbatim && j + 1 < input.length) j += 1;
   }
-  return null;
+  if (j >= limit) return null;
+  const body = input.slice(i + 1, j);
+  const end = j + 1 + hashes;
+  return { text: verbatim ? body.split(quote + quote).join(quote) : body.replace(/\\([\s\S])/g, '$1'), end, interpolated };
 }
 
 /** fish `set` flags that read or remove a variable instead of assigning it (-e -q -S -n -h and their long forms). */
@@ -2292,7 +2583,7 @@ function fishFlagsAssign(flags) {
 const MULTILINE_MAX_LINES = 200;
 const MULTILINE_MAX_CHARS = 32_768;
 const MULTILINE_BUDGET_CHARS = 24_000_000; // per file: characters the multi-line readers may look at before the file is reported
-const TRIPLE_QUOTE = /[rRbBfFuU]{0,2}("""|''')/y;
+const TRIPLE_QUOTE = /[rRbBfFuU]{0,2}#{0,16}("""|''')/y;
 const HEREDOC_OPENER = /<<(?:<|[-~])?(["']?)([A-Za-z_][A-Za-z0-9_]{0,63})\1/y;
 const HERE_STRING_OPENER = /@(["'])[ \t]*\r?\n/y;
 
@@ -2441,12 +2732,55 @@ function multilineValue(ctx, input, valueStart) {
   return null;
 }
 
-const ENDS_IN_BACKSLASH = /(?:^|[^\\])(?:\\\\)*\\$/;
+/** Does the text end in an odd run of backslashes (a line continuation)? A linear scan from the end; no regular expression. */
+function endsInBackslash(text) {
+  let run = 0;
+  for (let i = text.length - 1; i >= 0 && text[i] === '\\'; i -= 1) run += 1;
+  return run % 2 === 1;
+}
+
+/** Judge `text` through `judge`, remembering the verdict of a long text (the pieces of a continued value are judged once per name kind). */
+function judgeOnce(ctx, tag, text, judge) {
+  if (text.length < 128) return judge();
+  const memo = (ctx.judgedTexts ??= new Map());
+  let byText = memo.get(tag);
+  if (byText === undefined) memo.set(tag, (byText = new Map()));
+  let verdict = byText.get(text);
+  if (verdict === undefined) {
+    verdict = judge();
+    if (byText.size < 4096) byText.set(text, verdict);
+  }
+  return verdict;
+}
+
+/**
+ * One line of a backslash-continued value, read once per file: `piece` is its text without the continuation backslash and its
+ * leading blanks, `next` where its line ends, `more` whether it continues on the next line. Every match that reads a
+ * continuation walks these records instead of slicing and testing the lines again, so a file of many continued lines
+ * costs one read per line, not one per (match, line).
+ */
+function continuationLine(ctx, input, at) {
+  const lines = (ctx.continuationLines ??= new Map());
+  let line = lines.get(at);
+  if (line === undefined) {
+    let next = input.indexOf('\n', at);
+    if (next === -1) next = input.length;
+    const text = input.slice(at, Math.min(next, at + 4096)).replace(/\r$/, '');
+    const more = endsInBackslash(text);
+    const piece = (more ? text.slice(0, -1) : text).trimStart();
+    line = { next, more, piece, trimmed: piece.trim() };
+    lines.set(at, line);
+  }
+  return line;
+}
 
 /**
  * The lines that continue an unquoted value of a configuration file after its first line:
  *  - a trailing backslash (properties files, shell scripts): the next line follows without a break;
  *  - an INI value (configparser) or a YAML plain scalar folded over indented lines: the following lines indented deeper than the key.
+ * A name that sits inside a continuation already read for an earlier name (`a=x \` / `b=y`) is part of that value: its own
+ * pieces are judged, and the whole logical line once more (as read at the first name), but the tail is not joined again, so the
+ * reading stays linear however many names a continued value holds.
  * @returns {{values: string[], end: number, exhausted: boolean} | null}
  */
 function continuedValue(ctx, input, matchIndex, valueStart) {
@@ -2454,27 +2788,30 @@ function continuedValue(ctx, input, matchIndex, valueStart) {
   const first = input.slice(valueStart, Math.min(lineEnd, valueStart + 4096)).replace(/\r$/, '');
   const pieces = [];
   let end = lineEnd;
-  if (ENDS_IN_BACKSLASH.test(first)) {
+  if (endsInBackslash(first)) {
     if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
-    pieces.push(first.slice(0, -1));
+    const chain = [];
     let at = lineEnd + 1;
     let closed = false;
     for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length; n += 1) {
-      let next = input.indexOf('\n', at);
-      if (next === -1) next = input.length;
-      const line = input.slice(at, Math.min(next, at + 4096)).replace(/\r$/, '');
-      end = next;
-      const more = ENDS_IN_BACKSLASH.test(line);
-      pieces.push((more ? line.slice(0, -1) : line).trimStart());
-      if (!more || next >= input.length) {
+      const line = continuationLine(ctx, input, at);
+      chain.push(line);
+      end = line.next;
+      if (!line.more || line.next >= input.length) {
         closed = true;
         break;
       }
-      at = next + 1;
+      at = line.next + 1;
     }
     if (!closed) return exhaustedLiteral(ctx, input, valueStart);
     if (!spendMultiline(ctx, end - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
-    return { values: [pieces.join(''), ...pieces.map((piece) => piece.trim()).filter((piece) => piece !== '')], end, exhausted: false };
+    const head = (ctx.continuedHeads ??= new Map()).get(ctx.lineStart(valueStart));
+    const own = first.slice(0, -1);
+    const trimmed = [own.trim(), ...chain.map((line) => line.trimmed)].filter((piece) => piece !== '');
+    if (head !== undefined) return { values: [head.joined, ...trimmed], end, exhausted: false };
+    const joined = [own, ...chain.map((line) => line.piece)].join('');
+    for (let i = 0, line = lineEnd + 1; i < chain.length; line = chain[i].next + 1, i += 1) ctx.continuedHeads.set(line, { joined });
+    return { values: [joined, ...trimmed], end, exhausted: false };
   }
   if (!/\.(?:ini|cfg|conf|ya?ml)$/i.test(ctx.path)) return null;
   if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
@@ -2512,12 +2849,12 @@ const isSecretLikeName = (name) => secretNameKind(name) !== null;
 //   a type word alone:  `NAME string = ...` (Go var / const), `NAME char = ...`
 //   a marker:           Nim `NAME* =`, TypeScript `name?: T =` / `name!: T =`, C `NAME[] =`, Lua `NAME <const> =`
 // Every part is bounded, starts with a character the previous part cannot end in, and is optional as a whole.
-const ASSIGN_TYPE_COLON = String.raw`:[ \t]*(?:&(?:'[A-Za-z_]{1,16}[ \t]{1,4}|mut[ \t]{1,4})?|\*(?:const[ \t]{1,4}|mut[ \t]{1,4})?|\[\d{0,4}\](?:const[ \t]{1,4})?)?[A-Za-z_][A-Za-z0-9_<>[\]|.?!&*]{0,40}(?!:\/\/)`;
-const ASSIGN_TYPE_WORD = String.raw`[ \t]{1,4}(?:\*|\[\d{0,4}\])?(?:string|String|str|byte|bytes|char|text|any|auto|dynamic|object|Object)(?![A-Za-z0-9_])`;
+const ASSIGN_TYPE_COLON = String.raw`:[ \t]*(?:&(?:'[A-Za-z_]{1,16}[ \t]{1,4}|mut[ \t]{1,4})?|\*(?:const[ \t]{1,4}|mut[ \t]{1,4})?|\[\d{0,4}\](?:const[ \t]{1,4})?)?\[?[A-Za-z_][A-Za-z0-9_<>[\]|.?!&*]{0,40}(?!:\/\/)`;
+const ASSIGN_TYPE_WORD = String.raw`[ \t]{1,4}(?:As[ \t]{1,4})?(?:\*|\[\d{0,4}\])?(?:string|String|str|byte|bytes|char|text|any|auto|dynamic|object|Object)(?![A-Za-z0-9_])`;
 const ASSIGN_MARKER = String.raw`(?:\*|[?!](?=[ \t]*:)|\[[A-Za-z0-9_]{0,20}\]|[ \t]*<(?:const|close)>)`;
 // Every assignment operator that carries a value: = := ::= ?= += -= .= *= **= |= &= ^= %= ||= &&= ??= => and the arrows <- <<- -> (R, Scala) and the
 // infix `to` (Kotlin `"NAME" to "value"`). An arrow or `to` counts only in front of a quote, so `a->b`, `x<-1` and prose stay out.
-const ASSIGN_OPERATOR = String.raw`(\|\|=|&&=|\?\?=|\*\*=|:{1,3}=|\?=|[-+.*|&^%]=|=>|<{1,2}-(?=[ \t]*["'\x60])|->(?=[ \t]*["'\x60])|(?<=["'\x60][ \t]{1,8})to(?=[ \t]{1,8}["'\x60])|=|:(?!:))`;
+const ASSIGN_OPERATOR = String.raw`(\|\|=|&&=|\?\?=|\*\*=|:{1,3}=|\?=|[-+.*|&^%]=|=>|<{1,2}-(?=[ \t]*(?:[rR](?=")|["'\x60]))|->(?=[ \t]*["'\x60])|(?<=["'\x60][ \t]{1,8})to(?=[ \t]{1,8}["'\x60])|=|:(?!:))`;
 const ASSIGNMENT_PATTERN = new RegExp(
   String.raw`(?<![A-Za-z0-9_$.-])(?<!\$\{|:\/\/)(["'\x60]?)([A-Za-z_$][A-Za-z0-9_$.-]{0,1023})\1(?:(?<=["'\x60])[ \t]*\])?${ASSIGN_MARKER}?(?:[ \t]*${ASSIGN_TYPE_COLON}|${ASSIGN_TYPE_WORD}(?=[ \t]*=(?!=)))?[ \t]*${ASSIGN_OPERATOR}[ \t]*(?=\S)`,
   'g',
@@ -2951,6 +3288,10 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   if (kind === null) {
     const attribute = XML_NAME_ATTRIBUTE.exec(attributes);
     if (attribute !== null) kind = nameKindFor(attribute[1] ?? attribute[2], ctx);
+    // <header name="Authorization">Bearer T</header>, <Authorization>Bearer T</Authorization>: the text is a scheme and a credential.
+    if (kind === null && (isAuthorizationName(name) || (attribute !== null && isAuthorizationName((attribute[1] ?? attribute[2]).trim())))) {
+      return authorizationValueIsSecret(text);
+    }
   }
   if (kind === null) return false;
   const value = text.trim();
@@ -2998,6 +3339,20 @@ const SECRET_ASSIGNMENT_MATCHER = {
         isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
       );
     }
+    // A literal that does not start with a plain quote: Rust r#"..."#, C# @"...", C++ R"(...)", Swift #"..."#, Python r'...', Lua [[...]],
+    // Perl q(...), Ruby %q(...), OCaml {|...|}. A literal over several lines is judged like a heredoc.
+    if (ctx.mode === 'code' && !'"\'`'.includes(input[valueStart] ?? '')) {
+      const literal = callStringLiteral(input, valueStart, ctx.path);
+      if (literal !== null && (!literal.text.includes('\n') || spendMultiline(ctx, literal.text.length))) {
+        m.spanEnd = literal.end;
+        if (literal.interpolated && /[{}$]/.test(literal.text)) return false; // built from other values
+        const texts = literal.text.includes('\n') ? bodyValues(literal.text) : [literal.text];
+        if (literal.words === true) texts.push(...literal.text.split(/\s+/).filter((word) => word !== ''));
+        return texts.some((text) =>
+          isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
+        );
+      }
+    }
     // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
     // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
     const nested = valueStart < (ctx.bareRunEnd ?? 0);
@@ -3032,7 +3387,7 @@ const SECRET_ASSIGNMENT_MATCHER = {
       m.spanEnd = continued.end;
       if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
       if (isVaultBody(continued.values)) return false;
-      for (const text of continued.values) if (check(text, true)) return true;
+      for (const text of continued.values) if (judgeOnce(ctx, `${kind}|${m[3]}`, text, () => check(text, true))) return true;
     }
     // A value that continues after its first word (`password=Passwords do not match`) is the whole rest of the line:
     // the first word alone says nothing about it.
@@ -3060,7 +3415,7 @@ const DEFINITION_ASSIGNMENT_MATCHER = {
   appliesTo: (ctx) => ctx.mode === 'code',
   hint: /[@(:]/,
   pattern:
-    /(?<![A-Za-z0-9_$.\/-])(@|\((?:def|defonce|defvar|defparameter|defconstant|defcustom|setq|setf|define)(?![A-Za-z0-9_-])[ \t]{1,8}(?:\^[^\s()]{1,30}[ \t]{1,8}){0,2}|:)([A-Za-z_][A-Za-z0-9_.-]{0,255})()[ \t]{1,64}(?=["'\x60])/g,
+    /(?<![A-Za-z0-9_$.\/-])(@|\((?:def|defonce|defvar|defparameter|defconstant|defcustom|setq|setf|define)(?![A-Za-z0-9_-])[ \t]{1,8}(?:\^[^\s()]{1,30}[ \t]{1,8}){0,2}|:)([A-Za-z_][A-Za-z0-9_.-]{0,255})()[ \t]{1,64}(?=["'\x60~])/g,
   accept: (m, ctx) => SECRET_ASSIGNMENT_MATCHER.accept(m, ctx),
 };
 
@@ -3084,7 +3439,7 @@ const PROPERTIES_BLANK_MATCHER = {
     if (continued !== null) {
       m.spanEnd = continued.end;
       if (continued.exhausted) return exhaustedVerdict(m, ctx, continued);
-      return continued.values.some((text) => check(text, true));
+      return continued.values.some((text) => judgeOnce(ctx, `${kind}| `, text, () => check(text, true)));
     }
     const token = first.trimEnd();
     if (/\s/.test(token)) return check(token, true) || check(token.split(/\s/, 1)[0], false);
@@ -3577,17 +3932,11 @@ export const RULES = [
         pattern: ENV_SETTER_CALL,
         accept: (m, ctx) => {
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
-          const kind = nameKindFor(m[2], ctx);
+          const call = envSetterArguments(m.input, m.index + m[0].length, ctx.path);
+          if (call === null) return false;
+          const kind = nameKindFor(call.name, ctx);
           if (!kind) return false;
-          const start = m.index + m[0].length;
-          let literal;
-          if (m[3] === '=') {
-            // putenv("NAME=value"): the value runs to the closing quote of the same string
-            const body = callStringLiteral(m.input, m.index + m[0].lastIndexOf('(') + 1 + /^[ \t]*/.exec(m[0].slice(m[0].lastIndexOf('(') + 1))[0].length);
-            literal = body === null ? null : { text: body.text.slice(body.text.indexOf('=') + 1), end: body.end, interpolated: body.interpolated };
-          } else {
-            literal = callStringLiteral(m.input, start);
-          }
+          const literal = call.literal;
           if (literal === null) return false;
           m.spanEnd = literal.end;
           if (literal.interpolated && /[{}]/.test(literal.text)) return false; // an interpolated string is built from other values
@@ -3596,12 +3945,12 @@ export const RULES = [
       },
       {
         // Perl hash elements: $ENV{NAME} = 'v', $config{'password'} = "v" (a subscript in braces; PHP and Ruby use brackets, read above)
-        pattern: /(?<![A-Za-z0-9_$])\$[A-Za-z_][A-Za-z0-9_]{0,64}\{[ \t]{0,8}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,8}\}[ \t]{0,16}=(?![=~])[ \t]{0,16}(?=["'])/g,
+        pattern: /(?<![A-Za-z0-9_$])\$[A-Za-z_][A-Za-z0-9_]{0,64}\{[ \t]{0,8}(["']?)([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,8}\}[ \t]{0,16}=(?![=~])[ \t]{0,16}(?=\S)/g,
         accept: (m, ctx) => {
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
           const kind = nameKindFor(m[2], ctx);
           if (!kind) return false;
-          const literal = callStringLiteral(m.input, m.index + m[0].length);
+          const literal = callStringLiteral(m.input, m.index + m[0].length, ctx.path);
           if (literal === null) return false;
           m.spanEnd = literal.end;
           return powershellValueIsSecret(kind, { text: literal.text }, ctx);
@@ -3707,21 +4056,13 @@ export const RULES = [
         },
       },
       {
-        // XML element form: <property><name>X</name><value>Y</value></property>, <setting><key>X</key>...
-        hint: /<\/(?:name|key|variable|env)/i,
-        pattern: /<(name|key|variable|env|parametername|parameterkey)>[ \t\r\n]*([A-Za-z_][A-Za-z0-9_.-]{0,1023})[ \t\r\n]*<\/\1>/gi,
+        // XML element form: <property><name>X</name><value>Y</value></property>, <setting><key>X</key>..., with or without a namespace prefix
+        // (<ns:name>X</ns:name><ns:value>Y</ns:value>). The prefix ends in a colon and the closing tag repeats the whole qualified name.
+        hint: /<\/(?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:name|key|variable|env|parameter)/i,
+        pattern: /<((?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:name|key|variable|env|parametername|parameterkey))>[ \t\r\n]*([A-Za-z_][A-Za-z0-9_.-]{0,1023})[ \t\r\n]*<\/\1>/gi,
         accept: (m, ctx) => {
           const kind = nameKindFor(m[2], ctx);
-          if (kind === null) return false;
-          const window = xmlWindow(m.input, m.index);
-          ctx.pairBudget = (ctx.pairBudget ?? PAIR_BUDGET_CHARS) - (window?.text.length ?? 0) - 64;
-          if (ctx.pairBudget < 0) {
-            ctx.pairExhausted = true;
-            attributeToFile(m);
-            return true;
-          }
-          const found = window === null ? null : windowHoldsSecretValue(window, kind, ctx, false, m.input);
-          return found !== null && pairHit(m, window, found, ctx);
+          return kind !== null && xmlPairIsSecret(m, kind, ctx);
         },
       },
       {
@@ -3950,6 +4291,27 @@ export const RULES = [
         accept: (m, ctx) => directiveContextOk(m, ctx) && (m[2] ?? '').toLowerCase() !== 'digest' && httpCredentialIsSecret(m[2], m[3]),
       },
       {
+        // A header written as a name/value pair, the value in another field: <add key="Authorization" value="Bearer T"/> (.NET, Spring, Camel),
+        // {"name":"Authorization","value":"Bearer T"} (Postman, HAR, OpenAPI), `- name: Authorization` above `value: Bearer T` (Kubernetes,
+        // GitHub Actions, Helm), `header = "Authorization"` / `value = "Bearer T"`. The value is searched for in the same bounded
+        // object, YAML mapping or XML entry as for any secret-like name (see pairValueIsSecret).
+        hint: /authorization/i,
+        pattern:
+          /(?<![A-Za-z0-9_$.-])(\\?["']?)(?:name|key|header|headername|header_name|header-name|field|fieldname)\1[ \t]*[:=][ \t]*(\\?["']?)((?:[A-Za-z]{1,20}-)?authorization)\2(?![A-Za-z0-9_.-])/gi,
+        accept: (m, ctx) => {
+          if (ctx.mode === 'code' && m[2] === '') return false; // a bare identifier in source code is not a header name
+          return pairValueIsSecret(m, AUTHORIZATION_KIND, ctx);
+        },
+      },
+      {
+        // The same header in XML elements: <header><name>Authorization</name><value>Bearer T</value></header>, a plist
+        // <key>Authorization</key><string>Bearer T</string>, with or without a namespace prefix.
+        hint: /authorization/i,
+        pattern: /<((?:[A-Za-z_][A-Za-z0-9_.-]{0,32}:)?(?:name|key|header|headername))>[ \t\r\n]*((?:[A-Za-z]{1,20}-)?authorization)[ \t\r\n]*<\/\1>/gi,
+        appliesTo: (ctx) => ctx.xml,
+        accept: (m, ctx) => xmlPairIsSecret(m, AUTHORIZATION_KIND, ctx),
+      },
+      {
         // Authorization: Digest username="u", realm="r", nonce="n", uri="/", response="<hash>"  (the response is replayable within its nonce)
         pattern: new RegExp(HTTP_AUTH_NAME + HTTP_AUTH_SEPARATOR + String.raw`["'\x60]?digest[ \t][^\n]{0,600}?\bresponse=\\?["']?([A-Za-z0-9+/=_-]{16,256})`, 'gi'),
         accept: (m) => !isPlaceholder(m[1]) && looksRandom(m[1], { minLength: 16, minEntropy: 3.0 }),
@@ -3962,9 +4324,17 @@ export const RULES = [
         // "double" or `backtick`, escapes honoured, spaces allowed: a passphrase), is read by quotedArgument, one forward scan with no
         // backtracking, so no regex has to tell a quote that closes the string from one inside it.
         pattern:
-          /(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}(?=["'\x60])/g,
-        accept: (m) => {
-          const argument = quotedArgument(m.input, m.index + m[0].length);
+          /(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}(?=[@$rRbBfFuUL#]{0,3}["'\x60])/g,
+        accept: (m, ctx) => {
+          const start = m.index + m[0].length;
+          if (!'"\'`'.includes(m.input[start])) {
+            // a prefixed or raw literal (r"pw", @"pw", r#"pw"#): read as a whole literal
+            const literal = callStringLiteral(m.input, start, ctx.path);
+            if (literal === null || literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
+            m.spanEnd = literal.end;
+            return isSecretValue({ kind: 'strong', value: literal.text, quoted: true, separator: '=', mode: 'config' });
+          }
+          const argument = quotedArgument(m.input, start);
           if (argument === null || argument.raw.length === 0) return false;
           m.spanEnd = argument.end;
           return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config' });
@@ -4078,13 +4448,12 @@ export const RULES = [
         accept: (m) => directiveIsSecret({ text: m[1].trim(), quoted: false }),
       },
       {
-        // echo 'user:P' | chpasswd, chpasswd <<< "user:P": the password of a user account set from a script (a Dockerfile RUN line)
-        hint: /chpasswd/,
-        pattern: /(?:(?:echo|printf)[ \t]+(?:-[A-Za-z]+[ \t]+)*["']?[A-Za-z_][A-Za-z0-9_.-]{0,63}:([^\s"'|;&]{1,1024})["']?[ \t]*\|[ \t]*(?:sudo[ \t]+)?chpasswd|chpasswd[ \t]*<<<[ \t]*["']?[A-Za-z_][A-Za-z0-9_.-]{0,63}:([^\s"'|;&]{1,1024}))/g,
-        accept: (m) => {
-          const password = m[1] ?? m[2];
-          return !/^\$/.test(password) && directiveIsSecret({ text: password, quoted: false });
-        },
+        // Account passwords set from a script through standard input, the text read as whole shell words (single, double, $'...' and
+        // escaped-space quoting, so a passphrase counts). Sources: a pipe from echo or printf, a here-string, a heredoc; consumers: chpasswd
+        // (user:password per line, plain or -e hash), passwd (--stdin, or the password typed twice) and smbpasswd -s.
+        hint: /passwd/,
+        pattern: /(?<![A-Za-z0-9_./-])(?:chpasswd|passwd|smbpasswd)(?![A-Za-z0-9_.-])[^\n]{0,600}/g,
+        accept: (m, ctx) => accountPasswordFromStdin(m, ctx),
       },
     ],
   },
