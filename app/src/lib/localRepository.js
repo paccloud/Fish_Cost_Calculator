@@ -38,6 +38,18 @@ function now() {
   return new Date().toISOString();
 }
 
+// Compares by value: the server sends yield as a decimal string ("48.00"), and a record made on
+// this device may leave out fields the server fills in (source, is_shared).
+function sameYieldValues(a, b) {
+  return (
+    a.species === b.species &&
+    a.product === b.product &&
+    Number(a.yield) === Number(b.yield) &&
+    (a.source || 'User Input') === (b.source || 'User Input') &&
+    Boolean(a.is_shared) === Boolean(b.is_shared)
+  );
+}
+
 function makeRecord(data, scope) {
   const ts = now();
   return {
@@ -485,13 +497,19 @@ class LocalRepository {
     });
   }
 
-  async markYieldSynced(id, serverId, serverRevision) {
+  // `pushed` is the record as it was sent. If it was edited or deleted again while the request was
+  // out, only the server ids are taken and the newer change stays queued for the next push.
+  async markYieldSynced(id, serverId, serverRevision, pushed) {
     const key = idbKey(this._scope, 'yields');
     return this._withLock(key, async () => {
       const all = (await this._get(key)) || [];
       const idx = all.findIndex((y) => y.id === id);
       if (idx === -1) return;
-      all[idx] = { ...all[idx], syncStatus: 'synced', serverId, serverRevision, updatedAt: now() };
+      const rec = all[idx];
+      const changedSince = pushed && (rec.syncStatus !== pushed.syncStatus || !sameYieldValues(rec, pushed));
+      all[idx] = changedSince
+        ? { ...rec, serverId, serverRevision }
+        : { ...rec, syncStatus: 'synced', serverId, serverRevision, updatedAt: now() };
       await this._set(key, all);
     });
   }
@@ -515,16 +533,19 @@ class LocalRepository {
       );
 
       for (const sy of serverYields) {
+        const server = {
+          species: sy.species,
+          product: sy.product,
+          yield: sy.yield,
+          source: sy.source || 'User Input',
+          is_shared: sy.is_shared ?? false,
+        };
         const localId = byServerId.get(String(sy.id));
         if (!localId) {
           // New from server — insert as synced.
           const ts = now();
           all.push({
-            species: sy.species,
-            product: sy.product,
-            yield: sy.yield,
-            source: sy.source || 'User Input',
-            is_shared: sy.is_shared ?? false,
+            ...server,
             id: crypto.randomUUID(),
             scope: this._scope,
             serverId: sy.id,
@@ -544,21 +565,28 @@ class LocalRepository {
         if (rec.syncStatus === 'conflicted' || rec.syncStatus === 'conflict-delete') {
           all[idx] = {
             ...rec,
-            conflictServer: {
-              serverId: sy.id,
-              serverRevision: sy.revision,
-              species: sy.species,
-              product: sy.product,
-              yield: sy.yield,
-              source: sy.source || 'User Input',
-              is_shared: sy.is_shared ?? false,
-            },
+            conflictServer: { serverId: sy.id, serverRevision: sy.revision, ...server },
           };
+        } else if (rec.syncStatus === 'synced') {
+          if (!sameYieldValues(rec, server)) {
+            // Edited on another device: a synced record is a copy of the server's, so take its version.
+            all[idx] = { ...rec, ...server, serverRevision: sy.revision, updatedAt: now() };
+          } else if (sy.revision != null && rec.serverRevision !== sy.revision) {
+            // Same values at a newer revision: track it, or the next local edit is a false conflict.
+            all[idx] = { ...rec, serverRevision: sy.revision };
+          }
         }
-        // pending-delete, local, synced: no change needed
+        // pending-delete, local: the local change is still to be pushed, so keep it
       }
 
-      await this._set(key, all);
+      // A synced record the server no longer lists was deleted on another device. Records with
+      // local changes (local, pending-delete, conflicts) stay for the push and conflict flows.
+      const onServer = new Set(serverYields.map((sy) => String(sy.id)));
+      const kept = all.filter(
+        (y) => !(y.syncStatus === 'synced' && y.serverId != null && !onServer.has(String(y.serverId)))
+      );
+
+      await this._set(key, kept);
     });
   }
 

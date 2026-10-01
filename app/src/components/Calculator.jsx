@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { Calculator as CalcIcon, Save, HelpCircle, Download, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 import { isAppReadOnly } from '../config/move';
 import { calculate } from '../lib/calcEngine';
 import { parseAmount } from '../lib/numberInput';
 import { withConversionStates, hasUsableConversions, parseYieldPercent } from '../lib/fishDataShape';
+import { mergeFishData } from '../lib/fishDataMerge';
 
 /**
  * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
@@ -230,9 +232,12 @@ const StepHeading = ({ number, children, id }) => (
 );
 
 const TO_LIMIT = 6;
+const NO_YIELDS = [];
 
 const Calculator = () => {
   const { user, getAuthHeaders } = useAuth();
+  // Custom yields kept on this device and synced when there is signal, so they work offline too
+  const { customYields, refreshCustomYields } = useData();
   const [mode, setMode] = useState('cost');
   const [targetWeight, setTargetWeight] = useState('');
   const [species, setSpecies] = useState('');
@@ -250,7 +255,6 @@ const Calculator = () => {
   const [announcement, setAnnouncement] = useState('');
   const dockRef = useRef(null);
 
-  const [customData, setCustomData] = useState({});
   const [_history, setHistory] = useState([]);
   const [publicHistory, setPublicHistory] = useState([]);
 
@@ -280,24 +284,6 @@ const Calculator = () => {
   useEffect(() => {
     if (user) {
       getAuthHeaders().then(headers => {
-        fetch(apiUrl('/api/user-data'), { headers })
-          .then(res => res.json())
-          .then(data => {
-            if (Array.isArray(data)) {
-              const mapped = {};
-              data.forEach(item => {
-                if (!mapped[item.species]) mapped[item.species] = { conversions: {} };
-                mapped[item.species].conversions[`Custom: ${item.product}`] = {
-                  yield: parseFloat(item.yield),
-                  from: 'Custom',
-                  to: item.product
-                };
-              });
-              setCustomData(mapped);
-            }
-          })
-          .catch(() => {});
-
         fetch(apiUrl('/api/saved-calcs'), { headers })
           .then(res => res.json())
           .then(data => setHistory(data))
@@ -305,19 +291,19 @@ const Calculator = () => {
       });
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCustomData({});
       setHistory([]);
     }
   }, [user, getAuthHeaders]);
 
-  const combinedData = useMemo(() => {
-    const merged = { ...fishData };
-    Object.keys(customData).forEach(sp => {
-      if (!merged[sp]) merged[sp] = customData[sp];
-      else merged[sp] = { ...merged[sp], conversions: { ...merged[sp].conversions, ...customData[sp].conversions } };
-    });
-    return merged;
-  }, [fishData, customData]);
+  // The provider pulls once when it loads; opening the calculator again pulls too, so a yield
+  // edited on another device shows up here as it did when this page fetched its own copy
+  useEffect(() => {
+    refreshCustomYields();
+  }, [refreshCustomYields]);
+
+  // Only a signed-in person's own yields: the guest scope can hold records no one here owns
+  const myYields = user ? customYields : NO_YIELDS;
+  const combinedData = useMemo(() => mergeFishData(fishData, myYields), [fishData, myYields]);
 
   const speciesList = Object.keys(combinedData).sort();
 
@@ -343,6 +329,19 @@ const Calculator = () => {
       conv => conv.from === fromState && conv.to === toState
     );
   }, [species, fromState, toState, combinedData]);
+
+  // When a sync changes the chosen conversion (edited or deleted on another device), follow it,
+  // unless the yield was typed in by hand
+  const conversionYield = currentConversion ? String(currentConversion.yield) : null;
+  const [followedYield, setFollowedYield] = useState(conversionYield);
+  if (conversionYield !== followedYield) {
+    setFollowedYield(conversionYield);
+    if (conversionYield === null && toState) {
+      setToState(''); setYieldPercent('');
+    } else if (conversionYield !== null && yieldPercent === followedYield) {
+      setYieldPercent(conversionYield);
+    }
+  }
 
   const profile = species ? profilesData[species] : null;
   const scientificName = species && combinedData[species] ? combinedData[species].scientific_name : null;
