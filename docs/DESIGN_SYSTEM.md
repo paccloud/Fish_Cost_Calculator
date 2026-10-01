@@ -54,7 +54,9 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
 - **Works with no signal.** The calculator starts from the bundled reference yields
   (`FISH_DATA_V3`, given `from`/`to` by `app/src/lib/fishDataShape.js`) and the service worker serves
   the app, so it works on a boat with no connection. `/api/fish-data` replaces that data only when it
-  sends usable yields, and what is already picked stays picked.
+  sends usable yields, and what is already picked stays picked. A signed-in person's custom yields come
+  from the copy `DataContext` keeps on the device (merged by `app/src/lib/fishDataMerge.js`), which the
+  sync refreshes when there is signal, so they work offline too.
 - **Nothing hides behind the bar.** The calculator sets the page's `scroll-padding-bottom` to the bar's
   height, so whatever you Tab to scrolls into view above it (WCAG 2.4.11).
 
@@ -74,6 +76,3 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
   and the font link in `index.html`.
 - **Unused components** `Footer.jsx` and `InstallPrompt.jsx` are not rendered anywhere and use tokens
   that no longer exist (`bg-navy`, `text-teal`, `bg-rust`). Restyle before wiring them in, or delete.
-- **Your own yields offline.** The calculator reads a signed-in user's custom yields only from
-  `/api/user-data`, not from the copy `DataContext` keeps on the device, so they are missing offline
-  (the reference yields still work).

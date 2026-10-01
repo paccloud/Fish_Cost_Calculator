@@ -38,6 +38,18 @@ function now() {
   return new Date().toISOString();
 }
 
+// Compares by value: the server sends yield as a decimal string ("48.00") and may include
+// fields a record made on this device never set (is_shared).
+function sameYieldValues(local, server) {
+  return (
+    local.species === server.species &&
+    local.product === server.product &&
+    Number(local.yield) === Number(server.yield) &&
+    (local.source || 'User Input') === server.source &&
+    Boolean(local.is_shared) === Boolean(server.is_shared)
+  );
+}
+
 function makeRecord(data, scope) {
   const ts = now();
   return {
@@ -515,16 +527,19 @@ class LocalRepository {
       );
 
       for (const sy of serverYields) {
+        const server = {
+          species: sy.species,
+          product: sy.product,
+          yield: sy.yield,
+          source: sy.source || 'User Input',
+          is_shared: sy.is_shared ?? false,
+        };
         const localId = byServerId.get(String(sy.id));
         if (!localId) {
           // New from server — insert as synced.
           const ts = now();
           all.push({
-            species: sy.species,
-            product: sy.product,
-            yield: sy.yield,
-            source: sy.source || 'User Input',
-            is_shared: sy.is_shared ?? false,
+            ...server,
             id: crypto.randomUUID(),
             scope: this._scope,
             serverId: sy.id,
@@ -544,21 +559,23 @@ class LocalRepository {
         if (rec.syncStatus === 'conflicted' || rec.syncStatus === 'conflict-delete') {
           all[idx] = {
             ...rec,
-            conflictServer: {
-              serverId: sy.id,
-              serverRevision: sy.revision,
-              species: sy.species,
-              product: sy.product,
-              yield: sy.yield,
-              source: sy.source || 'User Input',
-              is_shared: sy.is_shared ?? false,
-            },
+            conflictServer: { serverId: sy.id, serverRevision: sy.revision, ...server },
           };
+        } else if (rec.syncStatus === 'synced' && !sameYieldValues(rec, server)) {
+          // Edited on another device: a synced record is a copy of the server's, so take its version.
+          all[idx] = { ...rec, ...server, serverRevision: sy.revision, updatedAt: now() };
         }
-        // pending-delete, local, synced: no change needed
+        // pending-delete, local: the local change is still to be pushed, so keep it
       }
 
-      await this._set(key, all);
+      // A synced record the server no longer lists was deleted on another device. Records with
+      // local changes (local, pending-delete, conflicts) stay for the push and conflict flows.
+      const onServer = new Set(serverYields.map((sy) => String(sy.id)));
+      const kept = all.filter(
+        (y) => !(y.syncStatus === 'synced' && y.serverId != null && !onServer.has(String(y.serverId)))
+      );
+
+      await this._set(key, kept);
     });
   }
 
