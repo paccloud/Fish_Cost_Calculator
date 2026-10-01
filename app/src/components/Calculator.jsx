@@ -5,6 +5,7 @@ import { Calculator as CalcIcon, Save, HelpCircle, Download, ChevronDown } from 
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
+import { isAppReadOnly } from '../config/move';
 import { calculate } from '../lib/calcEngine';
 import { parseAmount } from '../lib/numberInput';
 import { withConversionStates, hasUsableConversions, parseYieldPercent } from '../lib/fishDataShape';
@@ -405,7 +406,7 @@ const Calculator = () => {
   }, []);
 
   const handleSave = async () => {
-    if (!user || result === null) return;
+    if (!user || result === null || isAppReadOnly) return;
     const key = inputsKey;
     try {
       const headers = await getAuthHeaders('application/json');
@@ -732,7 +733,7 @@ const Calculator = () => {
       {result !== null && (
         user ? (
           <section className="card flex flex-wrap items-center gap-x-2 gap-y-2 p-5" aria-label="Keep this result">
-            <button type="button" onClick={handleSave} className="btn-secondary">
+            <button type="button" onClick={handleSave} disabled={isAppReadOnly} className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50">
               <Save size={18} aria-hidden="true" /> Save calculation
             </button>
             <button type="button" onClick={handleExport} className="btn-ghost">
