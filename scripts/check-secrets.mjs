@@ -1081,6 +1081,47 @@ function isSecondArgument(prefix) {
   return depth === 0;
 }
 
+/** `signWith(Keys.hmacShaKeyFor(` ... : does the text before the literal stay inside the call (never closes more than it opens)? */
+function opensWithinCall(prefix) {
+  let depth = 0;
+  for (const ch of prefix) {
+    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
+    else if (ch === ')' || ch === ']' || ch === '}') depth -= 1;
+    if (depth < 0) return false;
+  }
+  return true;
+}
+
+/**
+ * A literal handed to a signing or HMAC call as its key. The key is never prose, so a passphrase (several words) is judged like a
+ * quoted value under a strong name (documentation about the key and placeholders pass); one word must look random.
+ */
+function signingKeyIsSecret(raw) {
+  const text = raw.trim();
+  if (text === '' || text.includes('${') || isPlaceholder(text.length > 512 ? text.slice(0, 256) + text.slice(-256) : text)) return false;
+  if (/\s/.test(text)) return isPhraseSecret({ kind: 'strong', text });
+  return looksRandom(text, GATES.codeStrong);
+}
+
+// The calls whose options object carries a signing key under `secret` / `secretOrKey`: express-session, cookie-session, express-jwt,
+// koa-jwt, passport-jwt. The object must open right after the call's parenthesis: session({ secret: "..." }).
+const SIGNING_OPTIONS_CALL = /(?:^|[^A-Za-z0-9_$])(?:new[ \t]{1,8})?(?:session|expressSession|cookieSession|expressjwt|expressJwt|jwt|koaJwt|JwtStrategy)\([ \t\r\n]{0,64}$/;
+
+/** Is the `secret:` key at `index` inside an options object passed straight to one of SIGNING_OPTIONS_CALL? Looks back at most 600 characters. */
+function inSigningOptions(input, index) {
+  const before = input.slice(Math.max(0, index - 600), index);
+  let depth = 0;
+  let brace = before.length - 1;
+  for (; brace >= 0; brace -= 1) {
+    if (before[brace] === '}') depth += 1;
+    else if (before[brace] === '{') {
+      if (depth === 0) break;
+      depth -= 1;
+    }
+  }
+  return brace >= 0 && SIGNING_OPTIONS_CALL.test(before.slice(Math.max(0, brace - 100), brace));
+}
+
 // The text of the match's own line, bounded to 200 characters before and 400 after so a huge single line stays cheap.
 function nearbyLineText(m) {
   const before = m.input.slice(Math.max(0, m.index - 200), m.index);
@@ -2341,6 +2382,18 @@ function powershellValueIsSecret(kind, literal, ctx) {
   return isSecretValue({ kind, value: literal.text, quoted: true, separator: '=', mode: 'config', minLength: ctx.minStrong, catalog: ctx.catalog });
 }
 
+/**
+ * A PowerShell here-string (@' ... '@ or @" ... "@) at `start` as the value of an environment variable, read by the shared multi-line
+ * reader: each body line and the joined body are candidates. One that does not close within the bounds is reported (fail closed).
+ */
+function powershellHereStringIsSecret(m, kind, ctx, start) {
+  const read = multilineValue(ctx, m.input, start);
+  if (read === null) return false;
+  m.spanEnd = read.end;
+  if (read.exhausted) return exhaustedVerdict(m, ctx, read);
+  return read.values.some((text) => powershellValueIsSecret(kind, { text }, ctx));
+}
+
 // Function-call forms that set an environment variable or a system property to a literal:
 //   C# / .NET  Environment.SetEnvironmentVariable("NAME", "v"[, EnvironmentVariableTarget.Machine])   Win32  SetEnvironmentVariableW(L"NAME", L"v")
 //   Go         os.Setenv("NAME", "v")           Python  os.putenv("NAME", "v"), os.environ.setdefault("NAME", "v")
@@ -2563,6 +2616,18 @@ function callStringLiteral(input, start, filePath = '') {
   const body = input.slice(i + 1, j);
   const end = j + 1 + hashes;
   return { text: verbatim ? body.split(quote + quote).join(quote) : body.replace(/\\([\s\S])/g, '$1'), end, interpolated };
+}
+
+// Python string prefixes, case-insensitive: r b u f, and the pairs rb br fr rf (lower-cased here).
+const PYTHON_STRING_PREFIXES = new Set(['r', 'b', 'u', 'f', 'rb', 'br', 'fr', 'rf']);
+
+/** Length of a Python string prefix (r, b, rb, f, u, ...) at `start` that a quote follows directly, or 0. Reads at most three characters. */
+function stringPrefixLength(input, start) {
+  for (let length = 1; length <= 2; length += 1) {
+    const next = input[start + length];
+    if (next === '"' || next === "'") return PYTHON_STRING_PREFIXES.has(input.slice(start, start + length).toLowerCase()) ? length : 0;
+  }
+  return 0;
 }
 
 /** fish `set` flags that read or remove a variable instead of assigning it (-e -q -S -n -h and their long forms). */
@@ -3353,6 +3418,34 @@ const SECRET_ASSIGNMENT_MATCHER = {
         );
       }
     }
+    // Outside source code a Python string prefix (r"..", b'..', rb"..", f"..", u"..") in a snippet or a fenced block is not the value:
+    // the quoted body after it is (otherwise the bare word `r"big` would be judged instead of the whole passphrase).
+    const prefixLength = ctx.mode === 'code' ? 0 : stringPrefixLength(input, valueStart);
+    if (prefixLength > 0) {
+      const prefix = input.slice(valueStart, valueStart + prefixLength);
+      const formatted = /[fF]/.test(prefix);
+      valueStart += prefixLength;
+      const prefixed = multilineValue(ctx, input, valueStart);
+      if (prefixed !== null) {
+        m.spanEnd = prefixed.end;
+        if (prefixed.exhausted) return exhaustedVerdict(m, ctx, prefixed);
+        return prefixed.values.some(
+          (text) =>
+            !(formatted && /[{}]/.test(text)) &&
+            isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
+        );
+      }
+      VALUE_AT.lastIndex = valueStart;
+      const body = VALUE_AT.exec(input);
+      const text = body?.[1] ?? body?.[2];
+      if (text !== undefined) {
+        m.spanEnd = valueStart + body[0].length;
+        if (formatted && /[{}]/.test(text)) return false; // an f-string is built from other values
+        const literal = /[rR]/.test(prefix) ? text : unescapeQuoted(text);
+        return isSecretValue({ kind, value: literal, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
+      }
+      valueStart -= prefixLength; // not a closed string on this line: read the word as it stands
+    }
     // Assignments nested in one whitespace-free run (`a=b=c=...`) all share its tail. The first value gets the
     // full length; nested ones are judged on their first 64 characters, which keeps a hostile run linear.
     const nested = valueStart < (ctx.bareRunEnd ?? 0);
@@ -3906,10 +3999,11 @@ export const RULES = [
       {
         // PowerShell: $env:NAME = 'value', ${env:NAME} += "value"
         hint: /env:/i,
-        pattern: /\$\{?env:([A-Za-z_][A-Za-z0-9_.-]{0,255})\}?[ \t]{0,64}\+?=[ \t]{0,64}(?=["'])/gi,
+        pattern: /\$\{?env:([A-Za-z_][A-Za-z0-9_.-]{0,255})\}?[ \t]{0,64}\+?=[ \t]{0,64}(?=["'@])/gi,
         accept: (m, ctx) => {
           const kind = nameKindFor(m[1], ctx);
           if (!kind || !commandContextOk(m, ctx, true)) return false;
+          if (m.input[m.index + m[0].length] === '@') return powershellHereStringIsSecret(m, kind, ctx, m.index + m[0].length);
           const literal = powershellString(m.input, m.index + m[0].length);
           if (literal !== null) m.spanEnd = literal.end;
           return powershellValueIsSecret(kind, literal, ctx);
@@ -3918,10 +4012,11 @@ export const RULES = [
       {
         // PowerShell / .NET: [Environment]::SetEnvironmentVariable('NAME', 'value'[, 'User'])
         hint: /SetEnvironmentVariable/i,
-        pattern: /\[(?:System\.)?Environment\][ \t]{0,64}::[ \t]{0,64}SetEnvironmentVariable\([ \t]{0,64}(["'])([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,64},[ \t]{0,64}(?=["'])/gi,
+        pattern: /\[(?:System\.)?Environment\][ \t]{0,64}::[ \t]{0,64}SetEnvironmentVariable\([ \t]{0,64}(["'])([A-Za-z_][A-Za-z0-9_.-]{0,255})\1[ \t]{0,64},[ \t]{0,64}(?=["'@])/gi,
         accept: (m, ctx) => {
           const kind = nameKindFor(m[2], ctx);
           if (!kind || !commandContextOk(m, ctx, true)) return false;
+          if (m.input[m.index + m[0].length] === '@') return powershellHereStringIsSecret(m, kind, ctx, m.index + m[0].length);
           const literal = powershellString(m.input, m.index + m[0].length);
           if (literal !== null) m.spanEnd = literal.end;
           return powershellValueIsSecret(kind, literal, ctx);
@@ -4459,13 +4554,45 @@ export const RULES = [
   },
   {
     id: 'hardcoded-signing-key',
-    description: 'jwt.sign / jwt.verify called with a random-looking string literal as the key',
+    description:
+      'Signing / HMAC key written as a string literal (random-looking, or a passphrase): jwt.sign / jwt.verify, jwt.encode / JWT.encode, Jwts signWith, SecretKeySpec, HMAC, createHmac, express-session / express-jwt { secret }, cookieParser',
     appliesTo: (ctx) => ctx.mode === 'code',
-    hint: /\b(?:sign|verify)\b/,
+    hint: /\b(?:sign|verify|encode|decode|signWith|setSigningKey|verifyWith|SecretKeySpec|createHmac|HMAC|cookieParser|secret(?:OrKey|OrPrivateKey)?)\b|hmac\.new/,
     matchers: [
       {
-        pattern: /\b(?:jwt|jsonwebtoken|jws)\.(?:sign|verify)\(([^;]{0,300}?),[ \t]*(["'`])([^"'`\n]{8,4096})\2/g,
-        accept: (m) => isSecondArgument(m[1]) && looksRandom(m[3], GATES.codeStrong),
+        // jwt.sign(payload, "KEY"), jwt.verify(token, "KEY"), Python jwt.encode(payload, "KEY") / jwt.decode(token, key="KEY"), Ruby JWT.encode(payload, "KEY")
+        pattern: /\b(?:jwt|jsonwebtoken|jws|JWT)\.(?:sign|verify|encode|decode)\(([^;]{0,300}?),[ \t]*(?:key[ \t]{0,4}=[ \t]{0,4})?(["'`])([^"'`\n]{8,4096})\2/g,
+        accept: (m) => isSecondArgument(m[1]) && signingKeyIsSecret(m[3]),
+      },
+      {
+        // Java JJWT: Jwts.builder().signWith(SignatureAlgorithm.HS256, "KEY"), Jwts.parser().setSigningKey("KEY"), signWith(Keys.hmacShaKeyFor("KEY".getBytes()))
+        pattern: /\.(?:signWith|setSigningKey|verifyWith)\(([^;"'`\n]{0,200}?)(["'])([^"'\n]{1,4096})\2/g,
+        accept: (m) => opensWithinCall(m[1]) && signingKeyIsSecret(m[3]),
+      },
+      {
+        // Java / Kotlin: new SecretKeySpec("KEY".getBytes(), "HmacSHA256")
+        pattern: /\bSecretKeySpec\([ \t]{0,64}(["'])([^"'\n]{1,4096})\1/g,
+        accept: (m) => signingKeyIsSecret(m[2]),
+      },
+      {
+        // Python: hmac.new(b"KEY", msg, ...), HMAC(key="KEY"), hmac.HMAC(b"KEY", ...)
+        pattern: /(?:\bhmac\.new|(?<![A-Za-z0-9_$])HMAC)\([ \t]{0,64}(?:key[ \t]{0,4}=[ \t]{0,4})?[bBrRuU]{0,2}(["'])([^"'\n]{1,4096})\1/g,
+        accept: (m) => signingKeyIsSecret(m[2]),
+      },
+      {
+        // Node: crypto.createHmac('sha256', "KEY")
+        pattern: /\bcreateHmac\([ \t]{0,64}(["'])[A-Za-z0-9-]{1,32}\1[ \t]{0,64},[ \t]{0,64}(["'`])([^"'`\n]{1,4096})\2/g,
+        accept: (m) => signingKeyIsSecret(m[3]),
+      },
+      {
+        // cookie-parser: cookieParser("KEY")
+        pattern: /\bcookieParser\([ \t]{0,64}(["'`])([^"'`\n]{1,4096})\1/g,
+        accept: (m) => signingKeyIsSecret(m[2]),
+      },
+      {
+        // express-session / cookie-session / express-jwt / koa-jwt / passport-jwt options: session({ secret: "KEY" }), new JwtStrategy({ secretOrKey: "KEY" }, ...)
+        pattern: /(?<![A-Za-z0-9_$])(["']?)(?:secret|secretOrKey|secretOrPrivateKey)\1[ \t]{0,16}:[ \t]{0,16}(["'`])([^"'`\n]{1,4096})\2/g,
+        accept: (m) => inSigningOptions(m.input, m.index) && signingKeyIsSecret(m[3]),
       },
     ],
   },
