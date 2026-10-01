@@ -712,6 +712,15 @@ const SECRET_CASES = (() => {
       secret: dbPassword,
       text: `{"packages":{"node_modules/x":{"resolved":"https://${dbPassword}@registry.internal/x/-/x-1.0.0.tgz"}}}\n`,
     },
+    {
+      name: 'private EC JSON Web Key (d member)',
+      rule: 'private-jwk',
+      path: 'config/jwk.json',
+      secret: randomString(43, 1201, B64URL),
+      get text() {
+        return `{"kty":"EC","crv":"P-256","x":"${randomString(43, 1202, B64URL)}","y":"${randomString(43, 1203, B64URL)}",\n "d":"${this.secret}"}\n`;
+      },
+    },
     ...PROVIDER_TOKENS.map(([rule, label, build, secretPart], index) => {
       const token = build();
       return { name: `provider token: ${label}`, rule, path: index % 2 ? 'notes/findings.md' : 'src/data.json', secret: secretPart ? secretPart(token) : token, text: `${index % 2 ? 'see ' : '{"note":"'}${token}${index % 2 ? '' : '"}'}\n` };
