@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
  *   isAuthenticated {bool}  whether a user is signed in
  *   assigning    {bool}     assignment in progress
  *   onAssign     {Function} copy recovery records into active account scope
- *   onDiscard    {Function} permanently remove recovery records
+ *   onDiscard    {Function} permanently remove recovery records; omit to hide Discard
  *   onLater      {Function} dismiss modal without any action
  */
 export default function RecoveryModal({ calcs, yields, isAuthenticated, assigning, onAssign, onDiscard, onLater }) {
@@ -60,14 +60,16 @@ export default function RecoveryModal({ calcs, yields, isAuthenticated, assignin
               >
                 Review later
               </button>
-              <button
-                onClick={onDiscard}
-                disabled={assigning}
-                className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <Trash2 size={14} />
-                Discard
-              </button>
+              {onDiscard && (
+                <button
+                  onClick={onDiscard}
+                  disabled={assigning}
+                  className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  Discard
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -90,13 +92,15 @@ export default function RecoveryModal({ calcs, yields, isAuthenticated, assignin
               >
                 Later
               </button>
-              <button
-                onClick={onDiscard}
-                className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5"
-              >
-                <Trash2 size={14} />
-                Discard
-              </button>
+              {onDiscard && (
+                <button
+                  onClick={onDiscard}
+                  className="px-4 py-2 text-sm font-medium text-danger hover:underline border border-line rounded transition flex items-center gap-1.5"
+                >
+                  <Trash2 size={14} />
+                  Discard
+                </button>
+              )}
             </div>
           </div>
         )}

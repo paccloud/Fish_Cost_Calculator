@@ -5,7 +5,7 @@ import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
 import { useAuth } from './AuthContext';
 import { detectGuestRecords, adoptGuestRecords } from '../lib/guestAdoption';
-import { migrateLegacyRecords, getRecoveryCounts, assignRecoveryToAccount, discardRecovery } from '../lib/legacyMigration';
+import { migrateLegacyRecords, getRecoveryCounts, assignRecoveryToAccount, discardRecovery, recoveryScope } from '../lib/legacyMigration';
 import GuestAdoptionModal from '../components/GuestAdoptionModal';
 import SignOutGuardModal from '../components/SignOutGuardModal';
 import ConflictResolutionModal from '../components/ConflictResolutionModal';
@@ -13,6 +13,8 @@ import PreviewPublishModal from '../components/PreviewPublishModal';
 import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
+import { isAppReadOnly, isMoveNoticeOn } from '../config/move';
+import { buildUnsentChangesFile, countUnsentChanges, downloadUnsentChanges } from '../lib/unsentChanges';
 
 const DataContext = createContext(null);
 
@@ -254,6 +256,7 @@ export function DataProvider({ children }) {
   }, [uid, reloadFromRepo, triggerSync]);
 
   const handleRecoveryDiscard = useCallback(async () => {
+    if (isAppReadOnly) return;
     try { await discardRecovery(); } catch { /* best-effort */ }
     setRecoveryCounts(null);
   }, []);
@@ -269,19 +272,22 @@ export function DataProvider({ children }) {
   const signOut = useCallback(async () => {
     if (!uid) { await logout(); return; }
     let pending;
+    let conflicts;
     try {
-      pending = await repo.getPendingSync();
+      [pending, conflicts] = await Promise.all([repo.getPendingSync(), repo.getConflictedYields()]);
     } catch {
       // IndexedDB unavailable — sign out directly rather than leaving the user stuck.
       await logout();
       return;
     }
     const { calcs, yields } = pending;
-    if (calcs.length === 0 && yields.length === 0) {
+    // Conflicted yields haven't reached the server either.
+    const unsentYields = yields.length + conflicts.length;
+    if (calcs.length === 0 && unsentYields === 0) {
       try { await repo.clearSyncedCache(); } catch { /* best-effort */ }
       await logout();
     } else {
-      setSignOutGuardState({ calcs: calcs.length, yields: yields.length });
+      setSignOutGuardState({ calcs: calcs.length, yields: unsentYields });
     }
   }, [uid, repo, logout]);
 
@@ -300,6 +306,8 @@ export function DataProvider({ children }) {
   }, [repo, logout]);
 
   const handleSignOutDiscard = useCallback(async () => {
+    // Read-only for the move: unsent records are kept for the file export, never discarded.
+    if (isAppReadOnly) return;
     signingOutRef.current = true;
     clearTimeout(syncTimeoutRef.current);
     try {
@@ -385,6 +393,7 @@ export function DataProvider({ children }) {
 
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
+    if (isAppReadOnly) return;
     setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
@@ -447,6 +456,7 @@ export function DataProvider({ children }) {
 
   // Called directly — no preview modal needed to make something private.
   const unpublishCalc = useCallback(async (calc) => {
+    if (isAppReadOnly) return;
     if (!calc?.serverId) return;
     const queueForRetry = async ({ sync = true } = {}) => {
       await repo.queueUnpublish(calc.id);
@@ -488,7 +498,10 @@ export function DataProvider({ children }) {
 
   // ---- Saved Calculations ----
 
+  // While the app is read-only for the move (issue #130), new edits are refused;
+  // changes already pending still sync.
   const saveCalc = useCallback(async (calc) => {
+    if (isAppReadOnly) return null;
     const newCalc = await repo.addCalc(calc);
     setSavedCalcs((prev) => [...prev, newCalc]);
     debouncedSync();
@@ -496,6 +509,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const removeCalc = useCallback(async (id) => {
+    if (isAppReadOnly) return;
     await repo.removeCalc(id);
     setSavedCalcs((prev) => prev.filter((c) => c.id !== id));
     debouncedSync();
@@ -504,6 +518,7 @@ export function DataProvider({ children }) {
   // ---- Custom Yields ----
 
   const addYield = useCallback(async (data) => {
+    if (isAppReadOnly) return null;
     const newYield = await repo.addYield(data);
     setCustomYields((prev) => [...prev, newYield]);
     debouncedSync();
@@ -511,6 +526,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const updateYield = useCallback(async (id, data) => {
+    if (isAppReadOnly) return null;
     const updated = await repo.updateYield(id, data);
     if (updated) {
       setCustomYields((prev) => prev.map((y) => (y.id === id ? updated : y)));
@@ -520,6 +536,7 @@ export function DataProvider({ children }) {
   }, [repo, debouncedSync]);
 
   const removeYield = useCallback(async (id) => {
+    if (isAppReadOnly) return;
     await repo.removeYield(id);
     setCustomYields((prev) => prev.filter((y) => y.id !== id));
     debouncedSync();
@@ -537,6 +554,70 @@ export function DataProvider({ children }) {
     await setSpeciesLocal(data);
     setCustomSpeciesState(data);
   }, []);
+
+  // ---- The move to Firebase (issue #130) ----
+
+  // Everything on this device that never reached the server: the signed-in
+  // user's pending changes, anything saved here as a guest, and legacy records
+  // waiting in the recovery scope (exported with the guest ones, as unowned).
+  const collectUnsentParts = useCallback(async () => {
+    const guestRepo = uid ? createRepository(guestScope()) : repo;
+    const recoveryRepo = createRepository(recoveryScope());
+    const [pending, accountConflicts, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
+      uid ? repo.getPendingSync() : { calcs: [], yields: [] },
+      uid ? repo.getConflictedYields() : [],
+      guestRepo.getCalcs(),
+      guestRepo.getYields(),
+      recoveryRepo.getCalcs(),
+      recoveryRepo.getYields(),
+    ]);
+    return {
+      accountCalcs: pending.calcs,
+      accountYields: pending.yields,
+      accountConflicts,
+      guestCalcs: [...guestCalcs, ...recoveryCalcs],
+      guestYields: [...guestYields, ...recoveryYields],
+    };
+  }, [uid, repo]);
+
+  const collectUnsentChanges = useCallback(
+    async () => buildUnsentChangesFile(await collectUnsentParts()),
+    [collectUnsentParts]
+  );
+
+  // Counted straight from IndexedDB: pendingCount only updates after a sync
+  // runs, so it stays at zero for changes made while offline.
+  const [unsentCount, setUnsentCount] = useState(0);
+  const [accountUnsentCount, setAccountUnsentCount] = useState(0);
+  useEffect(() => {
+    if (!isMoveNoticeOn || !dataLoaded) return;
+    let cancelled = false;
+    collectUnsentParts()
+      .then(({ accountCalcs, accountYields, accountConflicts, guestCalcs, guestYields }) => {
+        if (cancelled) return;
+        const account = countUnsentChanges(buildUnsentChangesFile({ accountCalcs, accountYields, accountConflicts }));
+        const guest = countUnsentChanges(buildUnsentChangesFile({ guestCalcs, guestYields }));
+        setAccountUnsentCount(account);
+        setUnsentCount(account + guest);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [collectUnsentParts, dataLoaded, pendingCount, savedCalcs, customYields, conflictedYields, recoveryCounts]);
+
+  const saveUnsentChanges = useCallback(async () => {
+    downloadUnsentChanges(await collectUnsentChanges());
+  }, [collectUnsentChanges]);
+
+  // Warn before leaving while changes have not reached the server yet.
+  useEffect(() => {
+    if (!isMoveNoticeOn || !uid || accountUnsentCount === 0) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [uid, accountUnsentCount]);
 
   // ---- Manual retry ----
 
@@ -574,6 +655,10 @@ export function DataProvider({ children }) {
     unpublishCalc,
     publishPreviewCalc,
     publishLoading,
+    readOnly: isAppReadOnly,
+    unsentCount,
+    accountUnsentCount,
+    saveUnsentChanges,
   };
 
   return (
@@ -593,11 +678,14 @@ export function DataProvider({ children }) {
           calcs={signOutGuardState.calcs}
           yields={signOutGuardState.yields}
           onKeep={handleSignOutKeep}
-          onDiscard={handleSignOutDiscard}
+          onDiscard={isAppReadOnly ? undefined : handleSignOutDiscard}
           onCancel={handleSignOutCancel}
         />
       )}
-      {conflictedYields.length > 0 && (
+      {/* Read-only for the move: resolving a conflict would change records the
+          server can no longer take, and the modal can't be closed, so skip it
+          and let the conflicts be saved to the unsent-changes file instead. */}
+      {conflictedYields.length > 0 && !isAppReadOnly && (
         <ConflictResolutionModal
           conflicts={conflictedYields}
           onUseLocal={handleConflictUseLocal}
@@ -622,7 +710,7 @@ export function DataProvider({ children }) {
           isAuthenticated={!!uid}
           assigning={recoveryAssigning}
           onAssign={handleRecoveryAssign}
-          onDiscard={handleRecoveryDiscard}
+          onDiscard={isAppReadOnly ? undefined : handleRecoveryDiscard}
           onLater={handleRecoveryLater}
         />
       )}

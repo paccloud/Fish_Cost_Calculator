@@ -16,6 +16,7 @@ import { DataProvider, useData } from './context/DataContext';
 import { useTheme } from './context/ThemeContext';
 import SyncStatusBadge from './components/SyncStatusBadge';
 import SyncDetailsPanel from './components/SyncDetailsPanel';
+import MoveNotice from './components/MoveNotice';
 
 const NavBar = () => {
     const { user } = useAuth();
@@ -185,6 +186,7 @@ function AppContent() {
                 Skip to main content
             </a>
             <NavBar />
+            <MoveNotice />
             <main id="main" tabIndex={-1} className="py-6 sm:py-8 px-4 focus:outline-none">
                 <Analytics />
                 <Suspense fallback={

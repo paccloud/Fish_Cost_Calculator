@@ -10,7 +10,7 @@ import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
 const DataManagement = () => {
   const { user, getAuthHeaders } = useAuth();
-  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc } = useData();
+  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
   const [status, setStatus] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -156,7 +156,8 @@ const DataManagement = () => {
           </button>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
+            disabled={readOnly}
+            className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
           >
             <Plus size={16} />
             Add Entry
@@ -180,7 +181,7 @@ const DataManagement = () => {
       )}
 
       {/* Add/Edit Form */}
-      {showForm && (
+      {showForm && !readOnly && (
         <div className="card p-6 mb-8">
           <h2 className="text-lg font-semibold text-accent mb-4">
             {editingId ? 'Edit Entry' : 'Add New Entry'}
@@ -302,7 +303,8 @@ const DataManagement = () => {
                     calc.is_private === false ? (
                       <button
                         onClick={() => unpublishCalc(calc)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
+                        disabled={readOnly}
+                        className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
                         title="Make private"
                       >
                         <EyeOff size={13} />
@@ -311,7 +313,8 @@ const DataManagement = () => {
                     ) : (
                       <button
                         onClick={() => requestPublish(calc)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-accent hover:bg-brand-teal/10 transition"
+                        disabled={readOnly}
+                        className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-accent hover:bg-brand-teal/10 transition"
                         title="Publish to community feed"
                       >
                         <Globe size={13} />
@@ -364,7 +367,8 @@ const DataManagement = () => {
                   {item.serverId && (
                     <button
                       onClick={() => handleToggleShare(item)}
-                      className={`p-2 rounded transition ${item.is_shared ? 'text-accent hover:text-text-secondary' : 'text-text-secondary hover:text-accent'}`}
+                      disabled={readOnly}
+                      className={`disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded transition ${item.is_shared ? 'text-accent hover:text-text-secondary' : 'text-text-secondary hover:text-accent'}`}
                       title={item.is_shared ? 'Remove from community' : 'Share with community'}
                     >
                       {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
@@ -372,14 +376,16 @@ const DataManagement = () => {
                   )}
                   <button
                     onClick={() => handleEdit(item)}
-                    className="p-2 rounded text-text-secondary hover:text-accent transition"
+                    disabled={readOnly}
+                    className="disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded text-text-secondary hover:text-accent transition"
                     title="Edit"
                   >
                     <Edit2 size={16} />
                   </button>
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="p-2 rounded text-text-secondary hover:text-danger transition"
+                    disabled={readOnly}
+                    className="disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded text-text-secondary hover:text-danger transition"
                     title="Delete"
                   >
                     <Trash2 size={16} />
