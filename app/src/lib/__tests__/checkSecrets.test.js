@@ -7644,7 +7644,7 @@ describe('review round 16', () => {
     });
 
     it('reports a passphrase written with escaped spaces', () => {
-      expect(count('a.sh', `echo ${account}:${phrase.replace(/ /g, '\\ ')} | ${CHPASSWD}\n`)).toBe(1);
+      expect(count('a.sh', `echo ${account}:${phrase.replace(/[\\ ]/g, (c) => `\\${c}`)} | ${CHPASSWD}\n`)).toBe(1);
     });
 
     it('does not read code that builds a command string as an account and password', () => {
