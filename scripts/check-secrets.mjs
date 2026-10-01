@@ -71,6 +71,13 @@
  * leak from issue #22 lives in history forever and would fail every build. A shallow
  * clone only has part of the history, so an incomplete audit (shallow, or any version not
  * scanned) exits 2 and never prints "no hits".
+ *
+ * The scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js, exact paths, see isScannerFixture) are the one
+ * exemption of --history and --range: their added lines are not scanned, and every such version is counted as skipped
+ * ("scanner-fixture") and named in one note line, never as a hit and never as INCOMPLETE. Those files hold secret-shaped fixtures
+ * on purpose, and a rule added in a later commit can match a fixture line an earlier commit of the same pull request added and
+ * then rewrote; history cannot be edited to fix that. They are reviewed by hand, like the scanner and the workflow file
+ * (SECURITY_NOTICE.md), and the tree scan still scans them in full, so a secret-shaped literal at the tip is reported there.
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -113,6 +120,21 @@ const LOCKFILE_NAMES = new Set([
 export function isLockfile(filePath) {
   const base = path.posix.basename(filePath.split(path.sep).join('/')).toLowerCase();
   return LOCKFILE_NAMES.has(base);
+}
+
+// The scanner's own test files, by exact path: app/src/lib/__tests__/checkSecrets.test.js and the review-round files beside it
+// (checkSecrets.r17a.test.js, ...). Nothing else under __tests__ and no other *.test.js is matched. The history modes (--history,
+// --range) do not scan the added lines of these files and count each such version as skipped by design (SCANNER_FIXTURE_REASON):
+// they hold secret-shaped fixtures on purpose, a rule added later in a pull request can match a fixture line an earlier commit
+// of the same pull request added and then rewrote, and that history cannot be edited. The files are reviewed by hand instead,
+// as SECURITY_NOTICE.md already asks for the scanner and the workflow file. The tree scan is NOT affected: it scans these files
+// in full, so a secret-shaped literal that survives at the tip (one without an allow marker) still fails the build.
+const SCANNER_FIXTURE_FILE = /^app\/src\/lib\/__tests__\/checkSecrets[^/]*\.test\.js$/;
+const SCANNER_FIXTURE_REASON = 'scanner-fixture';
+
+/** True for the scanner's own Vitest files (app/src/lib/__tests__/checkSecrets*.test.js, repository-relative, exact directory). */
+export function isScannerFixture(filePath) {
+  return SCANNER_FIXTURE_FILE.test(filePath.split(path.sep).join('/'));
 }
 
 // A lockfile is machine-generated and can be far larger than a source file; it gets a higher (still fail-closed) limit.
@@ -5728,13 +5750,15 @@ function objectHead(root, oid) {
  * and reports a finding only when no parent's version of that file has the same finding (same rule, same matched text, compared
  * by digest and never printed). A credential a parent already held is that parent's, reported wherever the parent's side is
  * scanned; blaming it on the merge would blame a branch for commits that come in from its base.
- * @returns {{hits: Map<string, object>, oversize: number, oversizeLimits: Map<number, number>, unscanned: number}}
+ * A merge result of the scanner's own test files (isScannerFixture) is left out like any other version of them, and counted.
+ * @returns {{hits: Map<string, object>, oversize: number, oversizeLimits: Map<number, number>, unscanned: number, skipped: Record<string, number>}}
  */
 function scanMergeResults(root, merges) {
   const hits = new Map();
   const oversizeLimits = new Map();
   let oversize = 0;
   let unscanned = 0;
+  const skipped = {};
   for (let from = 0; from < merges.length; from += MERGE_BATCH) {
     const batch = merges.slice(from, from + MERGE_BATCH);
     const run = spawnSync('git', ['diff-tree', '--stdin', '-m', '-r', '-z', '--no-renames', '--raw'], {
@@ -5753,6 +5777,10 @@ function scanMergeResults(root, merges) {
         if (entry.status === 'D' || entry.newMode === '160000') continue;
         const others = perParent.map((group) => group.get(key));
         if (others.some((other) => other === undefined || other.status === 'D')) continue; // equal to a parent's version
+        if (isScannerFixture(displayPath(entry.raw))) {
+          skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
+          continue;
+        }
         candidates.push({
           commit,
           file: displayPath(entry.raw),
@@ -5801,7 +5829,7 @@ function scanMergeResults(root, merges) {
       }
     }
   }
-  return { hits, oversize, oversizeLimits, unscanned };
+  return { hits, oversize, oversizeLimits, unscanned, skipped };
 }
 
 /**
@@ -5813,7 +5841,8 @@ function scanMergeResults(root, merges) {
  * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, oversizeLimits: Map<number, number>, unscanned: number, skipped: Record<string, number>}>}
  * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
  * `skipped` counts the file versions left out on purpose, as the tree scan does: a verified binary (see isBinaryContent, checked
- * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`.
+ * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`; a version of
+ * the scanner's own test files (see isScannerFixture) is `scanner-fixture`.
  * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
  * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an unknown base).
  */
@@ -5883,6 +5912,10 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   const flush = () => {
     if (commit && !file && addedAny) {
       unscanned += 1; // added lines under a header this parser could not attribute to a path
+    } else if (commit && file && addedAny && isScannerFixture(file)) {
+      // The scanner's own test file (exact path, see isScannerFixture): left out by design whatever its size, counted and
+      // named in the report, reviewed by hand. The path is matched, never the content, so no fixture value is ever judged.
+      skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
     } else if (commit && file && addedAny) {
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
@@ -5951,7 +5984,8 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     } else if (!inHunk && line.startsWith('Binary files ')) {
       // git refused to show this version's content (for example above core.bigFileThreshold). Only a verified binary is
       // left out (counted, as the tree scan counts it); anything else, or a path this parser cannot name, is unscanned.
-      if (headerPath !== null && versionIsVerifiedBinary(root, commit, headerPath)) skipped.binary = (skipped.binary ?? 0) + 1;
+      if (headerPath !== null && isScannerFixture(headerPath)) skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
+      else if (headerPath !== null && versionIsVerifiedBinary(root, commit, headerPath)) skipped.binary = (skipped.binary ?? 0) + 1;
       else unscanned += 1;
     } else if (line.startsWith('@@')) {
       inHunk = true;
@@ -6048,6 +6082,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   const merged = scanMergeResults(root, merges);
   for (const [key, entry] of merged.hits) if (!hits.has(key)) hits.set(key, entry);
   for (const [limit, n] of merged.oversizeLimits) oversizeLimits.set(limit, (oversizeLimits.get(limit) ?? 0) + n);
+  for (const [reason, n] of Object.entries(merged.skipped)) skipped[reason] = (skipped[reason] ?? 0) + n;
   return { hits: [...hits.values()], commits, oversize: oversize + merged.oversize, oversizeLimits, unscanned: unscanned + merged.unscanned, skipped };
 }
 
@@ -6115,9 +6150,24 @@ export function formatUnreadableReport(paths) {
   ].join('\n');
 }
 
+/**
+ * The one line that names the versions of the scanner's own test files a history or range scan left out (see isScannerFixture),
+ * or an empty string when there were none. It is part of the report so the exemption is never silent.
+ */
+export function formatFixtureNote(skipped = {}) {
+  const n = skipped[SCANNER_FIXTURE_REASON] ?? 0;
+  if (n === 0) return '';
+  return (
+    `note: ${n} version${n === 1 ? '' : 's'} of the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js) ` +
+    `${n === 1 ? 'was' : 'were'} not scanned: they hold secret-shaped fixtures by design and are reviewed by hand (the tree scan still covers them).`
+  );
+}
+
 /** Format history-scan hits: commit, path, rule and counts only. */
-export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history', oversizeLimits = undefined } = {}) {
+export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history', oversizeLimits = undefined, skipped = {} } = {}) {
   const lines = [];
+  const fixtureNote = formatFixtureNote(skipped);
+  if (fixtureNote !== '') lines.push(fixtureNote, '');
   if (shallow) {
     lines.push(
       'warning: this is a shallow clone, so only part of the history was scanned.',
@@ -6243,13 +6293,15 @@ async function runRange(spec, { cwd, stdout, stderr }) {
   );
   const scope = newRef ? 'the new branch\'s tip commit only (the base is all zeros, so no earlier commit is known)' : `${commits} commit${commits === 1 ? '' : 's'} in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}`;
   if (hits.length > 0) {
-    stderr.write(`${formatHistoryReport(hits, { commits, oversize, oversizeLimits, unscanned, label: '--range' })}\n`);
+    stderr.write(`${formatHistoryReport(hits, { commits, oversize, oversizeLimits, unscanned, label: '--range', skipped })}\n`);
     return 1;
   }
   if (unscanned > 0) {
     stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize, oversizeLimits)}\n`);
     return 2;
   }
+  const fixtureNote = formatFixtureNote(skipped);
+  if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
   stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}${skippedNote(skipped)}\n`);
   return 0;
 }
@@ -6285,7 +6337,7 @@ export async function main(
       const shallow = git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true';
       const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(root);
       if (hits.length > 0) {
-        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned })}\n`);
+        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned, skipped })}\n`);
         return 1;
       }
       // An audit that did not look at everything is never reported as clean.
@@ -6296,6 +6348,8 @@ export async function main(
         stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
         return 2;
       }
+      const fixtureNote = formatFixtureNote(skipped);
+      if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
       stdout.write(`check-secrets --history: no hits in ${commits} commits${skippedNote(skipped)}\n`);
       return 0;
     }

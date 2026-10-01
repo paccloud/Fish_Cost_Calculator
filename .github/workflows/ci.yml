@@ -85,6 +85,10 @@ jobs:
       #   push          before..sha (a new branch has an all-zero "before": only the pushed tip commit is scanned)
       # A commit that is not in the clone (a force-push removed the old tip, a fetch was partial) or a shallow clone fails the
       # step with exit code 2 and a message. It never passes silently and never falls back to the full-history audit.
+      # The one path this step does not read is the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js, exact
+      # paths): they hold secret-shaped fixtures by design, and a rule added later in a PR can match a fixture line an earlier commit
+      # of the same PR added and then rewrote, which history cannot fix. Those versions are counted and named in a "note:" line and
+      # the files are reviewed by hand, like the scanner and this workflow (SECURITY_NOTICE.md). The tip scan above still reads them.
       # Event values reach the script only through env vars, are checked to be plain commit ids, and are quoted.
       - name: Scan commits in this change for secrets
         env:
