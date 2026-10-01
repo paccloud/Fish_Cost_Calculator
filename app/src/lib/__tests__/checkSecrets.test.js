@@ -7644,7 +7644,9 @@ describe('review round 16', () => {
     });
 
     it('reports a passphrase written with escaped spaces', () => {
-      expect(count('a.sh', `echo ${account}:${phrase.replace(/[\\ ]/g, (c) => `\\${c}`)} | ${CHPASSWD}\n`)).toBe(1);
+      // Shell-escape the phrase the way a shell needs it: a backslash escapes itself as well as a space, in one pass, so a
+      // backslash in the phrase can never make a following escape ambiguous (CodeQL js/incomplete-sanitization).
+      expect(count('a.sh', `echo ${account}:${phrase.replace(/[\\ ]/g, '\\$&')} | ${CHPASSWD}\n`)).toBe(1);
     });
 
     it('does not read code that builds a command string as an account and password', () => {
