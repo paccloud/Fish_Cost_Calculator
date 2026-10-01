@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Security rules for Local Catch (ADR 0001). The layout is documented in
+// docs/firestore.md; each later slice opens only the paths it introduces.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function str(value, max) {
+      return value is string && value.size() <= max;
+    }
+
+    // A custom yield: a species, a conversion (starting form → finished
+    // product), a yield above 0 and up to 100, and a private source note.
+    // The starting form may be blank (yields copied from Neon). Every write
+    // sends the whole document, so the field list is checked exactly.
+    function validCustomYield(d, uid) {
+      return d.keys().hasOnly(['ownerUid', 'species', 'from', 'to', 'yield', 'source', 'status', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['ownerUid', 'species', 'from', 'to', 'yield', 'source', 'status', 'createdAt', 'updatedAt'])
+        && d.ownerUid == uid
+        && str(d.species, 120) && d.species.trim().size() > 0
+        && str(d.from, 80)
+        && str(d.to, 80) && d.to.trim().size() > 0
+        && d.yield is number && d.yield > 0 && d.yield <= 100
+        && str(d.source, 500)
+        && d.status == 'private'
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time;
+    }
+
+    match /users/{uid}/customYields/{yieldId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && validCustomYield(request.resource.data, uid)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(uid)
+        && validCustomYield(request.resource.data, uid)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(uid);
+    }
+
+    // Everything else (the user document itself, saved calculations, the
+    // community dataset) stays closed until the slice that adds it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

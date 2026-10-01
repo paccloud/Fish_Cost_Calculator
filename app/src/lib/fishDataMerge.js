@@ -82,3 +82,40 @@ export function mergeFishData(staticData, customYields, customSpecies) {
 
   return merged;
 }
+
+/**
+ * Layer the signed-in person's custom yields from Firestore (issue #123) over
+ * fish data that is already in the calculator's shape.
+ *
+ * Each custom yield is a conversion `from → to` on a species. One without a
+ * starting form (copied from Neon, not yet completed) is skipped: the
+ * calculator needs both ends of the conversion. A custom yield with the same
+ * key as a reference yield replaces it, as the precedence above says.
+ *
+ * @param {Record<string, SpeciesEntry>|null|undefined} fishData
+ * @param {Array<{species: string, from: string, to: string, yield: number}>|null|undefined} customYields
+ * @returns {Record<string, SpeciesEntry>}
+ */
+export function mergeCustomYieldsIntoFishData(fishData, customYields) {
+  const merged = {};
+  for (const sp of Object.keys(fishData || {})) {
+    merged[sp] = { ...fishData[sp], conversions: { ...(fishData[sp]?.conversions || {}) } };
+  }
+
+  for (const item of Array.isArray(customYields) ? customYields : []) {
+    if (!item || !item.species || !item.from || !item.to) continue;
+    const yieldValue = Number(item.yield);
+    if (!Number.isFinite(yieldValue) || yieldValue <= 0 || yieldValue > 100) continue;
+
+    if (!merged[item.species]) merged[item.species] = { conversions: {} };
+    merged[item.species].conversions[`${item.from} → ${item.to}`] = {
+      from: item.from,
+      to: item.to,
+      yield: yieldValue,
+      range: null,
+      custom: true,
+    };
+  }
+
+  return merged;
+}

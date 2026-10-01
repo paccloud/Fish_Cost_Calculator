@@ -10,8 +10,10 @@ const DataTransparency = lazy(() => import('./components/DataTransparency'));
 const DataManagement = lazy(() => import('./components/DataManagement'));
 const ContributorProfile = lazy(() => import('./components/ContributorProfile'));
 const CommunityData = lazy(() => import('./components/CommunityData'));
+const MyData = lazy(() => import('./components/MyData'));
 import { Fish, UserCircle, Menu, X, Database, BookOpen, Sun, Moon, Users, Upload } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { FirebaseAuthProvider } from './context/FirebaseAuthContext';
 import { DataProvider, useData } from './context/DataContext';
 import { useTheme } from './context/ThemeContext';
 import SyncStatusBadge from './components/SyncStatusBadge';
@@ -56,10 +58,11 @@ const NavBar = () => {
                         <NavLink to="/community-data" className={navLinkClass}>
                             <span className="flex items-center gap-1"><Users size={13} />Community</span>
                         </NavLink>
+                        <NavLink to="/my-data" className={navLinkClass}>
+                            <span className="flex items-center gap-1"><Database size={13} />My data</span>
+                        </NavLink>
                         {user && (
-                            <NavLink to="/manage-data" className={navLinkClass}>
-                                <span className="flex items-center gap-1"><Database size={13} />My Data</span>
-                            </NavLink>
+                            <NavLink to="/manage-data" className={navLinkClass}>Manage data (old)</NavLink>
                         )}
                         <NavLink to="/upload" className={navLinkClass}>
                             <span className="flex items-center gap-1"><Upload size={13} />Upload</span>
@@ -127,7 +130,8 @@ const NavBar = () => {
                             { to: '/', label: 'Calculator', end: true },
                             { to: '/data-sources', label: 'Data Sources' },
                             { to: '/community-data', label: 'Community Data' },
-                            ...(user ? [{ to: '/manage-data', label: 'My Data' }] : []),
+                            { to: '/my-data', label: 'My data' },
+                            ...(user ? [{ to: '/manage-data', label: 'Manage data (old)' }] : []),
                             { to: '/upload', label: 'Upload Data' },
                             { to: '/about', label: 'About' },
                         ].map(({ to, label, end }) => (
@@ -198,6 +202,7 @@ function AppContent() {
                         <Route path="/upload" element={<UploadData />} />
                         <Route path="/about" element={<About />} />
                         <Route path="/data-sources" element={<DataTransparency />} />
+                        <Route path="/my-data" element={<MyData />} />
                         <Route path="/manage-data" element={<DataManagement />} />
                         <Route path="/profile" element={<ContributorProfile />} />
                         <Route path="/community-data" element={<CommunityData />} />
@@ -230,11 +235,15 @@ function App() {
             </div>
         }>
             <Router>
-                <AuthProvider>
-                    <DataProvider>
-                        <AppContent />
-                    </DataProvider>
-                </AuthProvider>
+                {/* The Firebase SDK session (Firestore pages) sits next to the
+                    REST session until the Neon-backed pages go (#133). */}
+                <FirebaseAuthProvider>
+                    <AuthProvider>
+                        <DataProvider>
+                            <AppContent />
+                        </DataProvider>
+                    </AuthProvider>
+                </FirebaseAuthProvider>
             </Router>
         </Suspense>
     );

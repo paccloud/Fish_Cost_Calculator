@@ -85,6 +85,22 @@ npm run dev
 # App runs on http://localhost:5173
 ```
 
+### Firebase emulators
+
+The **My data** page keeps custom yields in Cloud Firestore, reached straight from the
+browser. Locally it talks to the Firebase emulators (needs Java 21 or later):
+
+```bash
+cd app
+npm run emulators       # Auth + Firestore emulators, UI at http://127.0.0.1:4000
+npm run dev             # the development env file points the app at the emulators
+npm run test:emulated   # security-rules tests and Firestore tests
+```
+
+The emulators run under a `demo-` project, so nothing reaches a real Firebase project
+and no credentials are needed. Sign in with the fake Google account picker the Auth
+emulator shows. See `docs/firestore.md` for the data shape and the rules.
+
 ## 🏗️ Project Structure
 
 ```

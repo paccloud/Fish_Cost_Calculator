@@ -224,3 +224,52 @@ describe('full three-layer precedence', () => {
     expect(result['Pink Salmon'].conversions['D/H-On'].yield).toBe(91);          // static present
   });
 });
+
+// ---------------------------------------------------------------------------
+// mergeCustomYieldsIntoFishData — the person's Firestore custom yields (#123)
+// ---------------------------------------------------------------------------
+import { mergeCustomYieldsIntoFishData } from './fishDataMerge.js';
+
+describe('mergeCustomYieldsIntoFishData', () => {
+  const salmon = { species: 'Pink Salmon', from: 'Round', to: 'Skinless Fillet', yield: 45 };
+
+  it('adds a custom yield under its From → To key and marks it custom', () => {
+    const result = mergeCustomYieldsIntoFishData(STATIC, [
+      { species: 'Pink Salmon', from: 'Round', to: 'Steaks', yield: 70 },
+    ]);
+    expect(result['Pink Salmon'].conversions['Round → Steaks']).toEqual({
+      from: 'Round', to: 'Steaks', yield: 70, range: null, custom: true,
+    });
+    expect(result['Pink Salmon'].conversions['Skinless Fillet'].yield).toBe(42);
+  });
+
+  it('replaces a reference yield with the same conversion key', () => {
+    const data = { 'Pink Salmon': { conversions: { 'Round → Skinless Fillet': { from: 'Round', to: 'Skinless Fillet', yield: 42, range: [41, 46] } } } };
+    const result = mergeCustomYieldsIntoFishData(data, [salmon]);
+    expect(result['Pink Salmon'].conversions['Round → Skinless Fillet']).toMatchObject({ yield: 45, custom: true, range: null });
+  });
+
+  it('creates the species when it is not in the reference data', () => {
+    const result = mergeCustomYieldsIntoFishData(STATIC, [{ species: 'Sablefish', from: 'Round', to: 'D/H-Off', yield: 60 }]);
+    expect(result['Sablefish'].conversions['Round → D/H-Off'].yield).toBe(60);
+  });
+
+  it('skips a yield without a starting form, or with an unusable yield', () => {
+    const result = mergeCustomYieldsIntoFishData(STATIC, [
+      { species: 'Pink Salmon', from: '', to: 'Steaks', yield: 70 },
+      { species: 'Pink Salmon', from: 'Round', to: 'Steaks', yield: 0 },
+      { species: 'Pink Salmon', from: 'Round', to: 'Belly', yield: 101 },
+      { species: 'Pink Salmon', from: 'Round', to: 'Collar', yield: 'n/a' },
+      null,
+    ]);
+    expect(Object.keys(result['Pink Salmon'].conversions)).toEqual(['Skinless Fillet', 'D/H-On']);
+  });
+
+  it('never mutates its inputs and tolerates empty ones', () => {
+    const before = JSON.stringify(STATIC);
+    mergeCustomYieldsIntoFishData(STATIC, [salmon]);
+    expect(JSON.stringify(STATIC)).toBe(before);
+    expect(mergeCustomYieldsIntoFishData(null, null)).toEqual({});
+    expect(mergeCustomYieldsIntoFishData(STATIC, undefined)['Atlantic Cod'].conversions['Skinless Fillet'].yield).toBe(38);
+  });
+});

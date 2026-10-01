@@ -17,6 +17,16 @@ _Avoid_: cut, transformation
 The share of weight kept by a conversion, as a percentage above 0 and up to 100.
 _Avoid_: recovery rate, fraction (0.42)
 
+**Starting form**:
+The form of the fish a conversion starts from, such as Round or D/H-Off. A
+custom yield copied from Neon may have none until its owner fills it in; the
+calculator only offers a yield that has one.
+_Avoid_: from state, input state
+
+**Finished product**:
+The form a conversion ends in, such as Skinless Fillet.
+_Avoid_: to state, output, cut
+
 **Reference yield**:
 A published yield from the MAB-37 research that ships with the app.
 _Avoid_: default yield, static data

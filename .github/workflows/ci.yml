@@ -46,3 +46,45 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The Firestore security rules and the Firestore-backed data layer, run
+  # against the Firebase emulators. A `demo-` project never reaches a real
+  # Firebase project, so this needs no credentials.
+  emulator-tests:
+    name: Rules · Emulator tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # The Firestore emulator is a Java program.
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache the emulator downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('app/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rules and emulator tests
+        run: npm run test:emulated

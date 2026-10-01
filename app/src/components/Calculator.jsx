@@ -8,6 +8,8 @@ import { isAppReadOnly } from '../config/move';
 import { calculate } from '../lib/calcEngine';
 import { parseAmount } from '../lib/numberInput';
 import { withConversionStates, hasUsableConversions, parseYieldPercent } from '../lib/fishDataShape';
+import { mergeCustomYieldsIntoFishData } from '../lib/fishDataMerge';
+import { useCustomYields } from '../hooks/useCustomYields';
 
 /**
  * Help bubble that works for mouse (hover), keyboard (focus) and touch (tap).
@@ -310,14 +312,18 @@ const Calculator = () => {
     }
   }, [user, getAuthHeaders]);
 
+  // The person's custom yields in Firestore (issue #123). They sit next to the
+  // Neon-backed `customData` until that layer is removed (#133).
+  const { customYields: firestoreYields } = useCustomYields();
+
   const combinedData = useMemo(() => {
     const merged = { ...fishData };
     Object.keys(customData).forEach(sp => {
       if (!merged[sp]) merged[sp] = customData[sp];
       else merged[sp] = { ...merged[sp], conversions: { ...merged[sp].conversions, ...customData[sp].conversions } };
     });
-    return merged;
-  }, [fishData, customData]);
+    return mergeCustomYieldsIntoFishData(merged, firestoreYields);
+  }, [fishData, customData, firestoreYields]);
 
   const speciesList = Object.keys(combinedData).sort();
 

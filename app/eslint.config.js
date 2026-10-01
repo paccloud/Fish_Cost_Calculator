@@ -30,7 +30,7 @@ export default defineConfig([
       // the rule does not fire on those files.
       'react-refresh/only-export-components': [
         'warn',
-        { allowExportNames: ['useAuth', 'useData', 'useTheme'] },
+        { allowExportNames: ['useAuth', 'useData', 'useTheme', 'useFirebaseAuth'] },
       ],
     },
   },

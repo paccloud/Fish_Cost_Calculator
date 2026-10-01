@@ -39,9 +39,23 @@ cd app && npm run lint
 # Run tests (Vitest)
 cd app && npm test
 
+# Firebase emulators (Auth + Firestore) for the My data page, and the tests
+# that need them (security rules, Firestore repository). Needs Java 21+.
+cd app && npm run emulators
+cd app && npm run test:emulated
+
 # Build frontend for production
 cd app && npm run build
 ```
+
+### Firestore layer (move in progress)
+
+The **My data** page (`/my-data`) stores custom yields in Cloud Firestore through the
+Firebase SDK, with security rules in `firestore.rules` and the data shape in
+`docs/firestore.md` (ADR 0001, issues #123–#133). It sits next to the Neon-backed
+pages and the sync layer until those are removed in #133. The Firebase SDK is
+initialised lazily (`app/src/lib/firebase.js`), so the default `npm test` never
+touches it; emulator tests live under `app/test/` and run with `npm run test:emulated`.
 
 ### First-time Setup
 ```bash

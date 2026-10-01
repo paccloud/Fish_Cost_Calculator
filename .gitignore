@@ -43,6 +43,12 @@ server/uploads/
 .vercel
 .env*.local
 
+# Firebase emulators
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
 # Worktrees
 worktrees/
 

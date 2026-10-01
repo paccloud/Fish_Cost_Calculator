@@ -1,8 +1,16 @@
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  test: {
+    // test/** needs the Firebase emulators: see vitest.emulator.config.js
+    exclude: [...configDefaults.exclude, 'test/**'],
+  },
+  optimizeDeps: {
+    // Pre-bundle the Firebase SDK so the dev server does not reload on first use
+    include: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+  },
   plugins: [
     react(),
     VitePWA({
