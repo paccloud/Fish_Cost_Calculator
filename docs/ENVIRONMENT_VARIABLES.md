@@ -96,7 +96,7 @@ If protected endpoints return 401 after Firebase sign-in, check:
 
 3. Never put a real value in a tracked file. `.gitignore` covers only `.env`, `.env.local` and the `.env*.local` files (such as `app/.env.development.local`). `app/.env.development`, `app/.env.production`, `app/.env.example` and `server/.env.example` are **tracked** and must stay placeholder-only; the `Secret scan` CI job fails if a real-looking credential lands in a tracked file. If one already did, follow [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
 
-4. For the local Express server (`server/server.js`), create `server/.env` (or `.env.local`) with `FIREBASE_PROJECT_ID`, `JWT_SECRET`, and `ALLOWED_ORIGINS` that match your dev URLs. See `server/.env.example` for defaults.
+4. For the local Express server (`server/server.js`), create `server/.env` with `FIREBASE_PROJECT_ID`, `JWT_SECRET`, and `ALLOWED_ORIGINS` that match your dev URLs. See `server/.env.example` for defaults. The server loads **only** `server/.env`: it calls `require('dotenv').config()` with no path, which reads `.env` from the directory you run `cd server && node server.js` in. A `server/.env.local` file is silently ignored, so do not put server settings there. The root `.env.local` is a separate file used only by `vercel dev`.
 
 ## Production Deployment
 

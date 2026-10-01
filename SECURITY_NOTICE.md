@@ -125,7 +125,7 @@ It prints commit, file path, rule and a count, never the value. Hits are expecte
 Real values go only in untracked files. Never commit them, and never ask for credentials in chat, issues or PRs.
 
 1. Frontend (Vite): `cp app/.env.example app/.env.development.local`. Vite loads that file after `app/.env.development` and it overrides that file; it is gitignored. The `VITE_FIREBASE_*` values come from Firebase Console, Project settings, your web app. They are public identifiers, not secrets. Never copy the template over the tracked `app/.env.development` or `app/.env.production`.
-2. Local Express server: create `server/.env` (see `server/.env.example`). It needs `FIREBASE_PROJECT_ID` (the same Firebase project as the frontend), `ALLOWED_ORIGINS`, and `JWT_SECRET` for legacy login.
+2. Local Express server: create `server/.env` (see `server/.env.example`). It needs `FIREBASE_PROJECT_ID` (the same Firebase project as the frontend), `ALLOWED_ORIGINS`, and `JWT_SECRET` for legacy login. The server reads only `server/.env` (bare `require('dotenv').config()`); a `server/.env.local` is ignored.
 3. Vercel-based local testing (`vercel dev`): use a root `.env.local` created by `vercel env pull`.
 4. Database credentials come from the Neon console or from `vercel env pull`, not from a team lead's message. The scripts in `scripts/` (`import-fish-data-to-neon.js`, `migrate-sqlite-to-neon.js`) load only the tracked `app/.env.development`, and `dotenv` does not override variables already set in your shell. So `export DATABASE_URL=...` in your shell for that session instead of writing a real string into the tracked file.
 5. Auth is Firebase (email/password and Google). Do not configure Stack Auth; it is retired.
