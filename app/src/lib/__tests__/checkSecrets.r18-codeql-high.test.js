@@ -125,6 +125,52 @@ describe('review round 18: CodeQL js/incomplete-sanitization in the chpasswd tes
     }
   });
 
+  // Review round 19: the same CodeQL query flagged the scanner itself, in goEnvDefaultIsSecret, which escaped a Go variable's dots
+  // (`v.replace(/\./g, '\\.')`) to build one regex per variable. That code is gone: one precompiled pattern captures the tested and
+  // the assigned names, and they are compared with the read's variable as strings. These pin the behaviour down.
+  describe('Go env defaults on dotted variables (no regex built from file text)', () => {
+    const NAME = secretName('DB_', 'PASS', 'WORD');
+    const value = ['A7fK9mQ2', 'xL8vN4pR', '6tY3uW8z'].join('');
+    const go = (read, test, assign) => `package x\n\nfunc load() {\n\t${read} := os.Getenv("${NAME}")\n\tif ${test} == "" {\n\t\t${assign} = "${value}"\n\t}\n}\n`;
+    const fallbacks = (text) => scanText('config.go', text).filter((f) => f.rule === 'hardcoded-secret-fallback');
+
+    it('reports `x.y := os.Getenv(N)` then `if x.y == "" { x.y = "<fake>" }`', () => {
+      expect(fallbacks(go('x.y', 'x.y', 'x.y'))).toHaveLength(1);
+      expect(fallbacks(go('cfg.Db.Password', 'cfg.Db.Password', 'cfg.Db.Password'))).toHaveLength(1);
+    });
+
+    it('does not take a look-alike name (a dot is not a wildcard) for the variable, in the test or in the assignment', () => {
+      expect(fallbacks(go('cfg.DbPassword', 'cfgXDbPassword', 'cfg.DbPassword'))).toHaveLength(0);
+      expect(fallbacks(go('cfg.DbPassword', 'cfg.DbPassword', 'cfgXDbPassword'))).toHaveLength(0);
+      expect(fallbacks(go('cfg.DbPassword', 'cfg.DbPasswordX', 'cfg.DbPassword'))).toHaveLength(0);
+      expect(fallbacks(go('x.y', 'x.y', 'x.y.z'))).toHaveLength(0);
+    });
+
+    it('reads the other empty tests and the ok flag the same way', () => {
+      const lines = (read, test, assign) => `${read}\nif ${test} {\n  ${assign} = "${value}"\n}\n`;
+      expect(fallbacks(lines(`a.b := os.Getenv("${NAME}")`, 'len(a.b) == 0', 'a.b'))).toHaveLength(1);
+      expect(fallbacks(lines(`a.b := os.Getenv("${NAME}")`, '"" == a.b', 'a.b'))).toHaveLength(1);
+      expect(fallbacks(lines(`v, ok := os.LookupEnv("${NAME}")`, '!ok', 'v'))).toHaveLength(1);
+      expect(fallbacks(lines(`v, ok := os.LookupEnv("${NAME}")`, '!found', 'v'))).toHaveLength(0);
+    });
+
+    it('scans many distinct Go variables in linear time (no per-variable compile)', SLOW, () => {
+      const timings = timeInChild(`
+        const N = 'JWT_' + 'SECRET';
+        const V = 'A7fK9mQ2' + 'xL8vN4pR6tY3uW8';
+        let distinct = 'package x\\n';
+        for (let i = 0; i < 66000; i += 1) distinct += 'v' + i + ' := os.Getenv("' + N + '")\\n';
+        let dotted = 'package x\\n';
+        for (let i = 0; i < 3000; i += 1) dotted += 'cfg.A' + i + ' := os.Getenv("' + N + '")\\nif cfg.A' + i + ' == "" {\\n cfg.A' + i + ' = "' + V + '"\\n}\\n';
+        for (const text of [distinct, dotted]) {
+          const started = performance.now();
+          scanText('x.go', text);
+          timings.push(Math.round(performance.now() - started));
+        }`);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+  });
+
   it('scans hostile runs of escapes in linear time', SLOW, () => {
     const timings = timeInChild(`
       const C = 'chp' + 'asswd';

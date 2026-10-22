@@ -4957,7 +4957,7 @@ describe('curl -u and the other password flags judge the whole argument', () => 
   const phrase = `${first} ${['correct', 'horse', 'battery'].join(' ')} 123!`;
   const token = randomString(20, 8419);
   const rules = (text, file = 'run.sh') => scanText(file, text).map((f) => f.rule);
-  const escapedPhrase = phrase.replaceAll(' ', '\\ ');
+  const escapedPhrase = phrase.replace(/[\\ ]/g, '\\$&'); // backslash and space escaped in one pass
 
   const positives = [
     ['double quotes', `curl -u "admin:${phrase}" ${host}\n`],

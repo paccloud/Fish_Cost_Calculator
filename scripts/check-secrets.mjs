@@ -4690,6 +4690,20 @@ function ternaryTestIsSecret(m, ctx) {
   return envDefaultIsSecret(m, ctx, at);
 }
 
+// Go: an `if` that tests one variable for empty (`v == ""`, `"" == v`, `len(v) == 0`, `len(v) < 1`) or an ok flag (`!ok`), then its
+// block up to the first brace (read ahead, not consumed). One compiled pattern for every file: the tested and the assigned names are
+// captured and compared with the read's variable as strings, so no pattern is ever built from file text (no escaping, no per-name cost).
+const GO_IDENT_CHAIN = String.raw`[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3}`;
+const GO_EMPTY_TEST = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])if[ \t]+(?:(?<a>${GO_IDENT_CHAIN})[ \t]*==[ \t]*(?:""|\x60\x60)|(?:""|\x60\x60)[ \t]*==[ \t]*(?<b>${GO_IDENT_CHAIN})(?![A-Za-z0-9_.])|` +
+    String.raw`len\((?<c>${GO_IDENT_CHAIN})\)[ \t]*(?:==[ \t]*0|<[ \t]*1)|!(?<ok>[A-Za-z_][A-Za-z0-9_]{0,63})(?![A-Za-z0-9_]))[^{}\n]{0,160}\{(?=(?<body>[^{}]{0,480}))`,
+  'g',
+);
+// An assignment in that block: `name = ` (not `==`, not `:=`, not a field of something else).
+const GO_ASSIGNMENT = new RegExp(String.raw`(?<![A-Za-z0-9_.])(?<t>${GO_IDENT_CHAIN})[ \t]*=(?!=)[ \t]*(?=\S)`, 'g');
+// How far into the block the assignment may start.
+const GO_BLOCK_CHARS = 400;
+
 /**
  * Go: after `v := os.Getenv("N")`, an `if` within ENV_GO_DEFAULT_LINES lines that tests v for empty and assigns v a constant in its
  * block (`if v == "" { v = "x" }`). The window, the test and the block are all bounded; the block is read up to its first brace.
@@ -4703,23 +4717,25 @@ function goEnvDefaultIsSecret(m, ctx) {
     lines += 1;
     if (lines > ENV_GO_DEFAULT_LINES) end = at;
   }
-  // One compiled test per variable (and ok flag) per file: a file of many reads of the same variable compiles it once.
-  const key = `${m.groups.v}\0${m.groups.ok ?? ''}`;
-  ctx.goDefaultTests ??= new Map();
-  let test = ctx.goDefaultTests.get(key);
-  if (test === undefined) {
-    const v = m.groups.v.replace(/\./g, '\\.'); // an identifier chain: dots are its only regex characters
-    const empty = [String.raw`${v}[ \t]*==[ \t]*(?:""|\x60\x60)`, String.raw`(?:""|\x60\x60)[ \t]*==[ \t]*${v}`, String.raw`len\(${v}\)[ \t]*(?:==[ \t]*0|<[ \t]*1)`];
-    if (m.groups.ok !== undefined) empty.push(String.raw`!${m.groups.ok}(?![A-Za-z0-9_])`);
-    test = new RegExp(String.raw`(?<![A-Za-z0-9_])if[ \t]+(?:${empty.join('|')})[^{}\n]{0,160}\{[^{}]{0,400}?(?<![A-Za-z0-9_.])${v}[ \t]*=(?!=)[ \t]*(?=\S)`);
-    ctx.goDefaultTests.set(key, test);
+  const window = m.input.slice(from, end);
+  if (!window.includes('if')) return false;
+  const { v, ok } = m.groups;
+  GO_EMPTY_TEST.lastIndex = 0;
+  for (let test = GO_EMPTY_TEST.exec(window); test !== null; test = GO_EMPTY_TEST.exec(window)) {
+    const tested = test.groups.a ?? test.groups.b ?? test.groups.c;
+    if (tested === undefined ? ok === undefined || test.groups.ok !== ok : tested !== v) continue;
+    const blockAt = test.index + test[0].length;
+    const body = test.groups.body;
+    GO_ASSIGNMENT.lastIndex = 0;
+    for (let assign = GO_ASSIGNMENT.exec(body); assign !== null && assign.index <= GO_BLOCK_CHARS; assign = GO_ASSIGNMENT.exec(body)) {
+      if (assign.groups.t !== v) continue;
+      const literal = fallbackConstant(m.input, from + blockAt + assign.index + assign[0].length, ctx.path, ctx);
+      if (literal === null) return false;
+      m.spanEnd = literal.end;
+      return true;
+    }
   }
-  const hit = test.exec(m.input.slice(from, end));
-  if (hit === null) return false;
-  const literal = fallbackConstant(m.input, from + hit.index + hit[0].length, ctx.path);
-  if (literal === null) return false;
-  m.spanEnd = literal.end;
-  return true;
+  return false;
 }
 
 export const RULES = [
