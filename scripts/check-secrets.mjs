@@ -185,9 +185,15 @@ const LOCKFILE_DIGEST = new RegExp(
   'g',
 );
 // A hex digest is blanked only after a checksum-like key (Cargo `checksum = "..."`, composer `"shasum": "..."`, yarn berry
-// `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment).
+// `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment). The key must start a token: at the start of the text or
+// after a blank, a quote, `{`, `[`, `(`, `,`, `;`, `?`, `&` or `#`. Without that, any URL user name that ENDS in one of the words
+// (`https://subhash:<hex>@`, `https://cicommit:<hex>@`, `//hash:<hex>@`) read as a key and its hex password was blanked. The
+// compound keys a lockfile really writes (composer `content-hash`, pnpm `packageExtensionsChecksum` / `pnpmfileChecksum`) are
+// named; `#commit=` (yarn berry) counts as a token start. A bare "#" counts only as a URL fragment (see hexFragmentOk).
 const LOCKFILE_HEX_DIGEST =
-  /((?:checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+  /((?<![^\s"'{[(,;?&#])(?:content[-_]?hash|packageExtensionsChecksum|pnpmfileChecksum|checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+/** A "#" before a hex run is a URL fragment only when it follows URL text: not at the start, not after a blank, a quote, `=`, `:` or "#". */
+const hexFragmentOk = (text, at) => at >= 1 && !/[\s"'=:#]/.test(text[at - 1]);
 // ...except `sha256:<hex>` / `sha1=<hex>` with nothing between the algorithm and the hex: that is one digest-shaped VALUE, not
 // a key and its value. LOCKFILE_DIGEST has already blanked it where it is an integrity value; anywhere else (the value of an
 // auth field, a `?token=` URL parameter) it stays visible.
@@ -209,8 +215,13 @@ const DIGEST_VALUE_LEAD = /^sha(?:1|256|512)[:=]$/i;
 // digest is fixed and the pass stays linear. A digest the look back cannot place stays visible: at worst a finding to allow,
 // never a miss.
 const INTEGRITY_KEY_LOOKBACK = 48; // longer than the longest lead INTEGRITY_KEY_LEAD can match (37 characters)
+// The key must start a token (after a blank, a quote, `{`, `[`, `(` or `,`, or at the start of the look back): a URL user name
+// such as `ci-hash`, `x_digest` or `//hash` in `https://ci-hash:sha512-...@host` is not an integrity key. pnpm's camelCase
+// top-level checksums are named.
 const INTEGRITY_KEY_LEAD =
-  /(?<![A-Za-z0-9])(?:integrity|checksums?|shasum|hash(?:es)?|digest|sha(?:1|256|384|512))["']?(?:[ \t]{0,8}[:=][ \t]{0,8}|[ \t]{1,8})(?:\[[ \t]{0,8})?["']?$/i;
+  /(?<![^\s"'{[(,])(?:integrity|checksums?|shasum|hash(?:es)?|digest|sha(?:1|256|384|512)|packageExtensionsChecksum|pnpmfileChecksum)["']?(?:[ \t]{0,8}[:=][ \t]{0,8}|[ \t]{1,8})(?:\[[ \t]{0,8})?["']?$/i;
+// Inside a URL authority (after `//` and before the host's `@`), nothing is an integrity key: `https://hash:<digest>@host`.
+const URL_AUTHORITY_TAIL = /\/\/[^/\s"'@]{0,256}$/;
 const ARRAY_ELEMENT_LOOKBACK = 256; // the line break and indentation between `[` or `,` and a list element on the next line
 const LINE_LOOKBACK = 512; // a go.sum module path and version, a Gemfile gem name and version
 const GO_SUM_LINE_LEAD = /^\S{1,400}[ \t]+v\d\S{0,100}[ \t]+$/;
@@ -219,7 +230,8 @@ const DIGEST_LIST_SEPARATOR = /^[ \t]{0,4},?[ \t]{0,4}$/;
 
 /** Is the digest at text[start, end) in an integrity position (see above), other than the second of a list? */
 function isIntegrityPosition(text, start, end) {
-  if (INTEGRITY_KEY_LEAD.test(text.slice(Math.max(0, start - INTEGRITY_KEY_LOOKBACK), start))) return true;
+  const lead = text.slice(Math.max(0, start - INTEGRITY_KEY_LOOKBACK), start);
+  if (INTEGRITY_KEY_LEAD.test(lead) && !URL_AUTHORITY_TAIL.test(text.slice(Math.max(0, start - 260), start))) return true;
   const before = text[start - 1];
   if (before === '#') return start >= 2 && !/[\s"'=:#]/.test(text[start - 2]);
   if ((before === '"' || before === "'") && text[end] === before) {
@@ -246,7 +258,11 @@ export function sanitizeLockfile(text) {
     listEnd = end;
     return ' '.repeat(m.length);
   });
-  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex) => (DIGEST_VALUE_LEAD.test(lead) ? m : lead + ' '.repeat(hex.length)));
+  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex, at, whole) => {
+    if (DIGEST_VALUE_LEAD.test(lead)) return m;
+    if (lead === '#' ? !hexFragmentOk(whole, at) : URL_AUTHORITY_TAIL.test(whole.slice(Math.max(0, at - 260), at))) return m;
+    return lead + ' '.repeat(hex.length);
+  });
 }
 
 // Leading bytes of common binary formats. A file is "verified binary" only when it has a NUL byte in its first

@@ -204,6 +204,54 @@ describe('review round 18: lockfile digests are blanked by position, not by shap
   });
 
   // -------------------------------------------------------------------------
+  // Review round 19: a URL user name that ENDS in a key word (subhash, cicommit, ci-hash, prev) read as a key, and a "#" that starts
+  // a value read as a URL fragment, so the hex or SRI password after it was blanked before url-password / lockfile-credential ran.
+  describe('(3) URL userinfo passwords and "#"-led values are never blanked as digests', () => {
+    const h40 = randomString(40, 1901, HEX);
+    const h64 = randomString(64, 1903, HEX);
+    const sri = `sha512-${randomString(86, 1905, ALNUM + '+')}==`; // no "/" (url-password's class stops at one)
+    const USERINFO = [
+      ['package-lock.json user "subhash", hex40', 'package-lock.json', `{\n  "packages": {\n    "x": {\n      "resolved": "${scheme}subhash:${h40}@registry.internal/x/-/x-1.0.0.tgz"\n    }\n  }\n}\n`],
+      ['package-lock.json user "cicommit", hex64', 'package-lock.json', `{"resolved": "${scheme}cicommit:${h64}@registry.internal/x.tgz"}\n`],
+      ['package-lock.json user "hash" right after //', 'package-lock.json', `{"resolved": "${scheme}hash:${h40}@registry.internal/x.tgz"}\n`],
+      ['package-lock.json user "ci-hash", SRI-shaped', 'package-lock.json', `{"resolved": "${scheme}ci-hash:${sri}@registry.internal/x.tgz"}\n`],
+      ['pnpm-lock.yaml tarball, user "ci-hash", SRI-shaped', 'pnpm-lock.yaml', `packages:\n  x:\n    resolution: {tarball: ${scheme}ci-hash:${sri}@registry.internal/x.tgz}\n`],
+      ['pnpm-lock.yaml tarball, user "x_digest", SRI-shaped', 'pnpm-lock.yaml', `packages:\n  x:\n    resolution: {tarball: ${scheme}x_digest:${sri}@registry.internal/x.tgz}\n`],
+      ['yarn.lock resolved with a commit fragment, user "subhash"', 'yarn.lock', `x@1:\n  resolved "${scheme}subhash:${h40}@registry.internal/x.tgz#${randomString(40, 1907, HEX)}"\n`],
+      ['Gemfile.lock remote, user "subhash"', 'Gemfile.lock', `GEM\n  remote: ${scheme}subhash:${h40}@gems.internal/\n`],
+      ['composer.lock dist url, user "prev"', 'composer.lock', `{"dist": {"url": "${scheme}prev:${h40}@repo.internal/x.zip"}}\n`],
+    ];
+    it.each(USERINFO)('%s: url-password', (_label, file, text) => {
+      expect(rules(file, text)).toContain('url-password');
+    });
+
+    const HASH_LED = [
+      ['yarn.lock _authToken=#hex64', 'yarn.lock', `//registry.internal/:_authToken=#${h64}\n`],
+      ['package-lock.json "_authToken": "#hex64"', 'package-lock.json', `{"_authToken": "#${h64}"}\n`],
+      ['package-lock.json "_password": "#hex40"', 'package-lock.json', `{"_password": "#${h40}"}\n`],
+      ['resolved URL ?token=#hex64', 'package-lock.json', `{"resolved": "${scheme}registry.internal/x.tgz?token=#${h64}"}\n`],
+    ];
+    it.each(HASH_LED)('%s: left visible and reported', (_label, file, text) => {
+      expect(sanitizeLockfile(text)).toBe(text);
+      expect(rules(file, text)).toContain('lockfile-credential');
+    });
+
+    const LEGIT = [
+      ['yarn v1 commit fragment and integrity', 'yarn.lock', `x@1:\n  resolved "${scheme}registry.yarnpkg.com/x/-/x-1.0.0.tgz#${h40}"\n  integrity ${carrier.sha512(1909)}\n`, [h40]],
+      ['yarn berry #commit= and checksum', 'yarn.lock', `"x@${scheme}github.com/a/b.git#commit=${h40}":\n  checksum: 10c0/${randomString(128, 1911, HEX)}\n`, [h40]],
+      ['composer content-hash, reference, shasum', 'composer.lock', `{\n "content-hash": "${randomString(32, 1913, HEX)}",\n "packages": [{"source": {"reference": "${h40}"}, "dist": {"shasum": "${h64.slice(0, 40)}"}}]\n}\n`, [h40]],
+      ['pnpm git resolution {commit: ...}', 'pnpm-lock.yaml', `packages:\n  x:\n    resolution: {commit: ${h40}, repo: ${scheme}github.com/a/b, type: git}\n`, [h40]],
+      ['git+ssh URL with a commit fragment', 'package-lock.json', `{"resolved": "git+ssh://git@github.com/a/b.git#${h40}"}\n`, [h40]],
+      ['pnpm top-level camelCase checksums', 'pnpm-lock.yaml', `lockfileVersion: '9.0'\npackageExtensionsChecksum: ${carrier.sha256(1915)}\npnpmfileChecksum: ${carrier.sha256(1917)}\n`, []],
+    ];
+    it.each(LEGIT)('%s: still blanked, nothing reported', (_label, file, text, hidden) => {
+      const cleaned = sanitizeLockfile(text);
+      for (const value of hidden) expect(cleaned).not.toContain(value);
+      expect(scanText(file, text)).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   it('hostile digest-dense inputs stay linear', SLOW, () => {
     const timings = timeInChild(`
       const sri = 'sha512-' + 'Ab+/'.repeat(21) + 'Ab' + '==';
@@ -283,6 +331,27 @@ describe('review round 18: lockfile digests are blanked by position, not by shap
         expect(output).toContain('lockfile-credential');
         for (const file of Object.keys(ordinary)) expect(output).not.toContain(file);
         for (const piece of [...windows(bodyOf(sri512)), ...windows(bodyOf(sri256))]) expect(output).not.toContain(piece);
+      }
+    });
+
+    it.skipIf(!hasGit())('URL userinfo and "#"-led auth values are reported by the tree scan, --range and --history', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'README.md': '# demo\n' });
+      const h40 = randomString(40, 1921, HEX);
+      const h64 = randomString(64, 1923, HEX);
+      const sri = `sha512-${randomString(86, 1925, ALNUM + '+')}==`;
+      commit(dir, {
+        'a/yarn.lock': `x@1:\n  resolved "${scheme}subhash:${h40}@registry.internal/x.tgz#${randomString(40, 1927, HEX)}"\n`,
+        'b/pnpm-lock.yaml': `packages:\n  x:\n    resolution: {tarball: ${scheme}ci-hash:${sri}@registry.internal/x.tgz}\n`,
+        'c/yarn.lock': `x@1:\n  resolved "${scheme}deploy:${h40}@registry.internal/x.tgz"\n`,
+        'd/package-lock.json': `{\n  "_authToken": "#${h64}"\n}\n`,
+      });
+      for (const args of [[], ['--range', `${base}..HEAD`], ['--history']]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, output).toBe(1);
+        for (const file of ['a/yarn.lock', 'b/pnpm-lock.yaml', 'c/yarn.lock', 'd/package-lock.json']) expect(output, `${args}: ${file}`).toContain(file);
+        for (const piece of [...windows(h40), ...windows(h64)]) expect(output).not.toContain(piece);
       }
     });
   });
