@@ -3694,14 +3694,13 @@ function connFieldValue(input, valueStart, literal, xmlText) {
   // A value quoted with the literal's OWN quote doubled: Visual Basic and C# verbatim "...Password=""p;w"";", PowerShell and SQL
   // '...Password=''p;w'';'. The literal's scan ended at the first of those quotes; the value runs to the next doubled quote.
   if (literal.quote !== null && first === literal.quote && input[valueStart + 1] === literal.quote) {
-    const pair = literal.quote + literal.quote;
-    const close = input.indexOf(pair, valueStart + 2);
-    if (close !== -1 && close < lineLimit) return { value: input.slice(valueStart + 2, close), braced: false, end: close + 2 };
+    const close = window.indexOf(literal.quote + literal.quote, 2); // within the bounded window: a constant cost per field
+    if (close !== -1 && valueStart + close < lineLimit) return { value: window.slice(2, close), braced: false, end: valueStart + close + 2 };
   }
   // A template reference ({{ .Values.db.pw }}, {{password}}) is not an ODBC braced value.
   if (first === '{' && input[valueStart + 1] === '{' && !literal.interpolated) {
-    const close = input.indexOf('}}', valueStart + 2);
-    if (close !== -1 && close < Math.max(limit, lineLimit)) return { value: input.slice(valueStart, close + 2), braced: false, end: close + 2 };
+    const close = window.indexOf('}}', 2);
+    if (close !== -1 && valueStart + close < lineLimit) return { value: window.slice(0, close + 2), braced: false, end: valueStart + close + 2 };
   }
   // The other quote closing a code piece, not opening a value: ARM `concat('...;Password=', parameters('pw'), ...)`, `"Password='" + pw`.
   if ((first === '"' || first === "'") && first !== literal.quote && /^[ \t]*(?:[,+&)]|$)/.test(input.slice(valueStart + 1, Math.min(literal.close, valueStart + 16)))) {

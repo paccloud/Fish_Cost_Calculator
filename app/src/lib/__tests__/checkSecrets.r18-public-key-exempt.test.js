@@ -396,8 +396,8 @@ describe('review round 18: public keys and certificates are not secrets', () => 
       join('=', randomString(4, 19035)), end(PGP_LABEL),
     ];
     it.each([
-      ['PHP / org.json escaped slashes', 'keys.json', `{"jwt_secret":"${pub.map((l) => l.replace(/\//g, '\\/')).join('\\n')}"}\n`],
-      ['PHP-escaped certificate', 'keys.json', `{"signing_key":"${pemLines(CERT, 19037).map((l) => l.replace(/\//g, '\\/')).join('\\n')}"}\n`],
+      ['PHP / org.json escaped slashes', 'keys.json', `{"jwt_secret":"${pub.map((l) => l.replace(/[\\/]/g, '\\$&')).join('\\n')}"}\n`],
+      ['PHP-escaped certificate', 'keys.json', `{"signing_key":"${pemLines(CERT, 19037).map((l) => l.replace(/[\\/]/g, '\\$&')).join('\\n')}"}\n`],
       ['a JSON array of lines', 'keys.json', `{"jwt_secret": [${pub.map((l) => JSON.stringify(l)).join(', ')}]}\n`],
       ['a JSON array of lines, one per line', 'keys.json', `{"jwt_secret": [\n${pub.map((l) => `    ${JSON.stringify(l)}`).join(',\n')}\n]}\n`],
       ['PGP armored public key', 'config.yml', `apt_signing_key: |\n${indent(pgp, '  ')}\n`],
