@@ -39,6 +39,10 @@
  *   - A value with spaces is exempt only as text: a sentence (looksLikeSentence) inside a message catalog path, or
  *     documentation about the credential (looksLikeDocumentation) anywhere; a passphrase that merely contains common words
  *     ("correct horse battery and staple", "This is the way.") is a finding.
+ *   - Public verification material is not a secret: a name ending in public/pub + key (PUBLIC_KEY, jwtPublicKey) is not secret-like,
+ *     and a complete PEM PUBLIC KEY / RSA PUBLIC KEY / CERTIFICATE block (a chain too) is blanked before the name-based rules read the
+ *     file, so it is not judged under any name (blankPublicPemBlocks). The shape rules still read it: a PRIVATE KEY block or a
+ *     provider token under a public name is a finding, and so is any text around a public block.
  *   - A URL value is judged only under a strong name, and only for credential-looking parts (signed-URL parameters,
  *     webhook path tokens, a token as the user name). Webhook URLs are also a rule of their own (webhook-url).
  *   - Native credential files (.netrc, .pgpass, .git-credentials, .npmrc, .pypirc, .aws/credentials, docker config,
@@ -329,6 +333,8 @@ const WEAK_WORDS = new Set([
 const WEAK_MERGED_SUBSTRING = /secret|passw(?:or)?d|token|privatekey|apikey|credential/;
 // Credential variables whose names do not end in a secret noun: sshpass reads SSHPASS, redis-cli reads REDISCLI_AUTH, Dovecot's LDAP bind is dnpass.
 const EXACT_STRONG_MERGED = new Set(['sshpass', 'rediscliauth', 'dnpass']);
+// <public qualifier> + "key" names verification material, not a secret (see secretNameKind).
+const PUBLIC_KEY_QUALIFIERS = new Set(['public', 'pub']);
 
 /** @returns {'strong' | 'weak' | null} how secret-like an identifier is (see the file header) */
 export function secretNameKind(name) {
@@ -340,6 +346,16 @@ export function secretNameKind(name) {
   const merged = bare.join('');
   if (STRONG_LAST_WORDS.has(last) || STRONG_MERGED_SUFFIX.test(merged) || EXACT_STRONG_MERGED.has(merged)) return 'strong';
   if (last === 'key' && KEY_QUALIFIERS.has(bare[bare.length - 2])) return 'strong';
+  // PUBLIC_KEY, jwtPublicKey, ssh_pub_key: the public half of a key pair is committed on purpose (a JWT verification key, a deploy
+  // key's .pub line) and its body is as random-looking as a secret. Exempt only a name that ENDS in public/pub + key, and only after
+  // the strong checks above, so public_key_password, pubkey_secret and public_secret_key stay strong; a name that also calls the key
+  // secret or private (secret_public_key, clientSecretPublicKey, private_public_key) contradicts itself and stays weak. Other words
+  // say what the key verifies (ID_TOKEN_PUBLIC_KEY, PASSWORD_ENCRYPTION_PUBLIC_KEY) and do not. A PRIVATE KEY block or a provider-
+  // shaped token held by such a name is still found by its own rule, which never looks at the name. "verification_key" and
+  // "verify_key" are NOT exempt: an HMAC (HS256) verification key is the shared secret itself (a PEM public key under any name is
+  // exempt by value: blankPublicPemBlocks). Single-word names (pubkey, publickey) and certificate names (cert, ca_cert,
+  // certificate) never were secret-like.
+  if (last === 'key' && PUBLIC_KEY_QUALIFIERS.has(bare[bare.length - 2]) && !/secret|private/.test(bare.slice(0, -2).join(''))) return null;
   // A bare "<vendor>_KEY" (SENDGRID_KEY, STRIPE_KEY) may be a credential or a cache key: only a random-looking value counts.
   if (last === 'key' && bare.length > 1) return 'weak';
   if (bare.some((w) => WEAK_WORDS.has(w)) || WEAK_MERGED_SUBSTRING.test(merged)) return 'weak';
@@ -5174,6 +5190,101 @@ export const RULES = [
 ];
 
 // ---------------------------------------------------------------------------
+// Public PEM blocks
+// ---------------------------------------------------------------------------
+
+// A public key or a certificate is verification material: it is committed on purpose (a JWT verification key, a CA bundle, a
+// pinned server certificate), and its base64 body is as random-looking as any secret, so every name-based reader (YAML block
+// scalars, heredocs, escaped JSON / dotenv strings, name/value pairs, ...) would report it under a secret-like name. Only these
+// labels count. A PRIVATE KEY of any kind never matches (nothing in the alternation says PRIVATE), and it has a rule of its own.
+const PUBLIC_PEM_BEGIN = '-----BEGIN ';
+const PUBLIC_PEM_LABEL = /((?:RSA |EC |DSA )?PUBLIC KEY|(?:TRUSTED |X509 )?CERTIFICATE)-----/y;
+// Between the lines of a block: the line breaks private-key-block accepts (real, or written as \n / \r\n escapes) and blanks, plus a
+// backslash line continuation (a .properties or shell value written as "...\n\" and the next line). Each repetition must consume a
+// line break, so the match stays linear.
+const PUBLIC_PEM_SEPARATOR = /(?:[ \t]*(?:\\r|\r)?(?:\\n|\n)|[ \t]*\\\r?\n)+[ \t]*/y;
+// One body line: strict base64. No headers (Proc-Type / DEK-Info belong to encrypted private keys), and padding ends the body.
+const PUBLIC_PEM_BODY_LINE = /[A-Za-z0-9+/]+(={1,2})?/y;
+
+/**
+ * Where the complete public PEM block that starts at `at` (a "-----BEGIN " index) ends: a public label, one or more base64 lines,
+ * and the END line of the same label. Returns -1 for anything else: an unclosed block, another label at the end, a stray line
+ * (a header, a non-base64 character, text after the padding), no body, or a body that is not DER. Public keys and certificates
+ * are DER SEQUENCEs (first byte 0x30), and every such body starts with "M" in base64, so a block that does not is not taken on
+ * trust. The walk stops at the first character that is neither a separator nor base64, so it never passes another BEGIN line.
+ */
+function publicPemBlockEnd(text, at) {
+  PUBLIC_PEM_LABEL.lastIndex = at + PUBLIC_PEM_BEGIN.length;
+  const label = PUBLIC_PEM_LABEL.exec(text);
+  if (label === null) return -1;
+  const close = `-----END ${label[1]}-----`;
+  let i = PUBLIC_PEM_LABEL.lastIndex;
+  let lines = 0;
+  let padded = false;
+  for (;;) {
+    PUBLIC_PEM_SEPARATOR.lastIndex = i;
+    if (PUBLIC_PEM_SEPARATOR.exec(text) === null) return -1;
+    i = PUBLIC_PEM_SEPARATOR.lastIndex;
+    if (lines > 0 && text.startsWith(close, i)) return i + close.length;
+    if (padded) return -1;
+    PUBLIC_PEM_BODY_LINE.lastIndex = i;
+    const body = PUBLIC_PEM_BODY_LINE.exec(text);
+    if (body === null || (lines === 0 && body[0][0] !== 'M')) return -1;
+    lines += 1;
+    padded = body[1] !== undefined;
+    i = PUBLIC_PEM_BODY_LINE.lastIndex;
+  }
+}
+
+/**
+ * The text with every complete public PEM block (PUBLIC KEY, RSA PUBLIC KEY, CERTIFICATE, a certificate chain: see
+ * publicPemBlockEnd) blanked, from its BEGIN marker to its END marker. Line breaks stay, and so do offsets and line numbers.
+ * The name-based rules read this text, so a public key is not judged as a secret under any name (a YAML public_key block, a
+ * JWT_SECRET variable that holds a PEM public key, a CA bundle in a k8s value); anything around the block (a password line after
+ * it, text glued to an escaped block) is still judged. The shape rules (private-key-block, provider tokens, URL passwords) read
+ * the original text. Linear: a failed attempt only walks separators and base64, which cannot hold the next BEGIN marker.
+ */
+export function blankPublicPemBlocks(text) {
+  if (!text.includes(PUBLIC_PEM_BEGIN)) return text;
+  const blank = (from, to) => text.slice(from, to).replace(/[^\r\n]+/g, (run) => ' '.repeat(run.length));
+  // An escaped line break written next to a block ("\n-----BEGIN", "-----END ...-----\n" in a JSON or dotenv string) goes with it,
+  // or unescaping would leave an "n" per block behind, and a chain would read as a long "n n n" value. Only blanks and \n / \r
+  // escapes on the block's own line: a password next to the block is never touched.
+  const isEscapedBreak = (i) => text[i] === '\\' && (text[i + 1] === 'n' || text[i + 1] === 'r');
+  const pieces = [];
+  let copied = 0;
+  for (let at = text.indexOf(PUBLIC_PEM_BEGIN); at !== -1; ) {
+    let end = publicPemBlockEnd(text, at);
+    if (end === -1) {
+      at = text.indexOf(PUBLIC_PEM_BEGIN, at + 1);
+      continue;
+    }
+    let start = at;
+    PUBLIC_PEM_SEPARATOR.lastIndex = copied;
+    if (copied > 0 && PUBLIC_PEM_SEPARATOR.exec(text) !== null && PUBLIC_PEM_SEPARATOR.lastIndex === at) {
+      start = copied; // the separator between two blocks of a chain, in any form a block line break may take
+    } else {
+      for (;;) {
+        if (start > copied && (text[start - 1] === ' ' || text[start - 1] === '\t')) start -= 1;
+        else if (start - 1 > copied && isEscapedBreak(start - 2)) start -= 2;
+        else break;
+      }
+    }
+    for (;;) {
+      if (text[end] === ' ' || text[end] === '\t') end += 1;
+      else if (isEscapedBreak(end)) end += 2;
+      else break;
+    }
+    pieces.push(text.slice(copied, start), blank(start, end));
+    copied = end;
+    at = text.indexOf(PUBLIC_PEM_BEGIN, end);
+  }
+  if (copied === 0) return text;
+  pieces.push(text.slice(copied));
+  return pieces.join('');
+}
+
+// ---------------------------------------------------------------------------
 // Scanning
 // ---------------------------------------------------------------------------
 
@@ -5312,15 +5423,22 @@ function scanRanges(filePath, text) {
       return lo < fences.length && fences[lo].start <= index ? fences[lo].lang : undefined;
     },
   };
+  // Public keys and certificates are not judged as secrets by the name-based rules (see blankPublicPemBlocks). The rules flagged
+  // `lockfile: true` are the shape rules (PEM private keys, provider-shaped tokens, URL passwords, webhook URLs): they never look
+  // at a name, so they keep reading the original text, and a private key or a token stays a finding whatever name holds it. The
+  // blanked text has the same length and line breaks, so ctx's line index and fences serve both; its look-behind (hasBefore) reads
+  // the original text, which can only make a rule look at more, never less.
+  const judged = lockfile ? text : blankPublicPemBlocks(text);
   for (const rule of RULES) {
     if (lockfile && !rule.lockfile) continue; // lockfiles: targeted rules only (see LOCKFILE_NAMES)
     if (rule.appliesTo && !rule.appliesTo(ctx)) continue;
+    const input = rule.lockfile ? text : judged;
     // The name hint is a speed-up for ordinary files; a credential file is always scanned in full.
-    if (rule.hint && !strict && !rule.hint.test(text)) continue;
+    if (rule.hint && !strict && !rule.hint.test(input)) continue;
     for (const matcher of rule.matchers) {
       if (matcher.appliesTo && !matcher.appliesTo(ctx)) continue;
-      if (matcher.hint && !matcher.hint.test(text)) continue;
-      for (const match of text.matchAll(matcher.pattern)) {
+      if (matcher.hint && !matcher.hint.test(input)) continue;
+      for (const match of input.matchAll(matcher.pattern)) {
         newlineIndex();
         const line = lineAt(newlines, match.index);
         const key = `${rule.id}:${line}`;
