@@ -41,9 +41,11 @@
  *     documentation about the credential (looksLikeDocumentation) anywhere; a passphrase that merely contains common words
  *     ("correct horse battery and staple", "This is the way.") is a finding.
  *   - Public verification material is not a secret: a name ending in public/pub + key (PUBLIC_KEY, jwtPublicKey) is not secret-like,
- *     and a complete PEM PUBLIC KEY / RSA PUBLIC KEY / CERTIFICATE block (a chain too) is blanked before the name-based rules read the
- *     file, so it is not judged under any name (blankPublicPemBlocks). The shape rules still read it: a PRIVATE KEY block or a
- *     provider token under a public name is a finding, and so is any text around a public block.
+ *     and a complete PEM PUBLIC KEY / RSA PUBLIC KEY / CERTIFICATE / CERTIFICATE REQUEST / X509 CRL block or PGP PUBLIC KEY BLOCK (a
+ *     chain too) whose body is one whole DER object (or PGP public-key packet) is blanked before the name-based rules read the file, so
+ *     it is not judged under any name (blankPublicPemBlocks). The shape rules still read it: a PRIVATE KEY block (in any line-break
+ *     encoding, on one line, base64-encoded, a PuTTY body, a bare DER key) or a provider token under a public name is a finding, and
+ *     so is any text around a public block.
  *   - A URL value is judged only under a strong name, and only for credential-looking parts (signed-URL parameters,
  *     webhook path tokens, a token as the user name). Webhook URLs are also a rule of their own (webhook-url).
  *   - A file-system path value (/etc/ssl/private/key.pem, ~/.ssh/id_rsa, ../certs/x.key, C:\keys\x.pfx, certs/server.pem) names the
@@ -58,7 +60,7 @@
  *     SETUVAR lines, in shell scripts, config files, heredocs written into them and fenced Markdown blocks.
  *   - Literals over several lines are judged like a quoted value: TOML/Python triple quotes, HCL/Ruby/Perl/PHP heredocs, PowerShell
  *     here-strings, template literals, quotes closed on a later line, backslash / INI continuation lines, YAML scalars on the next line.
- *     They are read up to 200 lines / 32 KB; a literal that does not end within that is reported (fail closed).
+ *     They are read up to 200 non-blank lines / 32 KB of non-blank text (4 MB raw); a literal that does not end within that is reported (fail closed).
  *     Each continuation line is read once per file (backslash continuations are cached), so the cost stays linear in the file.
  *   - String literals with a prefix, hashes or another delimiter are read wherever a literal value is (callStringLiteral): Rust r#"..."#,
  *     C# @"..." / $@"...", C++ R"(...)", Swift #"..."#, Python r'...', and by file type Lua [[...]], OCaml {|...|}, Perl q(), Ruby %q().
@@ -1286,8 +1288,34 @@ export function fileMode(filePath) {
 // Rules
 // ---------------------------------------------------------------------------
 
-// One or more line breaks (real or JSON-escaped). Unambiguous on purpose, to avoid regex backtracking blow-ups.
-const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:\\r|\r)?(?:\\n|\n))+[ \t]*`;
+// One line break inside a PEM block, as the formats write it: real (\n, \r\n), a JSON / YAML escape (\n, \r\n; doubled when the JSON
+// is itself escaped: \\n), a \u000a escape, an XML character reference (&#10; &#xA;, after an optional &#13; / &#xD;), or a backslash
+// line continuation (.properties, shell: `\` at the end of the line). The alternatives start with different text, so each position has
+// one reading.
+const PEM_LINE_BREAK = String.raw`(?:\\{1,2}r|\r|\\u000[dD]|&#(?:13|[xX]0{0,2}[dD]);)?(?:\\{1,2}n|\n|\\u000[aA]|&#(?:10|[xX]0{0,2}[aA]);)|\\\r?\n`;
+// One or more line breaks. Unambiguous on purpose (each repetition consumes a line break), to avoid regex backtracking blow-ups.
+const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:${PEM_LINE_BREAK}))+[ \t]*`;
+// Between the lines of a PRIVATE key block: those line breaks, or blanks alone (a block pasted onto one line, "-----BEGIN ... KEY-----
+// MII... -----END ... KEY-----", as a dotenv value or a YAML string holds it).
+const PRIVATE_PEM_SEPARATOR = String.raw`(?:${PEM_SEPARATOR}|[ \t]+)`;
+// A PEM private key written as base64 (a Kubernetes Secret's tls.key, a CI variable): "-----BEGIN " encodes to LS0tLS1CRUdJTi.
+const BASE64_PEM_PRIVATE = /(?<![A-Za-z0-9+/])LS0tLS1CRUdJTi[A-Za-z0-9+/]{30,}={0,2}/g;
+/** Does a base64 run starting with LS0tLS1CRUdJTi decode to a PRIVATE KEY header? Only its first 80 characters are decoded. */
+const base64PemIsPrivate = (b64) => /^-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----/.test(Buffer.from(b64.slice(0, 80), 'base64').toString('latin1'));
+// The bare DER body of a private key, base64 (no PEM armor): PKCS#8 RSA, PKCS#1 RSA, PKCS#8 and SEC1 EC, PKCS#8 Ed25519 / X25519.
+// Each prefix is the fixed ASN.1 header of that key type (version 0 or 1, then the algorithm OID or the first INTEGER).
+const DER_PRIVATE_KEY = new RegExp(
+  String.raw`(?<![A-Za-z0-9+/])(?:` +
+    [
+      String.raw`MII[A-Za-z0-9+/]{3}IBADANBgkqhkiG9w0BAQEFAAS[A-Za-z0-9+/]{200,}`, // PKCS#8 rsaEncryption
+      String.raw`MII[A-Za-z0-9+/]{3}IBAAKC[A-Za-z0-9+/]{3}A[A-Za-z0-9+/]{200,}`, // PKCS#1 RSAPrivateKey
+      String.raw`M[IH][A-Za-z0-9+/]{2}AgEAMB[AM]GByqGSM49AgEG[A-Za-z0-9+/]{40,}`, // PKCS#8 id-ecPublicKey
+      String.raw`M(?:HcCAQEEI|IGkAgEBBDA|IHcAgEBBEI)[A-Za-z0-9+/]{40,}`, // SEC1 ECPrivateKey (P-256, P-384, P-521)
+      String.raw`MC4CAQAwBQYDK2V[wu]BCIEI[A-Za-z0-9+/]{43}`, // PKCS#8 Ed25519 / X25519
+    ].join('|') +
+    ')',
+  'g',
+);
 const SECRET_HINT = /secret|passw|pwd|pass|token|credential|salt|pepper|key|auth/i;
 const ENV_ROOT = String.raw`(?:process\.env|import\.meta\.env)`;
 // A "/" in a URL, or the same "/" escaped for JSON (\/).
@@ -1875,7 +1903,8 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
   let closed = at === -1;
   let chars = 0;
   at += 1;
-  for (let n = 0; !closed && n < MULTILINE_MAX_LINES && chars <= MULTILINE_MAX_CHARS; n += 1) {
+  // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the raw read is capped and charged.
+  for (let n = 0; !closed && n < MULTILINE_MAX_LINES && chars <= MULTILINE_MAX_CHARS && at - afterHeader <= MULTILINE_RAW_MAX_CHARS; ) {
     if (at >= input.length) {
       closed = true;
       break;
@@ -1883,7 +1912,9 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
     const next = input.indexOf('\n', at);
     const stop = next === -1 ? input.length : next;
     const raw = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
-    chars += stop - at + 1;
+    const trimmedLength = raw.trim().length;
+    chars += trimmedLength;
+    if (trimmedLength > 0) n += 1;
     if (raw.trim() !== '') {
       if (/^[ \t]*/.exec(raw)[0].length <= keyColumn) {
         closed = true;
@@ -1898,7 +1929,10 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
     }
     at = next + 1;
   }
-  if (!closed) return exhaustedLiteral(ctx, input, afterHeader);
+  if (!closed) {
+    spendMultiline(ctx, Math.max(0, at - afterHeader - MULTILINE_MAX_CHARS));
+    return exhaustedLiteral(ctx, input, afterHeader);
+  }
   if (!spendMultiline(ctx, end - afterHeader + 1)) return exhaustedLiteral(ctx, input, afterHeader);
   return { values: bodyValues(lines.join('\n')), end, exhausted: false };
 }
@@ -2308,16 +2342,21 @@ function heredocBody(ctx, input, from, word) {
   let at = from;
   let closed = false;
   let end = from;
-  for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && at - from <= MULTILINE_MAX_CHARS; n += 1) {
+  let content = 0;
+  // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the whole raw read is charged below.
+  for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && content <= MULTILINE_MAX_CHARS && at - from <= MULTILINE_RAW_MAX_CHARS; ) {
     const lineEnd = input.indexOf('\n', at);
     const stop = lineEnd === -1 ? input.length : lineEnd;
     const line = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
     end = stop;
-    if (line.trim() === word) {
+    const trimmed = line.trim();
+    if (trimmed === word) {
       closed = true;
       break;
     }
     lines.push(line);
+    if (trimmed !== '') n += 1;
+    content += trimmed.length;
     if (lineEnd === -1) break;
     at = lineEnd + 1;
   }
@@ -2913,8 +2952,13 @@ function fishFlagsAssign(flags) {
 // and a per-file budget); when a bound is hit before the literal ends, the assignment is reported (fail closed).
 // ---------------------------------------------------------------------------
 
+// The bounds count CONTENT: lines that are not blank and characters that are not blanks. A certificate chain that the name-based
+// rules see blanked (blankPublicPemBlocks) is spaces and line breaks, so a real-size CA bundle (8 certificates of ~1.6 KB are over
+// 200 lines) does not run a literal out of its bounds. The raw distance a single read may cover is capped at MULTILINE_RAW_MAX_CHARS,
+// and blank text read past the content bounds is charged to the file's multi-line budget, so a hostile run of blanks stays linear.
 const MULTILINE_MAX_LINES = 200;
 const MULTILINE_MAX_CHARS = 32_768;
+const MULTILINE_RAW_MAX_CHARS = 4 * 1024 * 1024;
 const MULTILINE_BUDGET_CHARS = 24_000_000; // per file: characters the multi-line readers may look at before the file is reported
 const TRIPLE_QUOTE = /[rRbBfFuU]{0,2}#{0,16}("""|''')/y;
 const HEREDOC_OPENER = /<<(?:<|[-~])?(["']?)([A-Za-z_][A-Za-z0-9_]{0,63})\1/y;
@@ -2975,23 +3019,34 @@ function callLiteralTexts(m, ctx, literal, from) {
  * `pair`: a doubled quote is one quote of the content (YAML 'it''s'). `tripled`: the closing delimiter is three quotes.
  * `stop`: do not look at or beyond this index.
  */
-function closingQuote(input, from, quote, { escapes, pair = false, tripled = false, stop = input.length }) {
-  const limit = Math.min(stop, from + MULTILINE_MAX_CHARS);
+function closingQuote(input, from, quote, { escapes, pair = false, tripled = false, stop = input.length, ctx = null }) {
+  const limit = Math.min(stop, from + MULTILINE_RAW_MAX_CHARS);
   let lines = 0;
+  let content = 0;
+  let lineHasContent = false;
+  const giveUp = (at) => {
+    if (ctx !== null) spendMultiline(ctx, Math.max(0, at - from - MULTILINE_MAX_CHARS)); // blank text read past the content bound
+    return -1;
+  };
   for (let i = from; i < limit; i += 1) {
     const ch = input[i];
     if (ch === '\n') {
-      lines += 1;
-      if (lines > MULTILINE_MAX_LINES) return -1;
-    } else if (ch === '\\' && escapes) i += 1;
-    else if (ch === quote) {
-      if (tripled) {
-        if (input[i + 1] === quote && input[i + 2] === quote) return i;
-      } else if (pair && input[i + 1] === quote) i += 1;
-      else return i;
+      if (lineHasContent && (lines += 1) > MULTILINE_MAX_LINES) return giveUp(i);
+      lineHasContent = false;
+    } else if (ch === ' ' || ch === '\t' || ch === '\r') continue;
+    else if ((content += 1) > MULTILINE_MAX_CHARS) return giveUp(i);
+    else {
+      lineHasContent = true;
+      if (ch === '\\' && escapes) i += 1;
+      else if (ch === quote) {
+        if (tripled) {
+          if (input[i + 1] === quote && input[i + 2] === quote) return i;
+        } else if (pair && input[i + 1] === quote) i += 1;
+        else return i;
+      }
     }
   }
-  return -1;
+  return giveUp(limit);
 }
 
 /** Undo the escapes of a multi-line basic string: a line-ending backslash joins the lines, and \x is x. */
@@ -3012,7 +3067,7 @@ function multilineValue(ctx, input, valueStart) {
     const quote = triple[1];
     const bodyStart = valueStart + triple[0].length;
     const literalToml = quote === "'''" && /\.toml$/i.test(ctx.path);
-    const close = closingQuote(input, bodyStart, quote[0], { escapes: !literalToml, tripled: true });
+    const close = closingQuote(input, bodyStart, quote[0], { escapes: !literalToml, tripled: true, ctx });
     if (close === -1 || !spendMultiline(ctx, close - bodyStart)) return exhaustedLiteral(ctx, input, bodyStart);
     const raw = input.slice(bodyStart, close).replace(/^\r?\n/, '');
     const isRawString = /[rR]/.test(triple[0].slice(0, -3));
@@ -3030,7 +3085,9 @@ function multilineValue(ctx, input, valueStart) {
       const tag = opener[2];
       const body = [];
       let at = lineEnd + 1;
-      for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length; n += 1) {
+      let content = 0;
+      // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the raw read is capped and charged.
+      for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && at - lineEnd <= MULTILINE_RAW_MAX_CHARS; ) {
         let next = input.indexOf('\n', at);
         if (next === -1) next = input.length;
         const line = input.slice(at, next).replace(/\r$/, '');
@@ -3040,9 +3097,13 @@ function multilineValue(ctx, input, valueStart) {
           return { values: bodyValues(body.join('\n')), end: next, exhausted: false };
         }
         body.push(line);
-        if (next >= input.length || next - lineEnd > MULTILINE_MAX_CHARS) break;
+        const trimmed = line.trim().length;
+        if (trimmed > 0) n += 1;
+        content += trimmed;
+        if (next >= input.length || content > MULTILINE_MAX_CHARS) break;
         at = next + 1;
       }
+      spendMultiline(ctx, Math.max(0, at - lineEnd - MULTILINE_MAX_CHARS));
       return exhaustedLiteral(ctx, input, lineEnd);
     }
   }
@@ -3062,7 +3123,7 @@ function multilineValue(ctx, input, valueStart) {
   // A template / raw literal over several lines: JS `...`, Go `...`. (One line is read as an ordinary quoted value.)
   if (first === '`' && ctx.mode === 'code') {
     if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
-    const close = closingQuote(input, valueStart + 1, '`', { escapes: true });
+    const close = closingQuote(input, valueStart + 1, '`', { escapes: true, ctx });
     if (close === -1) return exhaustedLiteral(ctx, input, valueStart);
     const body = input.slice(valueStart + 1, close);
     if (!body.includes('\n')) return null;
@@ -3072,10 +3133,10 @@ function multilineValue(ctx, input, valueStart) {
   // A quote that is not closed on its line: shell NAME='a<newline>b', dotenv and YAML flow scalars over several lines.
   if ((first === '"' || first === "'") && ctx.mode === 'config') {
     const lineEnd = ctx.lineEnd(valueStart);
-    const sameLine = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", stop: lineEnd });
+    const sameLine = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", stop: lineEnd, ctx });
     if (sameLine !== -1) return null;
     if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
-    const close = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'" });
+    const close = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", ctx });
     if (close === -1 || !spendMultiline(ctx, close - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
     const body = input.slice(valueStart + 1, close);
     return { values: bodyValues(first === '"' ? unescapeMultiline(body) : body.replace(/''/g, "'")), end: close, exhausted: false };
@@ -3743,8 +3804,9 @@ const PROVIDER_RULES = [
   ),
   tokenRule(
     'other-provider-token',
-    'Other provider token (Databricks, Grafana, Supabase, PlanetScale, Docker Hub, RubyGems, Terraform Cloud, age secret key)',
-    /dapi|glsa_|sbp_|pscale_|dckr_pat_|rubygems_|atlasv1|AGE-SECRET-KEY/,
+    'Other provider token or prefixed private key (Databricks, Grafana, Supabase, PlanetScale, Docker Hub, RubyGems, Terraform Cloud, ' +
+      'Postman PMAK-, age secret key, BIP32 extended private key xprv / tprv / yprv / zprv, Nostr nsec1)',
+    /dapi|glsa_|sbp_|pscale_|dckr_pat_|rubygems_|atlasv1|AGE-SECRET-KEY|PMAK-|prv|nsec1/,
     [
       /(?<![A-Za-z0-9_])dapi[a-f0-9]{32}(?:-\d)?(?![A-Za-z0-9_])/g,
       /(?<![A-Za-z0-9_])glsa_[A-Za-z0-9]{32}_[a-f0-9]{8}(?![A-Za-z0-9_])/g,
@@ -3754,6 +3816,10 @@ const PROVIDER_RULES = [
       /(?<![A-Za-z0-9_])rubygems_[a-f0-9]{48}(?![A-Za-z0-9_])/g,
       /(?<![A-Za-z0-9])[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{60,}/g,
       /(?<![A-Za-z0-9-])AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}(?![A-Za-z0-9])/g,
+      /(?<![A-Za-z0-9_-])PMAK-[a-f0-9]{24}-[a-f0-9]{34}(?![A-Za-z0-9_-])/g,
+      // Base58Check of a 78-byte BIP32 extended PRIVATE key (the public form says pub: xpub, tpub, ...).
+      /(?<![A-Za-z0-9])[xtyzuvYZUV]prv[1-9A-HJ-NP-Za-km-z]{107,108}(?![A-Za-z0-9])/g,
+      /(?<![A-Za-z0-9])nsec1[02-9ac-hj-np-z]{58}(?![A-Za-z0-9])/g,
     ],
     (m) => !placeholderOf(m[0]) && varied(m[0]),
   ),
@@ -4829,12 +4895,14 @@ export const RULES = [
   {
     id: 'private-key-block',
     lockfile: true,
-    description: 'PEM private key block (header followed by key material)',
+    description:
+      'Private key material: a PEM private key block (line breaks real, escaped, as XML references or continuations, or blanks on one line), ' +
+      'the private lines of a PuTTY .ppk file, a base64-encoded PEM private key, or a bare base64 DER private key (PKCS#8, PKCS#1, SEC1)',
     matchers: [
       {
         pattern: new RegExp(
           String.raw`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----` +
-            PEM_SEPARATOR +
+            PRIVATE_PEM_SEPARATOR +
             String.raw`(?:(?:Proc-Type|DEK-Info|Version|Comment):[^\n]*` +
             PEM_SEPARATOR +
             String.raw`)*([A-Za-z0-9+/=]{20,}[^\n]*)`,
@@ -4842,6 +4910,14 @@ export const RULES = [
         ),
         accept: (m) => !placeholderOf(m[1]),
       },
+      {
+        // PuTTY .ppk: "PuTTY-User-Key-File-2: ssh-rsa" ... "Private-Lines: N" and the private key lines after it.
+        hint: /Private-Lines/,
+        pattern: new RegExp(String.raw`Private-Lines:[ \t]*\d{1,4}` + PEM_SEPARATOR + String.raw`([A-Za-z0-9+/=]{20,}[^\n]*)`, 'g'),
+        accept: (m) => !placeholderOf(m[1]),
+      },
+      { hint: /LS0tLS1CRUdJTi/, pattern: BASE64_PEM_PRIVATE, accept: (m) => base64PemIsPrivate(m[0]) },
+      { pattern: DER_PRIVATE_KEY, accept: (m) => !placeholderOf(m[0]) && varied(m[0].slice(-40)) },
     ],
   },
   {
@@ -5856,38 +5932,105 @@ export const RULES = [
 // scalars, heredocs, escaped JSON / dotenv strings, name/value pairs, ...) would report it under a secret-like name. Only these
 // labels count. A PRIVATE KEY of any kind never matches (nothing in the alternation says PRIVATE), and it has a rule of its own.
 const PUBLIC_PEM_BEGIN = '-----BEGIN ';
-const PUBLIC_PEM_LABEL = /((?:RSA |EC |DSA )?PUBLIC KEY|(?:TRUSTED |X509 )?CERTIFICATE)-----/y;
-// Between the lines of a block: the line breaks private-key-block accepts (real, or written as \n / \r\n escapes) and blanks, plus a
-// backslash line continuation (a .properties or shell value written as "...\n\" and the next line). Each repetition must consume a
-// line break, so the match stays linear.
-const PUBLIC_PEM_SEPARATOR = /(?:[ \t]*(?:\\r|\r)?(?:\\n|\n)|[ \t]*\\\r?\n)+[ \t]*/y;
-// One body line: strict base64. No headers (Proc-Type / DEK-Info belong to encrypted private keys), and padding ends the body.
-const PUBLIC_PEM_BODY_LINE = /[A-Za-z0-9+/]+(={1,2})?/y;
+const PUBLIC_PEM_LABEL =
+  /((?:RSA |EC |DSA )?PUBLIC KEY|(?:NEW )?CERTIFICATE REQUEST|(?:TRUSTED |X509 )?CERTIFICATE|X509 CRL|PGP PUBLIC KEY BLOCK)-----/y;
+// Between the lines of a block: the line breaks private-key-block accepts (PEM_LINE_BREAK: real, escaped once or twice, \u000a, an XML
+// character reference, a backslash line continuation) and blanks, plus the `", "` between the elements of a JSON or JS array that holds
+// one line per element. Each repetition must consume a line break or a quoted comma, so the match stays linear.
+const PUBLIC_PEM_SEPARATOR = new RegExp(String.raw`(?:[ \t]*(?:${PEM_LINE_BREAK}|["'][ \t]*,[ \t]*(?:\r?\n[ \t]*)?["']))+[ \t]*`, 'y');
+// One body line: strict base64 ("/" may be written "\/", as PHP json_encode and org.json do). No headers (Proc-Type / DEK-Info belong
+// to encrypted private keys), and padding ends the body. The two alternatives start with different characters (linear).
+const PUBLIC_PEM_BODY_LINE = /(?:[A-Za-z0-9+]|\\?\/)+(={1,2})?/y;
+// PGP armor: header lines ("Version: GnuPG v2") before the body, and a "=XXXX" CRC-24 line after it.
+const PGP_ARMOR_HEADER = /[A-Za-z][A-Za-z-]{0,30}: [^\n\r\\"]{0,200}/y;
+const PGP_CHECKSUM = /=[A-Za-z0-9+/]{4}/y;
+// The smallest public key or certificate that exists: an Ed25519 / X25519 SubjectPublicKeyInfo is 44 bytes.
+const MIN_PUBLIC_DER_BYTES = 44;
+
+/** The first bytes of a base64 run (up to 6, from its first 8 characters), or null. */
+const base64Head = (head) => (head.length < 4 ? null : [...Buffer.from(head.slice(0, head.length - (head.length % 4)), 'base64')]);
+
+/**
+ * Is a block body with this start (`head`, base64) and this many base64 characters (`chars`, padding left out) one complete
+ * object of its kind? PEM: a DER SEQUENCE (first byte 0x30) whose encoded length is exactly the decoded body. PGP: one public-key
+ * packet (tag 6, old or new format) that fits in the body. Either way at least MIN_PUBLIC_DER_BYTES. So a password dressed in
+ * BEGIN / END lines (`-----BEGIN PUBLIC KEY-----\nMyS3cret...\n-----END PUBLIC KEY-----`) is not taken for a key.
+ */
+function publicBodyIsWhole(head, chars, pgp) {
+  const decoded = Math.floor((chars * 6) / 8);
+  const b = base64Head(head);
+  if (b === null || b.length < 2 || decoded < MIN_PUBLIC_DER_BYTES) return false;
+  if (pgp) {
+    if ((b[0] & 0x80) === 0) return false;
+    if (b[0] & 0x40) {
+      if ((b[0] & 0x3f) !== 6) return false;
+      const len = b[1] < 192 ? b[1] + 2 : b[1] < 224 && b.length > 2 ? ((b[1] - 192) << 8) + b[2] + 192 + 3 : -1;
+      return len > 0 && len <= decoded;
+    }
+    if (((b[0] >> 2) & 0x0f) !== 6) return false;
+    const type = b[0] & 3;
+    const len = type === 0 ? b[1] + 2 : type === 1 && b.length > 2 ? ((b[1] << 8) | b[2]) + 3 : -1;
+    return len > 0 && len <= decoded;
+  }
+  if (b[0] !== 0x30) return false;
+  let total = -1;
+  if (b[1] < 0x80) total = 2 + b[1];
+  else if (b[1] === 0x81 && b.length > 2) total = 3 + b[2];
+  else if (b[1] === 0x82 && b.length > 3) total = 4 + ((b[2] << 8) | b[3]);
+  else if (b[1] === 0x83 && b.length > 4) total = 5 + ((b[2] << 16) | (b[3] << 8) | b[4]);
+  return total === decoded;
+}
 
 /**
  * Where the complete public PEM block that starts at `at` (a "-----BEGIN " index) ends: a public label, one or more base64 lines,
  * and the END line of the same label. Returns -1 for anything else: an unclosed block, another label at the end, a stray line
- * (a header, a non-base64 character, text after the padding), no body, or a body that is not DER. Public keys and certificates
- * are DER SEQUENCEs (first byte 0x30), and every such body starts with "M" in base64, so a block that does not is not taken on
- * trust. The walk stops at the first character that is neither a separator nor base64, so it never passes another BEGIN line.
+ * (a header, a non-base64 character, text after the padding), no body, or a body that is not one whole DER object of the length its
+ * header states (see publicBodyIsWhole; every DER body starts with "M" in base64). PGP armor may carry header lines and ends with a
+ * checksum line. The walk stops at the first character that is neither a separator nor base64, so it never passes another BEGIN line.
  */
 function publicPemBlockEnd(text, at) {
   PUBLIC_PEM_LABEL.lastIndex = at + PUBLIC_PEM_BEGIN.length;
   const label = PUBLIC_PEM_LABEL.exec(text);
   if (label === null) return -1;
+  const pgp = label[1] === 'PGP PUBLIC KEY BLOCK';
   const close = `-----END ${label[1]}-----`;
   let i = PUBLIC_PEM_LABEL.lastIndex;
   let lines = 0;
+  let headers = 0;
   let padded = false;
-  for (;;) {
+  let head = '';
+  let chars = 0;
+  const separator = () => {
     PUBLIC_PEM_SEPARATOR.lastIndex = i;
-    if (PUBLIC_PEM_SEPARATOR.exec(text) === null) return -1;
+    if (PUBLIC_PEM_SEPARATOR.exec(text) === null) return false;
     i = PUBLIC_PEM_SEPARATOR.lastIndex;
-    if (lines > 0 && text.startsWith(close, i)) return i + close.length;
+    return true;
+  };
+  for (;;) {
+    if (!separator()) return -1;
+    if (pgp && lines === 0) {
+      PGP_ARMOR_HEADER.lastIndex = i;
+      if (PGP_ARMOR_HEADER.exec(text) !== null) {
+        if ((headers += 1) > 16) return -1;
+        i = PGP_ARMOR_HEADER.lastIndex;
+        continue;
+      }
+    }
+    if (lines > 0 && pgp && text[i] === '=') {
+      PGP_CHECKSUM.lastIndex = i;
+      if (PGP_CHECKSUM.exec(text) === null) return -1;
+      i = PGP_CHECKSUM.lastIndex;
+      if (!separator() || !text.startsWith(close, i)) return -1;
+      return publicBodyIsWhole(head, chars, true) ? i + close.length : -1;
+    }
+    if (lines > 0 && !pgp && text.startsWith(close, i)) return publicBodyIsWhole(head, chars, false) ? i + close.length : -1;
     if (padded) return -1;
     PUBLIC_PEM_BODY_LINE.lastIndex = i;
     const body = PUBLIC_PEM_BODY_LINE.exec(text);
-    if (body === null || (lines === 0 && body[0][0] !== 'M')) return -1;
+    if (body === null || (lines === 0 && !(pgp ? /[mx]/ : /M/).test(body[0][0]))) return -1;
+    const run = body[0].replace(/[\\=]/g, '');
+    if (head.length < 8) head += run.slice(0, 8 - head.length);
+    chars += run.length;
     lines += 1;
     padded = body[1] !== undefined;
     i = PUBLIC_PEM_BODY_LINE.lastIndex;

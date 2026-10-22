@@ -12,6 +12,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
+import { Buffer } from 'node:buffer';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -76,13 +77,26 @@ const PRIVATE = join('PRIV', 'ATE', ' KEY');
 const RSA_PRIVATE = join('RSA ', 'PRIV', 'ATE', ' KEY');
 const EC_PRIVATE = join('EC ', 'PRIV', 'ATE', ' KEY');
 const ENCRYPTED_PRIVATE = join('ENCRYPTED ', 'PRIV', 'ATE', ' KEY');
-// Shaped like a real 2048-bit body: a DER SEQUENCE starts with "MII" in base64, then 64-character lines and a padded last line.
-// The rest is random, so every line reads as a random secret to a name-based rule.
-const bodyLines = (seed) => [
-  join('MII', randomString(61, seed, BASE64)),
-  ...[1, 2, 3].map((i) => randomString(64, seed + i, BASE64)),
-  join(randomString(20, seed + 9, BASE64), '=='),
-];
+/** `n` deterministic pseudo-random bytes. */
+function randomBytes(n, seed) {
+  let state = seed;
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    out.push(Math.floor(state / 65536) & 255);
+  }
+  return out;
+}
+/** The base64 of one whole DER SEQUENCE of `size` bytes (30 82 <length>, then random content), as 64-character lines. */
+const derLines = (size, seed) => {
+  const content = size - 4;
+  const der = Buffer.from([0x30, 0x82, content >> 8, content & 255, ...randomBytes(content, seed)]);
+  return der.toString('base64').match(/.{1,64}/g);
+};
+// Shaped like a real body: one DER SEQUENCE whose stated length is the decoded body (review round 19: a block whose body is not one
+// whole DER object is not taken for a public key), "MII" in base64, 64-character lines and a padded last line. The content is
+// random, so every line reads as a random secret to a name-based rule.
+const bodyLines = (seed) => derLines(208, seed);
 /** A PEM block as lines (no indentation). */
 const pemLines = (label, seed = 18001) => [begin(label), ...bodyLines(seed), end(label)];
 const indent = (lines, pad) => lines.map((line) => pad + line).join('\n');
@@ -280,7 +294,9 @@ describe('review round 18: public keys and certificates are not secrets', () => 
 
     it('a provider-shaped token inside a public block body is still found: the shape rules read the original text', () => {
       const pub = pemLines(PUBLIC);
-      const line = join('MII', randomString(10, 18520, BASE64), 'a', awsKeyId, 'b', randomString(20, 18530, BASE64));
+      // Same length as the line it replaces, and the same first 8 characters (the DER header), so the block stays whole.
+      const line = join(pub[1].slice(0, 8), randomString(13, 18520, BASE64), 'a', awsKeyId, 'b', randomString(21, 18530, BASE64));
+      expect(line).toHaveLength(pub[1].length);
       expect(blankPublicPemBlocks([pub[0], line, ...pub.slice(2)].join('\n')).trim()).toBe('');
       expect(rules('config.yml', `auth:\n  public_key: |\n${indent([pub[0], line, ...pub.slice(2)], '    ')}\n`)).toContain('aws-access-key-id');
     });
@@ -316,6 +332,155 @@ describe('review round 18: public keys and certificates are not secrets', () => 
       expect(count('app.env', `JWT_SECRET=${value}\n`)).toBe(1);
       expect(count('config.yml', `auth:\n  jwt_secret: |\n    ${value}\n`)).toBe(1);
       expect(rules('deploy.yml', `env:\n  - name: JWT_SECRET\n    value: "${value}"\n`)).toContain('secret-name-value-pair');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Review round 19: the public-name exemption silenced private material that private-key-block could not read (one line, XML
+  // entities, double escapes, \u000a, .properties continuations, PuTTY, base64 or bare DER keys, prefixed private keys); public blocks
+  // written with `\/`, as a JSON array, as PGP armor or as a CSR / CRL were still judged; a real-size CA chain ran literals out of
+  // their bounds; and a password dressed in public BEGIN / END lines passed.
+  describe('(4) review round 19', () => {
+    const PUBLIC_NAMES = ['public_key', 'PUBLIC_KEY', 'jwtPublicKey'];
+    const priv = pemLines(PRIVATE, 19001);
+    const openssh = [begin(join('OPENSSH ', PRIVATE)), join('b3BlbnNzaC1rZXktdjE', randomString(200, 19003, BASE64)), end(join('OPENSSH ', PRIVATE))];
+    const ppk = [
+      'PuTTY-User-Key-File-2: ssh-rsa', 'Encryption: none', 'Comment: k', 'Public-Lines: 2', ...derLines(120, 19005),
+      'Private-Lines: 3', ...derLines(180, 19007), join('Private-MAC: ', randomString(40, 19009, '0123456789abcdef')),
+    ];
+    const SHAPES = [
+      ['one line, blanks between (dotenv)', 'app.env', (name) => `${name.toUpperCase()}="${priv.join(' ')}"\n`],
+      ['one line, blanks between (YAML)', 'config.yml', (name) => `auth:\n  ${name}: "${priv.join(' ')}"\n`],
+      ['.properties continuation', 'app.properties', (name) => `${name}=${priv.join('\\n\\\n    ')}\n`],
+      ['XML &#10; entities', 'app.config', (name) => `<cfg>\n<${name}>${priv.join('&#10;')}</${name}>\n</cfg>\n`],
+      ['XML &#xA; entities', 'app.config', (name) => `<cfg>\n<${name}>${priv.join('&#xA;')}</${name}>\n</cfg>\n`],
+      ['XML add key/value', 'web.config', (name) => `<appSettings>\n<add key="${name}" value="${priv.join('&#10;')}"/>\n</appSettings>\n`],
+      ['double-escaped JSON', 'keys.json', (name) => `{"${name}": "${priv.join('\\\\n')}"}\n`],
+      ['\\u000a-escaped JSON', 'keys.json', (name) => `{"${name}": "${priv.join('\\u000a')}"}\n`],
+      ['PuTTY .ppk in a YAML block', 'config.yml', (name) => `${name}: |\n${indent(ppk, '  ')}\n`],
+      ['one-line OpenSSH private key', 'config.yml', (name) => `${name}: "${openssh.join(' ')}"\n`],
+      ['base64 of a PEM private key', 'config.yml', (name) => `${name}: ${Buffer.from(priv.join('\n')).toString('base64')}\n`],
+    ];
+    it.each(SHAPES)('a private key under a public name, %s: private-key-block', (_label, file, make) => {
+      for (const name of PUBLIC_NAMES) expect(rules(file, make(name)), name).toContain('private-key-block');
+    });
+
+    it('a bare base64 DER private key is reported under any name', () => {
+      const der = (hex, n, seed) => Buffer.concat([Buffer.from(hex, 'hex'), Buffer.from(randomBytes(n, seed))]).toString('base64');
+      const keys = [
+        der('308204bd020100300d06092a864886f70d0101010500048204a7', 1189, 19011), // PKCS#8 rsaEncryption
+        der('308204a40201000282010100', 1180, 19013), // PKCS#1 RSAPrivateKey
+        der('308187020100301306072a8648ce3d020106082a8648ce3d030107046d306b0201010420', 100, 19015), // PKCS#8 EC P-256
+        der('30770201010420', 112, 19017), // SEC1 EC P-256
+        der('302e020100300506032b657004220420', 32, 19019), // PKCS#8 Ed25519
+      ];
+      for (const key of keys) {
+        for (const name of ['public_key', 'data']) expect(rules('config.yml', `${name}: ${key}\n`), key.slice(0, 16)).toContain('private-key-block');
+      }
+    });
+
+    it('prefixed private material under a public name is reported by its token rule', () => {
+      const tokens = [
+        join('x', 'prv', '9s21ZrQH143K', randomString(95, 19021, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz')),
+        join('ns', 'ec1', randomString(58, 19023, 'qpzry9x8gf2tvdw0s3jn54khce6mua7l')),
+        join('PM', 'AK-', randomString(24, 19025, '0123456789abcdef'), '-', randomString(34, 19027, '0123456789abcdef')),
+      ];
+      for (const token of tokens) expect(rules('config.yml', `public_key: ${token}\n`), token.slice(0, 5)).toContain('other-provider-token');
+    });
+
+    const pub = pemLines(PUBLIC, 19031);
+    const PGP_LABEL = join('PGP ', 'PUBLIC KEY BLOCK');
+    const pgp = [
+      begin(PGP_LABEL), 'Version: GnuPG v2', '',
+      ...Buffer.from([0x99, 0x01, 0x0d, ...randomBytes(269, 19033)]).toString('base64').match(/.{1,64}/g),
+      join('=', randomString(4, 19035)), end(PGP_LABEL),
+    ];
+    it.each([
+      ['PHP / org.json escaped slashes', 'keys.json', `{"jwt_secret":"${pub.map((l) => l.replace(/\//g, '\\/')).join('\\n')}"}\n`],
+      ['PHP-escaped certificate', 'keys.json', `{"signing_key":"${pemLines(CERT, 19037).map((l) => l.replace(/\//g, '\\/')).join('\\n')}"}\n`],
+      ['a JSON array of lines', 'keys.json', `{"jwt_secret": [${pub.map((l) => JSON.stringify(l)).join(', ')}]}\n`],
+      ['a JSON array of lines, one per line', 'keys.json', `{"jwt_secret": [\n${pub.map((l) => `    ${JSON.stringify(l)}`).join(',\n')}\n]}\n`],
+      ['PGP armored public key', 'config.yml', `apt_signing_key: |\n${indent(pgp, '  ')}\n`],
+      ['CERTIFICATE REQUEST', 'keys.json', `{"jwt_secret": "${pemLines('CERTIFICATE REQUEST', 19039).join('\\n')}"}\n`],
+      ['X509 CRL', 'keys.json', `{"jwt_secret": "${pemLines('X509 CRL', 19041).join('\\n')}"}\n`],
+      ['\\u000a-escaped public key', 'keys.json', `{"jwt_secret": "${pub.join('\\u000a')}"}\n`],
+    ])('a complete public block is not judged under a secret name: %s', (_label, file, text) => {
+      expect(rules(file, text)).toEqual([]);
+    });
+
+    // Real-size certificates (~1.6 KB DER, 27 lines each): 8 of them are over 200 lines, 20 escaped on one line are over 32 KB.
+    const chain = (n) => Array.from({ length: n }, (_, i) => [begin(CERT), ...derLines(1600, 19100 + i), end(CERT)]).flat();
+    const TRIPLE = '"'.repeat(3);
+    it.each([
+      ['dotenv, quote closed on a later line', 'c.env', (lines) => `CA_BUNDLE_SECRET="${lines.join('\n')}"\n`],
+      ['Python triple quotes', 'c.py', (lines) => `TLS_CA_SECRET = ${TRIPLE}${lines.join('\n')}${TRIPLE}\n`],
+      ['TOML triple quotes', 'c.toml', (lines) => `tls_ca_secret = ${TRIPLE}\n${lines.join('\n')}\n${TRIPLE}\n`],
+      ['HCL heredoc', 'c.tf', (lines) => `${join('ca_', 'secret')} = <<EOT\n${lines.join('\n')}\nEOT\n`],
+      ['JS template literal', 'c.js', (lines) => `const CA_SECRET = \`${lines.join('\n')}\`;\n`],
+      ['k8s value block', 'c.yml', (lines) => `env:\n  - name: CA_SECRET\n    value: |\n${indent(lines, '      ')}\n`],
+      ['YAML block scalar', 'c.yml', (lines) => `ca_secret: |\n${indent(lines, '  ')}\n`],
+    ])('a chain of 8 real-size certificates is not judged: %s', (_label, file, make) => {
+      expect(chain(8).length).toBeGreaterThan(200);
+      expect(rules(file, make(chain(8)))).toEqual([]);
+    });
+    it('a chain of 20 real-size certificates escaped onto one line is not judged', () => {
+      expect(chain(20).join('\\n').length).toBeGreaterThan(32 * 1024);
+      expect(rules('c.json', `{"ca_secret": "${chain(20).join('\\n')}"}\n`)).toEqual([]);
+      expect(rules('c.env', `CA_SECRET="${chain(20).join('\\n')}"\n`)).toEqual([]);
+    });
+    it('a secret over more than 200 non-blank lines is still reported, blank lines or not', () => {
+      const long = Array.from({ length: 230 }, (_, i) => randomString(30, 19200 + i));
+      expect(rules('c.env', `CA_SECRET="${long.join('\n')}"\n`)).toContain('secret-assignment');
+      expect(rules('c.env', `CA_SECRET="${long.join('\n\n\n')}"\n`)).toContain('secret-assignment');
+    });
+
+    it.each([
+      ['an escaped block in a dotenv string', '.env', `DB_PASSWORD="${[begin(PUBLIC), 'MyS3cretPassw0rdA7fK9mQ2', end(PUBLIC)].join('\\n')}"\n`],
+      ['a YAML password block in CERTIFICATE lines', 'config.yml', `password: |\n${indent([begin(CERT), 'MyS3cretPassw0rdA7fK9mQ2', end(CERT)], '  ')}\n`],
+      ['a body whose DER length is wrong', 'config.yml', `jwt_secret: |\n${indent([begin(PUBLIC), ...derLines(208, 19301).slice(0, -1), end(PUBLIC)], '  ')}\n`],
+    ])('a password dressed up as a public block is still reported: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('secret-assignment');
+    });
+
+    it('hostile runs of blanks inside unclosed literals stay fast', SLOW, () => {
+      const timings = timeInChild(`
+        const blanks = (' '.repeat(60) + '\\n').repeat(60000);
+        const texts = {
+          dotenv: 'X_SECRET="' + blanks,
+          python: 'X_SECRET = ' + '"'.repeat(3) + blanks,
+          heredocs: Array.from({ length: 400 }, (_, i) => 'k' + i + '_sec' + 'ret = <<EOT' + i + '\\n').join('') + blanks,
+          template: 'const X_SECRET = ' + String.fromCharCode(96) + blanks,
+          yaml: 'x_secret: |\\n' + blanks + 'next: 1\\n',
+        };
+        for (const [name, text] of Object.entries(texts)) {
+          for (const file of ['a.env', 'a.py', 'a.tf', 'a.js', 'a.yml']) {
+            const start = performance.now();
+            scanText(file, text);
+            timings.push([name + ' ' + file, performance.now() - start]);
+          }
+        }
+      `);
+      for (const [label, ms] of timings) expect(ms, label).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it.skipIf(!hasGit())('the tree scan, --range and --history report one-line private keys under public names and pass a real CA chain', SLOW, () => {
+      const dir = makeRepo();
+      const root = commit(dir, { 'README.md': '# demo\n' });
+      commit(dir, {
+        'b1.env': `PUBLIC_KEY="${priv.join(' ')}"\n`,
+        'b2.yml': `auth:\n  public_key: "${priv.join(' ')}"\n`,
+        'c1.env': `CA_BUNDLE_SECRET="${chain(8).join('\n')}"\n`,
+      });
+      for (const args of [[], ['--range', `${root}..HEAD`], ['--history']]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, output).toBe(1);
+        expect(output).toContain('b1.env');
+        expect(output).toContain('b2.yml');
+        expect(output).toContain('private-key-block');
+        expect(output).not.toContain('c1.env');
+        for (const piece of windows(priv.slice(1, -1).join(''))) expect(output).not.toContain(piece);
+      }
     });
   });
 

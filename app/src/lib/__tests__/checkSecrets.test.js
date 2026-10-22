@@ -158,6 +158,9 @@ const PROVIDER_TOKENS = (() => {
     ['other-provider-token', 'Docker Hub PAT', () => ['dckr', '_pat_', r(30, 1049, B64URL)].join('')],
     ['other-provider-token', 'RubyGems', () => ['ruby', 'gems_', r(48, 1050, HEX)].join('')],
     ['other-provider-token', 'Terraform Cloud', () => [r(14, 1051), '.atlas', 'v1.', r(70, 1052, B64URL)].join('')],
+    ['other-provider-token', 'Postman API key (PMAK-)', () => ['PM', 'AK-', r(24, 1901, HEX), '-', r(34, 1902, HEX)].join('')],
+    ['other-provider-token', 'BIP32 extended private key (xprv)', () => ['x', 'prv', '9s21ZrQH143K', r(95, 1903, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz')].join('')],
+    ['other-provider-token', 'Nostr private key (nsec1)', () => ['ns', 'ec1', r(58, 1904, 'qpzry9x8gf2tvdw0s3jn54khce6mua7l')].join('')],
     ['other-provider-token', 'age secret key', () => ['AGE-SECRET', '-KEY-1', r(58, 1053, 'QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L')].join('')],
   ];
 })();
