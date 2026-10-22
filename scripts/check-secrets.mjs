@@ -1082,7 +1082,8 @@ function bareShellWordEnd(input, start) {
 }
 
 // Files whose unquoted values run to the end of the line (YAML plain scalars, ini, properties, dotenv).
-const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env']);
+// .udl: an OLE DB data link file, `[oledb]` and then one initialization (connection) string per line.
+const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env', '.udl']);
 const REST_OF_LINE_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'mycnf', 's3cfg', 'wgetrc', 'terraformrc'];
 function valueRunsToEndOfLine(filePath) {
   const base = path.posix.basename(filePath).toLowerCase();
@@ -1148,7 +1149,7 @@ const SOURCE_CODE_EXTENSIONS = new Set([
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.tf', '.tfvars', '.hcl', '.example',
-  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig', '.acl',
+  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig', '.acl', '.udl',
 ]);
 // XML configuration formats: Maven settings.xml and pom.xml, Ant, Tomcat server.xml, Android strings.xml, .NET
 // web.config / app.config (.config is above), MSBuild (.csproj, .props, .targets), .plist, .resx, .wsdl. These hold settings
@@ -1160,6 +1161,8 @@ const XML_CONFIG_EXTENSIONS = new Set([
   // entitlements, IDE and analyser settings, Windows packaging, Maven POM files.
   '.projitems', '.cscfg', '.csdef', '.jmx', '.mobileconfig', '.entitlements', '.iml', '.launch', '.ruleset', '.appxmanifest',
   '.wxs', '.wxi', '.pom', '.jnlp',
+  // SSIS package configurations and packages, SSRS data sources and reports: XML whose element text holds connection strings.
+  '.dtsconfig', '.dtsx', '.rds', '.rsds', '.rdl',
 ]);
 // systemd units (and Podman Quadlet units, which share their syntax) are INI-like settings: `Environment=NAME=value` sets a
 // variable of the service, so they are configuration, not source code. A drop-in (`app.service.d/override.conf`) is `.conf` already.
@@ -1188,7 +1191,7 @@ function baseWithoutTemplateSuffix(base) {
 export function isXmlConfigPath(filePath) {
   const base = path.posix.basename(filePath.split(path.sep).join('/'));
   const ext = path.posix.extname(baseWithoutTemplateSuffix(base));
-  return XML_CONFIG_EXTENSIONS.has(ext) || ext === '.config' || /^\.[a-z]*proj$/.test(ext);
+  return XML_CONFIG_EXTENSIONS.has(ext.toLowerCase()) || ext === '.config' || /^\.[a-z]*proj$/.test(ext);
 }
 
 const CONFIG_BASENAMES = new Set([
@@ -3467,11 +3470,17 @@ const SQL_RULE = {
 // reference, with no length or entropy test), because a connection string carries the password whole, as a URL does. Azure
 // `AccountKey=` / `SharedAccessKey=` fields are azure-storage-key's business (it knows their base64 shape).
 //
-// A field is a password key that opens a field: after `;`, a quote, `=` (a .env value that starts with it) or at the start of a line.
+// A field is a password key that opens a field: after `;`, a quote, `=` (a .env value that starts with it), `>`, at the start of a line, or
+// after blanks that follow `:`, a comment marker or (in prose) anything (see CONN_BLANK_OPENER).
 // The keys are case-insensitive and may have blanks around `=`, as the drivers parse them: Password, Pwd, Pass, Passwd, a qualified
 // SSL / TLS / proxy / certificate / key-store password, and OLE DB's `Jet OLEDB:Database Password`.
+// A field may also open after a blank (`conn: Password=...`, a `// Password=...` comment, prose) or `>` (XML element text): the
+// literal must still hold a connection-string key (CONN_STRING_CONTEXT), so a lone `pass=x` is not read. Npgsql's PSW and the SQL
+// Server JDBC key-store keys (keyStoreSecret, clientKeyPassword) are password keys too.
+// What may stand before the blanks in front of a field that opens after a blank (see the matcher).
+const CONN_BLANK_OPENER = /(?:[;"'\x60=>:]|\/\/|#|--|\/\*|^\*|<!--|^REM)$/i;
 const CONN_PASSWORD_FIELD =
-  /(?<=[;"'\x60=]|^)[ \t]{0,64}(?:jet[ \t]{1,8}oledb:(?:new[ \t]{1,8})?database[ \t]{1,8}password|(?:(?:ssl|tls|proxy|certificate|cert|keystore|truststore)[ \t_]?)?password|passwd|pwd|pass)[ \t]{0,64}=(?!=)[ \t]{0,64}/gim;
+  /(?<=[;"'\x60=> \t]|^)[ \t]{0,64}(?:jet[ \t]{1,8}oledb:(?:new[ \t]{1,8})?database[ \t]{1,8}password|key[ \t]?store[ \t]?secret|client[ \t]?key[ \t]?password|(?:(?:ssl|tls|proxy|certificate|cert|keystore|truststore)[ \t_]?)?password|passwd|pwd|psw|pass)[ \t]{0,64}=(?!=)[ \t]{0,64}/gim;
 // The other keys of a connection string. A password field counts only in a literal that also holds one of them (or a jdbc: URL), so
 // a lone `pass=x` in a query string, a list of test results or prose is not read as a connection string.
 const CONN_STRING_KEY = String.raw`(?:server|data[ \t]?source|host(?:[ \t]?name)?|address|addr|network[ \t]?address|database(?:[ \t]?name)?|initial[ \t]?catalog|user[ \t]?id|uid|user(?:[ \t]?name)?|driver|provider|dsn|dbq|port|integrated[ \t]?security|trusted[_ \t]?connection|encrypt|trust[ \t]?server[ \t]?certificate|persist[ \t]?security[ \t]?info|ssl[ \t]?mode|service[ \t]?name|application[ \t]?name|(?:connect(?:ion)?[ \t]?)?timeout|pooling|multiple[ \t]?active[ \t]?result[ \t]?sets)`;
@@ -3485,10 +3494,19 @@ const CONN_GLUE = new Set([' ', '\t', '\r', '\n', '+', '&', '.', '|', '_']);
 const CONN_COMMENT = /(?:^|[ \t;])(?:\/\/|\/\*|#|--|<!--)|^[ \t]*(?:\*|REM[ \t])/i;
 // C# $"..." / $@"..." / @$"...", Python f"..." / rf"..." / fr"...: the {...} inside are code, not text.
 const CONN_INTERPOLATED_PREFIX = /(?:^|[^A-Za-z0-9_])(?:\$@?|@\$|[fF][rR]?|[rR][fF])$/;
-// Filled in at run time: a printf / String.Format / MessageFormat slot or a `?` bind marker (`Password=%s`, `Pwd={0}`).
-const CONN_PARAMETER = /^(?:\?|%[-+ #0-9.]{0,8}[sdvqrS]|\{\d{0,3}(?:[,:][^{}]{0,32})?\})$/;
-// A {name} slot is a template when a format call fills it: Python str.format, Rust format!, .NET String.Format.
-const CONN_FORMAT_CALL = /\bformat(?:_map)?\b/i;
+// Filled in at run time: a printf / String.Format / MessageFormat slot or a `?` bind marker (`Password=%s`, `Pwd={0}`). printf slots
+// may be positional (%1$s), take a length modifier (%ls, %hs, %lld, %zu, %I64d) and a `*` width or precision (%.*s, %-*s); Ruby
+// names them (%{pw}, %<pw>s); Python's {0!s} / {0!r:>8} and .NET's {0,-8:X} are positional slots.
+const CONN_PARAMETER =
+  /^(?:\?|%(?:\d{1,2}\$)?[-+ #0-9.*]{0,8}(?:hh|h|ll|l|z|j|t|L|q|I64|I32|I)?[sdiuxXofFeEgGcCvqrSp@]|%\{[A-Za-z_][A-Za-z0-9_]{0,63}\}|%<[A-Za-z_][A-Za-z0-9_]{0,63}>[sdifgx]|\{\d{0,3}(?:![rsa])?(?:[,:][^{}]{0,32})?\})$/;
+// A {name} slot is a template when something fills it: a format call (Python str.format, Rust format!, .NET String.Format), a
+// .Replace("{pw}", ...) on the literal, a structured-logging call (Serilog / Microsoft.Extensions.Logging message templates name
+// their holes {Name} or {@Name}), or a value named as a template.
+const CONN_FORMAT_CALL =
+  /\bformat(?:_map)?\b|\.[Rr]eplace(?:All)?\(|\b(?:[Ll]og|_?[Ll]ogger|[A-Za-z_]{0,20}[Ll]ogger)\s{0,4}\.\s{0,4}(?:Verbose|Debug|Information|Info|Warning|Warn|Error|Fatal|Critical|Trace|Log[A-Za-z]{0,20})\s{0,4}\(|template/;
+// A reference that some tool replaces before the value is used: Jinja / Helm / Mustache / cookiecutter {{ ... }}, Jinja {% ... %}, ERB /
+// EJS <%= ... %>, cmd delayed expansion !NAME!, tokenizer @@NAME@@ / __NAME__ / #{NAME}#, MSBuild $(NAME).
+const CONN_REFERENCE = /^(?:\{\{[^{}]{1,256}\}\}|\{%[^%]{1,256}%\}|<%=?[^%]{1,256}%>|![A-Za-z_][A-Za-z0-9_.]{0,63}!|@@[A-Za-z_][A-Za-z0-9_.]{0,63}@@|__[A-Za-z][A-Za-z0-9_]{0,63}__|#\{[A-Za-z_][A-Za-z0-9_.]{0,63}\}#?|\$\([A-Za-z_][A-Za-z0-9_.]{0,63}\))$/;
 // How far a value is read. A longer one is judged on what was read (fail closed); the bound keeps each field's cost constant, so a
 // hostile line of `;pwd=` fields stays linear.
 const CONN_VALUE_LIMIT = 256;
@@ -3511,6 +3529,44 @@ const decodeXmlEntities = (text) =>
  * the current quoted literal are kept on ctx between the matches of one scan (matchAll visits them in order), so each line is read
  * once and each literal measured once however many fields it holds.
  */
+// Source files whose literals run over lines with no quote on the inner lines: Java / C# / Kotlin / Python / Scala / Swift triple
+// quotes (text blocks, raw literals) and Go / JavaScript / TypeScript backtick literals.
+const CONN_TRIPLE_SOURCE = /\.(?:java|cs|kt|kts|py|pyw|scala|swift|groovy|dart)$/i;
+const CONN_BACKTICK_SOURCE = /\.(?:go|js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i;
+
+/**
+ * Is the line that starts at `lineStart` inside a literal that runs over lines (triple quotes or a backtick literal opened on an
+ * earlier line)? A forward scan kept on ctx and advanced only (the matches of one scan come in order), so the whole file is read once.
+ * It toggles on triple quotes and on unescaped backticks; ordinary quotes are not tracked, so a backtick inside "..." can mislead it, and the
+ * only effect is which bare lines are read (each still needs a password field and a connection-string key).
+ */
+function connInsideMultiline(input, lineStart, ctx) {
+  const triple = CONN_TRIPLE_SOURCE.test(ctx.path);
+  const tick = CONN_BACKTICK_SOURCE.test(ctx.path);
+  if (!triple && !tick) return false;
+  let state = ctx.connMulti;
+  if (state === undefined || state.at > lineStart) state = ctx.connMulti = { at: 0, inTriple: false, inTick: false };
+  let { at, inTriple, inTick } = state;
+  for (; at < lineStart; at += 1) {
+    const ch = input[at];
+    if (inTick) {
+      if (ch === '\\') at += 1;
+      else if (ch === '`') inTick = false;
+    } else if (inTriple) {
+      if (ch === '"' && input[at + 1] === '"' && input[at + 2] === '"') {
+        inTriple = false;
+        at += 2;
+      }
+    } else if (tick && ch === '`') inTick = true;
+    else if (triple && ch === '"' && input[at + 1] === '"' && input[at + 2] === '"') {
+      inTriple = true;
+      at += 2;
+    }
+  }
+  Object.assign(state, { at, inTriple, inTick });
+  return inTriple || inTick;
+}
+
 function connLiteralAt(input, keyAt, ctx) {
   const lineStart = ctx.lineStart(keyAt);
   let state = ctx.connState;
@@ -3541,6 +3597,11 @@ function connLiteralAt(input, keyAt, ctx) {
     }
     const bare = state.bare;
     bare.bareOk = bare.asIs || (bare.commentAt !== -1 && lineStart + bare.commentAt < keyAt);
+    // A line inside a text block, a C# / Kotlin raw literal or a Go / JavaScript backtick literal is the literal's own text.
+    if (!bare.bareOk && ctx.mode === 'code') {
+      bare.inLiteral ??= connInsideMultiline(input, lineStart, ctx);
+      bare.bareOk = bare.inLiteral;
+    }
     return bare;
   }
   if (state.quoted === null || state.quoted.openAt !== openAt) {
@@ -3558,19 +3619,55 @@ function connLiteralAt(input, keyAt, ctx) {
   return state.quoted;
 }
 
+// How many literals before this one a concatenation (or a Join call) is followed back, and how far each may be.
+const CONN_CHAIN_PIECES = 8;
+const CONN_PIECE_CHARS = 256;
+// A Join call around the literals: C# string.Join(";", ...), Python ";".join([...]), JavaScript [...].join(";"). Its pieces are
+// separated by commas and the call puts the `;` between them.
+const CONN_JOIN_BEFORE = /\b[Jj]oin\s{0,8}\(\s{0,8}(?:\[|$)|\b[Jj]oin\s{0,8}\(\s{0,8}["'][;,]["']\s{0,8},/;
+const CONN_JOIN_AFTER = /^[^\n]{0,400}?[\])]\s{0,8}\.\s{0,8}[Jj]oin\s{0,8}\(\s{0,8}["'];["']/;
+
 /**
- * Does the literal continue a connection string from the piece before it? "Server=db;User Id=sa;" + "Password=<pw>;" in code (any of
- * the CONN_GLUE operators, or adjacent literals), or a YAML folded / multi-line scalar line after a line that ends in a field. The
- * piece before must end in a whole field (`key=value;`) and hold a connection-string key. At most 64 + 256 characters are read.
+ * The quoted pieces that come before the literal opened at `openAt`, nearest first (at most CONN_CHAIN_PIECES): each glued to the next
+ * by CONN_GLUE (or, in a Join call, by a comma). Each piece is read back to its opening quote within CONN_PIECE_CHARS on one line.
  */
-function connContinues(input, literal, ctx) {
+function connPiecesBefore(input, openAt, joined) {
+  const pieces = [];
+  let i = openAt - 1;
+  for (let n = 0; n < CONN_CHAIN_PIECES; n += 1) {
+    const stop = Math.max(0, i - 64);
+    while (i >= stop && (CONN_GLUE.has(input[i]) || (joined && (input[i] === ',' || input[i] === '[' || input[i] === '(')))) i -= 1;
+    const quote = input[i];
+    if (i < stop || (quote !== '"' && quote !== "'" && quote !== '\x60')) break;
+    let j = i - 1;
+    const back = Math.max(0, i - CONN_PIECE_CHARS);
+    while (j >= back && input[j] !== quote && input[j] !== '\n') j -= 1;
+    if (j < back || input[j] !== quote) break;
+    pieces.push(input.slice(j + 1, i));
+    i = j - 1;
+  }
+  return pieces;
+}
+
+/**
+ * Does the literal continue a connection string from the pieces before it? "Server=db;User Id=sa;" + "App=x;" + "Password=<pw>;" in
+ * code (any of the CONN_GLUE operators, or adjacent literals; up to CONN_CHAIN_PIECES pieces back), `"...User Id=sa" + ";Password=..."`
+ * (the `;` opens the password literal), the elements of a Join call, or a YAML folded / multi-line scalar line after a line that ends
+ * in a field. Some piece must hold a connection-string key, and the password field must start a field of the joined text.
+ */
+function connContinues(input, literal, ctx, keyAt) {
   let end;
   if (literal.quote !== null) {
-    let i = literal.openAt - 1;
-    const stop = Math.max(0, literal.openAt - 64);
-    while (i >= stop && CONN_GLUE.has(input[i])) i -= 1;
-    if (i < stop || (input[i] !== '"' && input[i] !== "'" && input[i] !== '\x60')) return false;
-    end = i; // the closing quote of the piece before
+    const lineStart = ctx.lineStart(literal.openAt);
+    const joined =
+      CONN_JOIN_BEFORE.test(input.slice(Math.max(lineStart, literal.openAt - 400), literal.openAt)) ||
+      CONN_JOIN_AFTER.test(input.slice(literal.openAt, literal.openAt + 600));
+    const pieces = connPiecesBefore(input, literal.openAt, joined);
+    if (pieces.length === 0) return false;
+    const lead = input.slice(literal.start, keyAt);
+    const text = joined ? pieces.reverse().join(';') : pieces.reverse().join('');
+    const boundary = joined ? lead.trim() === '' : /;[ \t]*$/.test(text + lead);
+    return boundary && CONN_STRING_CONTEXT.test(text.startsWith(';') ? text : `;${text}`);
   } else {
     if (literal.start === 0) return false;
     end = literal.start - 1; // the line break that ends the line before
@@ -3589,6 +3686,40 @@ function connContinues(input, literal, ctx) {
 function connFieldValue(input, valueStart, literal, xmlText) {
   const limit = Math.min(literal.close, valueStart + CONN_VALUE_LIMIT);
   const first = input[valueStart];
+  // The end of what any value form may read: the line, and CONN_VALUE_LIMIT characters (searched within that bound only, so a long
+  // line of fields costs a constant per field).
+  const window = input.slice(valueStart, valueStart + CONN_VALUE_LIMIT);
+  const lineBreak = window.indexOf('\n');
+  const lineLimit = valueStart + (lineBreak === -1 ? window.length : lineBreak);
+  // A value quoted with the literal's OWN quote doubled: Visual Basic and C# verbatim "...Password=""p;w"";", PowerShell and SQL
+  // '...Password=''p;w'';'. The literal's scan ended at the first of those quotes; the value runs to the next doubled quote.
+  if (literal.quote !== null && first === literal.quote && input[valueStart + 1] === literal.quote) {
+    const pair = literal.quote + literal.quote;
+    const close = input.indexOf(pair, valueStart + 2);
+    if (close !== -1 && close < lineLimit) return { value: input.slice(valueStart + 2, close), braced: false, end: close + 2 };
+  }
+  // A template reference ({{ .Values.db.pw }}, {{password}}) is not an ODBC braced value.
+  if (first === '{' && input[valueStart + 1] === '{' && !literal.interpolated) {
+    const close = input.indexOf('}}', valueStart + 2);
+    if (close !== -1 && close < Math.max(limit, lineLimit)) return { value: input.slice(valueStart, close + 2), braced: false, end: close + 2 };
+  }
+  // The other quote closing a code piece, not opening a value: ARM `concat('...;Password=', parameters('pw'), ...)`, `"Password='" + pw`.
+  if ((first === '"' || first === "'") && first !== literal.quote && /^[ \t]*(?:[,+&)]|$)/.test(input.slice(valueStart + 1, Math.min(literal.close, valueStart + 16)))) {
+    return { value: '', braced: false, end: valueStart, code: true };
+  }
+  // The value in a literal of its own: "...Password=" + "<pw>" + ";", Python ("...PWD=" "<pw>").
+  if (literal.quote !== null && valueStart === literal.close) {
+    let i = valueStart + 1;
+    const stop = Math.min(input.length, i + 64);
+    while (i < stop && CONN_GLUE.has(input[i])) i += 1;
+    const quote = input[i];
+    if (quote === '"' || quote === "'" || quote === '\x60') {
+      let j = i + 1;
+      const end = Math.min(input.length, j + CONN_VALUE_LIMIT);
+      for (; j < end && input[j] !== quote && input[j] !== '\n'; j += 1) if (input[j] === '\\') j += 1;
+      if (input[j] === quote) return { value: input.slice(i + 1, j).split(';')[0].trim(), braced: false, end: j + 1 };
+    }
+  }
   if (first === '{' && !literal.interpolated) {
     let i = valueStart + 1;
     for (; i < limit; i += 1) {
@@ -3619,14 +3750,25 @@ function connFieldValue(input, valueStart, literal, xmlText) {
 
 /** Is a connection-string password a literal credential? Interpolation and format slots are code; the rest is a URL password. */
 function connPasswordIsSecret(field, literal, around) {
+  if (field.code === true) return false;
   let text = field.value.includes('&') ? decodeXmlEntities(field.value) : field.value;
+  if (!literal.interpolated && CONN_REFERENCE.test(text.trim())) return false; // in C# $"..." / Python f"...", {{ is a literal brace
   // Interpolation that is code in any string: PHP `{$pw}`, Swift `\(pw)`; in an interpolated literal, every {...}. Literal text left
-  // next to it is still judged, as `${NAME}suffix` is in a URL.
+  // next to it is still judged, as `${NAME}suffix` is in a URL. In an interpolated literal `{{` and `}}` are literal braces (C# $"...",
+  // Python f"..."): `PWD={{<pw>}}` is the ODBC braced value <pw>, so they are kept aside while the holes are removed.
   text = text.replace(/\{\$[^{}\n]{0,256}\}|\\\([^()\n]{0,256}\)/g, '');
-  if (literal.interpolated) text = text.replace(/\{[^{}\n]{0,256}\}/g, '');
+  let braced = field.braced;
+  if (literal.interpolated) {
+    text = text.replace(/\{\{/g, '\u0001').replace(/\}\}/g, '\u0002').replace(/\{[^{}\n]{0,256}\}/g, '').replace(/\u0001/g, '{').replace(/\u0002/g, '}');
+    const odbc = /^\{([^{}]*)\}$/.exec(text.trim());
+    if (odbc !== null) {
+      text = odbc[1];
+      braced = true;
+    }
+  }
   text = text.trim();
-  if (text === '' || CONN_PARAMETER.test(field.braced ? `{${text}}` : text)) return false;
-  if (field.braced && /^[A-Za-z_][A-Za-z0-9_.]{0,63}$/.test(text) && CONN_FORMAT_CALL.test(around)) return false;
+  if (text === '' || CONN_PARAMETER.test(braced ? `{${text}}` : text)) return false;
+  if (braced && /^@?[A-Za-z_][A-Za-z0-9_.]{0,63}(?:![rsa])?(?::[^{}]{0,32})?$/.test(text) && CONN_FORMAT_CALL.test(around)) return false;
   return urlPasswordIsSecret(text);
 }
 
@@ -3634,16 +3776,22 @@ const CONNECTION_STRING_RULE = {
   id: 'connection-string-password',
   description:
     'Password / Pwd / Pass field set to a literal inside a semicolon-delimited connection string (ADO.NET, ODBC, OLE DB, SQL Server JDBC), in source code or config',
-  hint: /pass|pwd/i,
+  hint: /pass|pwd|psw|secret/i,
   matchers: [
     {
       pattern: CONN_PASSWORD_FIELD,
       accept: (m, ctx) => {
         const input = m.input;
         const keyAt = m.index + m[0].search(/\S/);
+        // A field after a blank opens one only after `:` (YAML / properties `conn: Password=...`), `>`, a comment marker, or in prose:
+        // `user=mail password=x` is a space-separated list (dovecot, libpq), not a connection string.
+        if (ctx.mode !== 'prose' && /[ \t]$/.test(input.slice(Math.max(0, keyAt - 1), keyAt))) {
+          const before = input.slice(Math.max(ctx.lineStart(keyAt), keyAt - 80), keyAt).trimEnd();
+          if (before !== '' && !CONN_BLANK_OPENER.test(before)) return false;
+        }
         const literal = connLiteralAt(input, keyAt, ctx);
         if (!literal.bareOk) return false;
-        literal.context ??= CONN_STRING_CONTEXT.test(input.slice(literal.start, literal.close)) || connContinues(input, literal, ctx);
+        literal.context ??= CONN_STRING_CONTEXT.test(input.slice(literal.start, literal.close)) || connContinues(input, literal, ctx, keyAt);
         if (!literal.context) return false;
         const valueStart = m.index + m[0].length;
         const field = connFieldValue(input, valueStart, literal, literal.quote === null && ctx.xml);
@@ -3743,8 +3891,14 @@ const PROVIDER_RULES = [
     id: 'azure-storage-key',
     description: 'Azure storage, Service Bus or Event Hubs shared key in a connection string, or a shared-access signature in a SAS URL',
     lockfile: true,
-    hint: /AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey|sig=/i,
+    hint: /AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey|sig=|AccessKey|Secret/i,
     matchers: [
+      {
+        // Azure SignalR / Web PubSub `Endpoint=...;AccessKey=<base64>` and App Configuration `Endpoint=...;Id=...;Secret=<base64>`
+        // (the generic names count only after an Endpoint= field of the same connection string).
+        pattern: /;[ \t]*(?:AccessKey|Secret)[ \t]*=[ \t]*([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])/gi,
+        accept: (m) => /Endpoint[ \t]*=[ \t]*https?:\/\//i.test(m.input.slice(Math.max(0, m.index - 300), m.index)) && !placeholderOf(m[1]) && /\d/.test(m[1]) && mixedCase(m[1]),
+      },
       {
         pattern: /(?<![A-Za-z0-9_])(?:AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey)[ \t]*=[ \t]*([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])/gi,
         accept: (m) => !placeholderOf(m[1]) && /\d/.test(m[1]) && mixedCase(m[1]),

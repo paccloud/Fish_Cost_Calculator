@@ -236,6 +236,121 @@ describe('review round 18: connection-string passwords in source code and config
   });
 
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Review round 19: doubled-quote values, concatenation and Join chains, a value in its own literal, literal braces in interpolated
+  // strings, fields after `: ` / `>` / a comment marker / prose, SSIS / SSRS / data-link files, multi-line literals whose inner line is
+  // the connection string, more keys; and template references, ARM concat, printf / Ruby / Python slots and log templates as FPs.
+  describe('review round 19', () => {
+    const BT = '`';
+    const TRIPLE = '"'.repeat(3);
+    const b64 = `${randomString(43, 19001)}=`;
+    const REPORTED = [
+      ['VB doubled quotes', 'Db.vb', `Dim cs = "Server=db;User Id=sa;${PW}=""${pw}"";"\n`],
+      ['C# verbatim doubled quotes', 'Db.cs', `var cs = @"Data Source=db;User ID=sa;${PW}=""${pw}""";\n`],
+      ['PowerShell doubled single quotes', 'db.ps1', `$cs = 'Server=db;User Id=sa;${PW}=''${pw}'';'\n`],
+      ['concatenation through a piece with no key', 'Db.cs', `var cs = "Server=db;User Id=sa;" +\n "App=EntityFramework;" +\n "${PW}=${pw};";\n`],
+      ['concatenation, the password piece opens with ;', 'Db.cs', `var cs = "Server=db;User Id=sa" + ";${PW}=${pw}";\n`],
+      ['C# string.Join', 'Db.cs', `var cs = string.Join(";", "Server=db", "User Id=sa", "${PW}=${pw}");\n`],
+      ['Python ";".join([...])', 'db.py', `cs = ";".join(["SERVER=db", "UID=sa", "${PWD}=${pw}"])\n`],
+      ['JavaScript [...].join(";")', 'db.js', `const cs = ["Server=db", "User Id=sa", "${PW}=${pw}"].join(";");\n`],
+      ['Python f-string with a literal-brace ODBC value', 'db.py', `cs = f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={host};UID=sa;${PWD}={{${pw}}}"\n`],
+      ['C# interpolated string with a literal-brace value', 'Db.cs', `var cs = $"Server={host};User Id=sa;${PW}={{${pw}}};";\n`],
+      ['YAML value led by the password', 'config.yml', `conn: ${PW}=${pw};Server=db;User Id=sa\n`],
+      ['a // comment led by the password', 'Db.cs', `// ${PW}=${pw};Server=db;User Id=sa\nvar x = 1;\n`],
+      ['Markdown prose', 'notes.md', `Prod: ${PW}=${pw};Server=db;User Id=sa\n`],
+      ['properties with a colon', 'db.properties', `db.conn: ${PW}=${pw};Server=db;User Id=sa\n`],
+      ['SSIS .dtsConfig element text', 'pkg.dtsConfig', `<DTSConfiguration>\n<Configuration><ConfiguredValue>Data Source=db;User ID=sa;${PW}=${pw};</ConfiguredValue></Configuration>\n</DTSConfiguration>\n`],
+      ['SSRS .rds', 'Shared.rds', `<RptDataSource>\n<ConnectionProperties><ConnectString>Data Source=db;Initial Catalog=x;${PW}=${pw}</ConnectString></ConnectionProperties>\n</RptDataSource>\n`],
+      ['SSRS .rdl', 'Report.rdl', `<Report>\n<ConnectString>Data Source=db;Initial Catalog=x;${PW}=${pw}</ConnectString>\n</Report>\n`],
+      ['OLE DB .udl', 'conn.udl', `[oledb]\n; Everything after this line is an OLE DB initstring\nProvider=SQLOLEDB.1;${PW}=${pw};Persist Security Info=True;User ID=sa;Data Source=db\n`],
+      ['the value in a literal of its own (C#)', 'Db.cs', `var cs = "Server=db;User Id=sa;${PW}=" + "${pw}" + ";";\n`],
+      ['the value in an adjacent literal (Python)', 'db.py', `cs = ("SERVER=db;UID=sa;${PWD}=" "${pw}")\n`],
+      ['Java text block', 'Db.java', `String cs = ${TRIPLE}\n    Server=db;User Id=sa;${PW}=${pw};\n    ${TRIPLE};\n`],
+      ['C# raw literal', 'Db.cs', `var cs = ${TRIPLE}\n    Server=db;User Id=sa;${PW}=${pw};\n    ${TRIPLE};\n`],
+      ['Kotlin raw string', 'Db.kt', `val cs = ${TRIPLE}\n    Server=db;User Id=sa;${PW}=${pw};\n    ${TRIPLE}\n`],
+      ['Go raw string', 'db.go', `var cs = ${BT}\n    Server=db;User Id=sa;${PW}=${pw};\n${BT}\n`],
+      ['JavaScript template over lines', 'db.js', `const cs = ${BT}\n    Server=db;User Id=sa;${PW}=${pw};\n${BT};\n`],
+      ['Npgsql PSW', 'Db.cs', `var cs = "Host=db;Username=u;PSW=${pw}";\n`],
+      ['JDBC keyStoreSecret', 'Db.java', `String u = "jdbc:sqlserver://db;user=sa;keyStoreSecret=${pw};";\n`],
+      ['JDBC clientKeyPassword', 'Db.java', `String u = "jdbc:sqlserver://db;user=sa;clientKeyPassword=${pw};";\n`],
+    ];
+    it.each(REPORTED)('reports: %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain(RULE);
+    });
+
+    it('Azure SignalR AccessKey= and App Configuration Secret= are azure-storage-key findings', () => {
+      expect(rules('a.json', `{"cs": "Endpoint=https://x.service.signalr.net;AccessKey=${b64};Version=1.0;"}\n`)).toContain('azure-storage-key');
+      expect(rules('a.json', `{"cs": "Endpoint=https://x.azconfig.io;Id=AbCd-l0-s0:1a2b3c;Secret=${b64}"}\n`)).toContain('azure-storage-key');
+    });
+
+    const PASSED = [
+      ['an Ansible / Jinja template', 'web.config.j2', `<add name="db" connectionString="Data Source={{ sql_host }};User ID={{ sql_user }};${PW}={{ sql_pw }}" />\n`],
+      ['a Helm template', 'configmap.yaml', `data:\n  conn: "Server={{ .Values.db.host }};User Id=sa;${PW}={{ .Values.db.pw }};"\n`],
+      ['cookiecutter', 'cookie.json', `{"cs": "Server=db;User Id=sa;${PW}={{ cookiecutter.db_password }}"}\n`],
+      ['Mustache', 'conn.mustache', `Server=db;User Id=sa;${PW}={{password}}\n`],
+      ['an ARM template concat', 'azuredeploy.json', `{"v": "[concat('Server=tcp:', parameters('server'), ';Initial Catalog=', parameters('db'), ';${PW}=', parameters('adminPassword'), ';Encrypt=True;')]"}\n`],
+      ['Java positional printf', 'Db.java', `String cs = String.format("Server=%1$s;User Id=sa;${PW}=%2$s;", host, pw);\n`],
+      ['PHP positional sprintf', 'db.php', `<?php $cs = sprintf("Server=db;User Id=sa;${PW}=%1$s;", $pw);\n`],
+      ['C wide and starred printf slots', 'db.c', `swprintf(b, L"Server=db;User Id=sa;${PW}=%ls;", pw);\nsprintf(b, "Server=db;UID=sa;${PWD}=%.*s;", n, pw);\nsprintf(b, "Server=db;UID=sa;${PWD}=%-*s;", n, pw);\nsprintf(b, "Server=db;UID=sa;${PWD}=%hs;", pw);\n`],
+      ['Ruby named format slots', 'db.rb', `cs = format("Server=db;User Id=sa;${PW}=%{pw};", pw: x)\ncs2 = format("Server=db;User Id=sa;${PW}=%<pw>s;", pw: x)\n`],
+      ['Python conversion slots', 'fmt.py', `cs = "Server=db;UID=sa;${PWD}={0!s}".format(pw)\ncs2 = "Server=db;UID=sa;${PWD}={pw!r}".format(pw=pw)\n`],
+      ['Serilog message templates', 'Log.cs', `Log.Debug("Server={Server};User Id={User};${PW}={Pw}", s, u, p);\nLog.Debug("Server={Server};User Id={User};${PW}={@Pw}", s, u, p);\n`],
+      ['a .Replace template', 'Db.cs', `var cs = "Server={host};User Id=sa;${PW}={pw};".Replace("{pw}", pw);\n`],
+      ['a JS .replace template', 'db.js', `const cs = "Server={host};User Id=sa;${PW}={pw};".replace('{pw}', pw);\n`],
+      ['a YAML template value', 'tmpl.yaml', `conn_template: "Server={host};User Id=sa;${PW}={pw};"\n`],
+      ['cmd delayed expansion', 'run.cmd', `echo "Server=db;User Id=sa;${PW}=!DB_SECRET!;"\n`],
+      ['tokenizer markers', 'tok.config', `<add name="db" connectionString="Server=db;User Id=sa;${PW}=@@DbSecret@@;" />\n`],
+      ['a space-separated list (dovecot) is no connection string', 'notes.txt.js', `const t = \`connect = host=db dbname=mail user=mail ${PW.toLowerCase()}=\${pw}\`;\n`],
+    ];
+    it.each(PASSED)('passes: %s', (_label, file, text) => {
+      expect(rules(file, text)).not.toContain(RULE);
+    });
+
+    it('the new readers stay linear on hostile input', SLOW, () => {
+      const timings = timeInChild(`
+        const P = 'Pass' + 'word';
+        const cases = {
+          doubled: '"Server=db;' + (';' + P + '=""').repeat(150000),
+          chain: ('"a=b;" + ').repeat(150000) + '"' + P + '=x"',
+          join: 'string.Join(";", ' + ('"a=b", ').repeat(150000) + '"' + P + '=x")',
+          ownLiteral: ('"Server=db;' + P + '=" + ').repeat(150000),
+          template: '"Server=db;' + (';' + P + '={{').repeat(150000),
+          blanks: ('conn: ' + P + '=x' + ' '.repeat(60)).repeat(30000),
+          textBlock: '"""\\n' + ('Server=db;' + P + '=;\\n').repeat(100000),
+          backticks: ('\`' + P + '=;Server=db\`\\n').repeat(100000),
+        };
+        for (const [name, text] of Object.entries(cases)) {
+          for (const file of ['a.cs', 'a.py', 'a.js', 'A.java', 'a.yml']) {
+            const start = performance.now();
+            scanText(file, text);
+            timings.push([name + ' ' + file, performance.now() - start]);
+          }
+        }
+      `);
+      for (const [label, ms] of timings) expect(ms, label).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it.skipIf(!hasGit())('the tree scan and --range report the new shapes and pass the templates', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'README.md': '# r19\n' });
+      commit(dir, {
+        'src/Db.vb': `Dim cs = "Server=db;User Id=sa;${PW}=""${pw}"";"\n`,
+        'src/Concat.cs': `var cs = "Server=db;User Id=sa;" +\n "App=EntityFramework;" +\n "${PW}=${pw};";\n`,
+        'src/Db.java': `String cs = ${TRIPLE}\n    Server=db;User Id=sa;${PW}=${pw};\n    ${TRIPLE};\n`,
+        'ssis/pkg.dtsConfig': `<DTSConfiguration>\n<Configuration><ConfiguredValue>Data Source=db;User ID=sa;${PW}=${pw};</ConfiguredValue></Configuration>\n</DTSConfiguration>\n`,
+        'deploy/web.config.j2': `<add name="db" connectionString="Data Source={{ sql_host }};User ID={{ sql_user }};${PW}={{ sql_pw }}" />\n`,
+      });
+      for (const args of [[], ['--range', `${base}..HEAD`]]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, output).toBe(1);
+        for (const file of ['src/Db.vb', 'src/Concat.cs', 'src/Db.java', 'ssis/pkg.dtsConfig']) expect(output, file).toContain(file);
+        expect(output).not.toContain('deploy/web.config.j2');
+        for (const piece of windows(pw)) expect(output).not.toContain(piece);
+      }
+    });
+  });
+
   it('a hostile file of password fields scans in linear time', SLOW, () => {
     const timings = timeInChild(`
       const P = 'Pass' + 'word';
