@@ -45,6 +45,9 @@
  *     provider token under a public name is a finding, and so is any text around a public block.
  *   - A URL value is judged only under a strong name, and only for credential-looking parts (signed-URL parameters,
  *     webhook path tokens, a token as the user name). Webhook URLs are also a rule of their own (webhook-url).
+ *   - A file-system path value (/etc/ssl/private/key.pem, ~/.ssh/id_rsa, ../certs/x.key, C:\keys\x.pfx, certs/server.pem) names the
+ *     file that holds the secret, so it passes in env, config, XML and Markdown files under a weak or strong name alike, unless a piece
+ *     of it looks machine-generated (/tmp/<random>, a base64 string that starts with "/"): see isFileSystemPath.
  *   - Native credential files (.netrc, .pgpass, .git-credentials, .npmrc, .pypirc, .aws/credentials, docker config,
  *     kubeconfig, .htpasswd, .my.cnf, .s3cfg, Terraform, .curlrc, .vault-token) have path-specific matchers
  *     (rule credential-file) and a 4-character value minimum; netrc, pgpass and docker auth are also recognised by
@@ -789,6 +792,51 @@ function urlCarriesCredential(url) {
   return false;
 }
 
+// A setting under a secret-like name often names the FILE that holds the secret (private_key: /etc/ssl/private/key.pem, signing_key:
+// ~/.ssh/id_rsa, client_secret: C:\secrets\client.json). That value is an address, like a URL with nothing credential-like in it.
+//   - Anchors: an absolute POSIX path, ~/, ./ or ../ (also .\ and ..\), a home or other directory variable ($HOME/, %USERPROFILE%\), a
+//     Windows drive (C:\ or C:/), a UNC share (\\host\share) or a path from the drive root (\keys\server.pfx; also what is left of an
+//     unquoted `name: C:\keys\...` once ASSIGNMENT_PATTERN has read `: C` as a type annotation). An anchored path needs two segments
+//     or a key-file extension: "/" + one word reads as a password.
+//   - Without an anchor only a relative path or a bare file name that ends in a key, certificate or credential-document extension counts
+//     (certs/server.pem, prod.p12, sa.json): base64 has "/" in its alphabet, so "abc/def" alone says nothing.
+//   - A segment is a run of [A-Za-z0-9._@-]; in an anchored path single blanks may join runs ("Program Files", "Application Support").
+//     So `+`, `=`, quotes, and `%`, `$` or `:` anywhere but in the anchor make the value something else (base64 padding, a URL,
+//     user:password@host, a reference), and it is judged as before.
+// Fail closed: a piece of a segment (split at - _ . @ and blanks) that looks machine-generated makes the whole value a token, not a
+// path: /tmp/<random>, /run/secrets/<40 hex>, a base64 string that happens to start with "/", a random name + ".pem". The gate is lower
+// than for whole values (8 characters) because a token split at its "/" characters is shorter in each piece.
+const KEY_FILE_EXTENSION = /\.(?:pem|key|crt|cer|der|csr|p7b|p8|p12|pfx|jks|jceks|keystore|truststore|pub|asc|gpg|ppk|json|txt)$/i;
+// The variable is an ALL-CAPS name, as in WHOLE_REFERENCE: `$` + mixed letters and digits reads as a password that starts with `$`.
+const POSIX_PATH_ANCHOR = /^(?:~|\.{1,2}|\$[A-Z_][A-Z0-9_]{0,63})?\//;
+const WINDOWS_PATH_ANCHOR = /^(?:[A-Za-z]:[\\/]|%[A-Za-z_][A-Za-z0-9_]{0,63}%[\\/]|\\\\(?=[^\\/])|\.{1,2}\\|\\(?=[^\\/]))/;
+const PATH_SEGMENT = /^[A-Za-z0-9._@-]{1,255}$/;
+// The blank is outside the run's class, so every character has one reading (linear).
+const SPACED_PATH_SEGMENT = /^[A-Za-z0-9._@-]{1,255}(?: [A-Za-z0-9._@-]{1,255}){0,15}$/;
+const MAX_PATH_SEGMENTS = 64;
+const PATH_PIECE_GATE = { minLength: 8, minEntropy: 3.0 };
+
+/** Is `value` unmistakably a file-system path whose pieces are all ordinary names (see above)? */
+export function isFileSystemPath(value) {
+  if (value.length > 4096) return false;
+  const windows = WINDOWS_PATH_ANCHOR.exec(value);
+  const posix = windows === null ? POSIX_PATH_ANCHOR.exec(value) : null;
+  const anchor = windows ?? posix;
+  // A POSIX path separates with "/" only (a backslash in it is not a path character); a Windows or a relative one with either. A
+  // doubled separator (C:\\keys\\x.pfx, as a single-quoted YAML or TOML literal keeps it) and a trailing one (a directory) are fine.
+  const segments = value
+    .slice(anchor === null ? 0 : anchor[0].length)
+    .split(posix === null ? /[\\/]+/ : /\/+/)
+    .filter((segment) => segment !== '');
+  if (segments.length === 0 || segments.length > MAX_PATH_SEGMENTS) return false;
+  const named = KEY_FILE_EXTENSION.test(segments[segments.length - 1]);
+  if (!named && (anchor === null || segments.length < 2)) return false;
+  const segmentShape = anchor === null ? PATH_SEGMENT : SPACED_PATH_SEGMENT;
+  return segments.every(
+    (segment) => segmentShape.test(segment) && segment.split(/[-_.@ ]+/).every((piece) => !looksRandom(piece, PATH_PIECE_GATE)),
+  );
+}
+
 /**
  * Decide whether a value assigned to a secret-like name is a finding.
  * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string, minLength?: number}} input
@@ -819,6 +867,10 @@ function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_S
     return kind === 'strong' && !/\s/.test(text) && urlCarriesCredential(text);
   }
   if (text === '' || isPlaceholder(text)) return false;
+  // A file-system path names the file that holds the secret; it is not the secret (isFileSystemPath). This comes before the env,
+  // config and Markdown gates below, under a weak or a strong name alike, and before the blank test ("C:\Program Files\..."). Source
+  // code keeps its randomness-only gate: a quoted literal there is reported only when it looks random as a whole.
+  if (mode !== 'code' && isFileSystemPath(text)) return false;
   if (/\s/.test(text)) {
     // Only a quoted value (or a whole-line value) may contain spaces; in code a spaced string is text.
     return quoted && mode !== 'code' && isPhraseSecret({ kind, text, minLength, catalog });
@@ -3658,8 +3710,6 @@ const LOCKFILE_RULE = {
 
 // The attribute that names an entry: <entry key="secret">V</entry>, <item name="password">V</item>.
 const XML_NAME_ATTRIBUTE = /(?:^|[ \t\r\n])(?:name|key)[ \t]*=[ \t]*(?:"([^"]{1,200})"|'([^']{1,200})')/i;
-// A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key.
-const PATH_VALUE = /^(?:\.{1,2}|~)?(?:\/[A-Za-z0-9._@-]{1,64}){2,12}\/?$/;
 // Example values Maven's reference settings.xml documents; they are sample text, not credentials.
 // (The passphrase hint is exact text: a sentence is not exempt by its punctuation, only this whole value is.)
 const XML_EXAMPLE_VALUES = new Set(['proxypass', 'optional; leave empty if not used.']);
@@ -3681,7 +3731,9 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   if (value === '') return false;
   // A Maven-encrypted password ({base64}) is not a plaintext credential: it is unreadable without the master key.
   if (/^\{[A-Za-z0-9+/=]{20,}\}$/.test(value)) return false;
-  if (PATH_VALUE.test(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
+  // A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key. The same
+  // test as every configuration value (isFileSystemPath), so a path with a random-looking piece is judged as a value here too.
+  if (isFileSystemPath(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
   // Text about the credential ("the password you chose during setup.") is exempt through the same documentation-cue rule
   // as every other format; punctuation alone never is, or a passphrase ending in "!" would slip through.
   return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
@@ -3815,7 +3867,12 @@ const SECRET_ASSIGNMENT_MATCHER = {
     if (value[3] !== undefined && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false;
     const check = (text, isQuoted) =>
       isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
-    if (quoted) return check(unescapeQuoted(quotedValue), true);
+    if (quoted) {
+      // A backslash is no escape in a single-quoted YAML or TOML string ('C:\keys\server.pfx'), so the path is judged as written too:
+      // unescaped it would read "C:keysserver.pfx", which is not a path, and the strong-name gate would report it.
+      if (ctx.mode !== 'code' && isFileSystemPath(quotedValue)) return false;
+      return check(unescapeQuoted(quotedValue), true);
+    }
     const bare = value[4];
     if (!nested) ctx.bareRunEnd = valueStart + bare.length;
     let token = bare.replace(/^["'`]+/, '');
