@@ -258,6 +258,71 @@ describe('review round 18: file-system path values', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Review round 19: the raw text of a DOUBLE-quoted value was judged as a path too, so a leading escape (`\u`, `\t`, `\n`) read as a
+  // drive-root anchor and every later escape as a separator; password-only positions accepted paths; and 8-character random pieces
+  // with one repeated character passed the piece gate.
+  describe('(4) escapes, password-only positions and short random pieces', () => {
+    const BS = '\\';
+    const word = (...parts) => parts.join('');
+    const ESCAPED = [
+      ['JSON \\u escapes (Python json.dump ensure_ascii)', 'config/app.json', `{\n  "${STRONG[3]}": "${BS}u00dcn${BS}u00efcode-pass-2024"\n}\n`],
+      ['YAML double-quoted \\t escapes', 'config/app.yml', `${secretName('pass', 'word')}: "${BS}t${word('Correct', 'Horse')}${BS}t${word('Batt', 'ery')}"\n`],
+      ['TOML \\u escapes', 'app.toml', `[db]\n${secretName('pass', 'word')} = "${BS}u0050assword-for-prod${BS}u0021"\n`],
+      ['YAML passphrase with \\t and \\n', 'config/app.yaml', `${STRONG[3]}: "${BS}tcorrect horse battery staple${BS}n"\n`],
+      ['dotenv \\t escapes', '.env', `${STRONG[3].toUpperCase()}="${BS}t${word('Correct', 'Horse')}${BS}t${word('Batt', 'ery')}"\n`],
+      ['MySQL option file \\u escapes', '.my.cnf', `[client]\n${secretName('pass', 'word')} = "${BS}u0048unter${BS}u0032-and-more"\n`],
+      ['YAML api token with \\u escapes', 'config/app.yml', `${secretName('api', '_token')}: "${BS}u0041bc-${BS}u0044ef-ghi-jkl-mno"\n`],
+    ];
+    it.each(ESCAPED)('reports %s', (_label, file, text) => {
+      expect(rules(file, text)).toContain('secret-assignment');
+    });
+
+    it('a double-quoted Windows path written with doubled backslashes or JSON \\/ is still a path', () => {
+      expect(count('a.json', `{"${STRONG[0]}": "C:${BS}${BS}keys${BS}${BS}server.pfx"}\n`)).toBe(0);
+      expect(count('a.json', `{"${STRONG[0]}": "${BS}/etc${BS}/ssl${BS}/private${BS}/key.pem"}\n`)).toBe(0);
+      expect(count('a.yml', `${STRONG[0]}: "C:${BS}keys${BS}server.pfx"\n`)).toBe(0); // \k and \s are not escapes
+      expect(count('a.yml', `${STRONG[0]}: 'C:${BS}${BS}keys${BS}${BS}server.pfx'\n`)).toBe(0);
+    });
+
+    it('a position that only ever holds the password reports a path-shaped value', () => {
+      const requirepass = secretName('require', 'pass');
+      expect(rules('redis.conf', `${requirepass} /srv/Summer2024/Prod\n`)).toContain('config-directive-secret');
+      expect(rules('redis.conf', `${secretName('master', 'auth')} /srv/Summer2024/Prod\n`)).toContain('config-directive-secret');
+      const basic = ['requests.get(url, au', 'th=("admin", "/srv/Summer2024/Prod"))\n'].join('');
+      expect(rules('app.py', basic)).toContain('http-auth-credential');
+      // A directive read by a secret-like NAME may still hold a key file, as an assignment may.
+      expect(count('redis.conf', 'tls-key-file /etc/redis/tls/redis.key\n')).toBe(0);
+    });
+
+    it('a random token cut into 8-character pieces is not a path, even with one repeated character per piece', () => {
+      const pieces = ['A7fK9mQ7', 'xL8vN4xR', '6tY3uW6z'];
+      expect(isFileSystemPath(`/${pieces.join('/')}`)).toBe(false);
+      expect(rules('a.yml', `${STRONG[0]}: /${pieces.join('/')}\n`)).toContain('secret-assignment');
+      expect(isFileSystemPath(`/${randomString(9, 19001)}/${randomString(9, 19002)}/${randomString(9, 19003)}`)).toBe(false);
+    });
+
+    it.each([
+      ['an SSH key with an id suffix (XML)', 'conf/settings.xml', `<settings>\n  <${STRONG[0]}>/home/ci/.ssh/id_ed25519_Kq7Lm2Xa9f3</${STRONG[0]}>\n</settings>\n`],
+      ['Program Files (x86)', 'a.yml', `${STRONG[0]}: "C:${BS}${BS}Program Files (x86)${BS}${BS}Acme${BS}${BS}certs${BS}${BS}server.key"\n`],
+      ['an 8.3 short name', 'a.yml', `${STRONG[0]}: C:${BS}PROGRA~1${BS}Acme${BS}certs${BS}server.key\n`],
+      ['a non-ASCII user name', '.env', `${STRONG[0].toUpperCase()}=/home/jos\u00e9/.ssh/id_rsa\n`],
+      ['a UNC administrative share', 'a.yml', `${STRONG[0]}: ${BS}${BS}fileserver${BS}c$${BS}keys${BS}server.pfx\n`],
+      ['a %VARIABLE% in the middle', 'a.yml', `${STRONG[0]}: C:${BS}Users${BS}%USERNAME%${BS}.ssh${BS}id_rsa\n`],
+      ['an App Store Connect key file', '.env', `APNS_${STRONG[0].toUpperCase()}=./certs/AuthKey_7UD5KJ9WQ3.p8\n`],
+      ['.ssh/id_ed25519 without an anchor', 'a.yml', `${STRONG[0]}: .ssh/id_ed25519\n`],
+      ['~user/', 'a.yml', `${STRONG[0]}: ~deploy/.ssh/id_rsa\n`],
+    ])('does not report a key-file path: %s', (_label, file, text) => {
+      expect(scanText(file, text)).toEqual([]);
+    });
+
+    it('an SSH key name is no exemption for a bare value or a random directory', () => {
+      expect(isFileSystemPath(`id_rsa_${randomString(24, 19011)}`)).toBe(false);
+      expect(isFileSystemPath(`/tmp/${randomString(24, 19012)}/id_rsa`)).toBe(false);
+      expect(isFileSystemPath('/home/ci/.ssh/id_ed25519_Kq7Lm2Xa9f3')).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   it('hostile inputs stay linear', SLOW, () => {
     const timings = timeInChild(`
       const name = 'private' + '_key';
@@ -326,6 +391,27 @@ describe('review round 18: file-system path values', () => {
         expect(output).toContain('secret-assignment');
         expect(output).not.toContain('config/app.yml');
         for (const piece of windows(token)) expect(output).not.toContain(piece);
+      }
+    });
+
+    it.skipIf(!hasGit())('escaped double-quoted passwords and a path-shaped requirepass are reported by the tree scan and --range', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'README.md': '# t\n' });
+      const BS = '\\';
+      commit(dir, {
+        'b1.json': `{\n  "${STRONG[3]}": "${BS}u00dcn${BS}u00efcode-pass-2024"\n}\n`,
+        'b2.yml': `${secretName('pass', 'word')}: "${BS}tCorrectHorse${BS}tBattery"\n`,
+        'b3.toml': `[db]\n${secretName('pass', 'word')} = "${BS}u0050assword-for-prod${BS}u0021"\n`,
+        'b4.yaml': `${STRONG[3]}: "${BS}tcorrect horse battery staple${BS}n"\n`,
+        'redis.conf': `${secretName('require', 'pass')} /srv/Summer2024/Prod\n`,
+      });
+      for (const args of [[], ['--range', `${base}..HEAD`]]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, output).toBe(1);
+        for (const file of ['b1.json', 'b2.yml', 'b3.toml', 'b4.yaml', 'redis.conf']) expect(output, file).toContain(file);
+        expect(output).not.toContain('Summer2024');
+        expect(output).not.toContain('battery staple');
       }
     });
   });

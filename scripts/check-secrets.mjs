@@ -897,13 +897,34 @@ function urlCarriesCredential(url) {
 // than for whole values (8 characters) because a token split at its "/" characters is shorter in each piece.
 const KEY_FILE_EXTENSION = /\.(?:pem|key|crt|cer|der|csr|p7b|p8|p12|pfx|jks|jceks|keystore|truststore|pub|asc|gpg|ppk|json|txt)$/i;
 // The variable is an ALL-CAPS name, as in WHOLE_REFERENCE: `$` + mixed letters and digits reads as a password that starts with `$`.
-const POSIX_PATH_ANCHOR = /^(?:~|\.{1,2}|\$[A-Z_][A-Z0-9_]{0,63})?\//;
+// `~user/` is another user's home directory.
+const POSIX_PATH_ANCHOR = /^(?:~(?:[a-z_][a-z0-9_-]{0,31})?|\.{1,2}|\$[A-Z_][A-Z0-9_]{0,63})?\//;
 const WINDOWS_PATH_ANCHOR = /^(?:[A-Za-z]:[\\/]|%[A-Za-z_][A-Za-z0-9_]{0,63}%[\\/]|\\\\(?=[^\\/])|\.{1,2}\\|\\(?=[^\\/]))/;
-const PATH_SEGMENT = /^[A-Za-z0-9._@-]{1,255}$/;
-// The blank is outside the run's class, so every character has one reading (linear).
-const SPACED_PATH_SEGMENT = /^[A-Za-z0-9._@-]{1,255}(?: [A-Za-z0-9._@-]{1,255}){0,15}$/;
+// Letters of any script (/home/josé/...), digits and . _ @ -.
+const PATH_SEGMENT = /^[\p{L}\p{N}._@-]{1,255}$/u;
+// The blank is outside the run's class, so every character has one reading (linear). An anchored segment may also hold
+// parentheses and "~" (C:\Program Files (x86)\, the 8.3 name C:\PROGRA~1\).
+const SPACED_PATH_SEGMENT = /^[\p{L}\p{N}._@()~-]{1,255}(?: [\p{L}\p{N}._@()~-]{1,255}){0,15}$/u;
+// A whole Windows segment that is a variable (C:\Users\%USERNAME%\.ssh) or, right after \\host\, an administrative share (c$).
+const WINDOWS_VARIABLE_SEGMENT = /^%[A-Za-z_][A-Za-z0-9_]{0,63}%$/;
+const ADMIN_SHARE_SEGMENT = /^[A-Za-z]\$$/;
 const MAX_PATH_SEGMENTS = 64;
-const PATH_PIECE_GATE = { minLength: 8, minEntropy: 3.0 };
+// A piece of 8 or more characters with this much variety is machine-generated. 2.7 rather than 3.0: an 8- or 9-character piece
+// of a random token reaches 3.0 only with every character distinct, so `/A7fK9mQ7/xL8vN4xR/...` (one repeat per piece) passed.
+const PATH_PIECE_GATE = { minLength: 8, minEntropy: 2.7 };
+// Key files whose conventional NAME carries an id: an SSH key with a suffix (id_ed25519_<host or id>, id_rsa-deploy.pub) and an
+// App Store Connect / APNs key (AuthKey_<10-character key id>.p8). The id is public; the name is judged by its shape, not its pieces.
+// Only in a path with a directory: a bare `id_rsa_<random>` is judged like any value.
+const NAMED_KEY_FILE = /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:_sk)?(?:[-_.][A-Za-z0-9]{1,24}){0,3}|AuthKey_[A-Z0-9]{10}\.p8)$/;
+
+// A backslash escape that a double-quoted JSON / YAML / TOML / shell string turns into another character (read in pairs, so `\\n` is a
+// doubled backslash and then "n"). `\\` and `\/` are left out: they are how a quoted Windows or JSON path writes its separators.
+const STRING_ESCAPE = /\\(?:[uUxtnrbfave0N_LP"' ]|$)/;
+/** Does the raw text of a double-quoted string hold an escape sequence other than `\\` and `\/`? */
+function hasStringEscape(raw) {
+  if (!raw.includes('\\')) return false;
+  return STRING_ESCAPE.test(raw.replace(/\\[\\/]/g, ''));
+}
 
 /** Is `value` unmistakably a file-system path whose pieces are all ordinary names (see above)? */
 export function isFileSystemPath(value) {
@@ -918,12 +939,18 @@ export function isFileSystemPath(value) {
     .split(posix === null ? /[\\/]+/ : /\/+/)
     .filter((segment) => segment !== '');
   if (segments.length === 0 || segments.length > MAX_PATH_SEGMENTS) return false;
-  const named = KEY_FILE_EXTENSION.test(segments[segments.length - 1]);
+  const last = segments[segments.length - 1];
+  const keyFileName = NAMED_KEY_FILE.test(last);
+  const named = KEY_FILE_EXTENSION.test(last) || keyFileName;
   if (!named && (anchor === null || segments.length < 2)) return false;
   const segmentShape = anchor === null ? PATH_SEGMENT : SPACED_PATH_SEGMENT;
-  return segments.every(
-    (segment) => segmentShape.test(segment) && segment.split(/[-_.@ ]+/).every((piece) => !looksRandom(piece, PATH_PIECE_GATE)),
-  );
+  const unc = windows !== null && windows[0] === '\\\\';
+  return segments.every((segment, i) => {
+    if (i === segments.length - 1 && keyFileName && (anchor !== null || segments.length >= 2)) return true;
+    if (windows !== null && WINDOWS_VARIABLE_SEGMENT.test(segment)) return true;
+    if (unc && i === 1 && ADMIN_SHARE_SEGMENT.test(segment)) return true;
+    return segmentShape.test(segment) && segment.split(/[-_.@ ()~]+/).every((piece) => !looksRandom(piece, PATH_PIECE_GATE));
+  });
 }
 
 /**
@@ -931,7 +958,7 @@ export function isFileSystemPath(value) {
  * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string, minLength?: number}} input
  * `minLength` is the shortest value a strong name may hold (8; credential files such as .npmrc use 4).
  */
-function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false }) {
+function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false, allowPath = true }) {
   let text = value;
   if (!quoted) {
     if (mode === 'code') return false; // a bare token in source code is an expression, not a literal
@@ -944,7 +971,7 @@ function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_S
   // right next to a reference (${A}literal). Operands are judged as whole strings.
   if (mode === 'config' && text.includes('${')) {
     const operand = (literal) =>
-      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode, minLength, catalog });
+      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode, minLength, catalog, allowPath });
     if (expansionLiterals(text).some(operand)) return true;
     const glued = stripQuotes(withoutExpansions(text));
     if (glued === '') return false;
@@ -958,8 +985,9 @@ function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_S
   if (text === '' || isPlaceholder(text)) return false;
   // A file-system path names the file that holds the secret; it is not the secret (isFileSystemPath). This comes before the env,
   // config and Markdown gates below, under a weak or a strong name alike, and before the blank test ("C:\Program Files\..."). Source
-  // code keeps its randomness-only gate: a quoted literal there is reported only when it looks random as a whole.
-  if (mode !== 'code' && isFileSystemPath(text)) return false;
+  // code keeps its randomness-only gate: a quoted literal there is reported only when it looks random as a whole. A position that
+  // can only hold the password itself (requirepass, a basic-auth argument, chpasswd input: `allowPath: false`) never holds a path.
+  if (allowPath && mode !== 'code' && isFileSystemPath(text)) return false;
   if (/\s/.test(text)) {
     // Only a quoted value (or a whole-line value) may contain spaces; in code a spaced string is text.
     return quoted && mode !== 'code' && isPhraseSecret({ kind, text, minLength, catalog });
@@ -3958,8 +3986,10 @@ const SECRET_ASSIGNMENT_MATCHER = {
       isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
     if (quoted) {
       // A backslash is no escape in a single-quoted YAML or TOML string ('C:\keys\server.pfx'), so the path is judged as written too:
-      // unescaped it would read "C:keysserver.pfx", which is not a path, and the strong-name gate would report it.
-      if (ctx.mode !== 'code' && isFileSystemPath(quotedValue)) return false;
+      // unescaped it would read "C:keysserver.pfx", which is not a path, and the strong-name gate would report it. A double-quoted
+      // (or backtick) value is judged as written only when it holds no escape sequence but a doubled backslash or `\/`: a JSON, YAML
+      // or TOML `"\u00dcn\u00efcode-pass"` or `"\tCorrectHorse\tBattery"` is a password with escapes, not a path from the drive root.
+      if (ctx.mode !== 'code' && (value[2] !== undefined || !hasStringEscape(quotedValue)) && isFileSystemPath(quotedValue)) return false;
       return check(unescapeQuoted(quotedValue), true);
     }
     const bare = value[4];
@@ -4335,10 +4365,15 @@ function directiveValue(groups) {
 // nginx variables ($http_x_api_key, ${var}), HAProxy sample fetches and log-format (%[req.hdr(x)]), Apache expressions (%{HTTP_X}e): references.
 const DIRECTIVE_REFERENCE = /^(?:\$[A-Za-z_{(]|%[[{])/;
 
-/** Is the literal value of a service directive a secret? Strong-name rules: any non-placeholder of 8+ characters. */
-function directiveIsSecret(value) {
+/**
+ * Is the literal value of a service directive a secret? Strong-name rules: any non-placeholder of 8+ characters. Most directives
+ * (requirepass, masterauth, BasicAuth, stats auth, an ACL >password, chpasswd input) hold the password itself, never the name of a
+ * file, so a path-shaped value is judged like any other (`requirepass /srv/Summer2024/Prod`). The matchers that read a
+ * directive by a secret-like NAME pass `allowPath: true`, as an assignment would.
+ */
+function directiveIsSecret(value, { allowPath = false } = {}) {
   if (DIRECTIVE_SAMPLES.has(value.text.toLowerCase()) || DIRECTIVE_REFERENCE.test(value.text)) return false;
-  return isSecretValue({ kind: 'strong', value: value.text, quoted: value.quoted, separator: '=', mode: 'config' });
+  return isSecretValue({ kind: 'strong', value: value.text, quoted: value.quoted, separator: '=', mode: 'config', allowPath });
 }
 
 /** Directives are read in configuration files, and in fenced blocks of Markdown; anywhere else the text is prose or code. */
@@ -5544,12 +5579,12 @@ export const RULES = [
             const read = callLiteralTexts(m, ctx, literal, start);
             if (read.verdict !== undefined) return read.verdict;
             if (literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
-            return read.texts.some((text) => isSecretValue({ kind: 'strong', value: text, quoted: true, separator: '=', mode: 'config' }));
+            return read.texts.some((text) => isSecretValue({ kind: 'strong', value: text, quoted: true, separator: '=', mode: 'config', allowPath: false }));
           }
           const argument = quotedArgument(m.input, start);
           if (argument === null || argument.raw.length === 0) return false;
           m.spanEnd = argument.end;
-          return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config' });
+          return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config', allowPath: false });
         },
       },
     ],
@@ -5589,7 +5624,7 @@ export const RULES = [
           const kind = nameKindFor(m.groups.name, ctx);
           const value = directiveValue(m.groups);
           // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
-          return kind === 'strong' && directiveIsSecret(value);
+          return kind === 'strong' && directiveIsSecret(value, { allowPath: true });
         },
       },
       {
@@ -5635,7 +5670,7 @@ export const RULES = [
           const kind = nameKindFor(m.groups.name, ctx);
           const value = directiveValue(m.groups);
           // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
-          return kind === 'strong' && directiveIsSecret(value);
+          return kind === 'strong' && directiveIsSecret(value, { allowPath: true });
         },
       },
       {
@@ -5651,7 +5686,7 @@ export const RULES = [
         // Erlang application config (RabbitMQ advanced.config / rabbitmq.config, sys.config): {default_pass, <<"P">>}, {password, "P"}
         pattern: /\{[ \t\r\n]{0,16}(?<name>[a-z][A-Za-z0-9_@]{0,127})[ \t\r\n]{0,16},[ \t\r\n]{0,16}(?:<<[ \t]{0,4})?"(?<dq>(?:[^"\\\n]|\\.){0,4096})"/g,
         appliesTo: (ctx) => ctx.mode === 'config' && /\.config(?:\.src)?$|\.app\.src$/i.test(ctx.path),
-        accept: (m, ctx) => nameKindFor(m.groups.name, ctx) === 'strong' && directiveIsSecret({ text: unescapeQuoted(m.groups.dq), quoted: true }),
+        accept: (m, ctx) => nameKindFor(m.groups.name, ctx) === 'strong' && directiveIsSecret({ text: unescapeQuoted(m.groups.dq), quoted: true }, { allowPath: true }),
       },
       {
         // OpenVPN inline credentials: <auth-user-pass> / user / password / </auth-user-pass>
