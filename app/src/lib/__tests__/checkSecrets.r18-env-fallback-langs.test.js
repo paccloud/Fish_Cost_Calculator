@@ -178,14 +178,15 @@ describe('review round 18: environment fallbacks outside JavaScript', () => {
       expect(fallbacks('main.go', `package main\n\nfunc k() string {\n\tk := os.Getenv("${NAME}")\n\tif k == "" {\n\t\tk = "${value}"\n\t}\n\treturn k\n}\n`).map((f) => f.line)).toEqual([4]);
     });
 
-    it('judges the default like the JavaScript branch: a guessable constant counts too', () => {
+    it('judges the default like the JavaScript branch: a guessable constant counts too (a placeholder does not: review round 19)', () => {
       expect(fallbacks('app.js', `const k = process.env.${NAME} || '${guessable}';\n`).length).toBe(1);
+      const weak = ['hunter2', 'hunter2'].join(''); // guessable, and no placeholder
       for (const [file, text] of [
-        ['Auth.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "${guessable}";\n`],
-        ['Auth.java', `String k = System.getenv().getOrDefault("${NAME}", "${guessable}");\n`],
-        ['auth.rb', `K = ENV.fetch("${NAME}", "${guessable}")\n`],
-        ['main.rs', `let k = env::var("${NAME}").unwrap_or("${guessable}".into());\n`],
-        ['main.go', `k := os.Getenv("${NAME}")\nif k == "" {\n\tk = "${guessable}"\n}\n`],
+        ['Auth.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "${weak}";\n`],
+        ['Auth.java', `String k = System.getenv().getOrDefault("${NAME}", "${weak}");\n`],
+        ['auth.rb', `K = ENV.fetch("${NAME}", "${weak}")\n`],
+        ['main.rs', `let k = env::var("${NAME}").unwrap_or("${weak}".into());\n`],
+        ['main.go', `k := os.Getenv("${NAME}")\nif k == "" {\n\tk = "${weak}"\n}\n`],
       ]) {
         expect(fallbacks(file, text).length, file).toBe(1);
       }
@@ -322,6 +323,122 @@ describe('review round 18: environment fallbacks outside JavaScript', () => {
       const result = scan(dir);
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.stdout).toContain('OK');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Review round 19: files named env.* in a programming language were read as configuration, chains and comments between the getter
+  // and the operator, and more idioms per language (Go if-init / cmp.Or / wrapped reads, Ruby without parentheses / .presence / do,
+  // Rust match / dotenvy / map_or / format!, Java requireNonNullElseGet / Optional.or / an env map variable, Python conditionals and
+  // keywords, PowerShell) were missed; message ternaries, `or ... in`, weak names and placeholders were reported.
+  describe('(5) review round 19', () => {
+    const MORE = [
+      ['env.go is code', 'config/env.go', `v := os.Getenv("${NAME}")\nif v == "" {\n  v = "${value}"\n}\n`],
+      ['Env.cs is code', 'src/Env.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "${value}";\n`],
+      ['env.rs is code', 'src/env.rs', `let k = std::env::var("${NAME}").unwrap_or("${value}".into());\n`],
+      ['env.rb is code', 'lib/env.rb', `K = ENV.fetch("${NAME}", "${value}")\n`],
+      ['env.php is code', 'config/env.php', `<?php\n$k = getenv("${NAME}") ?: "${value}";\n`],
+      ['env.ts is code', 'src/env.ts', `const k = Deno.env.get("${NAME}") ?? "${value}";\n`],
+      ['C# ?.Trim() ??', 'A.cs', `var k = Environment.GetEnvironmentVariable("${NAME}")?.Trim() ?? "${value}";\n`],
+      ['C# (getter) ??', 'A.cs', `var k = (Environment.GetEnvironmentVariable("${NAME}")) ?? "${value}";\n`],
+      ['C# // comment, ?? on the next line', 'A.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") // fallback\n    ?? "${value}";\n`],
+      ['C# /* comment */ ??', 'A.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") /* dev */ ?? "${value}";\n`],
+      ['C# named argument', 'A.cs', `var k = Environment.GetEnvironmentVariable(variable: "${NAME}") ?? "${value}";\n`],
+      ['Kotlin ?.trim() ?:', 'A.kt', `val k = System.getenv("${NAME}")?.trim() ?: "${value}"\n`],
+      ['Kotlin ?.takeIf { } ?:', 'A.kt', `val k = System.getenv("${NAME}")?.takeIf { it.isNotBlank() } ?: "${value}"\n`],
+      ['Kotlin .orEmpty().ifBlank { }', 'A.kt', `val k = System.getenv("${NAME}").orEmpty().ifBlank { "${value}" }\n`],
+      ['Go if-init, return after the block', 'a.go', `func k() string {\n\tif v := os.Getenv("${NAME}"); v != "" {\n\t\treturn v\n\t}\n\treturn "${value}"\n}\n`],
+      ['Go LookupEnv if-init', 'a.go', `func k() string {\n\tif v, ok := os.LookupEnv("${NAME}"); ok {\n\t\treturn v\n\t}\n\treturn "${value}"\n}\n`],
+      ['Go cmp.Or', 'a.go', `var k = cmp.Or(os.Getenv("${NAME}"), "${value}")\n`],
+      ['Go read wrapped in strings.TrimSpace', 'a.go', `v := strings.TrimSpace(os.Getenv("${NAME}"))\nif v == "" {\n\tv = "${value}"\n}\n`],
+      ['Ruby ENV.fetch without parentheses', 'a.rb', `K = ENV.fetch "${NAME}", "${value}"\n`],
+      ['Ruby .presence ||', 'a.rb', `K = ENV['${NAME}'].presence || '${value}'\n`],
+      ['Ruby ENV.fetch do ... end', 'a.rb', `K = ENV.fetch('${NAME}') do\n  '${value}'\nend\n`],
+      ['Rust match Err(_) =>', 'a.rs', `let k = match std::env::var("${NAME}") { Ok(v) => v, Err(_) => "${value}".to_string() };\n`],
+      ['Rust dotenvy::var', 'a.rs', `let k = dotenvy::var("${NAME}").unwrap_or_else(|_| "${value}".into());\n`],
+      ['Rust map_or_else', 'a.rs', `let k = env::var("${NAME}").map_or_else(|_| "${value}".to_string(), |v| v);\n`],
+      ['Rust format!', 'a.rs', `let k = env::var("${NAME}").unwrap_or_else(|_| format!("${value}"));\n`],
+      ['Java requireNonNullElseGet', 'A.java', `String k = Objects.requireNonNullElseGet(System.getenv("${NAME}"), () -> "${value}");\n`],
+      ['Java Optional.or', 'A.java', `String k = Optional.ofNullable(System.getenv("${NAME}")).or(() -> Optional.of("${value}")).get();\n`],
+      ['Java env map in a variable', 'A.java', `Map<String,String> env = System.getenv();\nString k = env.getOrDefault("${NAME}", "${value}");\n`],
+      ['Python conditional, in os.environ', 'a.py', `K = os.environ["${NAME}"] if "${NAME}" in os.environ else "${value}"\n`],
+      ['Python conditional, get', 'a.py', `K = os.environ.get('${NAME}') if os.environ.get('${NAME}') else '${value}'\n`],
+      ['django-environ env.str', 'a.py', `K = env.str("${NAME}", default="${value}")\n`],
+      ['Python keyword arguments', 'a.py', `K = os.getenv(key="${NAME}", default="${value}")\n`],
+      ['PowerShell ??', 'a.ps1', `$s = $env:${NAME} ?? '${value}'\n`],
+      ['PowerShell if / else', 'a.ps1', `$s = if ($env:${NAME}) { $env:${NAME} } else { '${value}' }\n`],
+    ];
+    it.each(MORE)('reports: %s', (_label, file, text) => {
+      expect(fallbacks(file, text).length).toBeGreaterThan(0);
+    });
+
+    const NOT = [
+      ['a status ternary that tests for null (C#)', 'H.cs', `var s = Environment.GetEnvironmentVariable("${NAME}") == null ? "missing" : "configured";\n`],
+      ['a status ternary with is null (C#)', 'H.cs', `var s = Environment.GetEnvironmentVariable("${NAME}") is null ? "not configured" : "ok";\n`],
+      ['a status ternary (Java)', 'H.java', `String s = System.getenv("${NAME}") == null ? "missing" : "ok";\n`],
+      ['Python or, then a membership test', 'm.py', `if os.getenv("${TOKEN}") or "api_token" in settings:\n    pass\n`],
+      ['Python or, then in sys.argv', 'm.py', `x = os.environ.get("${NAME}") or "--insecure" in sys.argv\n`],
+      ['Laravel weak names with word defaults', 'config/auth.php', `<?php\nreturn [\n  'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),\n  'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),\n];\n`],
+      ['a placeholder default', 'P.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "your-secret-here";\n`],
+      ['a <marker> default', 'P.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "<jwt-secret>";\n`],
+      ['REDACTED', 'P.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? "REDACTED";\n`],
+      ['changeme', 'P.kt', `val k = System.getenv("${NAME}") ?: "${guessable}"\n`],
+      ['a display default in parentheses', 'D.cs', `Console.WriteLine(Environment.GetEnvironmentVariable("${TOKEN}") ?? "(not set)");\n`],
+      ['a display default in angle brackets', 'd.py', `print("token:", os.getenv("${TOKEN}") or "<unset>")\n`],
+      ['env.production stays configuration (no code rule)', 'env.production', `KEY=Environment.GetEnvironmentVariable("${NAME}") ?? "${value}"\n`],
+    ];
+    it.each(NOT)('does not report as a fallback: %s', (_label, file, text) => {
+      expect(fallbacks(file, text)).toEqual([]);
+    });
+
+    it('a weak name still reports a random-looking default', () => {
+      expect(fallbacks('config/auth.php', `<?php\nreturn ['x' => env('AUTH_PASSWORD_BROKER', '${value}')];\n`).length).toBe(1);
+    });
+
+    it.skipIf(!hasGit())('the tree scan and --range report the new shapes and pass the message ternary', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'README.md': '# r19\n' });
+      commit(dir, {
+        'config/env.go': `package config\n\nfunc load() {\n\tv := os.Getenv("${NAME}")\n\tif v == "" {\n\t\tv = "${value}"\n\t}\n}\n`,
+        'src/Trim.kt': `val k = System.getenv("${NAME}")?.trim() ?: "${value}"\n`,
+        'src/Health.cs': `var s = Environment.GetEnvironmentVariable("${NAME}") == null ? "missing" : "configured";\n`,
+      });
+      for (const args of [[], ['--range', `${base}..HEAD`]]) {
+        const result = scan(dir, ...args);
+        const output = result.stdout + result.stderr;
+        expect(result.status, output).toBe(1);
+        expect(output).toContain('config/env.go');
+        expect(output).toContain('src/Trim.kt');
+        expect(output).not.toContain('src/Health.cs');
+        expect(output).not.toContain(value.slice(0, 8));
+      }
+    });
+
+    it('the new readers stay linear on hostile input', SLOW, () => {
+      const timings = timeInChild(`
+        const N = ${JSON.stringify(NAME)};
+        const size = 1_000_000;
+        const fill = (unit) => unit.repeat(Math.ceil(size / unit.length)).slice(0, size);
+        const inputs = [
+          ['a.cs', fill('Environment.GetEnvironmentVariable("' + N + '")?.A()?.B()?.C()?.D() ')],
+          ['a.cs', fill('Environment.GetEnvironmentVariable("' + N + '") /* ' + 'x'.repeat(150) + ' ')],
+          ['a.cs', fill('Environment.GetEnvironmentVariable("' + N + '") // ' + 'x'.repeat(150) + '\\n')],
+          ['a.kt', fill('System.getenv("' + N + '")?.takeIf { ' + 'a'.repeat(100) + ' ')],
+          ['a.go', fill('if v := os.Getenv("' + N + '"); v != "" { ' + 'x'.repeat(100) + ' ')],
+          ['a.go', fill('cmp.Or(os.Getenv("' + N + '"), ')],
+          ['a.rs', fill('match env::var("' + N + '") { Ok(v) => v, ' + 'x'.repeat(100))],
+          ['a.py', fill('os.environ["' + N + '"] if ' + 'x '.repeat(80))],
+          ['a.ps1', fill('$env:' + N + ' ?? ')],
+          ['a.java', fill('env.getOrDefault("' + N + '", ')],
+          ['a.rb', fill('ENV.fetch("' + N + '") do\\n')],
+        ];
+        for (const [file, text] of inputs) {
+          const t0 = performance.now();
+          scanText(file, text);
+          timings.push(performance.now() - t0);
+        }
+      `);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
     });
   });
 

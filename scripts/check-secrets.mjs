@@ -1138,6 +1138,13 @@ function unquotedContinuations(ctx, input, matchIndex, tokenEnd, token) {
 // ---------------------------------------------------------------------------
 
 const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
+// Program source: a base name that starts with "env." is configuration (env.production, env.example) unless it ends in one of these
+// (env.go, Env.cs, env.rs, env.ts are the code that READS the environment, and their defaults are judged as code).
+const SOURCE_CODE_EXTENSIONS = new Set([
+  '.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.go', '.rs', '.cs', '.java', '.kt', '.kts', '.scala', '.groovy',
+  '.py', '.rb', '.php', '.swift', '.dart', '.ex', '.exs', '.lua', '.pl', '.pm', '.c', '.h', '.cc', '.cpp', '.hpp', '.m', '.vb',
+  '.fs', '.ps1', '.psm1',
+]);
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.tf', '.tfvars', '.hcl', '.example',
@@ -1266,7 +1273,7 @@ export function fileMode(filePath) {
     base.startsWith('.env.') ||
     base.includes('.env.') ||
     base.endsWith('.env') ||
-    base.startsWith('env.') ||
+    (base.startsWith('env.') && !SOURCE_CODE_EXTENSIONS.has(ext)) ||
     base.startsWith('docker-compose') ||
     base.startsWith('dockerfile') ||
     DOVECOT_CONFIG.test(base) ||
@@ -4652,9 +4659,12 @@ function privateJwkMembers(ctx, text) {
 //             branch; `getenv("N") ? "configured" : "missing"` and `getenv("N") != null ? "set" : "unset"` are messages, not defaults.
 //   Go        v := os.Getenv("N") (or v, ok := os.LookupEnv("N")), then within ENV_GO_DEFAULT_LINES lines `if v == "" { v = "v" }` (also
 //             "" == v, len(v) == 0, !ok). Go has no default operator, so its idiom assigns the default to the variable on a later line.
-// The default is judged like the JavaScript branch above: any non-empty constant counts, because a guessable "changeme" default signs tokens
-// as well as a random one does. An empty string, an interpolated string ("${x}", "#{x}", Kotlin / PHP "$x", C# $"{x}", Swift "\(x)") and
-// anything that is not a string literal (a variable, a call, `throw`, `nil`) pass. Every pattern below is a fixed callee or operator followed
+// The default is judged like the JavaScript branch above under a strong name: any non-empty constant counts, because a guessable
+// "hunter2" default signs tokens as well as a random one does. A placeholder ("your-secret-here", "changeme", "<jwt-secret>") and a
+// display text in parentheses or brackets ("(not set)") pass, and under a weak name the default must look random (envDefaultValueIsSecret).
+// An empty string, an interpolated string ("${x}", "#{x}", Kotlin / PHP "$x", C# $"{x}", Swift "\(x)") and anything that is not a string
+// literal (a variable, a call, `throw`, `nil`) pass. A literal that is the operand of a comparison or membership test after `or` / `||`
+// (`getenv("K") or "k" in settings`) is no default, and a ternary whose both branches are literals is a message, not a default. Every pattern below is a fixed callee or operator followed
 // by bounded runs, so a match costs a constant amount of work past its start.
 // A default kept in a local variable and applied on a later line is read only in Go's form; `v = getenv("N")` then `v ?? "v"` is not.
 // ---------------------------------------------------------------------------
@@ -4664,11 +4674,12 @@ function privateJwkMembers(ctx, text) {
 // EnvironmentVariableTarget.User, Ruby ENV.fetch("N", nil), PHP getenv("N", true)); a quoted second argument is the argument form below.
 const ENV_GETTER =
   String.raw`(?<getter>(?<![A-Za-z0-9_$])(?:(?:System\.)?Environment\.GetEnvironmentVariable|getenv(?:\(\)(?:\.get)?)?|environ(?:\.get)?|ENV(?:\.fetch)?|` +
-  String.raw`System\.get_env|(?:std::)?env::var(?:_os)?|option_env!|sys\.env(?:\.get)?|Deno\.env\.get|ProcessInfo\.processInfo\.environment|Platform\.environment)|` +
-  String.raw`\$_(?:ENV|SERVER)|\$ENV)[ \t]{0,16}[([{]\s{0,64}(?<q>["'\x60]?)(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>` +
+  String.raw`System\.get_env|(?:std::)?env::var(?:_os)?|dotenvy?::var|option_env!|sys\.env(?:\.get)?|Deno\.env\.get|ProcessInfo\.processInfo\.environment|Platform\.environment)|` +
+  // A named first argument: C# GetEnvironmentVariable(variable: "N"), Python os.getenv(key="N").
+  String.raw`\$_(?:ENV|SERVER)|\$ENV)[ \t]{0,16}[([{]\s{0,64}(?:(?:variable|key|name)[ \t]{0,4}[:=][ \t]{0,4})?(?<q>["'\x60]?)(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>` +
   String.raw`\s{0,64}(?:,\s{0,64}[A-Za-z_][A-Za-z0-9_.:]{0,80}\s{0,64})?[)\]}]`;
 // A file that holds none of these words has no getter: the operator, method and ternary matchers are skipped for it.
-const ENV_GETTER_HINT = /getenv|GetEnvironmentVariable|environ|ENV|_SERVER|get_env|env::var|option_env!|sys\.env|Deno\.env/;
+const ENV_GETTER_HINT = /getenv|GetEnvironmentVariable|environ|ENV|_SERVER|get_env|env::var|dotenv|option_env!|sys\.env|Deno\.env/;
 // Where a getter is not the start of an expression (a ternary branch, a helper's argument), it may name its class or module first
 // (System.getenv, os.getenv): up to three qualifiers.
 const GETTER_QUALIFIERS = String.raw`(?:[A-Za-z_][A-Za-z0-9_]{0,63}\.){0,3}`;
@@ -4676,8 +4687,14 @@ const GETTER_QUALIFIERS = String.raw`(?:[A-Za-z_][A-Za-z0-9_]{0,63}\.){0,3}`;
 // Getter, then a default operator: ?? (C#, PHP, Swift, Dart, TypeScript), ?: (Kotlin, Groovy, PHP, GNU C), || (Ruby, Elixir, Perl), `or`
 // (Python, Lua, Ruby), and Perl's defined-or // (only after $ENV{...}: everywhere else // starts a comment). `??=` and `||=` are not
 // read here (the literal must follow the operator): they assign the variable, which secret-assignment judges.
+// What may stand between a getter and its default operator: the parenthesis of `(getter) ?? "v"`, up to three member calls or
+// properties, plain or null-conditional (C# `?.Trim()`, Kotlin `?.trim()`, `?.takeIf { it.isNotBlank() }`, Ruby `.presence`), and one
+// comment (`getter // fallback` + line break, `/* ... */`). Every run is bounded and the alternatives start differently (linear).
+const ENV_GETTER_TAIL =
+  String.raw`(?:[ \t]{0,16}\)){0,2}(?:\s{0,16}\??\.\s{0,16}[A-Za-z_][A-Za-z0-9_]{0,63}(?:\((?:[^()\n]|\([^()\n]{0,64}\)){0,128}\)|[ \t]{0,4}\{[^{}\n]{0,120}\})?){0,3}` +
+  String.raw`(?:[ \t]{0,16}(?:\/\/[^\n]{0,200}\n|\/\*[^*\n]{0,200}\*\/))?`;
 const ENV_DEFAULT_OPERATOR = new RegExp(
-  String.raw`${ENV_GETTER}\s{0,64}(?<op>\?\?|\?:|\|\||\/\/|(?<![A-Za-z0-9_$])or(?![A-Za-z0-9_$]))\s{0,64}(?=\S)`,
+  String.raw`${ENV_GETTER}${ENV_GETTER_TAIL}\s{0,64}(?<op>\?\?|\?:|\|\||\/\/|(?<![A-Za-z0-9_$])or(?![A-Za-z0-9_$]))\s{0,64}(?=\S)`,
   'g',
 );
 
@@ -4691,35 +4708,40 @@ const ENV_DEFAULT_ARGUMENT_CALLEE = [
   String.raw`System\.get_env`, // Elixir
   String.raw`String\.fromEnvironment`, // Dart (defaultValue:)
   String.raw`(?:os\.)?environ\.get`, // Python
+  String.raw`env\.str`, // django-environ env.str("N", default="v")
   String.raw`[Gg]et_?[Ee]nv(?:_?[Oo]r(?:_?[Dd]efault|_?[Ee]lse)?|_?[Ww]ith_?[Dd]efault)?`, // os.getenv, and getEnv / get_env / GetEnvOrDefault helpers
   // Laravel env("N", "v") and envOr helpers. Never a method: cmd.env("N", "v") sets a child process's variable, it does not read one.
   String.raw`(?<![.:]|->)env(?:_?[Oo]r(?:_?[Dd]efault)?)?`,
   String.raw`Env::get`, // Laravel
 ].join('|');
 const ENV_DEFAULT_ARGUMENT = new RegExp(
-  String.raw`(?<![A-Za-z0-9_$])(?<callee>${ENV_DEFAULT_ARGUMENT_CALLEE})\(\s{0,64}(?<q>["'\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>\s{0,64}` +
+  String.raw`(?<![A-Za-z0-9_$])(?<callee>${ENV_DEFAULT_ARGUMENT_CALLEE})\(\s{0,64}(?:(?:key|name|variable)[ \t]{0,4}[:=][ \t]{0,4})?(?<q>["'\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>\s{0,64}` +
     // `, "v"` (with Python's default= or Dart's defaultValue:), or a block after the call: Ruby ENV.fetch("N") { "v" } / { |k| "v" },
     // Kotlin getOrElse("N") { "v" }. The block form is accepted for those two callees only (an `if (getenv("N")) {` body is no default).
-    String.raw`(?:,\s{0,64}(?:default(?:Value)?[ \t]{0,4}[:=][ \t]{0,4})?|(?<block>\)[ \t]{0,16}\{[ \t]{0,16}(?:\|[^|\n]{0,64}\|[ \t]{0,16})?))(?=\S)`,
+    // Ruby's block may also be `do ... end`, its body on the next line.
+    String.raw`(?:,\s{0,64}(?:default(?:Value)?[ \t]{0,4}[:=][ \t]{0,4})?|(?<block>\)[ \t]{0,16}(?:\{[ \t]{0,16}|do(?![A-Za-z0-9_])\s{0,64})(?:\|[^|\n]{0,64}\|\s{0,16})?))(?=\S)`,
   'g',
 );
 
 // Getter, an optional `)` (Java's Optional.ofNullable(getter)), up to three adapters (.ok(), .map(String::trim), .filter(s -> !s.isBlank())),
 // the default method, and what may stand between its parenthesis and the literal: a closure head (Rust |_|, Java () ->), a block brace,
 // String::from( or String.valueOf(. An adapter's argument may hold one level of parentheses; both alternatives are disjoint, so no backtracking.
+// Also Kotlin `.orEmpty().ifBlank { "v" }` / `?.ifEmpty { "v" }`, Rust `map_or("v", f)` / `map_or_else(|_| "v", f)` / `format!("v")`,
+// and Java `Optional...or(() -> Optional.of("v"))`.
 const ENV_DEFAULT_METHOD = new RegExp(
   ENV_GETTER +
-    String.raw`(?:[ \t]{0,16}\))?(?:\s{0,16}\.\s{0,16}(?:ok|as_deref|as_ref|map|filter|flatMap|trim)\((?:[^()\n]|\([^()\n]{0,64}\)){0,128}\)){0,3}` +
-    String.raw`\s{0,16}\.\s{0,16}(?:unwrap_or(?:_else)?|orElse(?:Get)?|getOrElse)\(\s{0,16}(?:(?:move[ \t]+)?\|[^|\n]{0,64}\|\s{0,16}|\(\s{0,16}\)\s{0,16}->\s{0,16})?` +
-    String.raw`(?:\{\s{0,16})?(?:(?:String|OsString)::from\(\s{0,16}|String\.valueOf\(\s{0,16})?(?=\S)`,
+    String.raw`(?:[ \t]{0,16}\))?(?:\s{0,16}\??\.\s{0,16}(?:ok|as_deref|as_ref|map|filter|flatMap|trim|trimEnd|trimStart|orEmpty|takeIf|takeUnless)` +
+    String.raw`(?:\((?:[^()\n]|\([^()\n]{0,64}\)){0,128}\)|[ \t]{0,4}\{[^{}\n]{0,120}\})){0,3}` +
+    String.raw`\s{0,16}\??\.\s{0,16}(?:(?:unwrap_or(?:_else)?|orElse(?:Get)?|getOrElse|map_or(?:_else)?|or)\(\s{0,16}(?:(?:move[ \t]+)?\|[^|\n]{0,64}\|\s{0,16}|\(\s{0,16}\)\s{0,16}->\s{0,16})?` +
+    String.raw`(?:\{\s{0,16})?|(?:ifBlank|ifEmpty)[ \t]{0,4}\{\s{0,16})(?:(?:String|OsString)::from\(\s{0,16}|String\.valueOf\(\s{0,16}|format!\(\s{0,16}|Optional\.of\(\s{0,16})?(?=\S)`,
   'g',
 );
 
 // Java helpers that return their second argument when the first is null or blank, called with the getter first: Objects.requireNonNullElse
 // and Objects.toString (JDK), StringUtils.defaultIfBlank / defaultIfEmpty / defaultString (Apache Commons), MoreObjects.firstNonNull (Guava).
 const ENV_DEFAULT_WRAPPER = new RegExp(
-  String.raw`(?<![A-Za-z0-9_$])(?:Objects\.(?:requireNonNullElse|toString)|(?:StringUtils\.)?default(?:IfBlank|IfEmpty|String)|(?:MoreObjects\.)?firstNonNull)` +
-    String.raw`\(\s{0,64}${GETTER_QUALIFIERS}${ENV_GETTER}\s{0,64},\s{0,64}(?=\S)`,
+  String.raw`(?<![A-Za-z0-9_$])(?:Objects\.(?:requireNonNullElse(?:Get)?|toString)|(?:StringUtils\.)?default(?:IfBlank|IfEmpty|String)|(?:MoreObjects\.)?firstNonNull)` +
+    String.raw`\(\s{0,64}${GETTER_QUALIFIERS}${ENV_GETTER}\s{0,64},\s{0,64}(?:\(\s{0,16}\)\s{0,16}->\s{0,16})?(?=\S)`,
   'g',
 );
 
@@ -4748,8 +4770,41 @@ const TERNARY_THEN_BRANCH = /[^?:;\n"'\x60]{1,200}:(?!:)\s{0,64}(?=\S)/y;
 
 // Go: `v := os.Getenv("N")`, `var v = ...`, `v = ...`, `cfg.Secret = ...` or `v, ok := os.LookupEnv("N")`. The default must be assigned
 // within this many lines (and characters) after the read, inside an `if` that tests the variable for empty.
+// The read may be wrapped in one call (`strings.TrimSpace(os.Getenv("N"))`): group `wrap`, whose `)` (group `close`) must follow.
 const ENV_GO_READ =
-  /(?<![A-Za-z0-9_.])(?<v>[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3})(?:[ \t]*,[ \t]*(?<ok>[A-Za-z_][A-Za-z0-9_]{0,63}))?(?:[ \t]+string)?[ \t]*:?=[ \t]*os\.(?:Getenv|LookupEnv)\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)/g;
+  /(?<![A-Za-z0-9_.])(?<v>[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3})(?:[ \t]*,[ \t]*(?<ok>[A-Za-z_][A-Za-z0-9_]{0,63}))?(?:[ \t]+string)?[ \t]*:?=[ \t]*(?<wrap>[A-Za-z_][A-Za-z0-9_]{0,31}\.[A-Za-z_][A-Za-z0-9_]{0,63}\([ \t]*)?os\.(?:Getenv|LookupEnv)\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)(?<close>[ \t]*\))?/g;
+// Go: `cmp.Or(os.Getenv("N"), "v")` (the standard library's first-non-zero helper).
+const GO_CMP_OR = /(?<![A-Za-z0-9_.])cmp\.Or\([ \t]*os\.Getenv\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)[ \t]*,\s{0,64}(?=\S)/g;
+// Go's helper idiom: `if v := os.Getenv("N"); v != "" { return v }` (or `if v, ok := os.LookupEnv("N"); ok { ... }`), then the
+// default returned after the block (or from its `else` block).
+const GO_IF_INIT_RETURN =
+  /(?<![A-Za-z0-9_])if[ \t]+[A-Za-z_][A-Za-z0-9_]{0,63}(?:[ \t]*,[ \t]*[A-Za-z_][A-Za-z0-9_]{0,63})?[ \t]*:=[ \t]*os\.(?:Getenv|LookupEnv)\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)[ \t]*;[^{}\n]{1,160}\{[^{}]{0,400}\}\s{0,64}(?:else[ \t]*\{\s{0,64})?return[ \t]+(?=\S)/g;
+// Rust: `match env::var("N") { Ok(v) => v, Err(_) => "v".to_string() }` (also `.ok()` and `None =>`).
+const RUST_ENV_MATCH = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])match[ \t]+${ENV_GETTER}(?:\s{0,16}\.\s{0,16}(?:ok|as_deref)\(\))?\s{0,16}\{[^{}]{0,300}?(?<![A-Za-z0-9_])(?:Err|None)(?:\([^()\n]{0,40}\))?\s{0,16}=>\s{0,16}` +
+    String.raw`(?:\{\s{0,16})?(?:(?:String|OsString)::from\(\s{0,16}|format!\(\s{0,16})?(?=\S)`,
+  'g',
+);
+// Python: `getter if <test> else "v"` (os.environ["N"] if "N" in os.environ else "v").
+const PY_ENV_CONDITIONAL = new RegExp(String.raw`(?<![A-Za-z0-9_.])${GETTER_QUALIFIERS}${ENV_GETTER}[ \t]+if[ \t]+[^\n]{1,200}?[ \t]else[ \t]+(?=\S)`, 'g');
+// Ruby without parentheses: `ENV.fetch "N", "v"`.
+const RUBY_FETCH_BARE = /(?<![A-Za-z0-9_$])ENV\.fetch[ \t]+(?<q>["'])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*,[ \t]*(?=\S)/g;
+// PowerShell 7: `$env:N ?? 'v'` and `if ($env:N) { $env:N } else { 'v' }`.
+const PS_ENV_DEFAULT = /(?<![A-Za-z0-9_])\$env:(?<name>[A-Za-z_][A-Za-z0-9_]{0,255})[ \t]*\?\?[ \t]*(?=\S)/gi;
+const PS_ENV_IF_ELSE =
+  /(?<![A-Za-z0-9_])if[ \t]*\([ \t]*\$env:(?<name>[A-Za-z_][A-Za-z0-9_]{0,255})[ \t]*\)[ \t]*\{[ \t]*\$env:\k<name>[ \t]*\}\s{0,64}else[ \t]*\{\s{0,64}(?=\S)/gi;
+// Java: an environment map held in a variable (`Map<String, String> env = System.getenv();` ... `env.getOrDefault("N", "v")`).
+const JAVA_ENV_MAP_VARIABLE = /(?<![A-Za-z0-9_$.])([A-Za-z_$][A-Za-z0-9_$]{0,63})[ \t]*=[ \t]*System\.getenv\(\)[ \t]*;/g;
+const JAVA_ENV_MAP_GET =
+  /(?<![A-Za-z0-9_$.])(?<v>[A-Za-z_$][A-Za-z0-9_$]{0,63})\.(?:getOrDefault|getOrElse)\(\s{0,64}(?<q>["'])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>\s{0,64},\s{0,64}(?=\S)/g;
+/** The variables of this file that hold System.getenv() (computed once per file). */
+function javaEnvMapVariables(ctx, input) {
+  if (ctx.javaEnvMaps === undefined) {
+    ctx.javaEnvMaps = new Set();
+    if (input.includes('System.getenv()')) for (const m of input.matchAll(JAVA_ENV_MAP_VARIABLE)) ctx.javaEnvMaps.add(m[1]);
+  }
+  return ctx.javaEnvMaps;
+}
 const ENV_GO_DEFAULT_LINES = 8;
 const ENV_GO_DEFAULT_CHARS = 1200;
 
@@ -4775,25 +4830,54 @@ function fallbackConstant(input, at, filePath) {
 /** Is the getter's name a quoted secret-like name (a bare one only in Perl's $ENV{N})? */
 const envGetterNameOk = (groups) => (groups.q !== '' || groups.getter?.startsWith('$ENV') === true) && isSecretLikeName(groups.name);
 
-/** A getter match whose default literal starts at `at`: a secret-like name and a constant default. The span runs to the literal's end. */
-function envDefaultIsSecret(m, ctx, at) {
+// A literal after a default OPERATOR that is itself an operand of a tighter one is no default: Python `getenv("K") or "k" in settings`
+// (`or` binds more loosely than `in`), `... or "--insecure" in sys.argv`, `x == "v"`.
+const NOT_A_DEFAULT_AFTER = /[ \t]*(?:(?:not[ \t]+)?in(?![A-Za-z0-9_])|is(?![A-Za-z0-9_])|==|!=|<|>|%(?!=))/y;
+
+/**
+ * Is a constant default for the variable `name` a secret? A placeholder ("your-secret-here", "<jwt-secret>", "REDACTED", "changeme")
+ * and a parenthesised or bracketed display text ("(not set)", "[unset]") are not, exactly as the scanner's remediation text suggests.
+ * Under a weak name (AUTH_PASSWORD_BROKER, a *_TABLE) the default must look random, as a weak name's value in code must; under a
+ * strong name any other constant counts, as in the JavaScript branch (a guessable default signs tokens as well as a random one).
+ */
+function envDefaultValueIsSecret(name, text) {
+  const value = text.trim();
+  if (isPlaceholder(value) || /^\(.*\)$|^\[.*\]$/.test(value)) return false;
+  return secretNameKind(name) === 'strong' || looksRandom(value, GATES.codeWeak);
+}
+
+/**
+ * A getter match whose default literal starts at `at`: a secret-like name and a constant default that is a secret (see
+ * envDefaultValueIsSecret). `operator`: the literal follows a default operator, so it must not be the operand of a comparison or a
+ * membership test. The span runs to the literal's end.
+ */
+function envDefaultIsSecret(m, ctx, at, { operator = false } = {}) {
   if (!envGetterNameOk(m.groups)) return false;
-  const literal = fallbackConstant(m.input, at, ctx.path);
-  if (literal === null) return false;
+  const literal = fallbackConstant(m.input, at, ctx.path, ctx);
+  if (literal === null || !envDefaultValueIsSecret(m.groups.name, literal.text)) return false;
+  if (operator) {
+    NOT_A_DEFAULT_AFTER.lastIndex = literal.end;
+    if (NOT_A_DEFAULT_AFTER.test(m.input)) return false;
+  }
   m.spanEnd = literal.end;
   return true;
 }
 
 /** `? "v" : getter`: the then-branch literal of a ternary whose else-branch reads a secret-like variable. */
 function ternaryThenIsSecret(m, ctx) {
-  const literal = fallbackConstant(m.input, m.index + m[0].length, ctx.path);
+  const literal = fallbackConstant(m.input, m.index + m[0].length, ctx.path, ctx);
   if (literal === null) return false;
   ENV_TERNARY_ELSE_GETTER.lastIndex = literal.end;
   const getter = ENV_TERNARY_ELSE_GETTER.exec(m.input);
-  if (getter === null || !envGetterNameOk(getter.groups)) return false;
+  if (getter === null || !envGetterNameOk(getter.groups) || !envDefaultValueIsSecret(getter.groups.name, literal.text)) return false;
   m.spanEnd = getter.index + getter[0].length;
   return true;
 }
+
+/** `getter == null ? "v" : x` or `getter != null ? x : "v"`: the branch the condition's own test names as the default. */
+// The else-branch of a missing-test ternary: when it is a string literal too, both branches are messages (`getter == null ? "missing" :
+// "configured"`), as in the `!=` form, where a literal then-branch never reaches the else-branch reader.
+const TERNARY_ELSE_LITERAL = /\s{0,64}:(?!:)\s{0,64}[@$]?["'\x60]/y;
 
 /** `getter == null ? "v" : x` or `getter != null ? x : "v"`: the branch the condition's own test names as the default. */
 function ternaryTestIsSecret(m, ctx) {
@@ -4803,6 +4887,11 @@ function ternaryTestIsSecret(m, ctx) {
     const then = TERNARY_THEN_BRANCH.exec(m.input);
     if (then === null) return false;
     at = then.index + then[0].length;
+  } else {
+    const literal = fallbackConstant(m.input, at, ctx.path, ctx);
+    if (literal === null) return false;
+    TERNARY_ELSE_LITERAL.lastIndex = literal.end;
+    if (TERNARY_ELSE_LITERAL.test(m.input)) return false;
   }
   return envDefaultIsSecret(m, ctx, at);
 }
@@ -4826,7 +4915,7 @@ const GO_BLOCK_CHARS = 400;
  * block (`if v == "" { v = "x" }`). The window, the test and the block are all bounded; the block is read up to its first brace.
  */
 function goEnvDefaultIsSecret(m, ctx) {
-  if (!isSecretLikeName(m.groups.name)) return false;
+  if (!isSecretLikeName(m.groups.name) || (m.groups.wrap !== undefined && m.groups.close === undefined)) return false;
   const from = m.index + m[0].length;
   let end = Math.min(m.input.length, from + ENV_GO_DEFAULT_CHARS);
   let lines = 0;
@@ -4847,7 +4936,7 @@ function goEnvDefaultIsSecret(m, ctx) {
     for (let assign = GO_ASSIGNMENT.exec(body); assign !== null && assign.index <= GO_BLOCK_CHARS; assign = GO_ASSIGNMENT.exec(body)) {
       if (assign.groups.t !== v) continue;
       const literal = fallbackConstant(m.input, from + blockAt + assign.index + assign[0].length, ctx.path, ctx);
-      if (literal === null) return false;
+      if (literal === null || !envDefaultValueIsSecret(m.groups.name, literal.text)) return false;
       m.spanEnd = literal.end;
       return true;
     }
@@ -5858,7 +5947,7 @@ export const RULES = [
         // C# GetEnvironmentVariable("N") ?? "v", Kotlin System.getenv("N") ?: "v", Ruby ENV["N"] || "v", PHP $_ENV["N"] ?? "v", Python ... or "v"
         hint: ENV_GETTER_HINT,
         pattern: ENV_DEFAULT_OPERATOR,
-        accept: (m, ctx) => (m.groups.op !== '//' || m.groups.getter.startsWith('$ENV')) && envDefaultIsSecret(m, ctx, m.index + m[0].length),
+        accept: (m, ctx) => (m.groups.op !== '//' || m.groups.getter.startsWith('$ENV')) && envDefaultIsSecret(m, ctx, m.index + m[0].length, { operator: true }),
       },
       {
         // Java getenv().getOrDefault("N", "v"), Ruby ENV.fetch("N", "v") / ENV.fetch("N") { "v" }, Scala, Elixir, Dart, Laravel env("N", "v"), getEnv helpers
@@ -5901,6 +5990,59 @@ export const RULES = [
         appliesTo: (ctx) => /\.go$/i.test(ctx.path),
         pattern: ENV_GO_READ,
         accept: (m, ctx) => goEnvDefaultIsSecret(m, ctx),
+      },
+      {
+        // Go: cmp.Or(os.Getenv("N"), "v")
+        appliesTo: (ctx) => /\.go$/i.test(ctx.path),
+        hint: /cmp\.Or/,
+        pattern: GO_CMP_OR,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Go: if v := os.Getenv("N"); v != "" { return v } return "v"
+        appliesTo: (ctx) => /\.go$/i.test(ctx.path),
+        hint: /if[ \t]/,
+        pattern: GO_IF_INIT_RETURN,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Rust: match env::var("N") { Ok(v) => v, Err(_) => "v".to_string() }
+        appliesTo: (ctx) => /\.rs$/i.test(ctx.path),
+        hint: /match/,
+        pattern: RUST_ENV_MATCH,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Python: os.environ["N"] if "N" in os.environ else "v"
+        appliesTo: (ctx) => /\.pyw?$/i.test(ctx.path),
+        hint: ENV_GETTER_HINT,
+        pattern: PY_ENV_CONDITIONAL,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Ruby: ENV.fetch "N", "v"
+        hint: /ENV\.fetch/,
+        pattern: RUBY_FETCH_BARE,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // PowerShell: $env:N ?? 'v', if ($env:N) { $env:N } else { 'v' }
+        appliesTo: (ctx) => /\.ps[md]?1$/i.test(ctx.path),
+        hint: /\$env:/i,
+        pattern: PS_ENV_DEFAULT,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length, { operator: true }),
+      },
+      {
+        appliesTo: (ctx) => /\.ps[md]?1$/i.test(ctx.path),
+        hint: /\$env:/i,
+        pattern: PS_ENV_IF_ELSE,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Java: Map<String, String> env = System.getenv(); ... env.getOrDefault("N", "v")
+        hint: /System\.getenv\(\)/,
+        pattern: JAVA_ENV_MAP_GET,
+        accept: (m, ctx) => javaEnvMapVariables(ctx, m.input).has(m.groups.v) && envDefaultIsSecret(m, ctx, m.index + m[0].length),
       },
     ],
   },
