@@ -6622,21 +6622,28 @@ function scanMergeResults(root, merges) {
  * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`; a version of
  * the scanner's own test files (see isScannerFixture) is `scanner-fixture`.
  * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
- * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an all-zero base).
+ * cost what the range holds, not what the repository holds); `stdinRevisions` are more of them, one per line, written to git's
+ * standard input (`--stdin`) so that any number of them fits (an all-zero base subtracts every other branch tip as `^<id>`);
+ * `maxCount` limits the walk (range mode with an all-zero base).
  */
-async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}) {
+async function scanHistory(root, { revisions = ['--all'], stdinRevisions = null, maxCount = null } = {}) {
   const child = spawn(
     'git',
     [
       '-c', 'core.quotepath=false',
-      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
+      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), ...(stdinRevisions === null ? [] : ['--stdin']),
+      '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
       // Explicit prefixes: the parser strips "b/" from each "+++ " line, and a user's diff.noprefix (or mnemonicPrefix /
       // srcPrefix / dstPrefix) would otherwise drop it, so that a real top-level b/ directory got stripped instead.
       '-p', '--cc', '--src-prefix=a/', '--dst-prefix=b/', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
       ...revisions, '--',
     ],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+    { cwd: root, stdio: [stdinRevisions === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] },
   );
+  if (stdinRevisions !== null) {
+    child.stdin.on('error', () => {}); // a git that exits early reports through its status, not through EPIPE here
+    child.stdin.end(stdinRevisions.map((r) => `${r}\n`).join(''));
+  }
   let stderr = '';
   child.stderr.on('data', (chunk) => {
     if (stderr.length < 4096) stderr += chunk.toString('utf8');
@@ -6999,8 +7006,11 @@ const USAGE = `Usage: node scripts/check-secrets.mjs [--history | --range <base>
   --range     scan added lines of the commits reachable from <head> but not from <base> (what CI runs on a pull
               request or push: catches a secret committed and removed again inside the range). Needs full history:
               a shallow clone or a commit that is not present exits 2. An all-zero <base> (a new or recreated
-              branch) scans the commits reachable from <head> and from no other branch under refs/remotes/origin/
-              (every commit reachable from <head> when there is none); more than ${NEW_BRANCH_MAX_COMMITS} exits 2.
+              branch) scans the commits reachable from <head> and from no branch under refs/remotes/origin/ that
+              does not contain <head> (a branch at or past <head> never hides it; with no other branch, every
+              commit reachable from <head>); more than ${NEW_BRANCH_MAX_COMMITS} exits 2. Recreating a branch at exactly
+              another branch's tip therefore re-audits its whole history: check known old hits by hand with
+              --range <fork-point>..<head>.
   --help      show this message
 
 The report lists file path, line number and rule name only. Matched text is never printed.
@@ -7035,25 +7045,30 @@ function resolveCommit(root, revision) {
 }
 
 /**
- * The revisions an all-zero --range base stands for: `<head> --not <tip>...` over every branch under refs/remotes/origin/ whose
- * commit is not <head>. A push that creates a branch, or deletes and recreates it, has no "before" commit, and scanning only its
- * tip would pass a value that an earlier pushed commit added and the tip removed: the tree is clean and the range looks clean.
- * What such a push introduced is what no other branch on the remote already holds. A branch that points at <head> is the pushed
- * one: with fetch-depth 0, actions/checkout fetches every branch and then sets the pushed branch's remote-tracking ref to the
- * pushed commit, so after a recreate origin/<branch> IS <head>, and subtracting it would leave nothing to scan. Refs are compared
- * by commit, not by name, so origin/HEAD and any other ref at <head> drop out too. With no other branch at all (a first push, a
- * clone of a one-branch repository, no `origin` remote) every commit reachable from <head> is new. Leaving a ref out only ever
- * widens the walk, so anything that is not a plain commit id (a ref at a tag or tree object, a line this cannot parse) is left out.
- * @returns {{revisions: string[], others: number}} the `git log` revisions, and how many other branch tips they subtract
+ * The revisions an all-zero --range base stands for: <head>, minus the tip of every branch under refs/remotes/origin/ that does NOT
+ * contain <head> (`git for-each-ref --no-contains`). A push that creates a branch, or deletes and recreates it, has no "before"
+ * commit, and scanning only its tip would pass a value that an earlier pushed commit added and the tip removed: the tree is clean
+ * and the range looks clean. What such a push introduced is what no older branch on the remote already holds. The clone cannot
+ * tell a branch that existed before the push from one created with it or after it (pushed in the same `git push`, or before a
+ * re-run): a branch that contains <head> (the pushed branch itself, origin/HEAD, a descendant such as a `next` branch built on the
+ * new tip, or another branch at exactly <head>) may be one of those, so it never subtracts anything. Only branches that do not
+ * reach <head> do, and they cannot hide <head> itself. The price is a fail-closed full walk when main is recreated at exactly
+ * another branch's tip (`git push origin develop:main`): that re-audits everything reachable from it (capped, see runRange).
+ * With no such branch at all (a first push, a clone of a one-branch repository, no `origin` remote) every commit reachable from
+ * <head> is new. Leaving a ref out only ever widens the walk, so anything that is not a plain commit id (a ref at a tag or tree
+ * object, a line this cannot parse) is left out. The tips go to git on standard input (`^<id>` lines), never on the command line,
+ * so a remote with tens of thousands of branches cannot overflow the argument list.
+ * @returns {{revisions: string[], stdinRevisions: string[], others: number}} the `git log` revisions (command line and standard
+ * input), and how many other branch tips they subtract
  */
 function newBranchRevisions(root, head) {
-  const out = git(['for-each-ref', '--format=%(objecttype) %(objectname)', 'refs/remotes/origin/'], root).toString('utf8');
+  const out = git(['for-each-ref', `--no-contains=${head}`, '--format=%(objecttype) %(objectname)', 'refs/remotes/origin/'], root).toString('utf8');
   const tips = new Set();
   for (const line of out.split('\n')) {
     const match = /^commit ([0-9a-f]{40}(?:[0-9a-f]{24})?)$/.exec(line);
     if (match && match[1] !== head) tips.add(match[1]);
   }
-  return { revisions: tips.size === 0 ? [head] : [head, '--not', ...tips], others: tips.size };
+  return { revisions: [head], stdinRevisions: [...tips].map((tip) => `^${tip}`), others: tips.size };
 }
 
 /**
@@ -7100,27 +7115,34 @@ async function runRange(spec, { cwd, stdout, stderr }) {
   // A normal base: what head has and base does not. An all-zero base: what no other branch of origin holds, counted first (one
   // past the cap, which is cheap) so that a walk cut at the cap is known to be cut and never reported as complete.
   let revisions = [head, '--not', base];
+  let stdinRevisions = null;
   let others = 0;
   let truncated = false;
   if (newRef) {
-    ({ revisions, others } = newBranchRevisions(root, head));
-    const counted = git(['rev-list', '--count', `--max-count=${NEW_BRANCH_MAX_COMMITS + 1}`, ...revisions, '--'], root).toString('utf8').trim();
+    ({ revisions, stdinRevisions, others } = newBranchRevisions(root, head));
+    const count = spawnSync('git', ['rev-list', '--count', `--max-count=${NEW_BRANCH_MAX_COMMITS + 1}`, '--stdin', ...revisions, '--'], {
+      cwd: root,
+      input: stdinRevisions.map((r) => `${r}\n`).join(''),
+      maxBuffer: 1024 * 1024,
+    });
+    if (count.error || count.status !== 0) throw new Error('git rev-list failed while counting the commits new to this branch');
+    const counted = count.stdout.toString('utf8').trim();
     if (!/^\d+$/.test(counted)) throw new Error('git rev-list printed a count this scanner cannot parse');
     truncated = Number(counted) > NEW_BRANCH_MAX_COMMITS;
   }
   const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(
     root,
-    newRef ? { revisions, maxCount: NEW_BRANCH_MAX_COMMITS } : { revisions },
+    newRef ? { revisions, stdinRevisions, maxCount: NEW_BRANCH_MAX_COMMITS } : { revisions },
   );
   const plural = commits === 1 ? '' : 's';
   const headShort = printable(headRevision).slice(0, 12);
-  const newWhat = others > 0 ? 'new to this branch (reachable from no other branch under refs/remotes/origin/)' : `reachable from ${headShort}`;
+  const newWhat = others > 0 ? 'new to this branch (reachable from no older branch under refs/remotes/origin/)' : `reachable from ${headShort}`;
   let scope = `${commits} commit${plural} in ${baseRevision.slice(0, 12)}..${headShort}`;
   if (newRef) {
     scope =
       others > 0
-        ? `${commits} commit${plural} new to this branch (reachable from ${headShort} and from none of the ${others} other branch tip${others === 1 ? '' : 's'} under refs/remotes/origin/; the base is all zeros)`
-        : `all ${commits} commit${plural} reachable from ${headShort} (the base is all zeros and no other branch under refs/remotes/origin/ is known)`;
+        ? `${commits} commit${plural} new to this branch (reachable from ${headShort} and from none of the ${others} other branch tip${others === 1 ? '' : 's'} under refs/remotes/origin/ that do not contain it; the base is all zeros)`
+        : `all ${commits} commit${plural} reachable from ${headShort} (the base is all zeros and no branch under refs/remotes/origin/ without ${headShort} is known)`;
   }
   const cut =
     `the base is all zeros and more than ${NEW_BRANCH_MAX_COMMITS} commits are ${newWhat}, so only the newest ${NEW_BRANCH_MAX_COMMITS} were scanned ` +
@@ -7143,12 +7165,8 @@ async function runRange(spec, { cwd, stdout, stderr }) {
   }
   if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
   if (commits === 0) {
-    // With an all-zero base this means another branch of origin already holds <head>: the push introduced no commit.
-    stdout.write(
-      newRef
-        ? `check-secrets --range: no new commits (${headShort} is already on another branch under refs/remotes/origin/), nothing to scan\n`
-        : `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headShort}, nothing to scan\n`,
-    );
+    // Never with an all-zero base: a subtracted branch does not contain <head>, so <head> itself is always walked.
+    stdout.write(`check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headShort}, nothing to scan\n`);
     return 0;
   }
   stdout.write(`check-secrets --range: no hits in ${scope}${skippedNote(skipped)}\n`);

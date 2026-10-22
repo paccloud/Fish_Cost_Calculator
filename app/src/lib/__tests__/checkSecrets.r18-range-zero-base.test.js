@@ -119,10 +119,104 @@ describe('review round 18: --range with an all-zero base (a new or recreated bra
     expect(result.stderr).not.toContain(oldLeak.slice(0, 7));
     noValue(result);
 
-    // A head that another branch of origin already holds introduced nothing: it passes and says so.
+    // A head that a branch of origin contains (here origin/main, which is past it) never hides it: only branches that do not reach
+    // the head are subtracted, so c1 itself is walked (review round 19).
     const old = scan(runner, '--range', `${ZERO}..${c1}`);
     expect(old.status, output(old)).toBe(0);
-    expect(old.stdout).toContain('no new commits');
+    expect(old.stdout).toContain('no hits in 1 commit new to this branch');
+  });
+
+  // Review round 19: a branch that contains the head (pushed with it, before the checkout, or before a re-run) hid every pushed commit.
+  const recreatedMain = () => {
+    const upstream = makeRepo();
+    commit(upstream, { 'base.txt': 'base\n' });
+    expect(git(upstream, 'branch', 'feature').status).toBe(0);
+    commit(upstream, { 'one.txt': 'one\n' });
+    const c2 = commit(upstream, { 'x.env': leak });
+    const c3 = commit(upstream, { 'x.env': clean });
+    return { upstream, c2, c3 };
+  };
+
+  it.skipIf(!hasGit())('a descendant branch present at checkout (next at c4, a child of c3) does not hide the pushed commits', SLOW, () => {
+    const { upstream, c2, c3 } = recreatedMain();
+    expect(git(upstream, 'checkout', '-q', '-b', 'next').status).toBe(0);
+    commit(upstream, { 'n.txt': 'n\n' });
+    expect(git(upstream, 'checkout', '-q', 'main').status).toBe(0);
+    const runner = tempDir();
+    expect(run('git', ['clone', '-q', upstream, runner], tmpdir()).status).toBe(0);
+    expect(git(runner, 'rev-parse', 'refs/remotes/origin/next^').stdout.trim()).toBe(c3);
+    const result = scan(runner, '--range', `${ZERO}..${c3}`);
+    expect(result.status, output(result)).toBe(1);
+    expect(result.stderr).toContain(`${c2.slice(0, 7)}  x.env  secret-assignment  x1`);
+    expect(output(result)).not.toContain('no new commits');
+    noValue(result);
+  });
+
+  it.skipIf(!hasGit())('the same commits pushed in one multi-ref push (c3:main c4:next) are still scanned', SLOW, () => {
+    const work = makeRepo();
+    commit(work, { 'base.txt': 'base\n' });
+    const bare = tempDir();
+    expect(run('git', ['init', '-q', '--bare', '-b', 'main', bare], tmpdir()).status).toBe(0);
+    expect(git(work, 'push', '-q', bare, 'main:main', 'main:feature').status).toBe(0);
+    commit(work, { 'one.txt': 'one\n' });
+    const c2 = commit(work, { 'x.env': leak });
+    const c3 = commit(work, { 'x.env': clean });
+    const c4 = commit(work, { 'n.txt': 'n\n' });
+    expect(git(work, 'push', '-q', '-f', bare, `${c3}:refs/heads/main`, `${c4}:refs/heads/next`).status).toBe(0);
+    const runner = tempDir();
+    expect(run('git', ['clone', '-q', bare, runner], tmpdir()).status).toBe(0);
+    const result = scan(runner, '--range', `${ZERO}..${c3}`);
+    expect(result.status, output(result)).toBe(1);
+    expect(result.stderr).toContain(`${c2.slice(0, 7)}  x.env  secret-assignment  x1`);
+    noValue(result);
+  });
+
+  it.skipIf(!hasGit())('main recreated at exactly another branch tip (develop:main) re-audits the history, fail-closed', SLOW, () => {
+    // Documented: an equal-tip branch may have been pushed with main, so it subtracts nothing; an old, cleaned leak is reported.
+    const upstream = makeRepo();
+    commit(upstream, { 'base.txt': 'base\n' });
+    expect(git(upstream, 'branch', 'stale').status).toBe(0); // an older branch, from before the leak: it is subtracted
+    const oldLeak = commit(upstream, { 'old.env': leak });
+    const head = commit(upstream, { 'old.env': clean });
+    expect(git(upstream, 'branch', 'develop').status).toBe(0);
+    const runner = tempDir();
+    expect(run('git', ['clone', '-q', upstream, runner], tmpdir()).status).toBe(0);
+    expect(git(runner, 'rev-parse', 'refs/remotes/origin/develop').stdout.trim()).toBe(head);
+    const result = scan(runner, '--range', `${ZERO}..${head}`);
+    expect(result.status, output(result)).toBe(1);
+    expect(result.stderr).toContain(`${oldLeak.slice(0, 7)}  old.env  secret-assignment  x1`);
+    noValue(result);
+    // With develop one commit ahead the result is the same: a branch past the head never hides it either.
+    commit(upstream, { 'd.txt': 'd\n' });
+    expect(git(runner, 'fetch', '-q', 'origin').status).toBe(0);
+    const ahead = scan(runner, '--range', `${ZERO}..${head}`);
+    expect(ahead.status, output(ahead)).toBe(1);
+  });
+
+  it.skipIf(!hasGit())('tens of thousands of other branch tips do not overflow the argument list (they go to git on stdin)', SLOW, () => {
+    const dir = makeRepo();
+    const base = commit(dir, { 'base.txt': 'base\n' });
+    // 50,000 distinct one-commit branches off base, written as packed refs (one fast-import run, then one packed-refs file).
+    const N = 50000;
+    let stream = '';
+    for (let i = 1; i <= N; i += 1) {
+      stream += `commit refs/tmp/x\nmark :${i}\ncommitter t <t@example.invalid> ${1700000000 + i} +0000\ndata 2\nc\nfrom ${base}\nM 100644 inline b.txt\ndata ${String(i).length + 1}\n${i}\n\n`;
+    }
+    const marks = path.join(tempDir(), 'marks');
+    expect(run('git', ['fast-import', '--quiet', `--export-marks=${marks}`], dir, stream).status).toBe(0);
+    const ids = run('cat', [marks], dir).stdout.trim().split('\n').map((line) => line.split(' ')[1]);
+    expect(ids).toHaveLength(N);
+    const packed = ['# pack-refs with: peeled fully-peeled sorted ', ...ids.map((id, i) => `${id} refs/remotes/origin/b${String(i).padStart(6, '0')}`)];
+    writeFileSync(path.join(dir, '.git', 'packed-refs'), `${packed.join('\n')}\n`);
+    expect(git(dir, 'update-ref', '-d', 'refs/tmp/x').status).toBe(0);
+    commit(dir, { 'one.txt': 'one\n' });
+    const c2 = commit(dir, { 'x.env': leak });
+    const c3 = commit(dir, { 'x.env': clean });
+    const result = scan(dir, '--range', `${ZERO}..${c3}`);
+    expect(result.status, output(result)).toBe(1);
+    expect(result.stderr).toContain(`${c2.slice(0, 7)}  x.env  secret-assignment  x1`);
+    expect(result.stderr).toContain('1 hit in 1 of 3 commits');
+    expect(output(result)).not.toContain('rev-list failed');
   });
 
   it.skipIf(!hasGit())('a recreated branch without a leak passes and names what it scanned', SLOW, () => {
