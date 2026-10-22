@@ -51,6 +51,13 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
 - **Number boxes read what people type** (`app/src/lib/numberInput.js`): "$4.50", "1,000", "42%" and "4,50"
   all work. Text that isn't a number marks that box as invalid and the bar says to use numbers; it never
   counts as 0, because a wrong answer is worse than none.
+- **Works with no signal.** The calculator starts from the bundled reference yields
+  (`FISH_DATA_V3`, given `from`/`to` by `app/src/lib/fishDataShape.js`) and the service worker serves
+  the app, so it works on a boat with no connection. `/api/fish-data` replaces that data only when it
+  sends usable yields, and what is already picked stays picked. A signed-in person's custom yields come
+  from the copy `DataContext` keeps on the device (merged by `app/src/lib/fishDataMerge.js`), which the
+  sync refreshes when there is signal (and each time the calculator opens), so they work offline too.
+  If a sync changes the yield you picked, the yield box follows it, unless you typed your own.
 - **Nothing hides behind the bar.** The calculator sets the page's `scroll-padding-bottom` to the bar's
   height, so whatever you Tab to scrolls into view above it (WCAG 2.4.11).
 
@@ -70,6 +77,3 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
   and the font link in `index.html`.
 - **Unused components** `Footer.jsx` and `InstallPrompt.jsx` are not rendered anywhere and use tokens
   that no longer exist (`bg-navy`, `text-teal`, `bg-rust`). Restyle before wiring them in, or delete.
-- **Offline behavior.** `Calculator` seeds its data from `FISH_DATA_V3`, whose conversions have no
-  `from`/`to` fields (they are derived server-side by `/api/fish-data`). If that request fails, the
-  "What you have" list is empty and the calculator cannot be used, which matters on a boat with poor signal.

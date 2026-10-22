@@ -411,6 +411,85 @@ describe('mergeServerYields', () => {
     const pending = await repo.getPendingSync();
     expect(pending.yields[0].syncStatus).toBe('pending-delete');
   });
+
+  it('takes the server version of a synced yield edited on another device', async () => {
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48 });
+    await repo.markYieldSynced(rec.id, 12, 1);
+
+    await repo.mergeServerYields([
+      { id: 12, revision: 2, species: 'Halibut', product: 'Skin-On Fillet', yield: 52, source: 'Scale', is_shared: false },
+    ]);
+
+    const yields = await repo.getYields();
+    expect(yields).toHaveLength(1);
+    expect(yields[0]).toMatchObject({
+      id: rec.id, serverId: 12, serverRevision: 2, syncStatus: 'synced',
+      product: 'Skin-On Fillet', yield: 52, source: 'Scale',
+    });
+  });
+
+  it('leaves a synced yield alone when the server copy only looks different', async () => {
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48, source: 'User Input' });
+    await repo.markYieldSynced(rec.id, 12, 1);
+    const [before] = await repo.getYields();
+
+    await repo.mergeServerYields([
+      { id: 12, revision: 1, species: 'Halibut', product: 'Skinless Fillet', yield: '48.00', source: 'User Input', is_shared: false },
+    ]);
+
+    const [after] = await repo.getYields();
+    expect(after).toEqual(before);
+  });
+
+  it('tracks a newer server revision even when the values are unchanged', async () => {
+    // Another device edited the yield and then put the old values back
+    const rec = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48, source: 'User Input' });
+    await repo.markYieldSynced(rec.id, 12, 1);
+    const [before] = await repo.getYields();
+
+    await repo.mergeServerYields([
+      { id: 12, revision: 3, species: 'Halibut', product: 'Skinless Fillet', yield: '48.00', source: 'User Input', is_shared: false },
+    ]);
+
+    const [after] = await repo.getYields();
+    expect(after).toEqual({ ...before, serverRevision: 3 });
+
+    // so the next local edit is pushed against the current revision, not a false conflict
+    await repo.updateYield(rec.id, { yield: 50 });
+    const pending = await repo.getPendingSync();
+    expect(pending.yields[0].serverRevision).toBe(3);
+  });
+
+  it('drops a synced yield the server no longer has (deleted on another device)', async () => {
+    const gone = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48 });
+    await repo.markYieldSynced(gone.id, 12, 1);
+    const kept = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 40 });
+    await repo.markYieldSynced(kept.id, 13, 1);
+
+    await repo.mergeServerYields([{ id: 13, revision: 1, species: 'Cod', product: 'Fillet', yield: 40 }]);
+
+    const yields = await repo.getYields();
+    expect(yields.map((y) => y.serverId)).toEqual([13]);
+  });
+
+  it('keeps unsynced, deleting and conflicted yields the server does not list', async () => {
+    await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 40 }); // added offline
+    const edited = await repo.addYield({ species: 'Halibut', product: 'Skinless Fillet', yield: 48 });
+    await repo.markYieldSynced(edited.id, 12, 1);
+    await repo.updateYield(edited.id, { yield: 50 }); // edited offline, not pushed yet
+    const deleting = await repo.addYield({ species: 'Pollock', product: 'Fillet', yield: 30 });
+    await repo.markYieldSynced(deleting.id, 14, 1);
+    await repo.removeYield(deleting.id);
+    const conflicted = await repo.addYield({ species: 'Sole', product: 'Fillet', yield: 35 });
+    await repo.markYieldSynced(conflicted.id, 15, 1);
+    await repo.updateYield(conflicted.id, { yield: 36 });
+    await repo.markYieldConflicted(conflicted.id);
+
+    await repo.mergeServerYields([]);
+
+    expect((await repo.getYields()).map((y) => y.species).sort()).toEqual(['Cod', 'Halibut', 'Sole']);
+    expect((await repo.getPendingSync()).yields.map((y) => y.species)).toContain('Pollock');
+  });
 });
 
 // ---- removeCalcTombstone / removeYieldTombstone ----

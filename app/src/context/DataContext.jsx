@@ -25,6 +25,7 @@ export function DataProvider({ children }) {
   const [customSpecies, setCustomSpeciesState] = useState({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [storageFailed, setStorageFailed] = useState(false);
   // 'idle' | 'syncing' | 'synced' | 'offline' | 'pending' | 'error' | 'conflict'
   const [syncStatus, setSyncStatus] = useState('idle');
   const [syncError, setSyncError] = useState(null); // null | 'auth' | 'network'
@@ -91,12 +92,19 @@ export function DataProvider({ children }) {
     loadedScopeRef.current = null;
     async function loadData() {
       setDataLoaded(false);
-      const [calcs, yields, species, conflicts] = await Promise.all([
-        repo.getCalcs(),
-        repo.getYields(),
-        getCustomSpecies(),
-        repo.getConflictedYields(),
-      ]);
+      let calcs, yields, species, conflicts;
+      try {
+        [calcs, yields, species, conflicts] = await Promise.all([
+          repo.getCalcs(),
+          repo.getYields(),
+          getCustomSpecies(),
+          repo.getConflictedYields(),
+        ]);
+      } catch {
+        // Site storage blocked or broken: nothing can be kept on this device.
+        if (!cancelled) setStorageFailed(true);
+        return;
+      }
       if (!cancelled) {
         setSavedCalcs(calcs);
         setCustomYields(yields);
@@ -109,6 +117,21 @@ export function DataProvider({ children }) {
     loadData();
     return () => { cancelled = true; };
   }, [repo, scope]);
+
+  // Without on-device storage there is nothing for the sync to fill, so read the account's custom
+  // yields from the server instead and hold them in memory, tagged with the account they belong to.
+  const [serverYields, setServerYields] = useState({ uid: null, rows: [] });
+  const [serverYieldsWanted, setServerYieldsWanted] = useState(0); // bumped to fetch them again
+  useEffect(() => {
+    if (!storageFailed || !uid || !isOnline) return;
+    let cancelled = false;
+    getAuthHeaders()
+      .then((headers) => apiClient.listUserDataRaw(headers))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((rows) => { if (!cancelled && Array.isArray(rows)) setServerYields({ uid, rows }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [storageFailed, uid, isOnline, getAuthHeaders, serverYieldsWanted]);
 
   // One-time legacy migration + recovery check. Runs once per session.
   useEffect(() => {
@@ -626,13 +649,20 @@ export function DataProvider({ children }) {
     return triggerSync();
   }, [user, triggerSync]);
 
+  // Get the account's latest custom yields: through the sync, or straight from the server when
+  // this device can't store them. The calculator calls this each time it opens.
+  const refreshCustomYields = useCallback(() => {
+    if (storageFailed) setServerYieldsWanted((n) => n + 1);
+    else if (dataLoaded) retrySync();
+  }, [storageFailed, dataLoaded, retrySync]);
+
   // Gate account data so consumers never see the previous scope's records
   // during the render cycle between a uid change and the clearing effect.
   const scopeReady = loadedScopeRef.current === scope;
 
   const value = {
     savedCalcs: scopeReady ? savedCalcs : [],
-    customYields: scopeReady ? customYields : [],
+    customYields: scopeReady ? customYields : (storageFailed && serverYields.uid === uid ? serverYields.rows : []),
     customSpecies,
     conflictedYields: scopeReady ? conflictedYields : [],
     isOnline,
@@ -648,6 +678,7 @@ export function DataProvider({ children }) {
     removeYield,
     updateCustomSpecies,
     retrySync,
+    refreshCustomYields,
     signOut,
     requestPublish,
     confirmPublish,

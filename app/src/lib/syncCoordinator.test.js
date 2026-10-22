@@ -168,6 +168,43 @@ describe('createSyncCoordinator', () => {
       );
     });
 
+    it('keeps an edit made while the earlier push of the same yield was in flight', async () => {
+      const yld = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 55 });
+      await repo.markYieldSynced(yld.id, 'srv-race', 1);
+      await repo.updateYield(yld.id, { yield: 58 });
+      client.updateUserDataRaw = vi.fn(async () => {
+        await repo.updateYield(yld.id, { yield: 60 }); // edited again while the PUT is out
+        return fakeRes({ body: { id: 'srv-race', revision: 2 } });
+      });
+      client.listUserDataRaw = vi.fn(async () =>
+        fakeRes({ body: [{ id: 'srv-race', revision: 2, species: 'Cod', product: 'Fillet', yield: 58 }] })
+      );
+
+      await createSyncCoordinator(repo, client).sync(AUTH_USER);
+
+      const [rec] = await repo.getYields();
+      expect(rec).toMatchObject({ yield: 60, syncStatus: 'local', serverRevision: 2 });
+    });
+
+    it('keeps a delete made while the earlier push of the same yield was in flight', async () => {
+      const yld = await repo.addYield({ species: 'Cod', product: 'Fillet', yield: 55 });
+      await repo.markYieldSynced(yld.id, 'srv-race', 1);
+      await repo.updateYield(yld.id, { yield: 58 });
+      client.updateUserDataRaw = vi.fn(async () => {
+        await repo.removeYield(yld.id); // deleted while the PUT is out
+        return fakeRes({ body: { id: 'srv-race', revision: 2 } });
+      });
+      client.listUserDataRaw = vi.fn(async () =>
+        fakeRes({ body: [{ id: 'srv-race', revision: 2, species: 'Cod', product: 'Fillet', yield: 58 }] })
+      );
+
+      await createSyncCoordinator(repo, client).sync(AUTH_USER);
+
+      expect(await repo.getYields()).toHaveLength(0);
+      const pending = await repo.getPendingSync();
+      expect(pending.yields[0]).toMatchObject({ syncStatus: 'pending-delete', serverRevision: 2 });
+    });
+
     it('tracks a 409 conflict: increments conflicts (not errors), moves record to conflicted state', async () => {
       const yld = await repo.addYield({ species: 'Sole', product: 'Fillet', yield: 42 });
       await repo.markYieldSynced(yld.id, 'srv-yld-2', 1);

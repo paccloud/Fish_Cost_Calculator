@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useLayoutEffect, useEffect } from 'react';
 import { apiUrl } from '../config/api';
 import { getAuthHeaders as getAuthHeadersFn } from '../lib/authHeaders';
+import { decodeJwtPayload, legacyUserFromToken } from '../lib/legacyJwt';
 import {
   clearFirebaseSession,
   createGoogleAuthUri,
@@ -27,23 +28,6 @@ const defaultAuthApi = {
   signUpWithEmailPassword,
 };
 
-function decodeBase64UrlJson(value) {
-  try {
-    let base64 = value.replace(/-/g, '+').replace(/_/g, '/');
-    const padding = base64.length % 4;
-    if (padding) {
-      base64 += '='.repeat(4 - padding);
-    }
-
-    const binary = globalThis.atob(base64);
-    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-    const text = new TextDecoder().decode(bytes);
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
 function loadLegacyJwtSession(storage = globalThis.localStorage) {
   if (!storage || typeof storage.getItem !== 'function') {
     return null;
@@ -54,8 +38,7 @@ function loadLegacyJwtSession(storage = globalThis.localStorage) {
     return null;
   }
 
-  const [, encodedPayload] = storedToken.split('.');
-  const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
+  const payload = decodeJwtPayload(storedToken);
   if (!payload?.username) {
     storage.removeItem?.('token');
     return null;
@@ -69,12 +52,7 @@ function loadLegacyJwtSession(storage = globalThis.localStorage) {
 
   return {
     token: storedToken,
-    user: {
-      id: payload.id,
-      username: payload.username,
-      email: payload.email || null,
-      authProvider: 'password',
-    },
+    user: legacyUserFromToken(storedToken),
   };
 }
 
@@ -125,8 +103,7 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
   // as logged in while all protected requests return 401.
   useEffect(() => {
     if (!token) return;
-    const [, encodedPayload] = token.split('.');
-    const payload = encodedPayload ? decodeBase64UrlJson(encodedPayload) : null;
+    const payload = decodeJwtPayload(token);
     if (!payload?.exp) return;
     let timerId;
     function scheduleLogout() {
@@ -183,7 +160,7 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
       authApi.clearFirebaseSession();
       globalThis.localStorage?.setItem('token', legacyData.token);
       setToken(legacyData.token);
-      setUser({ username: legacyData.username, authProvider: 'password' });
+      setUser(legacyUserFromToken(legacyData.token) ?? { username: legacyData.username, authProvider: 'password' });
       return true;
     }
     const response = await globalThis.fetch(apiUrl('/api/login'), {
@@ -201,7 +178,8 @@ export const AuthProvider = ({ children, authApi = defaultAuthApi }) => {
     authApi.clearFirebaseSession();
     globalThis.localStorage?.setItem('token', data.token);
     setToken(data.token);
-    setUser({ username: data.username, authProvider: 'password' });
+    // The id in the token gives the account its own storage scope (see legacyUserFromToken)
+    setUser(legacyUserFromToken(data.token) ?? { username: data.username, authProvider: 'password' });
     return true;
   };
 

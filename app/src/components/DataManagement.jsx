@@ -61,12 +61,18 @@ const DataManagement = () => {
     e.preventDefault();
     try {
       if (editingId) {
-        await updateYield(editingId, {
+        const updated = await updateYield(editingId, {
           species: formData.species,
           product: formData.product,
           yield: parseFloat(formData.yield),
           source: formData.source,
         });
+        if (!updated) {
+          // Deleted on another device while open here: keep what was typed and let them add it back
+          setEditingId(null);
+          setStatus({ type: 'error', message: 'This yield was deleted on another device. Save to add it back.' });
+          return;
+        }
         setStatus({ type: 'success', message: 'Updated successfully!' });
       } else {
         await addYield({
