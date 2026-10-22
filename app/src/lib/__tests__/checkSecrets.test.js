@@ -3869,7 +3869,8 @@ describe('review round 9', () => {
     });
 
     it('blanking a digest keeps the text length and the line structure, and leaves a hex password in a URL visible', () => {
-      const text = `a ${sha512(2126)} b\nchecksum = "${hex(64, 2127)}"\nx: ${scheme}u:${hex(64, 2128)}@h/y\n`;
+      // The digest sits under an integrity key: since review round 18 a digest is blanked by position, not by shape alone.
+      const text = `integrity ${sha512(2126)} b\nchecksum = "${hex(64, 2127)}"\nx: ${scheme}u:${hex(64, 2128)}@h/y\n`;
       const cleaned = sanitizeLockfile(text);
       expect(cleaned.length).toBe(text.length);
       expect(cleaned.split('\n').length).toBe(text.split('\n').length);

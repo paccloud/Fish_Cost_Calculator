@@ -122,7 +122,8 @@ const SNIFF_BYTES = 8000;
 // rules do not run on them. They are NOT skipped: a dependency URL can carry a credential (https://user:<password>@registry/...),
 // and a lockfile can hold an auth field. Only rules flagged `lockfile: true` (URL passwords, private keys, provider-shaped
 // tokens, webhook URLs) and the targeted `lockfile-credential` rule run on them, after ordinary digests are blanked
-// (sanitizeLockfile). Exact names only: other *.lock files are scanned with every rule.
+// (sanitizeLockfile: only where the format puts an integrity value, never in an auth field). Exact names only: other *.lock
+// files are scanned with every rule.
 const LOCKFILE_NAMES = new Set([
   'package-lock.json',
   'npm-shrinkwrap.json',
@@ -165,25 +166,82 @@ const sizeLimit = (filePath) => (isLockfile(filePath) ? MAX_LOCKFILE_BYTES : MAX
 
 // Ordinary digests, blanked (same length, so line numbers stay) before the lockfile rules run. Every quantifier is a
 // fixed count or a bounded class run, so this is linear. Only digests of the exact size of their algorithm are blanked:
-// a longer or shorter string after "sha512-" is not an integrity value and stays visible to the token rules.
-const LOCKFILE_DIGESTS = [
-  /sha512-[A-Za-z0-9+/]{86}={0,2}/g,
-  /sha384-[A-Za-z0-9+/]{64}={0,2}/g,
-  /sha256-[A-Za-z0-9+/]{43}={0,2}/g,
-  /sha1-[A-Za-z0-9+/]{27}={0,2}/g,
-  /\bh1:[A-Za-z0-9+/]{43}=/g, // go.sum
-  /(?<![A-Za-z0-9])(?:sha(?:1|224|256|384|512)|md5)[:=][0-9a-fA-F]{32,128}(?![0-9A-Za-z])/g, // poetry, Pipfile.lock, Gemfile CHECKSUMS
-];
+// a longer or shorter string after "sha512-" is not an integrity value and stays visible to the token rules (hence the
+// lookahead: without it the first 86 characters of a longer value were blanked and only its tail was left to judge).
+const LOCKFILE_DIGEST = new RegExp(
+  [
+    String.raw`sha512-[A-Za-z0-9+/]{86}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha384-[A-Za-z0-9+/]{64}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha256-[A-Za-z0-9+/]{43}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha1-[A-Za-z0-9+/]{27}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`\bh1:[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])`, // go.sum
+    String.raw`(?<![A-Za-z0-9])(?:sha(?:1|224|256|384|512)|md5)[:=][0-9a-fA-F]{32,128}(?![0-9A-Za-z])`, // poetry, Pipfile.lock, Gemfile CHECKSUMS
+  ].join('|'),
+  'g',
+);
 // A hex digest is blanked only after a checksum-like key (Cargo `checksum = "..."`, composer `"shasum": "..."`, yarn berry
 // `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment).
 const LOCKFILE_HEX_DIGEST =
   /((?:checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+// ...except `sha256:<hex>` / `sha1=<hex>` with nothing between the algorithm and the hex: that is one digest-shaped VALUE, not
+// a key and its value. LOCKFILE_DIGEST has already blanked it where it is an integrity value; anywhere else (the value of an
+// auth field, a `?token=` URL parameter) it stays visible.
+const DIGEST_VALUE_LEAD = /^sha(?:1|256|512)[:=]$/i;
 
-/** The lockfile text with ordinary integrity digests blanked. Offsets and line breaks are unchanged. */
+// The SHAPE of a digest proves nothing on its own: a registry token can be written as "sha512-<base64>", and blanking that
+// shape wherever it appeared hid `"_authToken": "sha512-..."` (and `?token=sha256-...` in a URL) from lockfile-credential.
+// So a digest is blanked only where the lockfile format puts an integrity value, judged from the text just before it:
+//   - after an integrity / checksum key: npm and bun `"integrity": "`, yarn v1 `integrity `, pnpm `{integrity: `, poetry
+//     `hash = "`, `"shasum": "`, Pipfile.lock `"hashes": ["`. An auth-named field (_authToken, _auth, _password, npmAuthToken,
+//     token, password, ...) is never one of these keys, so its value always reaches lockfile-credential;
+//   - as the fragment of a resolved URL (`.tgz#sha512-...`), not after a bare "#" that starts a value or a comment;
+//   - as a whole quoted array element (bun.lock `["a@1.0.0", "", {}, "sha512-..."]`, the Pipfile.lock and old poetry hash
+//     lists, one per line): a credential field is `name: value`, never a bare element;
+//   - at the end of a go.sum line (`module v1.2.3[/go.mod] h1:...`) or a Gemfile.lock CHECKSUMS line (`  rake (13.0.6) sha256=...`);
+//   - after a digest blanked for one of these reasons and a space or comma: one value listing several (`"sha1-... sha512-..."`,
+//     `sha256=...,sha512=...`).
+// Every look back is bounded (a fixed window before the digest, never back to the start of a long line), so the cost per
+// digest is fixed and the pass stays linear. A digest the look back cannot place stays visible: at worst a finding to allow,
+// never a miss.
+const INTEGRITY_KEY_LOOKBACK = 48; // longer than the longest lead INTEGRITY_KEY_LEAD can match (37 characters)
+const INTEGRITY_KEY_LEAD =
+  /(?<![A-Za-z0-9])(?:integrity|checksums?|shasum|hash(?:es)?|digest|sha(?:1|256|384|512))["']?(?:[ \t]{0,8}[:=][ \t]{0,8}|[ \t]{1,8})(?:\[[ \t]{0,8})?["']?$/i;
+const ARRAY_ELEMENT_LOOKBACK = 256; // the line break and indentation between `[` or `,` and a list element on the next line
+const LINE_LOOKBACK = 512; // a go.sum module path and version, a Gemfile gem name and version
+const GO_SUM_LINE_LEAD = /^\S{1,400}[ \t]+v\d\S{0,100}[ \t]+$/;
+const GEMFILE_CHECKSUM_LINE_LEAD = /^[ \t]*[^\s()]{1,200}[ \t]+\([^()\n]{1,100}\)[ \t]+$/;
+const DIGEST_LIST_SEPARATOR = /^[ \t]{0,4},?[ \t]{0,4}$/;
+
+/** Is the digest at text[start, end) in an integrity position (see above), other than the second of a list? */
+function isIntegrityPosition(text, start, end) {
+  if (INTEGRITY_KEY_LEAD.test(text.slice(Math.max(0, start - INTEGRITY_KEY_LOOKBACK), start))) return true;
+  const before = text[start - 1];
+  if (before === '#') return start >= 2 && !/[\s"'=:#]/.test(text[start - 2]);
+  if ((before === '"' || before === "'") && text[end] === before) {
+    const lead = text.slice(Math.max(0, start - 1 - ARRAY_ELEMENT_LOOKBACK), start - 1).trimEnd();
+    if (lead.endsWith('[') || lead.endsWith(',')) return true;
+  }
+  const window = text.slice(Math.max(0, start - LINE_LOOKBACK), start);
+  const lineBreak = window.lastIndexOf('\n');
+  if (lineBreak === -1 && start > LINE_LOOKBACK) return false; // the line starts before the look back: no go.sum / Gemfile line is that long
+  const linePrefix = window.slice(lineBreak + 1);
+  return GO_SUM_LINE_LEAD.test(linePrefix) || GEMFILE_CHECKSUM_LINE_LEAD.test(linePrefix);
+}
+
+/**
+ * The lockfile text with ordinary integrity digests blanked: only a digest in an integrity position, never the value of an
+ * auth field (see isIntegrityPosition). Offsets and line breaks are unchanged.
+ */
 export function sanitizeLockfile(text) {
-  let out = text;
-  for (const pattern of LOCKFILE_DIGESTS) out = out.replace(pattern, (m) => ' '.repeat(m.length));
-  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex) => lead + ' '.repeat(hex.length));
+  let listEnd = -1; // the end of the last digest blanked, for a value that lists several
+  const out = text.replace(LOCKFILE_DIGEST, (m, start) => {
+    const end = start + m.length;
+    const listed = listEnd !== -1 && start > listEnd && start - listEnd <= 9 && DIGEST_LIST_SEPARATOR.test(text.slice(listEnd, start));
+    if (!listed && !isIntegrityPosition(text, start, end)) return m;
+    listEnd = end;
+    return ' '.repeat(m.length);
+  });
+  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex) => (DIGEST_VALUE_LEAD.test(lead) ? m : lead + ' '.repeat(hex.length)));
 }
 
 // Leading bytes of common binary formats. A file is "verified binary" only when it has a NUL byte in its first
