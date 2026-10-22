@@ -187,10 +187,14 @@ describe('review round 18: --range with an all-zero base (a new or recreated bra
     expect(result.stderr).toContain(`${oldLeak.slice(0, 7)}  old.env  secret-assignment  x1`);
     noValue(result);
     // With develop one commit ahead the result is the same: a branch past the head never hides it either.
-    commit(upstream, { 'd.txt': 'd\n' });
+    expect(git(upstream, 'checkout', '-q', 'develop').status).toBe(0);
+    const ahead1 = commit(upstream, { 'd.txt': 'd\n' });
     expect(git(runner, 'fetch', '-q', 'origin').status).toBe(0);
+    expect(git(runner, 'rev-parse', 'refs/remotes/origin/develop').stdout.trim()).toBe(ahead1);
     const ahead = scan(runner, '--range', `${ZERO}..${head}`);
     expect(ahead.status, output(ahead)).toBe(1);
+    expect(ahead.stderr).toContain(`${oldLeak.slice(0, 7)}  old.env  secret-assignment  x1`);
+    noValue(ahead);
   });
 
   it.skipIf(!hasGit())('tens of thousands of other branch tips do not overflow the argument list (they go to git on stdin)', SLOW, () => {

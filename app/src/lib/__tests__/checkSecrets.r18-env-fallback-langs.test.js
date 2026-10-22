@@ -178,7 +178,9 @@ describe('review round 18: environment fallbacks outside JavaScript', () => {
       expect(fallbacks('main.go', `package main\n\nfunc k() string {\n\tk := os.Getenv("${NAME}")\n\tif k == "" {\n\t\tk = "${value}"\n\t}\n\treturn k\n}\n`).map((f) => f.line)).toEqual([4]);
     });
 
-    it('judges the default like the JavaScript branch: a guessable constant counts too (a placeholder does not: review round 19)', () => {
+    it('reports a guessable constant default; only JavaScript also reports a placeholder default (unchanged from main)', () => {
+      // The JavaScript branch predates these languages and reports any literal default, placeholders included. The
+      // other languages pass a placeholder default (review round 19). Kept as is pending the owner's call on parity.
       expect(fallbacks('app.js', `const k = process.env.${NAME} || '${guessable}';\n`).length).toBe(1);
       const weak = ['hunter2', 'hunter2'].join(''); // guessable, and no placeholder
       for (const [file, text] of [
