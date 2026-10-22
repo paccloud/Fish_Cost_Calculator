@@ -3,6 +3,9 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // Tests are not shipped, and their regexes and fixtures can look like class names
+    "!./src/**/__tests__/**",
+    "!./src/**/*.test.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
   theme: {
