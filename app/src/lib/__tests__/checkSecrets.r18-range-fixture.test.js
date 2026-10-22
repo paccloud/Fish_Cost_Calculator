@@ -60,7 +60,17 @@ const OTHER_PATHS = [
   'app/src/lib/__tests__/nested/checkSecrets.test.js',
   'scripts/x.mjs',
   'scripts/checkSecrets.test.js',
+  // Near misses from review round 19: case, a trailing blank, other extensions, a look-alike letter, a subdirectory, a top-level b/.
+  'app/src/lib/__tests__/CheckSecrets.test.js',
+  'app/src/lib/__tests__/checkSecrets.test.js ',
+  'app/src/lib/__tests__/checkSecrets.test.mjs',
+  'app/src/lib/__tests__/checkSecrets.test.ts',
+  'app/src/lib/__tests__/checkSecrets.test.\u0458s',
+  'app/src/lib/__tests__/checkSecrets.test.js/x.js',
+  'b/app/src/lib/__tests__/checkSecrets.test.js',
 ];
+// A git path is always "/"-separated; a backslash is a literal character of the name. This one is a single root-level file.
+const BACKSLASH_NAME = 'app\\src\\lib\\__tests__\\checkSecrets.test.js';
 const NOTE_START = 'note: ';
 const NOTE_TEXT = "of the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js)";
 
@@ -87,8 +97,10 @@ describe('review round 18: scanner fixture files in --range and --history', () =
     it.each(OTHER_PATHS)('does not match %s', (file) => {
       expect(isScannerFixture(file)).toBe(false);
     });
-    it('accepts a path with the platform separator', () => {
-      expect(isScannerFixture(FIXTURE_FILE.split('/').join(path.sep))).toBe(true);
+    it('matches the git path as it is: a name holding backslashes is never the fixture, on any platform', () => {
+      // Git prints "/" on every platform, so no OS-separator conversion applies (on Windows it would turn this name into the fixture).
+      expect(isScannerFixture(BACKSLASH_NAME)).toBe(false);
+      expect(isScannerFixture(FIXTURE_FILE.split('/').join('\\'))).toBe(false);
     });
   });
 
@@ -239,6 +251,83 @@ describe('review round 18: scanner fixture files in --range and --history', () =
         expect(text).toContain('no hits in 3 commits');
         expect(text).toContain('2 scanner-fixture'); // the add and the rewrite each added lines to the file
         expectNoValue(text);
+      },
+    );
+
+    // diff.noprefix in the user's git config (here through GIT_CONFIG_* so the real config is untouched) drops the "b/" of each
+    // "+++ " line in `git log -p`. The scanner passes explicit prefixes, so a real top-level b/ directory is never stripped.
+    const NOPREFIX = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'diff.noprefix', GIT_CONFIG_VALUE_0: 'true' };
+    const scanWithEnv = (cwd, env, ...args) =>
+      spawnSync(process.execPath, [SCANNER, ...args], { cwd, encoding: 'utf8', timeout: SLOW_TEST_MS, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, ...env } });
+
+    it.each([['--range'], ['--history']])(
+      'with diff.noprefix=true, %s still reports a secret added and removed at b/app/src/lib/__tests__/checkSecrets.test.js',
+      SLOW,
+      (mode) => {
+        const dir = makeRepo();
+        const file = `b/${FIXTURE_FILE}`;
+        const base = commit(dir, { 'README.md': '# t\n' });
+        commit(dir, { [file]: fixtureBody }, 'add');
+        commit(dir, { [file]: '// rewritten\n' }, 'rewrite');
+        const args = mode === '--range' ? ['--range', `${base}..HEAD`] : ['--history'];
+        for (const env of [{}, NOPREFIX]) {
+          const result = scanWithEnv(dir, env, ...args);
+          const text = output(result);
+          expect(result.status, text).toBe(1);
+          expect(text).toContain(file);
+          expect(text).toContain('secret-assignment');
+          expect(text).not.toContain(NOTE_START);
+          expectNoValue(text);
+        }
+      },
+    );
+
+    it(
+      'with diff.noprefix=true the real fixture file is still left out (exit 0, note shown)',
+      SLOW,
+      () => {
+        const dir = makeRepo();
+        const base = commit(dir, { 'README.md': '# t\n' });
+        commit(dir, { [FIXTURE_FILE]: fixtureBody }, 'add fixture');
+        commit(dir, { [FIXTURE_FILE]: '// rewritten\n' }, 'rewrite fixture');
+        const result = scanWithEnv(dir, NOPREFIX, '--range', `${base}..HEAD`);
+        expect(result.status, output(result)).toBe(0);
+        expect(output(result)).toContain('2 scanner-fixture');
+      },
+    );
+
+    it.runIf(process.platform !== 'win32')(
+      'a root-level file whose name holds backslashes is scanned like any other path by --range',
+      SLOW,
+      () => {
+        const dir = makeRepo();
+        const base = commit(dir, { 'README.md': '# t\n' });
+        commit(dir, { [BACKSLASH_NAME]: fixtureBody }, 'add');
+        commit(dir, { [BACKSLASH_NAME]: '// rewritten\n' }, 'rewrite');
+        const result = scan(dir, '--range', `${base}..HEAD`);
+        const text = output(result);
+        expect(result.status, text).toBe(1);
+        expect(text).toContain('secret-assignment');
+        expect(text).not.toContain(NOTE_START);
+        expectNoValue(text);
+      },
+    );
+
+    it(
+      'an INCOMPLETE --range or --history result still names the skipped fixture versions',
+      SLOW,
+      () => {
+        const dir = makeRepo();
+        const base = commit(dir, { 'README.md': '# t\n' });
+        // A fixture version and an over-the-limit text file elsewhere: the run is incomplete (exit 2), and the note is in it.
+        commit(dir, { [FIXTURE_FILE]: fixtureBody, 'data/big.txt': `${'word '.repeat(1_300_000)}\n` }, 'both');
+        for (const args of [['--range', `${base}..HEAD`], ['--history']]) {
+          const result = scan(dir, ...args);
+          const text = output(result);
+          expect(result.status, text).toBe(2);
+          expect(text).toContain('INCOMPLETE');
+          expect(text).toContain(NOTE_TEXT);
+        }
       },
     );
 

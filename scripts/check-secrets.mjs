@@ -155,9 +155,14 @@ export function isLockfile(filePath) {
 const SCANNER_FIXTURE_FILE = /^app\/src\/lib\/__tests__\/checkSecrets[^/]*\.test\.js$/;
 const SCANNER_FIXTURE_REASON = 'scanner-fixture';
 
-/** True for the scanner's own Vitest files (app/src/lib/__tests__/checkSecrets*.test.js, repository-relative, exact directory). */
-export function isScannerFixture(filePath) {
-  return SCANNER_FIXTURE_FILE.test(filePath.split(path.sep).join('/'));
+/**
+ * True for the scanner's own Vitest files (app/src/lib/__tests__/checkSecrets*.test.js, repository-relative, exact directory).
+ * `gitPath` is a path as git prints it: always "/"-separated, whatever the platform. It is matched as it is, never converted from
+ * the OS separator: in a git path a backslash is a literal character of the name, so a root-level file literally named
+ * `app\src\lib\__tests__\checkSecrets.test.js` is NOT the fixture, on Windows either.
+ */
+export function isScannerFixture(gitPath) {
+  return SCANNER_FIXTURE_FILE.test(gitPath);
 }
 
 // A lockfile is machine-generated and can be far larger than a source file; it gets a higher (still fail-closed) limit.
@@ -6609,7 +6614,9 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     [
       '-c', 'core.quotepath=false',
       'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
-      '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
+      // Explicit prefixes: the parser strips "b/" from each "+++ " line, and a user's diff.noprefix (or mnemonicPrefix /
+      // srcPrefix / dstPrefix) would otherwise drop it, so that a real top-level b/ directory got stripped instead.
+      '-p', '--cc', '--src-prefix=a/', '--dst-prefix=b/', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
       ...revisions, '--',
     ],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
@@ -7111,11 +7118,13 @@ async function runRange(spec, { cwd, stdout, stderr }) {
   const gaps = [];
   if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize, oversizeLimits));
   if (truncated) gaps.push(cut);
+  const fixtureNote = formatFixtureNote(skipped);
   if (gaps.length > 0) {
+    // The fixture exemption is named in every result, an incomplete one included.
+    if (fixtureNote !== '') stderr.write(`${fixtureNote}\n`);
     stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
     return 2;
   }
-  const fixtureNote = formatFixtureNote(skipped);
   if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
   if (commits === 0) {
     // With an all-zero base this means another branch of origin already holds <head>: the push introduced no commit.
@@ -7168,11 +7177,12 @@ export async function main(
       const gaps = [];
       if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize, oversizeLimits));
       if (shallow) gaps.push('this is a shallow clone, so only part of the history was available. Run "git fetch --unshallow" or scan a full clone.');
+      const fixtureNote = formatFixtureNote(skipped);
       if (gaps.length > 0) {
+        if (fixtureNote !== '') stderr.write(`${fixtureNote}\n`);
         stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
         return 2;
       }
-      const fixtureNote = formatFixtureNote(skipped);
       if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
       stdout.write(`check-secrets --history: no hits in ${commits} commits${skippedNote(skipped)}\n`);
       return 0;
