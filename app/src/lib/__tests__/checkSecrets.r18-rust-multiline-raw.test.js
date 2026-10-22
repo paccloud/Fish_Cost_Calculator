@@ -235,6 +235,106 @@ describe('review round 18: multi-line Rust raw strings', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Review round 19: the other literal forms whose grammar allows a line break, the readers that did not pass ctx (environment
+  // fallbacks, the basic-auth argument, a JS fallback template), the Rust c / cr prefixes, and rustfmt's wrapped assignments and calls.
+  describe('(4) review round 19: every spanning literal form, every reader', () => {
+    const BT = '`';
+    const TRIPLE = '"'.repeat(3);
+    const FALLBACK = 'hardcoded-secret-fallback';
+    const SHAPES = [
+      ['Rust fallback unwrap_or(r#"..."#)', 'a.rs', `let k = std::env::var("${NAME}").unwrap_or(r#"\n${value}\n"#.to_string());\n`, FALLBACK],
+      ['Rust fallback unwrap_or_else(|_| r#"..."#.into())', 'a.rs', `let k = env::var("${NAME}").unwrap_or_else(|_| r#"\n${value}\n"#.into());\n`, FALLBACK],
+      ['Rust option_env! fallback', 'a.rs', `const K: &str = option_env!("${NAME}").unwrap_or(r#"\n${value}\n"#);\n`, FALLBACK],
+      ['Rust ordinary string over lines (assignment)', 'a.rs', `const ${NAME}: &str = "\n${value}\n";\n`, 'secret-assignment'],
+      ['Rust ordinary string over lines (set_var)', 'a.rs', `fn main() { std::env::set_var("${NAME}", "\n${value}\n"); }\n`, 'secret-assignment'],
+      ['Rust c"..." literal', 'a.rs', `const ${NAME}: &CStr = c"${value}";\n`, 'secret-assignment'],
+      ['Rust cr#"..."# literal', 'a.rs', `const ${NAME}: &CStr = cr#"${value}"#;\n`, 'secret-assignment'],
+      ['rustfmt-wrapped assignment', 'a.rs', `const ${NAME}: &str =\n    r#"${value}"#;\n`, 'secret-assignment'],
+      ['rustfmt-wrapped set_var call', 'a.rs', `std::env::set_var(\n    "${NAME}",\n    r#"\n${value}\n"#,\n);\n`, 'secret-assignment'],
+      ['C# verbatim @"..." assignment', 'A.cs', `string JwtSecret = @"${value}\ncontinued";\n`, 'secret-assignment'],
+      ['C# verbatim @"..." setter', 'A.cs', `Environment.SetEnvironmentVariable("${NAME}", @"\n${value}\n");\n`, 'secret-assignment'],
+      ['C# verbatim NetworkCredential', 'A.cs', `var c = new NetworkCredential("admin", @"\n${value}\n");\n`, 'http-auth-credential'],
+      ['C# verbatim ?? fallback', 'A.cs', `var k = Environment.GetEnvironmentVariable("${NAME}") ?? @"\n${value}\n";\n`, FALLBACK],
+      ['C# raw """ setter argument', 'A.cs', `Environment.SetEnvironmentVariable("${NAME}", ${TRIPLE}\n    ${value}\n    ${TRIPLE});\n`, 'secret-assignment'],
+      ['Go SetBasicAuth backtick', 'a.go', `req.SetBasicAuth("admin", ${BT}\n${value}\n${BT})\n`, 'http-auth-credential'],
+      ['JS template fallback', 'a.js', `const k = process.env.${NAME} ?? ${BT}\n${value}\n${BT};\n`, FALLBACK],
+      ['Perl q{...} assignment', 'a.pl', `my $jwt_secret = q{\n${value}\n};\n`, 'secret-assignment'],
+      ['Perl $ENV{...} = q{...}', 'a.pl', `$ENV{${NAME}} = q{\n${value}\n};\n`, 'secret-assignment'],
+      ['Ruby %q(...) assignment', 'a.rb', `jwt_secret = %q(\n${value}\n)\n`, 'secret-assignment'],
+      ['Ruby ENV.store with %q(...)', 'a.rb', `ENV.store("${NAME}", %q(\n${value}\n))\n`, 'secret-assignment'],
+      ['Groovy dollar-slashy', 'a.groovy', `def jwtSecret = $/\n${value}\n/$\n`, 'secret-assignment'],
+      ['a wrapped object property (prettier)', 'a.ts', `const cfg = {\n  jwtSecret:\n    '${value}',\n};\n`, 'secret-assignment'],
+    ];
+    it.each(SHAPES)('%s', (_label, file, text, rule) => {
+      expect(rules(file, text)).toContain(rule);
+    });
+
+    it.each([
+      ['a Rust string of words over lines', 'a.rs', `let s = "\nhello\nworld\n";\nlet a = 1;\n`],
+      ['a C# verbatim greeting', 'A.cs', `string Greeting = @"Hello\nWorld";\n`],
+      ['a placeholder over lines', 'a.rs', `const ${NAME}: &str = "\nchangeme\n";\n`],
+      ['three quotes in JavaScript are no triple-quoted string', 'a.js', `x.auth("a", ${TRIPLE}${'"'.repeat(20)}\n${'y\n'.repeat(300)}`],
+    ])('not reported: %s', (_label, file, text) => {
+      expect(scanText(file, text)).toEqual([]);
+    });
+
+    it('an unterminated spanning literal of the new forms is reported, not read to the end of the file', () => {
+      const tail = 'x\n'.repeat(300);
+      for (const [file, text] of [
+        ['a.rs', `const ${NAME}: &str = "${value}\n${tail}`],
+        ['A.cs', `string JwtSecret = @"${value}\n${tail}`],
+        ['a.pl', `my $jwt_secret = q{${value}\n${tail}`],
+        ['a.rb', `jwt_secret = %q(${value}\n${tail}`],
+      ]) {
+        expect(count(file, text), file).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it('hostile runs of unterminated openers of the new forms stay fast', SLOW, () => {
+      const timings = timeInChild(`
+        const N = 'JWT_' + 'SECRET';
+        const blanks = (' '.repeat(60) + '\\n').repeat(60000);
+        const texts = [
+          ['a.pl', 'my $jwt_secret = q{\\n'.repeat(2000) + blanks],
+          ['a.rb', 'jwt_secret = %q(\\n'.repeat(2000) + blanks],
+          ['a.rs', ('const ' + N + ': &str = "\\n').repeat(2000) + blanks],
+          ['a.rs', ('const ' + N + ': &str =\\n').repeat(50000)],
+          ['A.cs', 'string JwtSecret = @"\\n'.repeat(2000) + blanks],
+          ['A.cs', 'string JwtSecret = ' + '"'.repeat(3) + '\\n'.repeat(2000) + blanks],
+          ['a.groovy', 'def jwtSecret = $/\\n'.repeat(2000) + blanks],
+          ['a.go', 'req.SetBasicAuth("admin", ' + String.fromCharCode(96) + '\\n'.repeat(2000) + blanks],
+          ['a.js', ('x = process.env.' + N + ' ?? ' + String.fromCharCode(96) + '\\n').repeat(2000) + blanks],
+        ];
+        for (const [file, text] of texts) {
+          const started = performance.now();
+          scanText(file, text);
+          timings.push(Math.round(performance.now() - started));
+        }
+      `);
+      for (const ms of timings) expect(ms).toBeLessThan(HOSTILE_LIMIT_MS);
+    });
+
+    it.skipIf(!hasGit())('the tree scan, --range and --history report the new shapes', SLOW, () => {
+      const dir = makeRepo();
+      const base = commit(dir, { 'README.md': '# demo\n' });
+      commit(dir, {
+        'src/fallback.rs': `fn k() -> String { std::env::var("${NAME}").unwrap_or(r#"\n${value}\n"#.to_string()) }\n`,
+        'src/plain.rs': `const ${NAME}: &str = "\n${value}\n";\n`,
+        'src/Verbatim.cs': `class A { string JwtSecret = @"${value}\ncontinued"; }\n`,
+        'src/basic.go': `func f() { req.SetBasicAuth("admin", ${BT}\n${value}\n${BT}) }\n`,
+        'lib/q.pl': `my $jwt_secret = q{\n${value}\n};\n`,
+      });
+      for (const args of [[], ['--range', `${base}..HEAD`], ['--history']]) {
+        const result = scan(dir, ...args);
+        const output = `${result.stdout}\n${result.stderr}`;
+        expect(result.status, output).toBe(1);
+        for (const file of ['src/fallback.rs', 'src/plain.rs', 'src/Verbatim.cs', 'src/basic.go', 'lib/q.pl']) expect(output, file).toContain(file);
+        for (const piece of windows(value)) expect(output).not.toContain(piece);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
   it.skipIf(!hasGit())('the tree scan and --range report the assignment and the setter without printing the value', SLOW, () => {
     const dir = makeRepo();
     const base = commit(dir, { 'README.md': '# demo\n' });
