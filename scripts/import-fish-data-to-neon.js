@@ -22,7 +22,8 @@ import { FISH_DATA_V3, PROFILES_DATA } from '../app/src/data/fish_data_v3.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from app/.env.development or app/.env.production
+// DATABASE_URL should come from the shell environment; dotenv never overrides it.
+// (The tracked app/.env.* files must not hold real values; see SECURITY_NOTICE.md.)
 dotenv.config({ path: join(__dirname, '../app/.env.development') });
 
 const DATABASE_URL = process.env.DATABASE_URL;

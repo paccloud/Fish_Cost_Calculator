@@ -12,7 +12,8 @@
  * Usage:
  *   DATABASE_URL=<neon-connection-string> node scripts/migrate-sqlite-to-neon.js
  *
- *   Or set DATABASE_URL in app/.env.development and run:
+ *   Or `export DATABASE_URL=...` in your shell first (never write it into a tracked
+ *   file such as app/.env.development) and run:
  *   node scripts/migrate-sqlite-to-neon.js
  */
 
@@ -26,7 +27,8 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from app/.env.development or app/.env.production
+// DATABASE_URL should come from the shell environment; dotenv never overrides it.
+// (The tracked app/.env.* files must not hold real values; see SECURITY_NOTICE.md.)
 dotenv.config({ path: join(__dirname, '../app/.env.development') });
 
 const DATABASE_URL = process.env.DATABASE_URL;
