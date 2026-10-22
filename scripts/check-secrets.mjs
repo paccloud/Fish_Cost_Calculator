@@ -62,6 +62,9 @@
  *     (std::env::set_var, os.Setenv), are judged like a heredoc under the same bounds; one that does not end within them is reported.
  *   - Account passwords set from a script (chpasswd, passwd --stdin, smbpasswd -s, usermod -p, openssl passwd, mkpasswd, ldappasswd,
  *     net user, dscl -passwd) are read as whole shell words.
+ *   - Passwords inside semicolon-delimited connection strings (connection-string-password: ADO.NET, ODBC, OLE DB, SQL Server JDBC
+ *     `Password=` / `Pwd=` / `Pass=`) are read in string literals in code (also concatenated from pieces), JSON and XML attribute values,
+ *     dotenv / YAML / INI values, documents and comments, next to another connection-string key, and judged like a URL password.
  *   - Credentials that are not `name = value`: HTTP `Authorization` values with a scheme (http-auth-credential; Basic is decoded and
  *     judged by its password), Terraform `variable "api_token" { default = ... }` labels, and whitespace-delimited service directives
  *     keyed on their own names (config-directive-secret: Redis requirepass / ACL, HAProxy userlist, Mosquitto, nginx / Apache header
@@ -3149,6 +3152,207 @@ const SQL_RULE = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Passwords inside semicolon-delimited connection strings
+// ---------------------------------------------------------------------------
+
+// ADO.NET, ODBC, OLE DB and SQL Server JDBC connection strings are `key=value;key=value` lists, not URLs, so url-password never sees
+// them. In source code the generic assignment reader takes the `Password=<pw>;` inside `"Server=db;User Id=sa;Password=<pw>;"` for an
+// unquoted code expression and skips it, so the same literal in C#, JavaScript, Python or Java went unreported. This rule reads the
+// password field itself wherever such a list is a literal: a string literal in code, a JSON string (appsettings.json
+// "ConnectionStrings"), an XML attribute (web.config <add connectionString="..."/>) or element text, a .env / YAML / INI value, or a
+// bare line of a document. The value is judged like a URL password (urlPasswordIsSecret: anything that is not a placeholder or a
+// reference, with no length or entropy test), because a connection string carries the password whole, as a URL does. Azure
+// `AccountKey=` / `SharedAccessKey=` fields are azure-storage-key's business (it knows their base64 shape).
+//
+// A field is a password key that opens a field: after `;`, a quote, `=` (a .env value that starts with it) or at the start of a line.
+// The keys are case-insensitive and may have blanks around `=`, as the drivers parse them: Password, Pwd, Pass, Passwd, a qualified
+// SSL / TLS / proxy / certificate / key-store password, and OLE DB's `Jet OLEDB:Database Password`.
+const CONN_PASSWORD_FIELD =
+  /(?<=[;"'\x60=]|^)[ \t]{0,64}(?:jet[ \t]{1,8}oledb:(?:new[ \t]{1,8})?database[ \t]{1,8}password|(?:(?:ssl|tls|proxy|certificate|cert|keystore|truststore)[ \t_]?)?password|passwd|pwd|pass)[ \t]{0,64}=(?!=)[ \t]{0,64}/gim;
+// The other keys of a connection string. A password field counts only in a literal that also holds one of them (or a jdbc: URL), so
+// a lone `pass=x` in a query string, a list of test results or prose is not read as a connection string.
+const CONN_STRING_KEY = String.raw`(?:server|data[ \t]?source|host(?:[ \t]?name)?|address|addr|network[ \t]?address|database(?:[ \t]?name)?|initial[ \t]?catalog|user[ \t]?id|uid|user(?:[ \t]?name)?|driver|provider|dsn|dbq|port|integrated[ \t]?security|trusted[_ \t]?connection|encrypt|trust[ \t]?server[ \t]?certificate|persist[ \t]?security[ \t]?info|ssl[ \t]?mode|service[ \t]?name|application[ \t]?name|(?:connect(?:ion)?[ \t]?)?timeout|pooling|multiple[ \t]?active[ \t]?result[ \t]?sets)`;
+const CONN_STRING_CONTEXT = new RegExp(String.raw`(?:^|[;"'\x60=])[ \t]{0,64}${CONN_STRING_KEY}[ \t]{0,64}=|\bjdbc:[a-z0-9]{1,32}:`, 'i');
+// What may sit between two pieces of a connection string concatenated in code: blanks, line breaks and a concatenation operator
+// (`+`, `&`, `.`, `..`, `||`, Visual Basic's `& _`); nothing at all between adjacent literals (C, Python).
+const CONN_GLUE = new Set([' ', '\t', '\r', '\n', '+', '&', '.', '|', '_']);
+// Code and shell scripts read a bare (unquoted) field only after a comment marker: a connection string pasted into a comment is
+// text, while `;user=<u>;pass=<p>` outside a string is code (minified JavaScript assigns variables that way; in shell, `;` ends a
+// command, and a literal assigned there is secret-assignment's business).
+const CONN_COMMENT = /(?:^|[ \t;])(?:\/\/|\/\*|#|--|<!--)|^[ \t]*(?:\*|REM[ \t])/i;
+// C# $"..." / $@"..." / @$"...", Python f"..." / rf"..." / fr"...: the {...} inside are code, not text.
+const CONN_INTERPOLATED_PREFIX = /(?:^|[^A-Za-z0-9_])(?:\$@?|@\$|[fF][rR]?|[rR][fF])$/;
+// Filled in at run time: a printf / String.Format / MessageFormat slot or a `?` bind marker (`Password=%s`, `Pwd={0}`).
+const CONN_PARAMETER = /^(?:\?|%[-+ #0-9.]{0,8}[sdvqrS]|\{\d{0,3}(?:[,:][^{}]{0,32})?\})$/;
+// A {name} slot is a template when a format call fills it: Python str.format, Rust format!, .NET String.Format.
+const CONN_FORMAT_CALL = /\bformat(?:_map)?\b/i;
+// How far a value is read. A longer one is judged on what was read (fail closed); the bound keeps each field's cost constant, so a
+// hostile line of `;pwd=` fields stays linear.
+const CONN_VALUE_LIMIT = 256;
+// The `;` that ends an XML character reference (`&lt;`, `&#59;`) is part of the value, not the end of the field.
+const XML_ENTITY_BEFORE = /&(?:lt|gt|amp|quot|apos|#[0-9]{1,6}|#x[0-9a-f]{1,5})$/i;
+const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+const decodeXmlEntities = (text) =>
+  text.replace(/&(lt|gt|amp|quot|apos|#[0-9]{1,6}|#x[0-9a-f]{1,5});/gi, (whole, name) => {
+    const lower = name.toLowerCase();
+    if (lower in XML_ENTITIES) return XML_ENTITIES[lower];
+    const code = lower[1] === 'x' ? Number.parseInt(lower.slice(2), 16) : Number.parseInt(lower.slice(1), 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+  });
+
+/**
+ * The literal that holds the password key at `keyAt`: { quote, openAt, start, close, interpolated, bareOk, context }. The line is read
+ * from its start with a simple quote state (", ' or `; inside one, a backslash escapes the next character). `quote` is null for a
+ * field outside every quote: the bare line is then the literal, and `bareOk` says whether a bare field is read there at all.
+ * start..close is the literal's text; close is its closing quote or the end of the line. The quote state, the line's bare literal and
+ * the current quoted literal are kept on ctx between the matches of one scan (matchAll visits them in order), so each line is read
+ * once and each literal measured once however many fields it holds.
+ */
+function connLiteralAt(input, keyAt, ctx) {
+  const lineStart = ctx.lineStart(keyAt);
+  let state = ctx.connState;
+  if (state === undefined || state.lineStart !== lineStart || state.at > keyAt) {
+    state = { lineStart, at: lineStart, quote: null, openAt: -1, bare: null, quoted: null };
+  }
+  let { at, quote, openAt } = state;
+  for (; at < keyAt; at += 1) {
+    const ch = input[at];
+    if (quote !== null) {
+      if (ch === '\\') at += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === '\x60') {
+      quote = ch;
+      openAt = at;
+    }
+  }
+  Object.assign(state, { at, quote, openAt });
+  ctx.connState = state;
+  const lineEnd = ctx.lineEnd(keyAt);
+  if (quote === null) {
+    if (state.bare === null) {
+      // A line of a document, or an unquoted value of a dotenv / YAML / INI / properties / XML file, is a literal as it stands.
+      // Code (and shell, where `;` separates commands) is read bare only in a comment.
+      const asIs = ctx.mode === 'prose' || ctx.runsToEndOfLine || ctx.xml;
+      const commentAt = asIs ? -1 : input.slice(lineStart, Math.min(lineEnd, lineStart + 4096)).search(CONN_COMMENT);
+      state.bare = { quote: null, openAt: -1, start: lineStart, close: lineEnd, interpolated: false, asIs, commentAt, context: undefined };
+    }
+    const bare = state.bare;
+    bare.bareOk = bare.asIs || (bare.commentAt !== -1 && lineStart + bare.commentAt < keyAt);
+    return bare;
+  }
+  if (state.quoted === null || state.quoted.openAt !== openAt) {
+    let close = lineEnd;
+    for (let i = keyAt; i < lineEnd; i += 1) {
+      if (input[i] === '\\') i += 1;
+      else if (input[i] === quote) {
+        close = i;
+        break;
+      }
+    }
+    const interpolated = CONN_INTERPOLATED_PREFIX.test(input.slice(Math.max(lineStart, openAt - 4), openAt));
+    state.quoted = { quote, openAt, start: openAt + 1, close, interpolated, bareOk: true, context: undefined };
+  }
+  return state.quoted;
+}
+
+/**
+ * Does the literal continue a connection string from the piece before it? "Server=db;User Id=sa;" + "Password=<pw>;" in code (any of
+ * the CONN_GLUE operators, or adjacent literals), or a YAML folded / multi-line scalar line after a line that ends in a field. The
+ * piece before must end in a whole field (`key=value;`) and hold a connection-string key. At most 64 + 256 characters are read.
+ */
+function connContinues(input, literal, ctx) {
+  let end;
+  if (literal.quote !== null) {
+    let i = literal.openAt - 1;
+    const stop = Math.max(0, literal.openAt - 64);
+    while (i >= stop && CONN_GLUE.has(input[i])) i -= 1;
+    if (i < stop || (input[i] !== '"' && input[i] !== "'" && input[i] !== '\x60')) return false;
+    end = i; // the closing quote of the piece before
+  } else {
+    if (literal.start === 0) return false;
+    end = literal.start - 1; // the line break that ends the line before
+    if (end > 0 && input[end - 1] === '\r') end -= 1;
+  }
+  const before = input.slice(Math.max(ctx.lineStart(end), end - 256), end);
+  return /;[ \t]*$/.test(before) && CONN_STRING_CONTEXT.test(before);
+}
+
+/**
+ * The value of the field whose `=` ends at `valueStart`, read as the drivers read it: a value in {braces} (ODBC; `}}` is a `}`) or in
+ * the quote the literal does not use (ADO.NET `Password='a;b'`; a doubled quote is the quote) is read whole, `;` included; any other
+ * value runs to the next `;`, the end of the literal or, in XML element text, the next `<`. A bare configuration line can end in a
+ * ` #` comment. Returns { value, braced, end }.
+ */
+function connFieldValue(input, valueStart, literal, xmlText) {
+  const limit = Math.min(literal.close, valueStart + CONN_VALUE_LIMIT);
+  const first = input[valueStart];
+  if (first === '{' && !literal.interpolated) {
+    let i = valueStart + 1;
+    for (; i < limit; i += 1) {
+      if (input[i] === '}') {
+        if (input[i + 1] === '}') i += 1;
+        else break;
+      }
+    }
+    return { value: input.slice(valueStart + 1, Math.min(i, limit)).replace(/\}\}/g, '}'), braced: true, end: Math.min(i + 1, literal.close) };
+  }
+  if ((first === '"' || first === "'") && first !== literal.quote) {
+    for (let i = valueStart + 1; i < limit; i += 1) {
+      if (input[i] !== first) continue;
+      if (input[i + 1] === first) i += 1;
+      else return { value: input.slice(valueStart + 1, i).split(first + first).join(first), braced: false, end: i + 1 };
+    }
+  }
+  let i = valueStart;
+  for (; i < limit; i += 1) {
+    const ch = input[i];
+    if (ch === ';' && !XML_ENTITY_BEFORE.test(input.slice(Math.max(valueStart, i - 8), i))) break;
+    if (ch === '<' && xmlText) break;
+  }
+  let value = input.slice(valueStart, i);
+  if (literal.quote === null) value = value.replace(/[ \t]+#.*$/, '');
+  return { value: value.trim(), braced: false, end: i };
+}
+
+/** Is a connection-string password a literal credential? Interpolation and format slots are code; the rest is a URL password. */
+function connPasswordIsSecret(field, literal, around) {
+  let text = field.value.includes('&') ? decodeXmlEntities(field.value) : field.value;
+  // Interpolation that is code in any string: PHP `{$pw}`, Swift `\(pw)`; in an interpolated literal, every {...}. Literal text left
+  // next to it is still judged, as `${NAME}suffix` is in a URL.
+  text = text.replace(/\{\$[^{}\n]{0,256}\}|\\\([^()\n]{0,256}\)/g, '');
+  if (literal.interpolated) text = text.replace(/\{[^{}\n]{0,256}\}/g, '');
+  text = text.trim();
+  if (text === '' || CONN_PARAMETER.test(field.braced ? `{${text}}` : text)) return false;
+  if (field.braced && /^[A-Za-z_][A-Za-z0-9_.]{0,63}$/.test(text) && CONN_FORMAT_CALL.test(around)) return false;
+  return urlPasswordIsSecret(text);
+}
+
+const CONNECTION_STRING_RULE = {
+  id: 'connection-string-password',
+  description:
+    'Password / Pwd / Pass field set to a literal inside a semicolon-delimited connection string (ADO.NET, ODBC, OLE DB, SQL Server JDBC), in source code or config',
+  hint: /pass|pwd/i,
+  matchers: [
+    {
+      pattern: CONN_PASSWORD_FIELD,
+      accept: (m, ctx) => {
+        const input = m.input;
+        const keyAt = m.index + m[0].search(/\S/);
+        const literal = connLiteralAt(input, keyAt, ctx);
+        if (!literal.bareOk) return false;
+        literal.context ??= CONN_STRING_CONTEXT.test(input.slice(literal.start, literal.close)) || connContinues(input, literal, ctx);
+        if (!literal.context) return false;
+        const valueStart = m.index + m[0].length;
+        const field = connFieldValue(input, valueStart, literal, literal.quote === null && ctx.xml);
+        m.spanEnd = Math.max(field.end, valueStart);
+        // The line around the match, plus what follows the literal (a `.format(` chained on the next line).
+        return connPasswordIsSecret(field, literal, nearbyLineText(m) + input.slice(literal.close, literal.close + 80));
+      },
+    },
+  ],
+};
+
 /**
  * Each rule: id, description, matchers[{ pattern (global regex), accept(match, ctx), optional appliesTo(ctx) and hint }],
  * optional appliesTo(ctx) and hint (a cheap regex the file must match before the rule runs).
@@ -4351,6 +4555,7 @@ export const RULES = [
   ...PROVIDER_RULES,
   LOCKFILE_RULE,
   SQL_RULE,
+  CONNECTION_STRING_RULE,
   {
     id: 'webhook-url',
     lockfile: true,

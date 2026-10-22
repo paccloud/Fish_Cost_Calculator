@@ -191,6 +191,7 @@ const SECRET_CASES = (() => {
   const pairValue = randomString(26, 94);
 
   const scheme = ['postgres', 'ql'].join('');
+  const odbcPasswordKey = ['P', 'WD'].join('');
   const pemHeader = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
   const rsaHeader = ['-----BEGIN RSA ', 'PRIVATE KEY-----'].join('');
   const jwtHead = base64url({ alg: 'HS256', typ: 'JWT' });
@@ -373,6 +374,20 @@ const SECRET_CASES = (() => {
       path: 'db/users.sql',
       secret: sqlSecret,
       text: `CREATE USER 'app'@'%' IDENTIFIED BY '${sqlSecret}';\n`,
+    },
+    {
+      name: 'ADO.NET connection string literal in C#',
+      rule: 'connection-string-password',
+      path: 'src/Data/Db.cs',
+      secret: dbPassword,
+      text: `var connectionString = "Server=db;User Id=sa;Password=${dbPassword};";\n`,
+    },
+    {
+      name: 'ODBC connection string in Python, braced value',
+      rule: 'connection-string-password',
+      path: 'db.py',
+      secret: dbPassword,
+      text: `conn = pyodbc.connect("DRIVER={ODBC Driver 18 for SQL Server};SERVER=db;UID=sa;${odbcPasswordKey}={${dbPassword}}")\n`,
     },
     {
       name: 'SECRET in an .env file',
