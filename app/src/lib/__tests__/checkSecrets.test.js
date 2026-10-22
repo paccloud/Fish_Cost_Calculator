@@ -4316,14 +4316,22 @@ describe('review round 9', () => {
       expect(`${result.stdout}${result.stderr}`).not.toContain('no hits');
     });
 
-    it.skipIf(!hasGit())('an all-zero base (a new branch) scans the tip commit only, and says so', SLOW, () => {
+    it.skipIf(!hasGit())('an all-zero base (a new branch) with no other branch scans every commit reachable from head, and says so', SLOW, () => {
       const dir = makeRepo();
       commit(dir, 'first', { 'old.env': leak });
       const head = commit(dir, 'tip', { 'new.txt': 'n\n' });
       const zero = '0'.repeat(40);
-      const clean1 = scan(dir, '--range', `${zero}..${head}`);
+      // The tip is clean, but an earlier commit of the new branch added the key: an all-zero base is not "the tip only".
+      const earlier = scan(dir, '--range', `${zero}..${head}`);
+      expect(earlier.status).toBe(1);
+      expect(earlier.stderr).toContain('old.env  secret-assignment');
+      noValue(earlier);
+      const cleanDir = makeRepo();
+      commit(cleanDir, 'first', { 'a.txt': 'a\n' });
+      const cleanHead = commit(cleanDir, 'tip', { 'x.env': clean });
+      const clean1 = scan(cleanDir, '--range', `${zero}..${cleanHead}`);
       expect(clean1.status).toBe(0);
-      expect(clean1.stdout).toContain('tip commit only');
+      expect(clean1.stdout).toContain('all 2 commits reachable from');
       const leakyTip = commit(dir, 'leaky tip', { 'y.env': leak });
       expect(scan(dir, '--range', `${zero}..${leakyTip}`).status).toBe(1);
       // The root commit has no parent: still scanned.

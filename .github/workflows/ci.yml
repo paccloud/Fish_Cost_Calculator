@@ -82,7 +82,10 @@ jobs:
       # push, and that value is still in the pushed history. This step scans the ADDED lines of every commit in the range:
       #   pull_request  base.sha..head.sha (commits reachable from the PR head and not from its base; a fork's head commit
       #                 arrives through the PR merge commit that checkout fetches, and is present with fetch-depth 0)
-      #   push          before..sha (a new branch has an all-zero "before": only the pushed tip commit is scanned)
+      #   push          before..sha (a new or recreated branch has an all-zero "before": the step scans the commits reachable
+      #                 from sha and from no other branch under refs/remotes/origin/, which the full fetch provides; origin/main
+      #                 itself is held at sha and does not count. With no other branch it scans every commit reachable from
+      #                 sha. Either way more than 2,000 commits exits 2 rather than passing on a partial walk)
       # A commit that is not in the clone (a force-push removed the old tip, a fetch was partial) or a shallow clone fails the
       # step with exit code 2 and a message. It never passes silently and never falls back to the full-history audit.
       # The one path this step does not read is the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js, exact
