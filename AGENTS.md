@@ -44,5 +44,5 @@
 
 ## Configuration & Security
 
-- Do not commit secrets. Use example files like `app/.env.example` and `server/.env.example`, then local overrides (e.g. `.env.local`).
+- Do not commit secrets. Use example files like `app/.env.example` and `server/.env.example`, then gitignored local copies: `app/.env.development.local` for the frontend, `server/.env` for the local Express server (it loads only `server/.env`, not `server/.env.local`), and the root `.env.local` only for `vercel dev`.
 - Local development uses SQLite (`server/`); production deployment uses Vercel serverless endpoints in `api/` with Neon-backed storage.

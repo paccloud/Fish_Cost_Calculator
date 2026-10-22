@@ -158,6 +158,9 @@ const PROVIDER_TOKENS = (() => {
     ['other-provider-token', 'Docker Hub PAT', () => ['dckr', '_pat_', r(30, 1049, B64URL)].join('')],
     ['other-provider-token', 'RubyGems', () => ['ruby', 'gems_', r(48, 1050, HEX)].join('')],
     ['other-provider-token', 'Terraform Cloud', () => [r(14, 1051), '.atlas', 'v1.', r(70, 1052, B64URL)].join('')],
+    ['other-provider-token', 'Postman API key (PMAK-)', () => ['PM', 'AK-', r(24, 1901, HEX), '-', r(34, 1902, HEX)].join('')],
+    ['other-provider-token', 'BIP32 extended private key (xprv)', () => ['x', 'prv', '9s21ZrQH143K', r(95, 1903, '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz')].join('')],
+    ['other-provider-token', 'Nostr private key (nsec1)', () => ['ns', 'ec1', r(58, 1904, 'qpzry9x8gf2tvdw0s3jn54khce6mua7l')].join('')],
     ['other-provider-token', 'age secret key', () => ['AGE-SECRET', '-KEY-1', r(58, 1053, 'QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L')].join('')],
   ];
 })();
@@ -191,6 +194,7 @@ const SECRET_CASES = (() => {
   const pairValue = randomString(26, 94);
 
   const scheme = ['postgres', 'ql'].join('');
+  const odbcPasswordKey = ['P', 'WD'].join('');
   const pemHeader = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
   const rsaHeader = ['-----BEGIN RSA ', 'PRIVATE KEY-----'].join('');
   const jwtHead = base64url({ alg: 'HS256', typ: 'JWT' });
@@ -373,6 +377,20 @@ const SECRET_CASES = (() => {
       path: 'db/users.sql',
       secret: sqlSecret,
       text: `CREATE USER 'app'@'%' IDENTIFIED BY '${sqlSecret}';\n`,
+    },
+    {
+      name: 'ADO.NET connection string literal in C#',
+      rule: 'connection-string-password',
+      path: 'src/Data/Db.cs',
+      secret: dbPassword,
+      text: `var connectionString = "Server=db;User Id=sa;Password=${dbPassword};";\n`,
+    },
+    {
+      name: 'ODBC connection string in Python, braced value',
+      rule: 'connection-string-password',
+      path: 'db.py',
+      secret: dbPassword,
+      text: `conn = pyodbc.connect("DRIVER={ODBC Driver 18 for SQL Server};SERVER=db;UID=sa;${odbcPasswordKey}={${dbPassword}}")\n`,
     },
     {
       name: 'SECRET in an .env file',
@@ -3854,7 +3872,8 @@ describe('review round 9', () => {
     });
 
     it('blanking a digest keeps the text length and the line structure, and leaves a hex password in a URL visible', () => {
-      const text = `a ${sha512(2126)} b\nchecksum = "${hex(64, 2127)}"\nx: ${scheme}u:${hex(64, 2128)}@h/y\n`;
+      // The digest sits under an integrity key: since review round 18 a digest is blanked by position, not by shape alone.
+      const text = `integrity ${sha512(2126)} b\nchecksum = "${hex(64, 2127)}"\nx: ${scheme}u:${hex(64, 2128)}@h/y\n`;
       const cleaned = sanitizeLockfile(text);
       expect(cleaned.length).toBe(text.length);
       expect(cleaned.split('\n').length).toBe(text.split('\n').length);
@@ -4301,14 +4320,22 @@ describe('review round 9', () => {
       expect(`${result.stdout}${result.stderr}`).not.toContain('no hits');
     });
 
-    it.skipIf(!hasGit())('an all-zero base (a new branch) scans the tip commit only, and says so', SLOW, () => {
+    it.skipIf(!hasGit())('an all-zero base (a new branch) with no other branch scans every commit reachable from head, and says so', SLOW, () => {
       const dir = makeRepo();
       commit(dir, 'first', { 'old.env': leak });
       const head = commit(dir, 'tip', { 'new.txt': 'n\n' });
       const zero = '0'.repeat(40);
-      const clean1 = scan(dir, '--range', `${zero}..${head}`);
+      // The tip is clean, but an earlier commit of the new branch added the key: an all-zero base is not "the tip only".
+      const earlier = scan(dir, '--range', `${zero}..${head}`);
+      expect(earlier.status).toBe(1);
+      expect(earlier.stderr).toContain('old.env  secret-assignment');
+      noValue(earlier);
+      const cleanDir = makeRepo();
+      commit(cleanDir, 'first', { 'a.txt': 'a\n' });
+      const cleanHead = commit(cleanDir, 'tip', { 'x.env': clean });
+      const clean1 = scan(cleanDir, '--range', `${zero}..${cleanHead}`);
       expect(clean1.status).toBe(0);
-      expect(clean1.stdout).toContain('tip commit only');
+      expect(clean1.stdout).toContain('all 2 commits reachable from');
       const leakyTip = commit(dir, 'leaky tip', { 'y.env': leak });
       expect(scan(dir, '--range', `${zero}..${leakyTip}`).status).toBe(1);
       // The root commit has no parent: still scanned.
@@ -4933,7 +4960,7 @@ describe('curl -u and the other password flags judge the whole argument', () => 
   const phrase = `${first} ${['correct', 'horse', 'battery'].join(' ')} 123!`;
   const token = randomString(20, 8419);
   const rules = (text, file = 'run.sh') => scanText(file, text).map((f) => f.rule);
-  const escapedPhrase = phrase.replaceAll(' ', '\\ ');
+  const escapedPhrase = phrase.replace(/[\\ ]/g, '\\$&'); // backslash and space escaped in one pass
 
   const positives = [
     ['double quotes', `curl -u "admin:${phrase}" ${host}\n`],
@@ -7644,7 +7671,9 @@ describe('review round 16', () => {
     });
 
     it('reports a passphrase written with escaped spaces', () => {
-      expect(count('a.sh', `echo ${account}:${phrase.replace(/[\\ ]/g, (c) => `\\${c}`)} | ${CHPASSWD}\n`)).toBe(1);
+      // Shell-escape the phrase the way a shell needs it: a backslash escapes itself as well as a space, in one pass, so a
+      // backslash in the phrase can never make a following escape ambiguous (CodeQL js/incomplete-sanitization).
+      expect(count('a.sh', `echo ${account}:${phrase.replace(/[\\ ]/g, '\\$&')} | ${CHPASSWD}\n`)).toBe(1);
     });
 
     it('does not read code that builds a command string as an account and password', () => {

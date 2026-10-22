@@ -10,7 +10,8 @@
  *
  * Exit codes: 0 = clean, 1 = potential secret found (or a tracked file that could not be scanned:
  * text over the size limit, unreadable), 2 = usage or git error, or a --history / --range audit that did
- * not look at everything (version over the size limit, shallow clone, a commit that is not present).
+ * not look at everything (version over the size limit, shallow clone, a commit that is not present, a new branch with more
+ * commits than NEW_BRANCH_MAX_COMMITS).
  *
  * Fail closed: the only content skipped on purpose is gitlinks (submodule
  * pointers) and verified-binary files (a NUL byte in the first 8 KB AND a known binary signature such as PNG,
@@ -39,8 +40,17 @@
  *   - A value with spaces is exempt only as text: a sentence (looksLikeSentence) inside a message catalog path, or
  *     documentation about the credential (looksLikeDocumentation) anywhere; a passphrase that merely contains common words
  *     ("correct horse battery and staple", "This is the way.") is a finding.
+ *   - Public verification material is not a secret: a name ending in public/pub + key (PUBLIC_KEY, jwtPublicKey) is not secret-like,
+ *     and a complete PEM PUBLIC KEY / RSA PUBLIC KEY / CERTIFICATE / CERTIFICATE REQUEST / X509 CRL block or PGP PUBLIC KEY BLOCK (a
+ *     chain too) whose body is one whole DER object (or PGP public-key packet) is blanked before the name-based rules read the file, so
+ *     it is not judged under any name (blankPublicPemBlocks). The shape rules still read it: a PRIVATE KEY block (in any line-break
+ *     encoding, on one line, base64-encoded, a PuTTY body, a bare DER key) or a provider token under a public name is a finding, and
+ *     so is any text around a public block.
  *   - A URL value is judged only under a strong name, and only for credential-looking parts (signed-URL parameters,
  *     webhook path tokens, a token as the user name). Webhook URLs are also a rule of their own (webhook-url).
+ *   - A file-system path value (/etc/ssl/private/key.pem, ~/.ssh/id_rsa, ../certs/x.key, C:\keys\x.pfx, certs/server.pem) names the
+ *     file that holds the secret, so it passes in env, config, XML and Markdown files under a weak or strong name alike, unless a piece
+ *     of it looks machine-generated (/tmp/<random>, a base64 string that starts with "/"): see isFileSystemPath.
  *   - Native credential files (.netrc, .pgpass, .git-credentials, .npmrc, .pypirc, .aws/credentials, docker config,
  *     kubeconfig, .htpasswd, .my.cnf, .s3cfg, Terraform, .curlrc, .vault-token) have path-specific matchers
  *     (rule credential-file) and a 4-character value minimum; netrc, pgpass and docker auth are also recognised by
@@ -50,18 +60,27 @@
  *     SETUVAR lines, in shell scripts, config files, heredocs written into them and fenced Markdown blocks.
  *   - Literals over several lines are judged like a quoted value: TOML/Python triple quotes, HCL/Ruby/Perl/PHP heredocs, PowerShell
  *     here-strings, template literals, quotes closed on a later line, backslash / INI continuation lines, YAML scalars on the next line.
- *     They are read up to 200 lines / 32 KB; a literal that does not end within that is reported (fail closed).
+ *     They are read up to 200 non-blank lines / 32 KB of non-blank text (4 MB raw); a literal that does not end within that is reported (fail closed).
  *     Each continuation line is read once per file (backslash continuations are cached), so the cost stays linear in the file.
  *   - String literals with a prefix, hashes or another delimiter are read wherever a literal value is (callStringLiteral): Rust r#"..."#,
  *     C# @"..." / $@"...", C++ R"(...)", Swift #"..."#, Python r'...', and by file type Lua [[...]], OCaml {|...|}, Perl q(), Ruby %q().
+ *     Rust raw strings (r"...", r#"..."#, any hash count) and backtick literals that run over lines, in an assignment or a setter call
+ *     (std::env::set_var, os.Setenv), are judged like a heredoc under the same bounds; one that does not end within them is reported.
  *   - Account passwords set from a script (chpasswd, passwd --stdin, smbpasswd -s, usermod -p, openssl passwd, mkpasswd, ldappasswd,
  *     net user, dscl -passwd) are read as whole shell words.
+ *   - Passwords inside semicolon-delimited connection strings (connection-string-password: ADO.NET, ODBC, OLE DB, SQL Server JDBC
+ *     `Password=` / `Pwd=` / `Pass=`) are read in string literals in code (also concatenated from pieces), JSON and XML attribute values,
+ *     dotenv / YAML / INI values, documents and comments, next to another connection-string key, and judged like a URL password.
  *   - Credentials that are not `name = value`: HTTP `Authorization` values with a scheme (http-auth-credential; Basic is decoded and
  *     judged by its password), Terraform `variable "api_token" { default = ... }` labels, and whitespace-delimited service directives
  *     keyed on their own names (config-directive-secret: Redis requirepass / ACL, HAProxy userlist, Mosquitto, nginx / Apache header
  *     and SetEnv directives, ...). Only literals count; references, placeholders and paths pass.
  *   - Name and value fields in one JSON/YAML/HCL/XML object or call are matched in either order (secret-name-value-pair),
  *     and secrets passed on a command line (gh secret set, vercel env add, aws ssm put-parameter, ...) are their own rule.
+ *   - A literal default for a secret-like environment variable (hardcoded-secret-fallback) is read in each language's standard getter/default
+ *     form: JavaScript `||` / `??` and destructuring, Python os.getenv(N, v) / `or`, C# `??`, Kotlin `?:`, Java getOrDefault / Optional.orElse /
+ *     ternaries, Ruby ENV.fetch / `||`, PHP `?:` / `??`, Rust unwrap_or, Go `if v == "" { v = ... }` after os.Getenv, ... (see ENV_GETTER).
+ *     Any non-empty constant counts, a guessable one too; an empty or interpolated string, or a default that is not a literal, passes.
  *
  * The index blob AND the working-tree file are both scanned whenever they differ (compared by git blob id).
  * --history and --range skip a file version that is verified binary (the same test as above, on the version's own first 8 KB) and
@@ -71,6 +90,18 @@
  * leak from issue #22 lives in history forever and would fail every build. A shallow
  * clone only has part of the history, so an incomplete audit (shallow, or any version not
  * scanned) exits 2 and never prints "no hits".
+ *
+ * The scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js, exact paths, see isScannerFixture) are the one
+ * exemption of --history and --range: their added lines are not scanned, and every such version is counted as skipped
+ * ("scanner-fixture") and named in one note line, never as a hit and never as INCOMPLETE. Those files hold secret-shaped fixtures
+ * on purpose, and a rule added in a later commit can match a fixture line an earlier commit of the same pull request added and
+ * then rewrote; history cannot be edited to fix that. They are reviewed by hand, like the scanner and the workflow file
+ * (SECURITY_NOTICE.md), and the tree scan still scans them in full, so a secret-shaped literal at the tip is reported there.
+ *
+ * --range with an all-zero <base> (a push that creates a branch, or deletes and recreates it) has nothing to subtract, and the tip
+ * commit alone would miss a value that one pushed commit added and a later one removed. It scans the commits reachable from <head>
+ * and from no branch under refs/remotes/origin/ (a branch that points at <head> itself is the pushed one and does not count), or
+ * every commit reachable from <head> when there is no other branch. More than NEW_BRANCH_MAX_COMMITS of them exits 2 (incomplete).
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -93,7 +124,8 @@ const SNIFF_BYTES = 8000;
 // rules do not run on them. They are NOT skipped: a dependency URL can carry a credential (https://user:<password>@registry/...),
 // and a lockfile can hold an auth field. Only rules flagged `lockfile: true` (URL passwords, private keys, provider-shaped
 // tokens, webhook URLs) and the targeted `lockfile-credential` rule run on them, after ordinary digests are blanked
-// (sanitizeLockfile). Exact names only: other *.lock files are scanned with every rule.
+// (sanitizeLockfile: only where the format puts an integrity value, never in an auth field). Exact names only: other *.lock
+// files are scanned with every rule.
 const LOCKFILE_NAMES = new Set([
   'package-lock.json',
   'npm-shrinkwrap.json',
@@ -115,31 +147,124 @@ export function isLockfile(filePath) {
   return LOCKFILE_NAMES.has(base);
 }
 
+// The scanner's own test files, by exact path: app/src/lib/__tests__/checkSecrets.test.js and the review-round files beside it
+// (checkSecrets.r17a.test.js, ...). Nothing else under __tests__ and no other *.test.js is matched. The history modes (--history,
+// --range) do not scan the added lines of these files and count each such version as skipped by design (SCANNER_FIXTURE_REASON):
+// they hold secret-shaped fixtures on purpose, a rule added later in a pull request can match a fixture line an earlier commit
+// of the same pull request added and then rewrote, and that history cannot be edited. The files are reviewed by hand instead,
+// as SECURITY_NOTICE.md already asks for the scanner and the workflow file. The tree scan is NOT affected: it scans these files
+// in full, so a secret-shaped literal that survives at the tip (one without an allow marker) still fails the build.
+const SCANNER_FIXTURE_FILE = /^app\/src\/lib\/__tests__\/checkSecrets[^/]*\.test\.js$/;
+const SCANNER_FIXTURE_REASON = 'scanner-fixture';
+
+/**
+ * True for the scanner's own Vitest files (app/src/lib/__tests__/checkSecrets*.test.js, repository-relative, exact directory).
+ * `gitPath` is a path as git prints it: always "/"-separated, whatever the platform. It is matched as it is, never converted from
+ * the OS separator: in a git path a backslash is a literal character of the name, so a root-level file literally named
+ * `app\src\lib\__tests__\checkSecrets.test.js` is NOT the fixture, on Windows either.
+ */
+export function isScannerFixture(gitPath) {
+  return SCANNER_FIXTURE_FILE.test(gitPath);
+}
+
 // A lockfile is machine-generated and can be far larger than a source file; it gets a higher (still fail-closed) limit.
 const MAX_LOCKFILE_BYTES = 16 * 1024 * 1024;
 const sizeLimit = (filePath) => (isLockfile(filePath) ? MAX_LOCKFILE_BYTES : MAX_FILE_BYTES);
 
 // Ordinary digests, blanked (same length, so line numbers stay) before the lockfile rules run. Every quantifier is a
 // fixed count or a bounded class run, so this is linear. Only digests of the exact size of their algorithm are blanked:
-// a longer or shorter string after "sha512-" is not an integrity value and stays visible to the token rules.
-const LOCKFILE_DIGESTS = [
-  /sha512-[A-Za-z0-9+/]{86}={0,2}/g,
-  /sha384-[A-Za-z0-9+/]{64}={0,2}/g,
-  /sha256-[A-Za-z0-9+/]{43}={0,2}/g,
-  /sha1-[A-Za-z0-9+/]{27}={0,2}/g,
-  /\bh1:[A-Za-z0-9+/]{43}=/g, // go.sum
-  /(?<![A-Za-z0-9])(?:sha(?:1|224|256|384|512)|md5)[:=][0-9a-fA-F]{32,128}(?![0-9A-Za-z])/g, // poetry, Pipfile.lock, Gemfile CHECKSUMS
-];
+// a longer or shorter string after "sha512-" is not an integrity value and stays visible to the token rules (hence the
+// lookahead: without it the first 86 characters of a longer value were blanked and only its tail was left to judge).
+const LOCKFILE_DIGEST = new RegExp(
+  [
+    String.raw`sha512-[A-Za-z0-9+/]{86}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha384-[A-Za-z0-9+/]{64}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha256-[A-Za-z0-9+/]{43}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`sha1-[A-Za-z0-9+/]{27}={0,2}(?![A-Za-z0-9+/=])`,
+    String.raw`\bh1:[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])`, // go.sum
+    String.raw`(?<![A-Za-z0-9])(?:sha(?:1|224|256|384|512)|md5)[:=][0-9a-fA-F]{32,128}(?![0-9A-Za-z])`, // poetry, Pipfile.lock, Gemfile CHECKSUMS
+  ].join('|'),
+  'g',
+);
 // A hex digest is blanked only after a checksum-like key (Cargo `checksum = "..."`, composer `"shasum": "..."`, yarn berry
-// `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment).
+// `checksum: 10c0/...`) or after "#" (a git commit in a URL fragment). The key must start a token: at the start of the text or
+// after a blank, a quote, `{`, `[`, `(`, `,`, `;`, `?`, `&` or `#`. Without that, any URL user name that ENDS in one of the words
+// (`https://subhash:<hex>@`, `https://cicommit:<hex>@`, `//hash:<hex>@`) read as a key and its hex password was blanked. The
+// compound keys a lockfile really writes (composer `content-hash`, pnpm `packageExtensionsChecksum` / `pnpmfileChecksum`) are
+// named; `#commit=` (yarn berry) counts as a token start. A bare "#" counts only as a URL fragment (see hexFragmentOk).
 const LOCKFILE_HEX_DIGEST =
-  /((?:checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+  /((?<![^\s"'{[(,;?&#])(?:content[-_]?hash|packageExtensionsChecksum|pnpmfileChecksum|checksum|shasum|hash|integrity|digest|reference|commit|revision|rev|sha256|sha1|sha512)["']?[ \t]*[:=][ \t]*["']?(?:[0-9a-z]{1,8}\/)?|#)([0-9a-fA-F]{32,128})(?![0-9A-Za-z])/gi;
+/** A "#" before a hex run is a URL fragment only when it follows URL text: not at the start, not after a blank, a quote, `=`, `:` or "#". */
+const hexFragmentOk = (text, at) => at >= 1 && !/[\s"'=:#]/.test(text[at - 1]);
+// ...except `sha256:<hex>` / `sha1=<hex>` with nothing between the algorithm and the hex: that is one digest-shaped VALUE, not
+// a key and its value. LOCKFILE_DIGEST has already blanked it where it is an integrity value; anywhere else (the value of an
+// auth field, a `?token=` URL parameter) it stays visible.
+const DIGEST_VALUE_LEAD = /^sha(?:1|256|512)[:=]$/i;
 
-/** The lockfile text with ordinary integrity digests blanked. Offsets and line breaks are unchanged. */
+// The SHAPE of a digest proves nothing on its own: a registry token can be written as "sha512-<base64>", and blanking that
+// shape wherever it appeared hid `"_authToken": "sha512-..."` (and `?token=sha256-...` in a URL) from lockfile-credential.
+// So a digest is blanked only where the lockfile format puts an integrity value, judged from the text just before it:
+//   - after an integrity / checksum key: npm and bun `"integrity": "`, yarn v1 `integrity `, pnpm `{integrity: `, poetry
+//     `hash = "`, `"shasum": "`, Pipfile.lock `"hashes": ["`. An auth-named field (_authToken, _auth, _password, npmAuthToken,
+//     token, password, ...) is never one of these keys, so its value always reaches lockfile-credential;
+//   - as the fragment of a resolved URL (`.tgz#sha512-...`), not after a bare "#" that starts a value or a comment;
+//   - as a whole quoted array element (bun.lock `["a@1.0.0", "", {}, "sha512-..."]`, the Pipfile.lock and old poetry hash
+//     lists, one per line): a credential field is `name: value`, never a bare element;
+//   - at the end of a go.sum line (`module v1.2.3[/go.mod] h1:...`) or a Gemfile.lock CHECKSUMS line (`  rake (13.0.6) sha256=...`);
+//   - after a digest blanked for one of these reasons and a space or comma: one value listing several (`"sha1-... sha512-..."`,
+//     `sha256=...,sha512=...`).
+// Every look back is bounded (a fixed window before the digest, never back to the start of a long line), so the cost per
+// digest is fixed and the pass stays linear. A digest the look back cannot place stays visible: at worst a finding to allow,
+// never a miss.
+const INTEGRITY_KEY_LOOKBACK = 48; // longer than the longest lead INTEGRITY_KEY_LEAD can match (37 characters)
+// The key must start a token (after a blank, a quote, `{`, `[`, `(` or `,`, or at the start of the look back): a URL user name
+// such as `ci-hash`, `x_digest` or `//hash` in `https://ci-hash:sha512-...@host` is not an integrity key. pnpm's camelCase
+// top-level checksums are named.
+const INTEGRITY_KEY_LEAD =
+  /(?<![^\s"'{[(,])(?:integrity|checksums?|shasum|hash(?:es)?|digest|sha(?:1|256|384|512)|packageExtensionsChecksum|pnpmfileChecksum)["']?(?:[ \t]{0,8}[:=][ \t]{0,8}|[ \t]{1,8})(?:\[[ \t]{0,8})?["']?$/i;
+// Inside a URL authority (after `//` and before the host's `@`), nothing is an integrity key: `https://hash:<digest>@host`.
+const URL_AUTHORITY_TAIL = /\/\/[^/\s"'@]{0,256}$/;
+const ARRAY_ELEMENT_LOOKBACK = 256; // the line break and indentation between `[` or `,` and a list element on the next line
+const LINE_LOOKBACK = 512; // a go.sum module path and version, a Gemfile gem name and version
+const GO_SUM_LINE_LEAD = /^\S{1,400}[ \t]+v\d\S{0,100}[ \t]+$/;
+const GEMFILE_CHECKSUM_LINE_LEAD = /^[ \t]*[^\s()]{1,200}[ \t]+\([^()\n]{1,100}\)[ \t]+$/;
+const DIGEST_LIST_SEPARATOR = /^[ \t]{0,4},?[ \t]{0,4}$/;
+
+/** Is the digest at text[start, end) in an integrity position (see above), other than the second of a list? */
+function isIntegrityPosition(text, start, end) {
+  const lead = text.slice(Math.max(0, start - INTEGRITY_KEY_LOOKBACK), start);
+  if (INTEGRITY_KEY_LEAD.test(lead) && !URL_AUTHORITY_TAIL.test(text.slice(Math.max(0, start - 260), start))) return true;
+  const before = text[start - 1];
+  if (before === '#') return start >= 2 && !/[\s"'=:#]/.test(text[start - 2]);
+  if ((before === '"' || before === "'") && text[end] === before) {
+    const lead = text.slice(Math.max(0, start - 1 - ARRAY_ELEMENT_LOOKBACK), start - 1).trimEnd();
+    if (lead.endsWith('[') || lead.endsWith(',')) return true;
+  }
+  const window = text.slice(Math.max(0, start - LINE_LOOKBACK), start);
+  const lineBreak = window.lastIndexOf('\n');
+  if (lineBreak === -1 && start > LINE_LOOKBACK) return false; // the line starts before the look back: no go.sum / Gemfile line is that long
+  const linePrefix = window.slice(lineBreak + 1);
+  return GO_SUM_LINE_LEAD.test(linePrefix) || GEMFILE_CHECKSUM_LINE_LEAD.test(linePrefix);
+}
+
+/**
+ * The lockfile text with ordinary integrity digests blanked: only a digest in an integrity position, never the value of an
+ * auth field (see isIntegrityPosition). Offsets and line breaks are unchanged.
+ */
 export function sanitizeLockfile(text) {
-  let out = text;
-  for (const pattern of LOCKFILE_DIGESTS) out = out.replace(pattern, (m) => ' '.repeat(m.length));
-  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex) => lead + ' '.repeat(hex.length));
+  let listEnd = -1; // the end of the last digest blanked, for a value that lists several
+  const out = text.replace(LOCKFILE_DIGEST, (m, start) => {
+    const end = start + m.length;
+    const listed = listEnd !== -1 && start > listEnd && start - listEnd <= 9 && DIGEST_LIST_SEPARATOR.test(text.slice(listEnd, start));
+    if (!listed && !isIntegrityPosition(text, start, end)) return m;
+    listEnd = end;
+    return ' '.repeat(m.length);
+  });
+  return out.replace(LOCKFILE_HEX_DIGEST, (m, lead, hex, at, whole) => {
+    if (DIGEST_VALUE_LEAD.test(lead)) return m;
+    if (lead === '#' ? !hexFragmentOk(whole, at) : URL_AUTHORITY_TAIL.test(whole.slice(Math.max(0, at - 260), at))) return m;
+    return lead + ' '.repeat(hex.length);
+  });
 }
 
 // Leading bytes of common binary formats. A file is "verified binary" only when it has a NUL byte in its first
@@ -305,6 +430,8 @@ const WEAK_WORDS = new Set([
 const WEAK_MERGED_SUBSTRING = /secret|passw(?:or)?d|token|privatekey|apikey|credential/;
 // Credential variables whose names do not end in a secret noun: sshpass reads SSHPASS, redis-cli reads REDISCLI_AUTH, Dovecot's LDAP bind is dnpass.
 const EXACT_STRONG_MERGED = new Set(['sshpass', 'rediscliauth', 'dnpass']);
+// <public qualifier> + "key" names verification material, not a secret (see secretNameKind).
+const PUBLIC_KEY_QUALIFIERS = new Set(['public', 'pub']);
 
 /** @returns {'strong' | 'weak' | null} how secret-like an identifier is (see the file header) */
 export function secretNameKind(name) {
@@ -316,6 +443,16 @@ export function secretNameKind(name) {
   const merged = bare.join('');
   if (STRONG_LAST_WORDS.has(last) || STRONG_MERGED_SUFFIX.test(merged) || EXACT_STRONG_MERGED.has(merged)) return 'strong';
   if (last === 'key' && KEY_QUALIFIERS.has(bare[bare.length - 2])) return 'strong';
+  // PUBLIC_KEY, jwtPublicKey, ssh_pub_key: the public half of a key pair is committed on purpose (a JWT verification key, a deploy
+  // key's .pub line) and its body is as random-looking as a secret. Exempt only a name that ENDS in public/pub + key, and only after
+  // the strong checks above, so public_key_password, pubkey_secret and public_secret_key stay strong; a name that also calls the key
+  // secret or private (secret_public_key, clientSecretPublicKey, private_public_key) contradicts itself and stays weak. Other words
+  // say what the key verifies (ID_TOKEN_PUBLIC_KEY, PASSWORD_ENCRYPTION_PUBLIC_KEY) and do not. A PRIVATE KEY block or a provider-
+  // shaped token held by such a name is still found by its own rule, which never looks at the name. "verification_key" and
+  // "verify_key" are NOT exempt: an HMAC (HS256) verification key is the shared secret itself (a PEM public key under any name is
+  // exempt by value: blankPublicPemBlocks). Single-word names (pubkey, publickey) and certificate names (cert, ca_cert,
+  // certificate) never were secret-like.
+  if (last === 'key' && PUBLIC_KEY_QUALIFIERS.has(bare[bare.length - 2]) && !/secret|private/.test(bare.slice(0, -2).join(''))) return null;
   // A bare "<vendor>_KEY" (SENDGRID_KEY, STRIPE_KEY) may be a credential or a cache key: only a random-looking value counts.
   if (last === 'key' && bare.length > 1) return 'weak';
   if (bare.some((w) => WEAK_WORDS.has(w)) || WEAK_MERGED_SUBSTRING.test(merged)) return 'weak';
@@ -746,12 +883,84 @@ function urlCarriesCredential(url) {
   return false;
 }
 
+// A setting under a secret-like name often names the FILE that holds the secret (private_key: /etc/ssl/private/key.pem, signing_key:
+// ~/.ssh/id_rsa, client_secret: C:\secrets\client.json). That value is an address, like a URL with nothing credential-like in it.
+//   - Anchors: an absolute POSIX path, ~/, ./ or ../ (also .\ and ..\), a home or other directory variable ($HOME/, %USERPROFILE%\), a
+//     Windows drive (C:\ or C:/), a UNC share (\\host\share) or a path from the drive root (\keys\server.pfx; also what is left of an
+//     unquoted `name: C:\keys\...` once ASSIGNMENT_PATTERN has read `: C` as a type annotation). An anchored path needs two segments
+//     or a key-file extension: "/" + one word reads as a password.
+//   - Without an anchor only a relative path or a bare file name that ends in a key, certificate or credential-document extension counts
+//     (certs/server.pem, prod.p12, sa.json): base64 has "/" in its alphabet, so "abc/def" alone says nothing.
+//   - A segment is a run of [A-Za-z0-9._@-]; in an anchored path single blanks may join runs ("Program Files", "Application Support").
+//     So `+`, `=`, quotes, and `%`, `$` or `:` anywhere but in the anchor make the value something else (base64 padding, a URL,
+//     user:password@host, a reference), and it is judged as before.
+// Fail closed: a piece of a segment (split at - _ . @ and blanks) that looks machine-generated makes the whole value a token, not a
+// path: /tmp/<random>, /run/secrets/<40 hex>, a base64 string that happens to start with "/", a random name + ".pem". The gate is lower
+// than for whole values (8 characters) because a token split at its "/" characters is shorter in each piece.
+const KEY_FILE_EXTENSION = /\.(?:pem|key|crt|cer|der|csr|p7b|p8|p12|pfx|jks|jceks|keystore|truststore|pub|asc|gpg|ppk|json|txt)$/i;
+// The variable is an ALL-CAPS name, as in WHOLE_REFERENCE: `$` + mixed letters and digits reads as a password that starts with `$`.
+// `~user/` is another user's home directory.
+const POSIX_PATH_ANCHOR = /^(?:~(?:[a-z_][a-z0-9_-]{0,31})?|\.{1,2}|\$[A-Z_][A-Z0-9_]{0,63})?\//;
+const WINDOWS_PATH_ANCHOR = /^(?:[A-Za-z]:[\\/]|%[A-Za-z_][A-Za-z0-9_]{0,63}%[\\/]|\\\\(?=[^\\/])|\.{1,2}\\|\\(?=[^\\/]))/;
+// Letters of any script (/home/josé/...), digits and . _ @ -.
+const PATH_SEGMENT = /^[\p{L}\p{N}._@-]{1,255}$/u;
+// The blank is outside the run's class, so every character has one reading (linear). An anchored segment may also hold
+// parentheses and "~" (C:\Program Files (x86)\, the 8.3 name C:\PROGRA~1\).
+const SPACED_PATH_SEGMENT = /^[\p{L}\p{N}._@()~-]{1,255}(?: [\p{L}\p{N}._@()~-]{1,255}){0,15}$/u;
+// A whole Windows segment that is a variable (C:\Users\%USERNAME%\.ssh) or, right after \\host\, an administrative share (c$).
+const WINDOWS_VARIABLE_SEGMENT = /^%[A-Za-z_][A-Za-z0-9_]{0,63}%$/;
+const ADMIN_SHARE_SEGMENT = /^[A-Za-z]\$$/;
+const MAX_PATH_SEGMENTS = 64;
+// A piece of 8 or more characters with this much variety is machine-generated. 2.7 rather than 3.0: an 8- or 9-character piece
+// of a random token reaches 3.0 only with every character distinct, so `/A7fK9mQ7/xL8vN4xR/...` (one repeat per piece) passed.
+const PATH_PIECE_GATE = { minLength: 8, minEntropy: 2.7 };
+// Key files whose conventional NAME carries an id: an SSH key with a suffix (id_ed25519_<host or id>, id_rsa-deploy.pub) and an
+// App Store Connect / APNs key (AuthKey_<10-character key id>.p8). The id is public; the name is judged by its shape, not its pieces.
+// Only in a path with a directory: a bare `id_rsa_<random>` is judged like any value.
+const NAMED_KEY_FILE = /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:_sk)?(?:[-_.][A-Za-z0-9]{1,24}){0,3}|AuthKey_[A-Z0-9]{10}\.p8)$/;
+
+// A backslash escape that a double-quoted JSON / YAML / TOML / shell string turns into another character (read in pairs, so `\\n` is a
+// doubled backslash and then "n"). `\\` and `\/` are left out: they are how a quoted Windows or JSON path writes its separators.
+const STRING_ESCAPE = /\\(?:[uUxtnrbfave0N_LP"' ]|$)/;
+/** Does the raw text of a double-quoted string hold an escape sequence other than `\\` and `\/`? */
+function hasStringEscape(raw) {
+  if (!raw.includes('\\')) return false;
+  return STRING_ESCAPE.test(raw.replace(/\\[\\/]/g, ''));
+}
+
+/** Is `value` unmistakably a file-system path whose pieces are all ordinary names (see above)? */
+export function isFileSystemPath(value) {
+  if (value.length > 4096) return false;
+  const windows = WINDOWS_PATH_ANCHOR.exec(value);
+  const posix = windows === null ? POSIX_PATH_ANCHOR.exec(value) : null;
+  const anchor = windows ?? posix;
+  // A POSIX path separates with "/" only (a backslash in it is not a path character); a Windows or a relative one with either. A
+  // doubled separator (C:\\keys\\x.pfx, as a single-quoted YAML or TOML literal keeps it) and a trailing one (a directory) are fine.
+  const segments = value
+    .slice(anchor === null ? 0 : anchor[0].length)
+    .split(posix === null ? /[\\/]+/ : /\/+/)
+    .filter((segment) => segment !== '');
+  if (segments.length === 0 || segments.length > MAX_PATH_SEGMENTS) return false;
+  const last = segments[segments.length - 1];
+  const keyFileName = NAMED_KEY_FILE.test(last);
+  const named = KEY_FILE_EXTENSION.test(last) || keyFileName;
+  if (!named && (anchor === null || segments.length < 2)) return false;
+  const segmentShape = anchor === null ? PATH_SEGMENT : SPACED_PATH_SEGMENT;
+  const unc = windows !== null && windows[0] === '\\\\';
+  return segments.every((segment, i) => {
+    if (i === segments.length - 1 && keyFileName && (anchor !== null || segments.length >= 2)) return true;
+    if (windows !== null && WINDOWS_VARIABLE_SEGMENT.test(segment)) return true;
+    if (unc && i === 1 && ADMIN_SHARE_SEGMENT.test(segment)) return true;
+    return segmentShape.test(segment) && segment.split(/[-_.@ ()~]+/).every((piece) => !looksRandom(piece, PATH_PIECE_GATE));
+  });
+}
+
 /**
  * Decide whether a value assigned to a secret-like name is a finding.
  * @param {{kind: 'strong'|'weak', value: string, quoted: boolean, separator: string, mode: string, minLength?: number}} input
  * `minLength` is the shortest value a strong name may hold (8; credential files such as .npmrc use 4).
  */
-function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false }) {
+function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_STRONG_CONFIG_LENGTH, catalog = false, allowPath = true }) {
   let text = value;
   if (!quoted) {
     if (mode === 'code') return false; // a bare token in source code is an expression, not a literal
@@ -764,7 +973,7 @@ function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_S
   // right next to a reference (${A}literal). Operands are judged as whole strings.
   if (mode === 'config' && text.includes('${')) {
     const operand = (literal) =>
-      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode, minLength, catalog });
+      isSecretValue({ kind, value: stripQuotes(literal), quoted: true, separator: '=', mode, minLength, catalog, allowPath });
     if (expansionLiterals(text).some(operand)) return true;
     const glued = stripQuotes(withoutExpansions(text));
     if (glued === '') return false;
@@ -776,6 +985,11 @@ function isSecretValue({ kind, value, quoted, separator, mode, minLength = MIN_S
     return kind === 'strong' && !/\s/.test(text) && urlCarriesCredential(text);
   }
   if (text === '' || isPlaceholder(text)) return false;
+  // A file-system path names the file that holds the secret; it is not the secret (isFileSystemPath). This comes before the env,
+  // config and Markdown gates below, under a weak or a strong name alike, and before the blank test ("C:\Program Files\..."). Source
+  // code keeps its randomness-only gate: a quoted literal there is reported only when it looks random as a whole. A position that
+  // can only hold the password itself (requirepass, a basic-auth argument, chpasswd input: `allowPath: false`) never holds a path.
+  if (allowPath && mode !== 'code' && isFileSystemPath(text)) return false;
   if (/\s/.test(text)) {
     // Only a quoted value (or a whole-line value) may contain spaces; in code a spaced string is text.
     return quoted && mode !== 'code' && isPhraseSecret({ kind, text, minLength, catalog });
@@ -868,7 +1082,8 @@ function bareShellWordEnd(input, start) {
 }
 
 // Files whose unquoted values run to the end of the line (YAML plain scalars, ini, properties, dotenv).
-const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env']);
+// .udl: an OLE DB data link file, `[oledb]` and then one initialization (connection) string per line.
+const REST_OF_LINE_EXTENSIONS = new Set(['.yml', '.yaml', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.env', '.udl']);
 const REST_OF_LINE_FORMATS = ['npmrc', 'pypirc', 'awscreds', 'mycnf', 's3cfg', 'wgetrc', 'terraformrc'];
 function valueRunsToEndOfLine(filePath) {
   const base = path.posix.basename(filePath).toLowerCase();
@@ -924,10 +1139,17 @@ function unquotedContinuations(ctx, input, matchIndex, tokenEnd, token) {
 // ---------------------------------------------------------------------------
 
 const PROSE_EXTENSIONS = new Set(['.md', '.mdx', '.txt', '.rst', '.adoc']);
+// Program source: a base name that starts with "env." is configuration (env.production, env.example) unless it ends in one of these
+// (env.go, Env.cs, env.rs, env.ts are the code that READS the environment, and their defaults are judged as code).
+const SOURCE_CODE_EXTENSIONS = new Set([
+  '.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx', '.go', '.rs', '.cs', '.java', '.kt', '.kts', '.scala', '.groovy',
+  '.py', '.rb', '.php', '.swift', '.dart', '.ex', '.exs', '.lua', '.pl', '.pm', '.c', '.h', '.cc', '.cpp', '.hpp', '.m', '.vb',
+  '.fs', '.ps1', '.psm1',
+]);
 const CONFIG_EXTENSIONS = new Set([
   '.env', '.ini', '.cfg', '.conf', '.config', '.properties', '.toml', '.yml', '.yaml', '.json', '.jsonc',
   '.json5', '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh', '.bat', '.cmd', '.tf', '.tfvars', '.hcl', '.example',
-  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig', '.acl',
+  '.sample', '.template', '.dist', '.cnf', '.tfstate', '.kubeconfig', '.acl', '.udl',
 ]);
 // XML configuration formats: Maven settings.xml and pom.xml, Ant, Tomcat server.xml, Android strings.xml, .NET
 // web.config / app.config (.config is above), MSBuild (.csproj, .props, .targets), .plist, .resx, .wsdl. These hold settings
@@ -939,6 +1161,8 @@ const XML_CONFIG_EXTENSIONS = new Set([
   // entitlements, IDE and analyser settings, Windows packaging, Maven POM files.
   '.projitems', '.cscfg', '.csdef', '.jmx', '.mobileconfig', '.entitlements', '.iml', '.launch', '.ruleset', '.appxmanifest',
   '.wxs', '.wxi', '.pom', '.jnlp',
+  // SSIS package configurations and packages, SSRS data sources and reports: XML whose element text holds connection strings.
+  '.dtsconfig', '.dtsx', '.rds', '.rsds', '.rdl',
 ]);
 // systemd units (and Podman Quadlet units, which share their syntax) are INI-like settings: `Environment=NAME=value` sets a
 // variable of the service, so they are configuration, not source code. A drop-in (`app.service.d/override.conf`) is `.conf` already.
@@ -967,7 +1191,7 @@ function baseWithoutTemplateSuffix(base) {
 export function isXmlConfigPath(filePath) {
   const base = path.posix.basename(filePath.split(path.sep).join('/'));
   const ext = path.posix.extname(baseWithoutTemplateSuffix(base));
-  return XML_CONFIG_EXTENSIONS.has(ext) || ext === '.config' || /^\.[a-z]*proj$/.test(ext);
+  return XML_CONFIG_EXTENSIONS.has(ext.toLowerCase()) || ext === '.config' || /^\.[a-z]*proj$/.test(ext);
 }
 
 const CONFIG_BASENAMES = new Set([
@@ -1052,7 +1276,7 @@ export function fileMode(filePath) {
     base.startsWith('.env.') ||
     base.includes('.env.') ||
     base.endsWith('.env') ||
-    base.startsWith('env.') ||
+    (base.startsWith('env.') && !SOURCE_CODE_EXTENSIONS.has(ext)) ||
     base.startsWith('docker-compose') ||
     base.startsWith('dockerfile') ||
     DOVECOT_CONFIG.test(base) ||
@@ -1074,8 +1298,34 @@ export function fileMode(filePath) {
 // Rules
 // ---------------------------------------------------------------------------
 
-// One or more line breaks (real or JSON-escaped). Unambiguous on purpose, to avoid regex backtracking blow-ups.
-const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:\\r|\r)?(?:\\n|\n))+[ \t]*`;
+// One line break inside a PEM block, as the formats write it: real (\n, \r\n), a JSON / YAML escape (\n, \r\n; doubled when the JSON
+// is itself escaped: \\n), a \u000a escape, an XML character reference (&#10; &#xA;, after an optional &#13; / &#xD;), or a backslash
+// line continuation (.properties, shell: `\` at the end of the line). The alternatives start with different text, so each position has
+// one reading.
+const PEM_LINE_BREAK = String.raw`(?:\\{1,2}r|\r|\\u000[dD]|&#(?:13|[xX]0{0,2}[dD]);)?(?:\\{1,2}n|\n|\\u000[aA]|&#(?:10|[xX]0{0,2}[aA]);)|\\\r?\n`;
+// One or more line breaks. Unambiguous on purpose (each repetition consumes a line break), to avoid regex backtracking blow-ups.
+const PEM_SEPARATOR = String.raw`(?:[ \t]*(?:${PEM_LINE_BREAK}))+[ \t]*`;
+// Between the lines of a PRIVATE key block: those line breaks, or blanks alone (a block pasted onto one line, "-----BEGIN ... KEY-----
+// MII... -----END ... KEY-----", as a dotenv value or a YAML string holds it).
+const PRIVATE_PEM_SEPARATOR = String.raw`(?:${PEM_SEPARATOR}|[ \t]+)`;
+// A PEM private key written as base64 (a Kubernetes Secret's tls.key, a CI variable): "-----BEGIN " encodes to LS0tLS1CRUdJTi.
+const BASE64_PEM_PRIVATE = /(?<![A-Za-z0-9+/])LS0tLS1CRUdJTi[A-Za-z0-9+/]{30,}={0,2}/g;
+/** Does a base64 run starting with LS0tLS1CRUdJTi decode to a PRIVATE KEY header? Only its first 80 characters are decoded. */
+const base64PemIsPrivate = (b64) => /^-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----/.test(Buffer.from(b64.slice(0, 80), 'base64').toString('latin1'));
+// The bare DER body of a private key, base64 (no PEM armor): PKCS#8 RSA, PKCS#1 RSA, PKCS#8 and SEC1 EC, PKCS#8 Ed25519 / X25519.
+// Each prefix is the fixed ASN.1 header of that key type (version 0 or 1, then the algorithm OID or the first INTEGER).
+const DER_PRIVATE_KEY = new RegExp(
+  String.raw`(?<![A-Za-z0-9+/])(?:` +
+    [
+      String.raw`MII[A-Za-z0-9+/]{3}IBADANBgkqhkiG9w0BAQEFAAS[A-Za-z0-9+/]{200,}`, // PKCS#8 rsaEncryption
+      String.raw`MII[A-Za-z0-9+/]{3}IBAAKC[A-Za-z0-9+/]{3}A[A-Za-z0-9+/]{200,}`, // PKCS#1 RSAPrivateKey
+      String.raw`M[IH][A-Za-z0-9+/]{2}AgEAMB[AM]GByqGSM49AgEG[A-Za-z0-9+/]{40,}`, // PKCS#8 id-ecPublicKey
+      String.raw`M(?:HcCAQEEI|IGkAgEBBDA|IHcAgEBBEI)[A-Za-z0-9+/]{40,}`, // SEC1 ECPrivateKey (P-256, P-384, P-521)
+      String.raw`MC4CAQAwBQYDK2V[wu]BCIEI[A-Za-z0-9+/]{43}`, // PKCS#8 Ed25519 / X25519
+    ].join('|') +
+    ')',
+  'g',
+);
 const SECRET_HINT = /secret|passw|pwd|pass|token|credential|salt|pepper|key|auth/i;
 const ENV_ROOT = String.raw`(?:process\.env|import\.meta\.env)`;
 // A "/" in a URL, or the same "/" escaped for JSON (\/).
@@ -1663,7 +1913,8 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
   let closed = at === -1;
   let chars = 0;
   at += 1;
-  for (let n = 0; !closed && n < MULTILINE_MAX_LINES && chars <= MULTILINE_MAX_CHARS; n += 1) {
+  // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the raw read is capped and charged.
+  for (let n = 0; !closed && n < MULTILINE_MAX_LINES && chars <= MULTILINE_MAX_CHARS && at - afterHeader <= MULTILINE_RAW_MAX_CHARS; ) {
     if (at >= input.length) {
       closed = true;
       break;
@@ -1671,7 +1922,9 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
     const next = input.indexOf('\n', at);
     const stop = next === -1 ? input.length : next;
     const raw = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
-    chars += stop - at + 1;
+    const trimmedLength = raw.trim().length;
+    chars += trimmedLength;
+    if (trimmedLength > 0) n += 1;
     if (raw.trim() !== '') {
       if (/^[ \t]*/.exec(raw)[0].length <= keyColumn) {
         closed = true;
@@ -1686,7 +1939,10 @@ function blockScalarValue(ctx, input, afterHeader, keyColumn) {
     }
     at = next + 1;
   }
-  if (!closed) return exhaustedLiteral(ctx, input, afterHeader);
+  if (!closed) {
+    spendMultiline(ctx, Math.max(0, at - afterHeader - MULTILINE_MAX_CHARS));
+    return exhaustedLiteral(ctx, input, afterHeader);
+  }
   if (!spendMultiline(ctx, end - afterHeader + 1)) return exhaustedLiteral(ctx, input, afterHeader);
   return { values: bodyValues(lines.join('\n')), end, exhausted: false };
 }
@@ -2096,16 +2352,21 @@ function heredocBody(ctx, input, from, word) {
   let at = from;
   let closed = false;
   let end = from;
-  for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && at - from <= MULTILINE_MAX_CHARS; n += 1) {
+  let content = 0;
+  // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the whole raw read is charged below.
+  for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && content <= MULTILINE_MAX_CHARS && at - from <= MULTILINE_RAW_MAX_CHARS; ) {
     const lineEnd = input.indexOf('\n', at);
     const stop = lineEnd === -1 ? input.length : lineEnd;
     const line = input.slice(at, Math.min(stop, at + 4096)).replace(/\r$/, '');
     end = stop;
-    if (line.trim() === word) {
+    const trimmed = line.trim();
+    if (trimmed === word) {
       closed = true;
       break;
     }
     lines.push(line);
+    if (trimmed !== '') n += 1;
+    content += trimmed.length;
     if (lineEnd === -1) break;
     at = lineEnd + 1;
   }
@@ -2451,48 +2712,76 @@ const ENV_SETTER_CALLEE = [
 ].join('|');
 // The callee and its opening parenthesis; the arguments (a name literal, then `, value` or `=value` inside the same string for putenv)
 // are read by envSetterArguments with callStringLiteral, so every literal form of a language (Rust r#"..."#, C# @"...", C++ R"(...)") counts.
-const ENV_SETTER_CALL = new RegExp(String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_CALLEE})\([ \t]{0,64}(?=\S)`, 'g');
+const ENV_SETTER_CALL = new RegExp(String.raw`(?<![A-Za-z0-9_$])(?:${ENV_SETTER_CALLEE})\(\s{0,64}(?=\S)`, 'g');
+/** The index after the blanks and line breaks (at most 256 characters: rustfmt puts each argument on its own line) from `at`. */
+function skipArgumentSpace(input, at) {
+  const stop = Math.min(input.length, at + 256);
+  while (at < stop && (input[at] === ' ' || input[at] === '\t' || input[at] === '\r' || input[at] === '\n')) at += 1;
+  return at;
+}
 const ENV_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_.-]{0,255}$/;
 
 /**
- * The arguments of an environment setter call whose `(` and blanks end at `start`: { name, literal } for `("NAME", "value")` or
- * `("NAME=value")`, or null when they are not literals (a variable, a call, a name that is not a variable name).
+ * The arguments of an environment setter call whose `(` and blanks end at `start`: { name, literal, valueStart } for `("NAME", "value")`
+ * or `("NAME=value")`, or null when they are not literals (a variable, a call, a name that is not a variable name). The value may run
+ * over lines (Rust r#"..."#, a Go backtick literal) or be exhausted; the caller judges it through callLiteralTexts.
  */
-function envSetterArguments(input, start, filePath) {
+function envSetterArguments(input, start, filePath, ctx = null) {
   const nameLiteral = callStringLiteral(input, start, filePath);
   if (nameLiteral === null) return null;
-  let at = nameLiteral.end;
-  while (input[at] === ' ' || input[at] === '\t') at += 1;
+  let at = skipArgumentSpace(input, nameLiteral.end);
   if (input[at] === ',' && ENV_VARIABLE_NAME.test(nameLiteral.text)) {
-    at += 1;
-    while (input[at] === ' ' || input[at] === '\t') at += 1;
-    return { name: nameLiteral.text, literal: callStringLiteral(input, at, filePath) };
+    at = skipArgumentSpace(input, at + 1);
+    return { name: nameLiteral.text, literal: callStringLiteral(input, at, filePath, ctx), valueStart: at };
   }
   const equals = nameLiteral.text.indexOf('=');
   if (equals > 0 && ENV_VARIABLE_NAME.test(nameLiteral.text.slice(0, equals))) {
     // putenv("NAME=value"): the value runs to the closing quote of the same string
     const text = nameLiteral.text.slice(equals + 1);
-    return { name: nameLiteral.text.slice(0, equals), literal: { text, end: nameLiteral.end, interpolated: nameLiteral.interpolated } };
+    return { name: nameLiteral.text.slice(0, equals), literal: { text, end: nameLiteral.end, interpolated: nameLiteral.interpolated }, valueStart: start };
   }
   return null;
 }
 
 const LITERAL_HASH_MAX = 16; // Rust r#"..."#, Swift #"..."#: at most this many hashes
 const LITERAL_MAX_CHARS = 4098;
+// Languages whose triple-quoted strings run over lines (Python, Kotlin, Java text blocks, C# raw literals, Scala, Swift, Groovy, Julia,
+// Dart, Elixir, TOML). Elsewhere three quotes are an empty string and a quote.
+const SPANNING_TRIPLE_QUOTES = /\.(?:py|pyw|pyi|kt|kts|java|cs|scala|sc|swift|groovy|gradle|gvy|jl|dart|ex|exs|toml)$/i;
 const CLOSING_DELIMITER = { '(': ')', '[': ']', '{': '}', '<': '>' };
 
 /**
  * The body of a delimited literal whose opening delimiter is at `open`: { text, end } or null. A bracket delimiter nests; any other
- * delimiter closes at its next occurrence; a backslash escapes the next character. One line, at most LITERAL_MAX_CHARS.
+ * delimiter closes at its next occurrence; a backslash escapes the next character. Without `ctx`: one line, at most LITERAL_MAX_CHARS.
+ * With `ctx` (Perl q{...} / qq / qw and Ruby %q(...) / %Q / %w may run over lines): up to the multi-line bounds (200 non-blank lines,
+ * 32 KB of non-blank text, MULTILINE_RAW_MAX_CHARS in all); one that does not close within them comes back { exhausted: true }.
  */
-function delimitedBody(input, open) {
+function delimitedBody(input, open, ctx = null) {
   const opener = input[open];
   const closer = CLOSING_DELIMITER[opener] ?? opener;
   let depth = 0;
   let text = '';
-  for (let j = open + 1; j < input.length && j - open < LITERAL_MAX_CHARS; j += 1) {
+  const spans = ctx !== null;
+  const capped = spans && budgetSpent(ctx); // the file's multi-line budget is gone: a literal that leaves its line is exhausted
+  let j = open + 1;
+  const exhausted = () => {
+    spendMultiline(ctx, Math.max(0, j - open - MULTILINE_MAX_CHARS)); // blank text read past the content bound (see closingQuote)
+    return { text: '', end: Math.min(input.length, open + 1 + MULTILINE_MAX_CHARS), interpolated: false, exhausted: true };
+  };
+  let lines = 0;
+  let content = 0;
+  let lineHasContent = false;
+  const limit = spans ? MULTILINE_RAW_MAX_CHARS : LITERAL_MAX_CHARS;
+  for (; j < input.length && j - open < limit; j += 1) {
     const ch = input[j];
-    if (ch === '\n') return null;
+    if (ch === '\n') {
+      if (!spans) return null;
+      if (capped || (lineHasContent && (lines += 1) > MULTILINE_MAX_LINES)) return exhausted();
+      lineHasContent = false;
+    } else if (ch !== ' ' && ch !== '\t' && ch !== '\r') {
+      lineHasContent = true;
+      if ((content += 1) > MULTILINE_MAX_CHARS) return spans ? exhausted() : null;
+    }
     if (ch === '\\' && j + 1 < input.length) {
       text += input[j + 1];
       j += 1;
@@ -2506,7 +2795,7 @@ function delimitedBody(input, open) {
       text += ch;
     }
   }
-  return null;
+  return spans ? exhausted() : null;
 }
 
 /** A word-list literal (Perl qw(), Ruby %w[]) is a list of values: its words are candidates as well as the whole text. */
@@ -2523,6 +2812,13 @@ function indexWithin(input, needle, from, max) {
   return found === -1 ? -1 : from + found;
 }
 
+/** The number of line breaks in input[from, to). */
+function lineCount(input, from, to) {
+  let n = 0;
+  for (let at = input.indexOf('\n', from); at !== -1 && at < to; at = input.indexOf('\n', at + 1)) n += 1;
+  return n;
+}
+
 /** The body from `from` to the next `closer` (a literal that may run over lines: Lua [[...]], OCaml {|...|}, C++ R"(...)"), or null. */
 function bodyUntil(input, from, closer) {
   const close = indexWithin(input, closer, from, MULTILINE_MAX_CHARS);
@@ -2535,7 +2831,7 @@ function bodyUntil(input, from, closer) {
  * Lua [[...]] / [==[...]==], OCaml {|...|} / {id|...|id}, Perl q(...) qq{...} qw/.../, Ruby and Crystal %q(...) %Q[...] %w<...> %(...),
  * Elixir ~s(...) ~S"...", Groovy slashy /.../ and dollar-slashy $/.../$.
  */
-function quoteLikeLiteral(input, start, filePath) {
+function quoteLikeLiteral(input, start, filePath, ctx = null) {
   const c = input[start];
   if (c === '[' && /\.lua$/i.test(filePath)) {
     let level = 0;
@@ -2553,11 +2849,11 @@ function quoteLikeLiteral(input, start, filePath) {
     let open = start + 1;
     const words = input[open] === 'w';
     if (input[open] === 'q' || words) open += 1;
-    return '([{<|!/^~\'"'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open), words) : null;
+    return '([{<|!/^~\'"'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open, ctx), words) : null;
   }
   if (c === '%' && /\.(?:rb|rake|gemspec|podspec|cr|erb)$/i.test(filePath)) {
     const open = 'qQwWiI'.includes(input[start + 1] ?? '\n') ? start + 2 : start + 1;
-    return '([{<|!/^'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open), 'wWiI'.includes(input[start + 1] ?? '\n')) : null;
+    return '([{<|!/^'.includes(input[open] ?? '\n') ? wordList(delimitedBody(input, open, ctx), 'wWiI'.includes(input[start + 1] ?? '\n')) : null;
   }
   if (c === '~' && /\.(?:ex|exs|eex|heex)$/i.test(filePath)) {
     return /[A-Za-z]/.test(input[start + 1] ?? '') && '([{<|/"\''.includes(input[start + 2] ?? '\n') ? delimitedBody(input, start + 2) : null;
@@ -2566,6 +2862,14 @@ function quoteLikeLiteral(input, start, filePath) {
     const dollar = c === '$';
     const open = dollar ? start + 1 : start;
     const close = indexWithin(input, dollar ? '/$' : '/', open + 1, LITERAL_MAX_CHARS);
+    if (dollar && ctx !== null && (close === -1 || input.slice(open, close).includes('\n'))) {
+      // A dollar-slashy string may run over lines: read like the other spanning literals, exhausted past the bounds.
+      const exhausted = { text: '', end: Math.min(input.length, open + 1 + MULTILINE_MAX_CHARS), interpolated: true, exhausted: true };
+      if (budgetSpent(ctx)) return exhausted;
+      const far = indexWithin(input, '/$', open + 1, MULTILINE_MAX_CHARS);
+      if (far === -1 || lineCount(input, open + 1, far) > MULTILINE_MAX_LINES) return exhausted;
+      return { text: input.slice(open + 1, far).replace(/^\r?\n/, ''), end: far + 2, interpolated: true };
+    }
     if (close === -1 || input.slice(open, close).includes('\n')) return null;
     return { text: input.slice(open + 1, close), end: close + (dollar ? 2 : 1), interpolated: true };
   }
@@ -2580,13 +2884,18 @@ function quoteLikeLiteral(input, start, filePath) {
  *   triple-quoted strings on one line
  *   the quote-less forms of quoteLikeLiteral (Lua, OCaml, Perl, Ruby, Elixir, Groovy), chosen by `filePath`.
  * Backslash escapes the next character unless the string is verbatim (@"..." doubles its quote) or raw (backtick, r"...", hashed).
+ * Raw forms whose grammar lets them run over lines (Rust r"..." / br"..." in a .rs file, r#"..."# with any number of hashes, backtick
+ * literals) are read over lines when `ctx` is given: the body comes back whole (the caller judges it like a heredoc, see
+ * callLiteralTexts), and one that does not end within the multi-line bounds (or once the file's budget is gone) comes back as
+ * { exhausted: true } so the caller reports it instead of reading the following lines as code. Without `ctx` they are one line.
  * Returns { text, end, interpolated } or null (not a literal, not closed within the bounds).
  */
-function callStringLiteral(input, start, filePath = '') {
+function callStringLiteral(input, start, filePath = '', ctx = null) {
   let i = start;
   let prefix = input.startsWith('u8', i) ? 'u8' : '';
   i += prefix.length;
-  for (let n = 0; n < 2 && /[@$LuUrRbBfF]/.test(input[i] ?? ''); n += 1) {
+  const rust = /\.rs$/i.test(filePath);
+  for (let n = 0; n < 2 && (/[@$LuUrRbBfF]/.test(input[i] ?? '') || (rust && n === 0 && input[i] === 'c')); n += 1) {
     prefix += input[i];
     i += 1;
   }
@@ -2600,7 +2909,7 @@ function callStringLiteral(input, start, filePath = '') {
   while (hashes <= LITERAL_HASH_MAX && input[i + hashes] === '#') hashes += 1;
   const quote = input[i + hashes];
   if (hashes > LITERAL_HASH_MAX || (hashes > 0 && quote !== '"') || (quote !== '"' && quote !== "'" && quote !== '`')) {
-    return hashes === 0 ? quoteLikeLiteral(input, start, filePath) : null;
+    return hashes === 0 ? quoteLikeLiteral(input, start, filePath, ctx) : null;
   }
   i += hashes;
   const verbatim = prefix.includes('@');
@@ -2619,23 +2928,65 @@ function callStringLiteral(input, start, filePath = '') {
   }
   if (quote !== '`' && hashes === 0 && input[i + 1] === quote && input[i + 2] === quote) {
     const close = indexWithin(input, quote.repeat(3), i + 3, LITERAL_MAX_CHARS);
+    if (ctx !== null && SPANNING_TRIPLE_QUOTES.test(filePath) && (close === -1 || input.slice(i + 3, close).includes('\n'))) {
+      // Triple quotes run over lines in every language that has them (Python, Kotlin and Java text blocks, C# raw literals, Scala,
+      // Swift): read within the multi-line bounds, exhausted past them. C#, Kotlin and Scala raw strings have no escapes.
+      const exhausted = { text: '', end: Math.min(input.length, i + 3 + MULTILINE_MAX_CHARS), interpolated, exhausted: true };
+      if (budgetSpent(ctx)) return exhausted;
+      const escapes = !raw && !/\.(?:cs|kt|kts|scala)$/i.test(filePath);
+      const far = closingQuote(input, i + 3, quote, { escapes, tripled: true, ctx });
+      if (far === -1) return exhausted;
+      const body = input.slice(i + 3, far).replace(/^\r?\n/, '');
+      return { text: escapes ? unescapeMultiline(body) : body, end: far + 3, interpolated };
+    }
     if (close === -1 || input.slice(i + 3, close).includes('\n')) return null;
     return { text: input.slice(i + 3, close), end: close + 3, interpolated };
   }
   const closer = '#'.repeat(hashes);
   if (raw && !verbatim) {
     // no escapes: the literal ends at the first closing quote (followed by its hashes); two native searches, no per-character work
-    const closing = indexWithin(input, quote + closer, i + 1, LITERAL_MAX_CHARS);
+    let closing = indexWithin(input, quote + closer, i + 1, LITERAL_MAX_CHARS);
+    // Rust raw strings and backtick literals may span lines (Python r"..." and Swift #"..."# may not: a line break there is a syntax
+    // error, so a newline in one of those is the next line of code, not the value). A spanning form that does not close on its line
+    // is looked for within the multi-line window, only after the short one failed, so an ordinary one-line literal never pays for
+    // the wide search; one that is still not closed, or that exceeds the line bound, is exhausted (reported by the caller, fail
+    // closed). Once the file's multi-line budget is gone nothing more is read: a file of unterminated openers costs one window per
+    // opener until then and a constant after.
+    const spansLines = ctx !== null && (hashes > 0 || quote === '`' || (/^[bc]?r$/.test(prefix) && rust));
+    if (spansLines && (closing === -1 || input.slice(i + 1, closing).includes('\n'))) {
+      const exhausted = { text: '', end: Math.min(input.length, i + 1 + MULTILINE_MAX_CHARS), interpolated, exhausted: true };
+      if (budgetSpent(ctx)) return exhausted;
+      if (closing === -1) closing = indexWithin(input, quote + closer, i + 1, MULTILINE_MAX_CHARS);
+      if (closing === -1) return exhausted;
+      const text = input.slice(i + 1, closing);
+      let lines = 0;
+      for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
+        lines += 1;
+        if (lines > MULTILINE_MAX_LINES) return exhausted;
+      }
+      return { text: text.replace(/^\r?\n/, ''), end: closing + 1 + hashes, interpolated };
+    }
     if (closing === -1) return null;
     const text = input.slice(i + 1, closing);
     return text.includes('\n') ? null : { text, end: closing + 1 + hashes, interpolated };
   }
   // One pass to the closing quote without building anything, so a line of unclosed openers costs a scan each, not an allocation each.
+  // A Rust string ("...", b"...", c"...") and a C# verbatim string (@"...", $@"...") may run over lines: with `ctx`, one that does not
+  // close on its line is read within the multi-line bounds (closingQuote) and comes back whole, or exhausted past them.
+  const spansPlain = ctx !== null && quote === '"' && hashes === 0 && (verbatim || (rust && /^[bc]?$/.test(prefix)));
   const limit = Math.min(input.length, i + LITERAL_MAX_CHARS);
   let j = i + 1;
   for (; j < limit; j += 1) {
     const ch = input[j];
-    if (ch === '\n') return null;
+    if (ch === '\n') {
+      if (!spansPlain) return null;
+      const exhausted = { text: '', end: Math.min(input.length, i + 1 + MULTILINE_MAX_CHARS), interpolated, exhausted: true };
+      if (budgetSpent(ctx)) return exhausted;
+      const far = closingQuote(input, i + 1, quote, { escapes: !verbatim, pair: verbatim, ctx });
+      if (far === -1) return exhausted;
+      const body = input.slice(i + 1, far);
+      return { text: verbatim ? body.split(quote + quote).join(quote) : unescapeMultiline(body), end: far + 1, interpolated };
+    }
     if (ch === quote) {
       if (hashes > 0) {
         if (input.startsWith(closer, j + 1)) break;
@@ -2676,8 +3027,13 @@ function fishFlagsAssign(flags) {
 // and a per-file budget); when a bound is hit before the literal ends, the assignment is reported (fail closed).
 // ---------------------------------------------------------------------------
 
+// The bounds count CONTENT: lines that are not blank and characters that are not blanks. A certificate chain that the name-based
+// rules see blanked (blankPublicPemBlocks) is spaces and line breaks, so a real-size CA bundle (8 certificates of ~1.6 KB are over
+// 200 lines) does not run a literal out of its bounds. The raw distance a single read may cover is capped at MULTILINE_RAW_MAX_CHARS,
+// and blank text read past the content bounds is charged to the file's multi-line budget, so a hostile run of blanks stays linear.
 const MULTILINE_MAX_LINES = 200;
 const MULTILINE_MAX_CHARS = 32_768;
+const MULTILINE_RAW_MAX_CHARS = 4 * 1024 * 1024;
 const MULTILINE_BUDGET_CHARS = 24_000_000; // per file: characters the multi-line readers may look at before the file is reported
 const TRIPLE_QUOTE = /[rRbBfFuU]{0,2}#{0,16}("""|''')/y;
 const HEREDOC_OPENER = /<<(?:<|[-~])?(["']?)([A-Za-z_][A-Za-z0-9_]{0,63})\1/y;
@@ -2715,28 +3071,57 @@ function exhaustedVerdict(m, ctx, read) {
 }
 
 /**
+ * The texts a literal read by callStringLiteral (at `from`) is judged on, or the verdict when it cannot be verified. A one-line
+ * literal is its text. One that runs over lines (a Rust raw string, a backtick literal, a Lua / OCaml / C++ raw body) is judged like
+ * a heredoc: each line and the joined lines, charged to the file's multi-line budget. A word list (Perl qw, Ruby %w) adds its words.
+ * A literal that did not end within the bounds, or whose body the budget no longer covers, is reported (fail closed), once the
+ * budget is gone once per file, exactly as the other multi-line readers do.
+ * @returns {{texts: string[]} | {verdict: boolean}}
+ */
+function callLiteralTexts(m, ctx, literal, from) {
+  const multiline = literal.text.includes('\n');
+  if (literal.exhausted === true || (multiline && !spendMultiline(ctx, literal.text.length))) {
+    return { verdict: exhaustedVerdict(m, ctx, exhaustedLiteral(ctx, m.input, from)) };
+  }
+  const texts = multiline ? bodyValues(literal.text) : [literal.text];
+  if (literal.words === true) texts.push(...literal.text.split(/\s+/).filter((word) => word !== ''));
+  return { texts };
+}
+
+/**
  * Index of the closing `quote` of a string body that starts at `from`, or -1 when it does not close within the bounds.
  * `escapes`: a backslash makes the next character part of the string (so an escaped quote does not close it).
  * `pair`: a doubled quote is one quote of the content (YAML 'it''s'). `tripled`: the closing delimiter is three quotes.
  * `stop`: do not look at or beyond this index.
  */
-function closingQuote(input, from, quote, { escapes, pair = false, tripled = false, stop = input.length }) {
-  const limit = Math.min(stop, from + MULTILINE_MAX_CHARS);
+function closingQuote(input, from, quote, { escapes, pair = false, tripled = false, stop = input.length, ctx = null }) {
+  const limit = Math.min(stop, from + MULTILINE_RAW_MAX_CHARS);
   let lines = 0;
+  let content = 0;
+  let lineHasContent = false;
+  const giveUp = (at) => {
+    if (ctx !== null) spendMultiline(ctx, Math.max(0, at - from - MULTILINE_MAX_CHARS)); // blank text read past the content bound
+    return -1;
+  };
   for (let i = from; i < limit; i += 1) {
     const ch = input[i];
     if (ch === '\n') {
-      lines += 1;
-      if (lines > MULTILINE_MAX_LINES) return -1;
-    } else if (ch === '\\' && escapes) i += 1;
-    else if (ch === quote) {
-      if (tripled) {
-        if (input[i + 1] === quote && input[i + 2] === quote) return i;
-      } else if (pair && input[i + 1] === quote) i += 1;
-      else return i;
+      if (lineHasContent && (lines += 1) > MULTILINE_MAX_LINES) return giveUp(i);
+      lineHasContent = false;
+    } else if (ch === ' ' || ch === '\t' || ch === '\r') continue;
+    else if ((content += 1) > MULTILINE_MAX_CHARS) return giveUp(i);
+    else {
+      lineHasContent = true;
+      if (ch === '\\' && escapes) i += 1;
+      else if (ch === quote) {
+        if (tripled) {
+          if (input[i + 1] === quote && input[i + 2] === quote) return i;
+        } else if (pair && input[i + 1] === quote) i += 1;
+        else return i;
+      }
     }
   }
-  return -1;
+  return giveUp(limit);
 }
 
 /** Undo the escapes of a multi-line basic string: a line-ending backslash joins the lines, and \x is x. */
@@ -2757,7 +3142,7 @@ function multilineValue(ctx, input, valueStart) {
     const quote = triple[1];
     const bodyStart = valueStart + triple[0].length;
     const literalToml = quote === "'''" && /\.toml$/i.test(ctx.path);
-    const close = closingQuote(input, bodyStart, quote[0], { escapes: !literalToml, tripled: true });
+    const close = closingQuote(input, bodyStart, quote[0], { escapes: !literalToml, tripled: true, ctx });
     if (close === -1 || !spendMultiline(ctx, close - bodyStart)) return exhaustedLiteral(ctx, input, bodyStart);
     const raw = input.slice(bodyStart, close).replace(/^\r?\n/, '');
     const isRawString = /[rR]/.test(triple[0].slice(0, -3));
@@ -2775,7 +3160,9 @@ function multilineValue(ctx, input, valueStart) {
       const tag = opener[2];
       const body = [];
       let at = lineEnd + 1;
-      for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length; n += 1) {
+      let content = 0;
+      // Blank lines do not count against the bounds (see MULTILINE_MAX_LINES); the raw read is capped and charged.
+      for (let n = 0; n < MULTILINE_MAX_LINES && at <= input.length && at - lineEnd <= MULTILINE_RAW_MAX_CHARS; ) {
         let next = input.indexOf('\n', at);
         if (next === -1) next = input.length;
         const line = input.slice(at, next).replace(/\r$/, '');
@@ -2785,9 +3172,13 @@ function multilineValue(ctx, input, valueStart) {
           return { values: bodyValues(body.join('\n')), end: next, exhausted: false };
         }
         body.push(line);
-        if (next >= input.length || next - lineEnd > MULTILINE_MAX_CHARS) break;
+        const trimmed = line.trim().length;
+        if (trimmed > 0) n += 1;
+        content += trimmed;
+        if (next >= input.length || content > MULTILINE_MAX_CHARS) break;
         at = next + 1;
       }
+      spendMultiline(ctx, Math.max(0, at - lineEnd - MULTILINE_MAX_CHARS));
       return exhaustedLiteral(ctx, input, lineEnd);
     }
   }
@@ -2807,7 +3198,7 @@ function multilineValue(ctx, input, valueStart) {
   // A template / raw literal over several lines: JS `...`, Go `...`. (One line is read as an ordinary quoted value.)
   if (first === '`' && ctx.mode === 'code') {
     if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
-    const close = closingQuote(input, valueStart + 1, '`', { escapes: true });
+    const close = closingQuote(input, valueStart + 1, '`', { escapes: true, ctx });
     if (close === -1) return exhaustedLiteral(ctx, input, valueStart);
     const body = input.slice(valueStart + 1, close);
     if (!body.includes('\n')) return null;
@@ -2817,10 +3208,10 @@ function multilineValue(ctx, input, valueStart) {
   // A quote that is not closed on its line: shell NAME='a<newline>b', dotenv and YAML flow scalars over several lines.
   if ((first === '"' || first === "'") && ctx.mode === 'config') {
     const lineEnd = ctx.lineEnd(valueStart);
-    const sameLine = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", stop: lineEnd });
+    const sameLine = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", stop: lineEnd, ctx });
     if (sameLine !== -1) return null;
     if (budgetSpent(ctx)) return exhaustedLiteral(ctx, input, valueStart);
-    const close = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'" });
+    const close = closingQuote(input, valueStart + 1, first, { escapes: first === '"', pair: first === "'", ctx });
     if (close === -1 || !spendMultiline(ctx, close - valueStart)) return exhaustedLiteral(ctx, input, valueStart);
     const body = input.slice(valueStart + 1, close);
     return { values: bodyValues(first === '"' ? unescapeMultiline(body) : body.replace(/''/g, "'")), end: close, exhausted: false };
@@ -3066,6 +3457,351 @@ const SQL_RULE = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Passwords inside semicolon-delimited connection strings
+// ---------------------------------------------------------------------------
+
+// ADO.NET, ODBC, OLE DB and SQL Server JDBC connection strings are `key=value;key=value` lists, not URLs, so url-password never sees
+// them. In source code the generic assignment reader takes the `Password=<pw>;` inside `"Server=db;User Id=sa;Password=<pw>;"` for an
+// unquoted code expression and skips it, so the same literal in C#, JavaScript, Python or Java went unreported. This rule reads the
+// password field itself wherever such a list is a literal: a string literal in code, a JSON string (appsettings.json
+// "ConnectionStrings"), an XML attribute (web.config <add connectionString="..."/>) or element text, a .env / YAML / INI value, or a
+// bare line of a document. The value is judged like a URL password (urlPasswordIsSecret: anything that is not a placeholder or a
+// reference, with no length or entropy test), because a connection string carries the password whole, as a URL does. Azure
+// `AccountKey=` / `SharedAccessKey=` fields are azure-storage-key's business (it knows their base64 shape).
+//
+// A field is a password key that opens a field: after `;`, a quote, `=` (a .env value that starts with it), `>`, at the start of a line, or
+// after blanks that follow `:`, a comment marker or (in prose) anything (see CONN_BLANK_OPENER).
+// The keys are case-insensitive and may have blanks around `=`, as the drivers parse them: Password, Pwd, Pass, Passwd, a qualified
+// SSL / TLS / proxy / certificate / key-store password, and OLE DB's `Jet OLEDB:Database Password`.
+// A field may also open after a blank (`conn: Password=...`, a `// Password=...` comment, prose) or `>` (XML element text): the
+// literal must still hold a connection-string key (CONN_STRING_CONTEXT), so a lone `pass=x` is not read. Npgsql's PSW and the SQL
+// Server JDBC key-store keys (keyStoreSecret, clientKeyPassword) are password keys too.
+// What may stand before the blanks in front of a field that opens after a blank (see the matcher).
+const CONN_BLANK_OPENER = /(?:[;"'\x60=>:]|\/\/|#|--|\/\*|^\*|<!--|^REM)$/i;
+const CONN_PASSWORD_FIELD =
+  /(?<=[;"'\x60=> \t]|^)[ \t]{0,64}(?:jet[ \t]{1,8}oledb:(?:new[ \t]{1,8})?database[ \t]{1,8}password|key[ \t]?store[ \t]?secret|client[ \t]?key[ \t]?password|(?:(?:ssl|tls|proxy|certificate|cert|keystore|truststore)[ \t_]?)?password|passwd|pwd|psw|pass)[ \t]{0,64}=(?!=)[ \t]{0,64}/gim;
+// The other keys of a connection string. A password field counts only in a literal that also holds one of them (or a jdbc: URL), so
+// a lone `pass=x` in a query string, a list of test results or prose is not read as a connection string.
+const CONN_STRING_KEY = String.raw`(?:server|data[ \t]?source|host(?:[ \t]?name)?|address|addr|network[ \t]?address|database(?:[ \t]?name)?|initial[ \t]?catalog|user[ \t]?id|uid|user(?:[ \t]?name)?|driver|provider|dsn|dbq|port|integrated[ \t]?security|trusted[_ \t]?connection|encrypt|trust[ \t]?server[ \t]?certificate|persist[ \t]?security[ \t]?info|ssl[ \t]?mode|service[ \t]?name|application[ \t]?name|(?:connect(?:ion)?[ \t]?)?timeout|pooling|multiple[ \t]?active[ \t]?result[ \t]?sets)`;
+const CONN_STRING_CONTEXT = new RegExp(String.raw`(?:^|[;"'\x60=])[ \t]{0,64}${CONN_STRING_KEY}[ \t]{0,64}=|\bjdbc:[a-z0-9]{1,32}:`, 'i');
+// What may sit between two pieces of a connection string concatenated in code: blanks, line breaks and a concatenation operator
+// (`+`, `&`, `.`, `..`, `||`, Visual Basic's `& _`); nothing at all between adjacent literals (C, Python).
+const CONN_GLUE = new Set([' ', '\t', '\r', '\n', '+', '&', '.', '|', '_']);
+// Code and shell scripts read a bare (unquoted) field only after a comment marker: a connection string pasted into a comment is
+// text, while `;user=<u>;pass=<p>` outside a string is code (minified JavaScript assigns variables that way; in shell, `;` ends a
+// command, and a literal assigned there is secret-assignment's business).
+const CONN_COMMENT = /(?:^|[ \t;])(?:\/\/|\/\*|#|--|<!--)|^[ \t]*(?:\*|REM[ \t])/i;
+// C# $"..." / $@"..." / @$"...", Python f"..." / rf"..." / fr"...: the {...} inside are code, not text.
+const CONN_INTERPOLATED_PREFIX = /(?:^|[^A-Za-z0-9_])(?:\$@?|@\$|[fF][rR]?|[rR][fF])$/;
+// Filled in at run time: a printf / String.Format / MessageFormat slot or a `?` bind marker (`Password=%s`, `Pwd={0}`). printf slots
+// may be positional (%1$s), take a length modifier (%ls, %hs, %lld, %zu, %I64d) and a `*` width or precision (%.*s, %-*s); Ruby
+// names them (%{pw}, %<pw>s); Python's {0!s} / {0!r:>8} and .NET's {0,-8:X} are positional slots.
+const CONN_PARAMETER =
+  /^(?:\?|%(?:\d{1,2}\$)?[-+ #0-9.*]{0,8}(?:hh|h|ll|l|z|j|t|L|q|I64|I32|I)?[sdiuxXofFeEgGcCvqrSp@]|%\{[A-Za-z_][A-Za-z0-9_]{0,63}\}|%<[A-Za-z_][A-Za-z0-9_]{0,63}>[sdifgx]|\{\d{0,3}(?:![rsa])?(?:[,:][^{}]{0,32})?\})$/;
+// A {name} slot is a template when something fills it: a format call (Python str.format, Rust format!, .NET String.Format), a
+// .Replace("{pw}", ...) on the literal, a structured-logging call (Serilog / Microsoft.Extensions.Logging message templates name
+// their holes {Name} or {@Name}), or a value named as a template.
+const CONN_FORMAT_CALL =
+  /\bformat(?:_map)?\b|\.[Rr]eplace(?:All)?\(|\b(?:[Ll]og|_?[Ll]ogger|[A-Za-z_]{0,20}[Ll]ogger)\s{0,4}\.\s{0,4}(?:Verbose|Debug|Information|Info|Warning|Warn|Error|Fatal|Critical|Trace|Log[A-Za-z]{0,20})\s{0,4}\(|template/;
+// A reference that some tool replaces before the value is used: Jinja / Helm / Mustache / cookiecutter {{ ... }}, Jinja {% ... %}, ERB /
+// EJS <%= ... %>, cmd delayed expansion !NAME!, tokenizer @@NAME@@ / __NAME__ / #{NAME}#, MSBuild $(NAME).
+const CONN_REFERENCE = /^(?:\{\{[^{}]{1,256}\}\}|\{%[^%]{1,256}%\}|<%=?[^%]{1,256}%>|![A-Za-z_][A-Za-z0-9_.]{0,63}!|@@[A-Za-z_][A-Za-z0-9_.]{0,63}@@|__[A-Za-z][A-Za-z0-9_]{0,63}__|#\{[A-Za-z_][A-Za-z0-9_.]{0,63}\}#?|\$\([A-Za-z_][A-Za-z0-9_.]{0,63}\))$/;
+// How far a value is read. A longer one is judged on what was read (fail closed); the bound keeps each field's cost constant, so a
+// hostile line of `;pwd=` fields stays linear.
+const CONN_VALUE_LIMIT = 256;
+// The `;` that ends an XML character reference (`&lt;`, `&#59;`) is part of the value, not the end of the field.
+const XML_ENTITY_BEFORE = /&(?:lt|gt|amp|quot|apos|#[0-9]{1,6}|#x[0-9a-f]{1,5})$/i;
+const XML_ENTITIES = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+const decodeXmlEntities = (text) =>
+  text.replace(/&(lt|gt|amp|quot|apos|#[0-9]{1,6}|#x[0-9a-f]{1,5});/gi, (whole, name) => {
+    const lower = name.toLowerCase();
+    if (lower in XML_ENTITIES) return XML_ENTITIES[lower];
+    const code = lower[1] === 'x' ? Number.parseInt(lower.slice(2), 16) : Number.parseInt(lower.slice(1), 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+  });
+
+/**
+ * The literal that holds the password key at `keyAt`: { quote, openAt, start, close, interpolated, bareOk, context }. The line is read
+ * from its start with a simple quote state (", ' or `; inside one, a backslash escapes the next character). `quote` is null for a
+ * field outside every quote: the bare line is then the literal, and `bareOk` says whether a bare field is read there at all.
+ * start..close is the literal's text; close is its closing quote or the end of the line. The quote state, the line's bare literal and
+ * the current quoted literal are kept on ctx between the matches of one scan (matchAll visits them in order), so each line is read
+ * once and each literal measured once however many fields it holds.
+ */
+// Source files whose literals run over lines with no quote on the inner lines: Java / C# / Kotlin / Python / Scala / Swift triple
+// quotes (text blocks, raw literals) and Go / JavaScript / TypeScript backtick literals.
+const CONN_TRIPLE_SOURCE = /\.(?:java|cs|kt|kts|py|pyw|scala|swift|groovy|dart)$/i;
+const CONN_BACKTICK_SOURCE = /\.(?:go|js|mjs|cjs|jsx|ts|mts|cts|tsx)$/i;
+
+/**
+ * Is the line that starts at `lineStart` inside a literal that runs over lines (triple quotes or a backtick literal opened on an
+ * earlier line)? A forward scan kept on ctx and advanced only (the matches of one scan come in order), so the whole file is read once.
+ * It toggles on triple quotes and on unescaped backticks; ordinary quotes are not tracked, so a backtick inside "..." can mislead it, and the
+ * only effect is which bare lines are read (each still needs a password field and a connection-string key).
+ */
+function connInsideMultiline(input, lineStart, ctx) {
+  const triple = CONN_TRIPLE_SOURCE.test(ctx.path);
+  const tick = CONN_BACKTICK_SOURCE.test(ctx.path);
+  if (!triple && !tick) return false;
+  let state = ctx.connMulti;
+  if (state === undefined || state.at > lineStart) state = ctx.connMulti = { at: 0, inTriple: false, inTick: false };
+  let { at, inTriple, inTick } = state;
+  for (; at < lineStart; at += 1) {
+    const ch = input[at];
+    if (inTick) {
+      if (ch === '\\') at += 1;
+      else if (ch === '`') inTick = false;
+    } else if (inTriple) {
+      if (ch === '"' && input[at + 1] === '"' && input[at + 2] === '"') {
+        inTriple = false;
+        at += 2;
+      }
+    } else if (tick && ch === '`') inTick = true;
+    else if (triple && ch === '"' && input[at + 1] === '"' && input[at + 2] === '"') {
+      inTriple = true;
+      at += 2;
+    }
+  }
+  Object.assign(state, { at, inTriple, inTick });
+  return inTriple || inTick;
+}
+
+function connLiteralAt(input, keyAt, ctx) {
+  const lineStart = ctx.lineStart(keyAt);
+  let state = ctx.connState;
+  if (state === undefined || state.lineStart !== lineStart || state.at > keyAt) {
+    state = { lineStart, at: lineStart, quote: null, openAt: -1, bare: null, quoted: null };
+  }
+  let { at, quote, openAt } = state;
+  for (; at < keyAt; at += 1) {
+    const ch = input[at];
+    if (quote !== null) {
+      if (ch === '\\') at += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'" || ch === '\x60') {
+      quote = ch;
+      openAt = at;
+    }
+  }
+  Object.assign(state, { at, quote, openAt });
+  ctx.connState = state;
+  const lineEnd = ctx.lineEnd(keyAt);
+  if (quote === null) {
+    if (state.bare === null) {
+      // A line of a document, or an unquoted value of a dotenv / YAML / INI / properties / XML file, is a literal as it stands.
+      // Code (and shell, where `;` separates commands) is read bare only in a comment.
+      const asIs = ctx.mode === 'prose' || ctx.runsToEndOfLine || ctx.xml;
+      const commentAt = asIs ? -1 : input.slice(lineStart, Math.min(lineEnd, lineStart + 4096)).search(CONN_COMMENT);
+      state.bare = { quote: null, openAt: -1, start: lineStart, close: lineEnd, interpolated: false, asIs, commentAt, context: undefined };
+    }
+    const bare = state.bare;
+    bare.bareOk = bare.asIs || (bare.commentAt !== -1 && lineStart + bare.commentAt < keyAt);
+    // A line inside a text block, a C# / Kotlin raw literal or a Go / JavaScript backtick literal is the literal's own text.
+    if (!bare.bareOk && ctx.mode === 'code') {
+      bare.inLiteral ??= connInsideMultiline(input, lineStart, ctx);
+      bare.bareOk = bare.inLiteral;
+    }
+    return bare;
+  }
+  if (state.quoted === null || state.quoted.openAt !== openAt) {
+    let close = lineEnd;
+    for (let i = keyAt; i < lineEnd; i += 1) {
+      if (input[i] === '\\') i += 1;
+      else if (input[i] === quote) {
+        close = i;
+        break;
+      }
+    }
+    const interpolated = CONN_INTERPOLATED_PREFIX.test(input.slice(Math.max(lineStart, openAt - 4), openAt));
+    state.quoted = { quote, openAt, start: openAt + 1, close, interpolated, bareOk: true, context: undefined };
+  }
+  return state.quoted;
+}
+
+// How many literals before this one a concatenation (or a Join call) is followed back, and how far each may be.
+const CONN_CHAIN_PIECES = 8;
+const CONN_PIECE_CHARS = 256;
+// A Join call around the literals: C# string.Join(";", ...), Python ";".join([...]), JavaScript [...].join(";"). Its pieces are
+// separated by commas and the call puts the `;` between them.
+const CONN_JOIN_BEFORE = /\b[Jj]oin\s{0,8}\(\s{0,8}(?:\[|$)|\b[Jj]oin\s{0,8}\(\s{0,8}["'][;,]["']\s{0,8},/;
+const CONN_JOIN_AFTER = /^[^\n]{0,400}?[\])]\s{0,8}\.\s{0,8}[Jj]oin\s{0,8}\(\s{0,8}["'];["']/;
+
+/**
+ * The quoted pieces that come before the literal opened at `openAt`, nearest first (at most CONN_CHAIN_PIECES): each glued to the next
+ * by CONN_GLUE (or, in a Join call, by a comma). Each piece is read back to its opening quote within CONN_PIECE_CHARS on one line.
+ */
+function connPiecesBefore(input, openAt, joined) {
+  const pieces = [];
+  let i = openAt - 1;
+  for (let n = 0; n < CONN_CHAIN_PIECES; n += 1) {
+    const stop = Math.max(0, i - 64);
+    while (i >= stop && (CONN_GLUE.has(input[i]) || (joined && (input[i] === ',' || input[i] === '[' || input[i] === '(')))) i -= 1;
+    const quote = input[i];
+    if (i < stop || (quote !== '"' && quote !== "'" && quote !== '\x60')) break;
+    let j = i - 1;
+    const back = Math.max(0, i - CONN_PIECE_CHARS);
+    while (j >= back && input[j] !== quote && input[j] !== '\n') j -= 1;
+    if (j < back || input[j] !== quote) break;
+    pieces.push(input.slice(j + 1, i));
+    i = j - 1;
+  }
+  return pieces;
+}
+
+/**
+ * Does the literal continue a connection string from the pieces before it? "Server=db;User Id=sa;" + "App=x;" + "Password=<pw>;" in
+ * code (any of the CONN_GLUE operators, or adjacent literals; up to CONN_CHAIN_PIECES pieces back), `"...User Id=sa" + ";Password=..."`
+ * (the `;` opens the password literal), the elements of a Join call, or a YAML folded / multi-line scalar line after a line that ends
+ * in a field. Some piece must hold a connection-string key, and the password field must start a field of the joined text.
+ */
+function connContinues(input, literal, ctx, keyAt) {
+  let end;
+  if (literal.quote !== null) {
+    const lineStart = ctx.lineStart(literal.openAt);
+    const joined =
+      CONN_JOIN_BEFORE.test(input.slice(Math.max(lineStart, literal.openAt - 400), literal.openAt)) ||
+      CONN_JOIN_AFTER.test(input.slice(literal.openAt, literal.openAt + 600));
+    const pieces = connPiecesBefore(input, literal.openAt, joined);
+    if (pieces.length === 0) return false;
+    const lead = input.slice(literal.start, keyAt);
+    const text = joined ? pieces.reverse().join(';') : pieces.reverse().join('');
+    const boundary = joined ? lead.trim() === '' : /;[ \t]*$/.test(text + lead);
+    return boundary && CONN_STRING_CONTEXT.test(text.startsWith(';') ? text : `;${text}`);
+  } else {
+    if (literal.start === 0) return false;
+    end = literal.start - 1; // the line break that ends the line before
+    if (end > 0 && input[end - 1] === '\r') end -= 1;
+  }
+  const before = input.slice(Math.max(ctx.lineStart(end), end - 256), end);
+  return /;[ \t]*$/.test(before) && CONN_STRING_CONTEXT.test(before);
+}
+
+/**
+ * The value of the field whose `=` ends at `valueStart`, read as the drivers read it: a value in {braces} (ODBC; `}}` is a `}`) or in
+ * the quote the literal does not use (ADO.NET `Password='a;b'`; a doubled quote is the quote) is read whole, `;` included; any other
+ * value runs to the next `;`, the end of the literal or, in XML element text, the next `<`. A bare configuration line can end in a
+ * ` #` comment. Returns { value, braced, end }.
+ */
+function connFieldValue(input, valueStart, literal, xmlText) {
+  const limit = Math.min(literal.close, valueStart + CONN_VALUE_LIMIT);
+  const first = input[valueStart];
+  // The end of what any value form may read: the line, and CONN_VALUE_LIMIT characters (searched within that bound only, so a long
+  // line of fields costs a constant per field).
+  const window = input.slice(valueStart, valueStart + CONN_VALUE_LIMIT);
+  const lineBreak = window.indexOf('\n');
+  const lineLimit = valueStart + (lineBreak === -1 ? window.length : lineBreak);
+  // A value quoted with the literal's OWN quote doubled: Visual Basic and C# verbatim "...Password=""p;w"";", PowerShell and SQL
+  // '...Password=''p;w'';'. The literal's scan ended at the first of those quotes; the value runs to the next doubled quote.
+  if (literal.quote !== null && first === literal.quote && input[valueStart + 1] === literal.quote) {
+    const close = window.indexOf(literal.quote + literal.quote, 2); // within the bounded window: a constant cost per field
+    if (close !== -1 && valueStart + close < lineLimit) return { value: window.slice(2, close), braced: false, end: valueStart + close + 2 };
+  }
+  // A template reference ({{ .Values.db.pw }}, {{password}}) is not an ODBC braced value.
+  if (first === '{' && input[valueStart + 1] === '{' && !literal.interpolated) {
+    const close = window.indexOf('}}', 2);
+    if (close !== -1 && valueStart + close < lineLimit) return { value: window.slice(0, close + 2), braced: false, end: valueStart + close + 2 };
+  }
+  // The other quote closing a code piece, not opening a value: ARM `concat('...;Password=', parameters('pw'), ...)`, `"Password='" + pw`.
+  if ((first === '"' || first === "'") && first !== literal.quote && /^[ \t]*(?:[,+&)]|$)/.test(input.slice(valueStart + 1, Math.min(literal.close, valueStart + 16)))) {
+    return { value: '', braced: false, end: valueStart, code: true };
+  }
+  // The value in a literal of its own: "...Password=" + "<pw>" + ";", Python ("...PWD=" "<pw>").
+  if (literal.quote !== null && valueStart === literal.close) {
+    let i = valueStart + 1;
+    const stop = Math.min(input.length, i + 64);
+    while (i < stop && CONN_GLUE.has(input[i])) i += 1;
+    const quote = input[i];
+    if (quote === '"' || quote === "'" || quote === '\x60') {
+      let j = i + 1;
+      const end = Math.min(input.length, j + CONN_VALUE_LIMIT);
+      for (; j < end && input[j] !== quote && input[j] !== '\n'; j += 1) if (input[j] === '\\') j += 1;
+      if (input[j] === quote) return { value: input.slice(i + 1, j).split(';')[0].trim(), braced: false, end: j + 1 };
+    }
+  }
+  if (first === '{' && !literal.interpolated) {
+    let i = valueStart + 1;
+    for (; i < limit; i += 1) {
+      if (input[i] === '}') {
+        if (input[i + 1] === '}') i += 1;
+        else break;
+      }
+    }
+    return { value: input.slice(valueStart + 1, Math.min(i, limit)).replace(/\}\}/g, '}'), braced: true, end: Math.min(i + 1, literal.close) };
+  }
+  if ((first === '"' || first === "'") && first !== literal.quote) {
+    for (let i = valueStart + 1; i < limit; i += 1) {
+      if (input[i] !== first) continue;
+      if (input[i + 1] === first) i += 1;
+      else return { value: input.slice(valueStart + 1, i).split(first + first).join(first), braced: false, end: i + 1 };
+    }
+  }
+  let i = valueStart;
+  for (; i < limit; i += 1) {
+    const ch = input[i];
+    if (ch === ';' && !XML_ENTITY_BEFORE.test(input.slice(Math.max(valueStart, i - 8), i))) break;
+    if (ch === '<' && xmlText) break;
+  }
+  let value = input.slice(valueStart, i);
+  if (literal.quote === null) value = value.replace(/[ \t]+#.*$/, '');
+  return { value: value.trim(), braced: false, end: i };
+}
+
+/** Is a connection-string password a literal credential? Interpolation and format slots are code; the rest is a URL password. */
+function connPasswordIsSecret(field, literal, around) {
+  if (field.code === true) return false;
+  let text = field.value.includes('&') ? decodeXmlEntities(field.value) : field.value;
+  if (!literal.interpolated && CONN_REFERENCE.test(text.trim())) return false; // in C# $"..." / Python f"...", {{ is a literal brace
+  // Interpolation that is code in any string: PHP `{$pw}`, Swift `\(pw)`; in an interpolated literal, every {...}. Literal text left
+  // next to it is still judged, as `${NAME}suffix` is in a URL. In an interpolated literal `{{` and `}}` are literal braces (C# $"...",
+  // Python f"..."): `PWD={{<pw>}}` is the ODBC braced value <pw>, so they are kept aside while the holes are removed.
+  text = text.replace(/\{\$[^{}\n]{0,256}\}|\\\([^()\n]{0,256}\)/g, '');
+  let braced = field.braced;
+  if (literal.interpolated) {
+    text = text.replace(/\{\{/g, '\u0001').replace(/\}\}/g, '\u0002').replace(/\{[^{}\n]{0,256}\}/g, '').replace(/\u0001/g, '{').replace(/\u0002/g, '}');
+    const odbc = /^\{([^{}]*)\}$/.exec(text.trim());
+    if (odbc !== null) {
+      text = odbc[1];
+      braced = true;
+    }
+  }
+  text = text.trim();
+  if (text === '' || CONN_PARAMETER.test(braced ? `{${text}}` : text)) return false;
+  if (braced && /^@?[A-Za-z_][A-Za-z0-9_.]{0,63}(?:![rsa])?(?::[^{}]{0,32})?$/.test(text) && CONN_FORMAT_CALL.test(around)) return false;
+  return urlPasswordIsSecret(text);
+}
+
+const CONNECTION_STRING_RULE = {
+  id: 'connection-string-password',
+  description:
+    'Password / Pwd / Pass field set to a literal inside a semicolon-delimited connection string (ADO.NET, ODBC, OLE DB, SQL Server JDBC), in source code or config',
+  hint: /pass|pwd|psw|secret/i,
+  matchers: [
+    {
+      pattern: CONN_PASSWORD_FIELD,
+      accept: (m, ctx) => {
+        const input = m.input;
+        const keyAt = m.index + m[0].search(/\S/);
+        // A field after a blank opens one only after `:` (YAML / properties `conn: Password=...`), `>`, a comment marker, or in prose:
+        // `user=mail password=x` is a space-separated list (dovecot, libpq), not a connection string.
+        if (ctx.mode !== 'prose' && /[ \t]$/.test(input.slice(Math.max(0, keyAt - 1), keyAt))) {
+          const before = input.slice(Math.max(ctx.lineStart(keyAt), keyAt - 80), keyAt).trimEnd();
+          if (before !== '' && !CONN_BLANK_OPENER.test(before)) return false;
+        }
+        const literal = connLiteralAt(input, keyAt, ctx);
+        if (!literal.bareOk) return false;
+        literal.context ??= CONN_STRING_CONTEXT.test(input.slice(literal.start, literal.close)) || connContinues(input, literal, ctx, keyAt);
+        if (!literal.context) return false;
+        const valueStart = m.index + m[0].length;
+        const field = connFieldValue(input, valueStart, literal, literal.quote === null && ctx.xml);
+        m.spanEnd = Math.max(field.end, valueStart);
+        // The line around the match, plus what follows the literal (a `.format(` chained on the next line).
+        return connPasswordIsSecret(field, literal, nearbyLineText(m) + input.slice(literal.close, literal.close + 80));
+      },
+    },
+  ],
+};
+
 /**
  * Each rule: id, description, matchers[{ pattern (global regex), accept(match, ctx), optional appliesTo(ctx) and hint }],
  * optional appliesTo(ctx) and hint (a cheap regex the file must match before the rule runs).
@@ -3154,8 +3890,14 @@ const PROVIDER_RULES = [
     id: 'azure-storage-key',
     description: 'Azure storage, Service Bus or Event Hubs shared key in a connection string, or a shared-access signature in a SAS URL',
     lockfile: true,
-    hint: /AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey|sig=/i,
+    hint: /AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey|sig=|AccessKey|Secret/i,
     matchers: [
+      {
+        // Azure SignalR / Web PubSub `Endpoint=...;AccessKey=<base64>` and App Configuration `Endpoint=...;Id=...;Secret=<base64>`
+        // (the generic names count only after an Endpoint= field of the same connection string).
+        pattern: /;[ \t]*(?:AccessKey|Secret)[ \t]*=[ \t]*([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])/gi,
+        accept: (m) => /Endpoint[ \t]*=[ \t]*https?:\/\//i.test(m.input.slice(Math.max(0, m.index - 300), m.index)) && !placeholderOf(m[1]) && /\d/.test(m[1]) && mixedCase(m[1]),
+      },
       {
         pattern: /(?<![A-Za-z0-9_])(?:AccountKey|SharedAccessKey|PrimaryKey|SecondaryKey)[ \t]*=[ \t]*([A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])/gi,
         accept: (m) => !placeholderOf(m[1]) && /\d/.test(m[1]) && mixedCase(m[1]),
@@ -3287,8 +4029,9 @@ const PROVIDER_RULES = [
   ),
   tokenRule(
     'other-provider-token',
-    'Other provider token (Databricks, Grafana, Supabase, PlanetScale, Docker Hub, RubyGems, Terraform Cloud, age secret key)',
-    /dapi|glsa_|sbp_|pscale_|dckr_pat_|rubygems_|atlasv1|AGE-SECRET-KEY/,
+    'Other provider token or prefixed private key (Databricks, Grafana, Supabase, PlanetScale, Docker Hub, RubyGems, Terraform Cloud, ' +
+      'Postman PMAK-, age secret key, BIP32 extended private key xprv / tprv / yprv / zprv, Nostr nsec1)',
+    /dapi|glsa_|sbp_|pscale_|dckr_pat_|rubygems_|atlasv1|AGE-SECRET-KEY|PMAK-|prv|nsec1/,
     [
       /(?<![A-Za-z0-9_])dapi[a-f0-9]{32}(?:-\d)?(?![A-Za-z0-9_])/g,
       /(?<![A-Za-z0-9_])glsa_[A-Za-z0-9]{32}_[a-f0-9]{8}(?![A-Za-z0-9_])/g,
@@ -3298,6 +4041,10 @@ const PROVIDER_RULES = [
       /(?<![A-Za-z0-9_])rubygems_[a-f0-9]{48}(?![A-Za-z0-9_])/g,
       /(?<![A-Za-z0-9])[A-Za-z0-9]{14}\.atlasv1\.[A-Za-z0-9_-]{60,}/g,
       /(?<![A-Za-z0-9-])AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}(?![A-Za-z0-9])/g,
+      /(?<![A-Za-z0-9_-])PMAK-[a-f0-9]{24}-[a-f0-9]{34}(?![A-Za-z0-9_-])/g,
+      // Base58Check of a 78-byte BIP32 extended PRIVATE key (the public form says pub: xpub, tpub, ...).
+      /(?<![A-Za-z0-9])[xtyzuvYZUV]prv[1-9A-HJ-NP-Za-km-z]{107,108}(?![A-Za-z0-9])/g,
+      /(?<![A-Za-z0-9])nsec1[02-9ac-hj-np-z]{58}(?![A-Za-z0-9])/g,
     ],
     (m) => !placeholderOf(m[0]) && varied(m[0]),
   ),
@@ -3371,8 +4118,6 @@ const LOCKFILE_RULE = {
 
 // The attribute that names an entry: <entry key="secret">V</entry>, <item name="password">V</item>.
 const XML_NAME_ATTRIBUTE = /(?:^|[ \t\r\n])(?:name|key)[ \t]*=[ \t]*(?:"([^"]{1,200})"|'([^']{1,200})')/i;
-// A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key.
-const PATH_VALUE = /^(?:\.{1,2}|~)?(?:\/[A-Za-z0-9._@-]{1,64}){2,12}\/?$/;
 // Example values Maven's reference settings.xml documents; they are sample text, not credentials.
 // (The passphrase hint is exact text: a sentence is not exempt by its punctuation, only this whole value is.)
 const XML_EXAMPLE_VALUES = new Set(['proxypass', 'optional; leave empty if not used.']);
@@ -3394,7 +4139,9 @@ function xmlElementIsSecret(qualifiedName, attributes, text, ctx) {
   if (value === '') return false;
   // A Maven-encrypted password ({base64}) is not a plaintext credential: it is unreadable without the master key.
   if (/^\{[A-Za-z0-9+/=]{20,}\}$/.test(value)) return false;
-  if (PATH_VALUE.test(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
+  // A file-system path (/path/to/private/key, ./certs/key.pem, ~/.ssh/id_rsa): a key FILE element holds this, not a key. The same
+  // test as every configuration value (isFileSystemPath), so a path with a random-looking piece is judged as a value here too.
+  if (isFileSystemPath(value) || XML_EXAMPLE_VALUES.has(value.toLowerCase())) return false;
   // Text about the credential ("the password you chose during setup.") is exempt through the same documentation-cue rule
   // as every other format; punctuation alone never is, or a passphrase ending in "!" would slip through.
   return isSecretValue({ kind, value, quoted: true, separator: ':', mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
@@ -3437,6 +4184,16 @@ function unwrapLiteralCall(input, start) {
   return at !== start && /["'\x60]/.test(input[at] ?? '') ? at : start;
 }
 
+// In source code, a formatter (rustfmt, prettier, ktlint) puts a long value on the line after the operator: `const JWT_SECRET: &str =`
+// and then the literal, indented. The same assignment with one line break (and indentation) between the operator and the value; the
+// value is read exactly as SECRET_ASSIGNMENT_MATCHER reads it (in code only a quoted literal can be a finding).
+const ASSIGNMENT_VALUE_LOOKAHEAD = String.raw`[ \t]*(?=\S)`;
+if (!ASSIGNMENT_PATTERN.source.endsWith(ASSIGNMENT_VALUE_LOOKAHEAD)) throw new Error('ASSIGNMENT_PATTERN must end in its value look-ahead');
+const WRAPPED_ASSIGNMENT_PATTERN = new RegExp(
+  ASSIGNMENT_PATTERN.source.slice(0, -ASSIGNMENT_VALUE_LOOKAHEAD.length) + String.raw`[ \t]*\r?\n[ \t]*(?=\S)`,
+  'g',
+);
+
 const SECRET_ASSIGNMENT_MATCHER = {
   // group 2 = name, 3 = separator. The VALUE is deliberately not part of the match: it is read in accept()
   // (VALUE_AT) and only for a secret-like name. A rejected match therefore consumes nothing but `name =`, and
@@ -3472,15 +4229,16 @@ const SECRET_ASSIGNMENT_MATCHER = {
       );
     }
     // A literal that does not start with a plain quote: Rust r#"..."#, C# @"...", C++ R"(...)", Swift #"..."#, Python r'...', Lua [[...]],
-    // Perl q(...), Ruby %q(...), OCaml {|...|}. A literal over several lines is judged like a heredoc.
-    if (ctx.mode === 'code' && !'"\'`'.includes(input[valueStart] ?? '')) {
-      const literal = callStringLiteral(input, valueStart, ctx.path);
-      if (literal !== null && (!literal.text.includes('\n') || spendMultiline(ctx, literal.text.length))) {
+    // Perl q(...), Ruby %q(...), OCaml {|...|}. A literal over several lines is judged like a heredoc, and one that does not end within
+    // the bounds is reported (callLiteralTexts).
+    if (ctx.mode === 'code' && (!'"\'`'.includes(input[valueStart] ?? '') || (input[valueStart] === '"' && /\.rs$/i.test(ctx.path)))) {
+      const literal = callStringLiteral(input, valueStart, ctx.path, ctx);
+      if (literal !== null) {
         m.spanEnd = literal.end;
+        const read = callLiteralTexts(m, ctx, literal, valueStart);
+        if (read.verdict !== undefined) return read.verdict;
         if (literal.interpolated && /[{}$]/.test(literal.text)) return false; // built from other values
-        const texts = literal.text.includes('\n') ? bodyValues(literal.text) : [literal.text];
-        if (literal.words === true) texts.push(...literal.text.split(/\s+/).filter((word) => word !== ''));
-        return texts.some((text) =>
+        return read.texts.some((text) =>
           isSecretValue({ kind, value: text, quoted: true, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog }),
         );
       }
@@ -3527,7 +4285,14 @@ const SECRET_ASSIGNMENT_MATCHER = {
     if (value[3] !== undefined && ctx.mode !== 'code' && isShellScriptPath(ctx.path)) return false;
     const check = (text, isQuoted) =>
       isSecretValue({ kind, value: text, quoted: isQuoted, separator: m[3], mode: ctx.mode, minLength: ctx.minStrong, catalog: ctx.catalog });
-    if (quoted) return check(unescapeQuoted(quotedValue), true);
+    if (quoted) {
+      // A backslash is no escape in a single-quoted YAML or TOML string ('C:\keys\server.pfx'), so the path is judged as written too:
+      // unescaped it would read "C:keysserver.pfx", which is not a path, and the strong-name gate would report it. A double-quoted
+      // (or backtick) value is judged as written only when it holds no escape sequence but a doubled backslash or `\/`: a JSON, YAML
+      // or TOML `"\u00dcn\u00efcode-pass"` or `"\tCorrectHorse\tBattery"` is a password with escapes, not a path from the drive root.
+      if (ctx.mode !== 'code' && (value[2] !== undefined || !hasStringEscape(quotedValue)) && isFileSystemPath(quotedValue)) return false;
+      return check(unescapeQuoted(quotedValue), true);
+    }
     const bare = value[4];
     if (!nested) ctx.bareRunEnd = valueStart + bare.length;
     let token = bare.replace(/^["'`]+/, '');
@@ -3571,6 +4336,12 @@ const SECRET_ASSIGNMENT_MATCHER = {
 // Definition forms with no operator, where the name follows a keyword or sigil and the value is a quoted literal after a blank:
 // Elixir `@jwt_secret "v"`, Clojure `(def jwt-secret "v")` / `{:jwt-secret "v"}`, Lisp `(setq jwt-secret "v")` / `(defvar ...)`.
 // Source code only (in prose these read as ordinary text); the value is judged like any other quoted literal in code.
+const WRAPPED_ASSIGNMENT_MATCHER = {
+  appliesTo: (ctx) => ctx.mode === 'code',
+  pattern: WRAPPED_ASSIGNMENT_PATTERN,
+  accept: (m, ctx) => SECRET_ASSIGNMENT_MATCHER.accept(m, ctx),
+};
+
 const DEFINITION_ASSIGNMENT_MATCHER = {
   appliesTo: (ctx) => ctx.mode === 'code',
   hint: /[@(:]/,
@@ -3901,10 +4672,15 @@ function directiveValue(groups) {
 // nginx variables ($http_x_api_key, ${var}), HAProxy sample fetches and log-format (%[req.hdr(x)]), Apache expressions (%{HTTP_X}e): references.
 const DIRECTIVE_REFERENCE = /^(?:\$[A-Za-z_{(]|%[[{])/;
 
-/** Is the literal value of a service directive a secret? Strong-name rules: any non-placeholder of 8+ characters. */
-function directiveIsSecret(value) {
+/**
+ * Is the literal value of a service directive a secret? Strong-name rules: any non-placeholder of 8+ characters. Most directives
+ * (requirepass, masterauth, BasicAuth, stats auth, an ACL >password, chpasswd input) hold the password itself, never the name of a
+ * file, so a path-shaped value is judged like any other (`requirepass /srv/Summer2024/Prod`). The matchers that read a
+ * directive by a secret-like NAME pass `allowPath: true`, as an assignment would.
+ */
+function directiveIsSecret(value, { allowPath = false } = {}) {
   if (DIRECTIVE_SAMPLES.has(value.text.toLowerCase()) || DIRECTIVE_REFERENCE.test(value.text)) return false;
-  return isSecretValue({ kind: 'strong', value: value.text, quoted: value.quoted, separator: '=', mode: 'config' });
+  return isSecretValue({ kind: 'strong', value: value.text, quoted: value.quoted, separator: '=', mode: 'config', allowPath });
 }
 
 /** Directives are read in configuration files, and in fenced blocks of Markdown; anywhere else the text is prose or code. */
@@ -4097,6 +4873,325 @@ function privateJwkMembers(ctx, text) {
   return ctx.jwkFound;
 }
 
+// ---------------------------------------------------------------------------
+// Environment fallbacks outside JavaScript (rule hardcoded-secret-fallback). Every language reads an environment variable by a literal
+// name and has standard ways to supply a default when it is unset. A literal default under a secret-like name N is the same hardcoded
+// secret as JavaScript's `process.env.N || "v"`: it is the key in use whenever the variable is missing. The forms read, by shape:
+//   operator  C# Environment.GetEnvironmentVariable("N") ?? "v"          Kotlin / Groovy System.getenv("N") ?: "v"
+//             PHP getenv("N") ?: "v", $_ENV["N"] ?? "v", $_SERVER[...]    Ruby ENV["N"] || "v"   Perl $ENV{N} // "v"   Elixir System.get_env("N") || "v"
+//             Python os.getenv("N") or "v", os.environ.get("N") or "v"    Lua os.getenv("N") or "v"   Deno.env.get("N") ?? "v"
+//             Swift ProcessInfo.processInfo.environment["N"] ?? "v"       Dart Platform.environment["N"] ?? "v"
+//   argument  Java / Kotlin System.getenv().getOrDefault("N", "v")        Ruby ENV.fetch("N", "v"), ENV.fetch("N") { "v" }
+//             Scala sys.env.getOrElse("N", "v"), Properties.envOrElse    Elixir System.get_env("N", "v")   Dart String.fromEnvironment("N", defaultValue: "v")
+//             PHP (Laravel) env("N", "v"), Env::get("N", "v")            getenv / getEnv / get_env / GetEnvOrDefault("N", "v") helpers, Python default="v"
+//   method    Java Optional.ofNullable(System.getenv("N")).orElse("v")   Scala sys.env.get("N").getOrElse("v")
+//             Rust std::env::var("N").unwrap_or("v".into()), .unwrap_or_else(|_| "v".to_string()), option_env!("N").unwrap_or("v")
+//   helper    Java Objects.requireNonNullElse(System.getenv("N"), "v"), Objects.toString(...), StringUtils.defaultIfBlank(...), MoreObjects.firstNonNull(...)
+//   ternary   System.getenv("N") != null ? System.getenv("N") : "v"      string.IsNullOrEmpty(GetEnvironmentVariable("N")) ? "v" : GetEnvironmentVariable("N")
+//             getenv("N") == null ? "v" : x                              C# GetEnvironmentVariable("N") is { } v ? v : "v"
+//             Either the other branch is a getter too, or the condition tests the getter for null / empty and so names the default
+//             branch; `getenv("N") ? "configured" : "missing"` and `getenv("N") != null ? "set" : "unset"` are messages, not defaults.
+//   Go        v := os.Getenv("N") (or v, ok := os.LookupEnv("N")), then within ENV_GO_DEFAULT_LINES lines `if v == "" { v = "v" }` (also
+//             "" == v, len(v) == 0, !ok). Go has no default operator, so its idiom assigns the default to the variable on a later line.
+// The default is judged like the JavaScript branch above under a strong name: any non-empty constant counts, because a guessable
+// "hunter2" default signs tokens as well as a random one does. A placeholder ("your-secret-here", "changeme", "<jwt-secret>") and a
+// display text in parentheses or brackets ("(not set)") pass, and under a weak name the default must look random (envDefaultValueIsSecret).
+// An empty string, an interpolated string ("${x}", "#{x}", Kotlin / PHP "$x", C# $"{x}", Swift "\(x)") and anything that is not a string
+// literal (a variable, a call, `throw`, `nil`) pass. A literal that is the operand of a comparison or membership test after `or` / `||`
+// (`getenv("K") or "k" in settings`) is no default, and a ternary whose both branches are literals is a message, not a default. Every pattern below is a fixed callee or operator followed
+// by bounded runs, so a match costs a constant amount of work past its start.
+// A default kept in a local variable and applied on a later line is read only in Go's form; `v = getenv("N")` then `v ?? "v"` is not.
+// ---------------------------------------------------------------------------
+
+// One getter that reads a variable by a literal name: group `getter` is the callee, `q` the name's quote, `name` the name. A bare name is
+// accepted only for Perl's $ENV{N} (envGetterNameOk). An identifier may follow the name as a second argument (C#
+// EnvironmentVariableTarget.User, Ruby ENV.fetch("N", nil), PHP getenv("N", true)); a quoted second argument is the argument form below.
+const ENV_GETTER =
+  String.raw`(?<getter>(?<![A-Za-z0-9_$])(?:(?:System\.)?Environment\.GetEnvironmentVariable|getenv(?:\(\)(?:\.get)?)?|environ(?:\.get)?|ENV(?:\.fetch)?|` +
+  String.raw`System\.get_env|(?:std::)?env::var(?:_os)?|dotenvy?::var|option_env!|sys\.env(?:\.get)?|Deno\.env\.get|ProcessInfo\.processInfo\.environment|Platform\.environment)|` +
+  // A named first argument: C# GetEnvironmentVariable(variable: "N"), Python os.getenv(key="N").
+  String.raw`\$_(?:ENV|SERVER)|\$ENV)[ \t]{0,16}[([{]\s{0,64}(?:(?:variable|key|name)[ \t]{0,4}[:=][ \t]{0,4})?(?<q>["'\x60]?)(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>` +
+  String.raw`\s{0,64}(?:,\s{0,64}[A-Za-z_][A-Za-z0-9_.:]{0,80}\s{0,64})?[)\]}]`;
+// A file that holds none of these words has no getter: the operator, method and ternary matchers are skipped for it.
+const ENV_GETTER_HINT = /getenv|GetEnvironmentVariable|environ|ENV|_SERVER|get_env|env::var|dotenv|option_env!|sys\.env|Deno\.env/;
+// Where a getter is not the start of an expression (a ternary branch, a helper's argument), it may name its class or module first
+// (System.getenv, os.getenv): up to three qualifiers.
+const GETTER_QUALIFIERS = String.raw`(?:[A-Za-z_][A-Za-z0-9_]{0,63}\.){0,3}`;
+
+// Getter, then a default operator: ?? (C#, PHP, Swift, Dart, TypeScript), ?: (Kotlin, Groovy, PHP, GNU C), || (Ruby, Elixir, Perl), `or`
+// (Python, Lua, Ruby), and Perl's defined-or // (only after $ENV{...}: everywhere else // starts a comment). `??=` and `||=` are not
+// read here (the literal must follow the operator): they assign the variable, which secret-assignment judges.
+// What may stand between a getter and its default operator: the parenthesis of `(getter) ?? "v"`, up to three member calls or
+// properties, plain or null-conditional (C# `?.Trim()`, Kotlin `?.trim()`, `?.takeIf { it.isNotBlank() }`, Ruby `.presence`), and one
+// comment (`getter // fallback` + line break, `/* ... */`). Every run is bounded and the alternatives start differently (linear).
+const ENV_GETTER_TAIL =
+  String.raw`(?:[ \t]{0,16}\)){0,2}(?:\s{0,16}\??\.\s{0,16}[A-Za-z_][A-Za-z0-9_]{0,63}(?:\((?:[^()\n]|\([^()\n]{0,64}\)){0,128}\)|[ \t]{0,4}\{[^{}\n]{0,120}\})?){0,3}` +
+  String.raw`(?:[ \t]{0,16}(?:\/\/[^\n]{0,200}\n|\/\*[^*\n]{0,200}\*\/))?`;
+const ENV_DEFAULT_OPERATOR = new RegExp(
+  String.raw`${ENV_GETTER}${ENV_GETTER_TAIL}\s{0,64}(?<op>\?\?|\?:|\|\||\/\/|(?<![A-Za-z0-9_$])or(?![A-Za-z0-9_$]))\s{0,64}(?=\S)`,
+  'g',
+);
+
+// Calls that take the name and then the default (or a block that returns it). os.getenv / os.environ.get repeat the Python matcher above
+// on purpose, so its `default=` keyword is read as well; a finding is reported once per line.
+const ENV_DEFAULT_ARGUMENT_CALLEE = [
+  String.raw`(?:System\.)?getenv\(\)\.(?:getOrDefault|getOrElse)`, // Java / Kotlin map defaults
+  String.raw`ENV\.fetch`, // Ruby
+  String.raw`sys\.env\.getOrElse`, // Scala
+  String.raw`(?:scala\.util\.)?Properties\.envOrElse`, // Scala
+  String.raw`System\.get_env`, // Elixir
+  String.raw`String\.fromEnvironment`, // Dart (defaultValue:)
+  String.raw`(?:os\.)?environ\.get`, // Python
+  String.raw`env\.str`, // django-environ env.str("N", default="v")
+  String.raw`[Gg]et_?[Ee]nv(?:_?[Oo]r(?:_?[Dd]efault|_?[Ee]lse)?|_?[Ww]ith_?[Dd]efault)?`, // os.getenv, and getEnv / get_env / GetEnvOrDefault helpers
+  // Laravel env("N", "v") and envOr helpers. Never a method: cmd.env("N", "v") sets a child process's variable, it does not read one.
+  String.raw`(?<![.:]|->)env(?:_?[Oo]r(?:_?[Dd]efault)?)?`,
+  String.raw`Env::get`, // Laravel
+].join('|');
+const ENV_DEFAULT_ARGUMENT = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$])(?<callee>${ENV_DEFAULT_ARGUMENT_CALLEE})\(\s{0,64}(?:(?:key|name|variable)[ \t]{0,4}[:=][ \t]{0,4})?(?<q>["'\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>\s{0,64}` +
+    // `, "v"` (with Python's default= or Dart's defaultValue:), or a block after the call: Ruby ENV.fetch("N") { "v" } / { |k| "v" },
+    // Kotlin getOrElse("N") { "v" }. The block form is accepted for those two callees only (an `if (getenv("N")) {` body is no default).
+    // Ruby's block may also be `do ... end`, its body on the next line.
+    String.raw`(?:,\s{0,64}(?:default(?:Value)?[ \t]{0,4}[:=][ \t]{0,4})?|(?<block>\)[ \t]{0,16}(?:\{[ \t]{0,16}|do(?![A-Za-z0-9_])\s{0,64})(?:\|[^|\n]{0,64}\|\s{0,16})?))(?=\S)`,
+  'g',
+);
+
+// Getter, an optional `)` (Java's Optional.ofNullable(getter)), up to three adapters (.ok(), .map(String::trim), .filter(s -> !s.isBlank())),
+// the default method, and what may stand between its parenthesis and the literal: a closure head (Rust |_|, Java () ->), a block brace,
+// String::from( or String.valueOf(. An adapter's argument may hold one level of parentheses; both alternatives are disjoint, so no backtracking.
+// Also Kotlin `.orEmpty().ifBlank { "v" }` / `?.ifEmpty { "v" }`, Rust `map_or("v", f)` / `map_or_else(|_| "v", f)` / `format!("v")`,
+// and Java `Optional...or(() -> Optional.of("v"))`.
+const ENV_DEFAULT_METHOD = new RegExp(
+  ENV_GETTER +
+    String.raw`(?:[ \t]{0,16}\))?(?:\s{0,16}\??\.\s{0,16}(?:ok|as_deref|as_ref|map|filter|flatMap|trim|trimEnd|trimStart|orEmpty|takeIf|takeUnless)` +
+    String.raw`(?:\((?:[^()\n]|\([^()\n]{0,64}\)){0,128}\)|[ \t]{0,4}\{[^{}\n]{0,120}\})){0,3}` +
+    String.raw`\s{0,16}\??\.\s{0,16}(?:(?:unwrap_or(?:_else)?|orElse(?:Get)?|getOrElse|map_or(?:_else)?|or)\(\s{0,16}(?:(?:move[ \t]+)?\|[^|\n]{0,64}\|\s{0,16}|\(\s{0,16}\)\s{0,16}->\s{0,16})?` +
+    String.raw`(?:\{\s{0,16})?|(?:ifBlank|ifEmpty)[ \t]{0,4}\{\s{0,16})(?:(?:String|OsString)::from\(\s{0,16}|String\.valueOf\(\s{0,16}|format!\(\s{0,16}|Optional\.of\(\s{0,16})?(?=\S)`,
+  'g',
+);
+
+// Java helpers that return their second argument when the first is null or blank, called with the getter first: Objects.requireNonNullElse
+// and Objects.toString (JDK), StringUtils.defaultIfBlank / defaultIfEmpty / defaultString (Apache Commons), MoreObjects.firstNonNull (Guava).
+const ENV_DEFAULT_WRAPPER = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$])(?:Objects\.(?:requireNonNullElse(?:Get)?|toString)|(?:StringUtils\.)?default(?:IfBlank|IfEmpty|String)|(?:MoreObjects\.)?firstNonNull)` +
+    String.raw`\(\s{0,64}${GETTER_QUALIFIERS}${ENV_GETTER}\s{0,64},\s{0,64}(?:\(\s{0,16}\)\s{0,16}->\s{0,16})?(?=\S)`,
+  'g',
+);
+
+// Ternaries whose one branch is a getter and whose other branch is a literal. The `?` is not part of ??, ?. or ?: .
+const TERNARY_QUESTION = String.raw`(?<![?])\?(?![?.:])`;
+// `? getter : "v"` (the getter may be followed by up to three zero-argument calls such as .trim()).
+const ENV_DEFAULT_TERNARY_ELSE = new RegExp(
+  String.raw`${TERNARY_QUESTION}\s{0,64}${GETTER_QUALIFIERS}${ENV_GETTER}(?:\s{0,16}\.\s{0,16}[A-Za-z_][A-Za-z0-9_]{0,63}\(\s{0,16}\)){0,3}\s{0,64}:(?!:)\s{0,64}(?=\S)`,
+  'g',
+);
+// `? "v" : getter`: the literal is read after the `?`, then ENV_TERNARY_ELSE_GETTER must follow it.
+const ENV_DEFAULT_TERNARY_THEN = new RegExp(String.raw`${TERNARY_QUESTION}\s{0,64}(?=\S)`, 'g');
+const ENV_TERNARY_ELSE_GETTER = new RegExp(String.raw`\s{0,64}:(?!:)\s{0,64}${GETTER_QUALIFIERS}${ENV_GETTER}`, 'y');
+// A condition that tests the getter itself for null or empty says which branch is the default, whatever the other branch is:
+// `getter == null ? "v" : x` (then-branch, group `missing`) and `getter != null ? x : "v"`, C# `getter is { } v ? v : "v"` (else-branch).
+// Not preceded by `!` (also across blanks and opening parentheses: `!(getter == null)`), which would invert the test.
+const ENV_DEFAULT_TERNARY_TEST = new RegExp(
+  String.raw`(?<![!A-Za-z0-9_$.])(?<!![ \t(]{1,8})${GETTER_QUALIFIERS}${ENV_GETTER}\s{0,16}(?:(?<missing>===?\s{0,16}(?:null|nil|None|""|'')|is[ \t]+null)|` +
+    String.raw`!==?\s{0,16}(?:null|nil|None|""|'')|is[ \t]+not[ \t]+null|is[ \t]+(?:\{\s{0,16}\}|string|String)[ \t]+[A-Za-z_][A-Za-z0-9_]{0,63})` +
+    String.raw`\s{0,16}\)?\s{0,64}${TERNARY_QUESTION}\s{0,64}(?=\S)`,
+  'g',
+);
+// The then-branch of a present-test ternary, skipped to reach the else-branch: an expression with no quote, `?`, `:` or `;` (a getter
+// there is the ENV_DEFAULT_TERNARY_ELSE form).
+const TERNARY_THEN_BRANCH = /[^?:;\n"'\x60]{1,200}:(?!:)\s{0,64}(?=\S)/y;
+
+// Go: `v := os.Getenv("N")`, `var v = ...`, `v = ...`, `cfg.Secret = ...` or `v, ok := os.LookupEnv("N")`. The default must be assigned
+// within this many lines (and characters) after the read, inside an `if` that tests the variable for empty.
+// The read may be wrapped in one call (`strings.TrimSpace(os.Getenv("N"))`): group `wrap`, whose `)` (group `close`) must follow.
+const ENV_GO_READ =
+  /(?<![A-Za-z0-9_.])(?<v>[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3})(?:[ \t]*,[ \t]*(?<ok>[A-Za-z_][A-Za-z0-9_]{0,63}))?(?:[ \t]+string)?[ \t]*:?=[ \t]*(?<wrap>[A-Za-z_][A-Za-z0-9_]{0,31}\.[A-Za-z_][A-Za-z0-9_]{0,63}\([ \t]*)?os\.(?:Getenv|LookupEnv)\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)(?<close>[ \t]*\))?/g;
+// Go: `cmp.Or(os.Getenv("N"), "v")` (the standard library's first-non-zero helper).
+const GO_CMP_OR = /(?<![A-Za-z0-9_.])cmp\.Or\([ \t]*os\.Getenv\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)[ \t]*,\s{0,64}(?=\S)/g;
+// Go's helper idiom: `if v := os.Getenv("N"); v != "" { return v }` (or `if v, ok := os.LookupEnv("N"); ok { ... }`), then the
+// default returned after the block (or from its `else` block).
+const GO_IF_INIT_RETURN =
+  /(?<![A-Za-z0-9_])if[ \t]+[A-Za-z_][A-Za-z0-9_]{0,63}(?:[ \t]*,[ \t]*[A-Za-z_][A-Za-z0-9_]{0,63})?[ \t]*:=[ \t]*os\.(?:Getenv|LookupEnv)\([ \t]*(?<q>["\x60])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*\)[ \t]*;[^{}\n]{1,160}\{[^{}]{0,400}\}\s{0,64}(?:else[ \t]*\{\s{0,64})?return[ \t]+(?=\S)/g;
+// Rust: `match env::var("N") { Ok(v) => v, Err(_) => "v".to_string() }` (also `.ok()` and `None =>`).
+const RUST_ENV_MATCH = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])match[ \t]+${ENV_GETTER}(?:\s{0,16}\.\s{0,16}(?:ok|as_deref)\(\))?\s{0,16}\{[^{}]{0,300}?(?<![A-Za-z0-9_])(?:Err|None)(?:\([^()\n]{0,40}\))?\s{0,16}=>\s{0,16}` +
+    String.raw`(?:\{\s{0,16})?(?:(?:String|OsString)::from\(\s{0,16}|format!\(\s{0,16})?(?=\S)`,
+  'g',
+);
+// Python: `getter if <test> else "v"` (os.environ["N"] if "N" in os.environ else "v").
+const PY_ENV_CONDITIONAL = new RegExp(String.raw`(?<![A-Za-z0-9_.])${GETTER_QUALIFIERS}${ENV_GETTER}[ \t]+if[ \t]+[^\n]{1,200}?[ \t]else[ \t]+(?=\S)`, 'g');
+// Ruby without parentheses: `ENV.fetch "N", "v"`.
+const RUBY_FETCH_BARE = /(?<![A-Za-z0-9_$])ENV\.fetch[ \t]+(?<q>["'])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>[ \t]*,[ \t]*(?=\S)/g;
+// PowerShell 7: `$env:N ?? 'v'` and `if ($env:N) { $env:N } else { 'v' }`.
+const PS_ENV_DEFAULT = /(?<![A-Za-z0-9_])\$env:(?<name>[A-Za-z_][A-Za-z0-9_]{0,255})[ \t]*\?\?[ \t]*(?=\S)/gi;
+const PS_ENV_IF_ELSE =
+  /(?<![A-Za-z0-9_])if[ \t]*\([ \t]*\$env:(?<name>[A-Za-z_][A-Za-z0-9_]{0,255})[ \t]*\)[ \t]*\{[ \t]*\$env:\k<name>[ \t]*\}\s{0,64}else[ \t]*\{\s{0,64}(?=\S)/gi;
+// Java: an environment map held in a variable (`Map<String, String> env = System.getenv();` ... `env.getOrDefault("N", "v")`).
+const JAVA_ENV_MAP_VARIABLE = /(?<![A-Za-z0-9_$.])([A-Za-z_$][A-Za-z0-9_$]{0,63})[ \t]*=[ \t]*System\.getenv\(\)[ \t]*;/g;
+const JAVA_ENV_MAP_GET =
+  /(?<![A-Za-z0-9_$.])(?<v>[A-Za-z_$][A-Za-z0-9_$]{0,63})\.(?:getOrDefault|getOrElse)\(\s{0,64}(?<q>["'])(?<name>[A-Za-z_][A-Za-z0-9_.-]{0,255})\k<q>\s{0,64},\s{0,64}(?=\S)/g;
+/** The variables of this file that hold System.getenv() (computed once per file). */
+function javaEnvMapVariables(ctx, input) {
+  if (ctx.javaEnvMaps === undefined) {
+    ctx.javaEnvMaps = new Set();
+    if (input.includes('System.getenv()')) for (const m of input.matchAll(JAVA_ENV_MAP_VARIABLE)) ctx.javaEnvMaps.add(m[1]);
+  }
+  return ctx.javaEnvMaps;
+}
+const ENV_GO_DEFAULT_LINES = 8;
+const ENV_GO_DEFAULT_CHARS = 1200;
+
+// Strings that interpolate a bare $name: Kotlin, Groovy, PHP and Perl in double quotes, Dart in either quote.
+const DOLLAR_NAME_INTERPOLATION = /\.(?:kts?|groovy|gradle|gvy|php|phtml|pl|pm|dart)$/i;
+
+/**
+ * The string literal at `at` as an environment default: the literal ({ text, end }) when it is a non-empty constant, or null when it is
+ * empty, interpolated (built from other values), or not a string literal at all (a variable, a call, `throw`, `nil`).
+ */
+function fallbackConstant(input, at, filePath, ctx = null) {
+  // With ctx a literal may run over lines (Rust r#"..."#, a backtick, C# @"...", Perl q{...}) or be exhausted: see judgeEnvDefault.
+  const literal = callStringLiteral(input, at, filePath, ctx);
+  if (literal === null) return null;
+  if (literal.exhausted === true) return literal;
+  if (literal.text.trim() === '') return null;
+  if (literal.interpolated && /[{}$]/.test(literal.text)) return null; // C# $"{x}", Scala s"$x", Python f"{x}"
+  const source = input.slice(at, literal.end);
+  if (INTERPOLATION.test(literal.text) || source.includes('{$')) return null; // ${x}, #{x}, {{x}}, PHP {$x}
+  const quote = /["'\x60]/.exec(source)?.[0];
+  if (DOLLAR_NAME_INTERPOLATION.test(filePath) && /\$[A-Za-z_]/.test(source) && (quote === '"' || /\.dart$/i.test(filePath))) return null;
+  if (/\.swift$/i.test(filePath) && source.includes('\\(')) return null; // Swift "\(x)" (the escape is gone from literal.text)
+  return literal;
+}
+
+/** Is the getter's name a quoted secret-like name (a bare one only in Perl's $ENV{N})? */
+const envGetterNameOk = (groups) => (groups.q !== '' || groups.getter?.startsWith('$ENV') === true) && isSecretLikeName(groups.name);
+
+// A literal after a default OPERATOR that is itself an operand of a tighter one is no default: Python `getenv("K") or "k" in settings`
+// (`or` binds more loosely than `in`), `... or "--insecure" in sys.argv`, `x == "v"`.
+const NOT_A_DEFAULT_AFTER = /[ \t]*(?:(?:not[ \t]+)?in(?![A-Za-z0-9_])|is(?![A-Za-z0-9_])|==|!=|<|>|%(?!=))/y;
+
+/**
+ * Is a constant default for the variable `name` a secret? A placeholder ("your-secret-here", "<jwt-secret>", "REDACTED", "changeme")
+ * and a parenthesised or bracketed display text ("(not set)", "[unset]") are not, exactly as the scanner's remediation text suggests.
+ * Under a weak name (AUTH_PASSWORD_BROKER, a *_TABLE) the default must look random, as a weak name's value in code must; under a
+ * strong name any other constant counts, as in the JavaScript branch (a guessable default signs tokens as well as a random one).
+ */
+function envDefaultValueIsSecret(name, text) {
+  const value = text.trim();
+  if (isPlaceholder(value) || /^\(.*\)$|^\[.*\]$/.test(value)) return false;
+  return secretNameKind(name) === 'strong' || looksRandom(value, GATES.codeWeak);
+}
+
+/**
+ * A getter match whose default literal starts at `at`: a secret-like name and a constant default that is a secret (see
+ * envDefaultValueIsSecret). `operator`: the literal follows a default operator, so it must not be the operand of a comparison or a
+ * membership test. The span runs to the literal's end.
+ */
+function envDefaultIsSecret(m, ctx, at, { operator = false } = {}) {
+  if (!envGetterNameOk(m.groups)) return false;
+  const literal = fallbackConstant(m.input, at, ctx.path, ctx);
+  if (literal === null) return false;
+  if (operator && literal.exhausted !== true) {
+    NOT_A_DEFAULT_AFTER.lastIndex = literal.end;
+    if (NOT_A_DEFAULT_AFTER.test(m.input)) return false;
+  }
+  return judgeEnvDefault(m, ctx, m.groups.name, literal, at);
+}
+
+/**
+ * The verdict on a default literal read by fallbackConstant at `at`: one over lines is judged like a heredoc (each line and all of them,
+ * charged to the file's multi-line budget), one that did not end within the bounds is reported (fail closed), exactly as callLiteralTexts
+ * does for the other readers. The span runs to the literal's end.
+ */
+function judgeEnvDefault(m, ctx, name, literal, at) {
+  m.spanEnd = literal.end;
+  const read = callLiteralTexts(m, ctx, literal, at);
+  if (read.verdict !== undefined) return read.verdict;
+  return read.texts.some((text) => envDefaultValueIsSecret(name, text));
+}
+
+/** `? "v" : getter`: the then-branch literal of a ternary whose else-branch reads a secret-like variable. */
+function ternaryThenIsSecret(m, ctx) {
+  const literal = fallbackConstant(m.input, m.index + m[0].length, ctx.path, ctx);
+  if (literal === null) return false;
+  ENV_TERNARY_ELSE_GETTER.lastIndex = literal.end;
+  const getter = ENV_TERNARY_ELSE_GETTER.exec(m.input);
+  if (getter === null || literal.exhausted === true || !envGetterNameOk(getter.groups) || !envDefaultValueIsSecret(getter.groups.name, literal.text)) return false;
+  m.spanEnd = getter.index + getter[0].length;
+  return true;
+}
+
+/** `getter == null ? "v" : x` or `getter != null ? x : "v"`: the branch the condition's own test names as the default. */
+// The else-branch of a missing-test ternary: when it is a string literal too, both branches are messages (`getter == null ? "missing" :
+// "configured"`), as in the `!=` form, where a literal then-branch never reaches the else-branch reader.
+const TERNARY_ELSE_LITERAL = /\s{0,64}:(?!:)\s{0,64}[@$]?["'\x60]/y;
+
+/** `getter == null ? "v" : x` or `getter != null ? x : "v"`: the branch the condition's own test names as the default. */
+function ternaryTestIsSecret(m, ctx) {
+  let at = m.index + m[0].length;
+  if (m.groups.missing === undefined) {
+    TERNARY_THEN_BRANCH.lastIndex = at;
+    const then = TERNARY_THEN_BRANCH.exec(m.input);
+    if (then === null) return false;
+    at = then.index + then[0].length;
+  } else {
+    const literal = fallbackConstant(m.input, at, ctx.path, ctx);
+    if (literal === null) return false;
+    TERNARY_ELSE_LITERAL.lastIndex = literal.exhausted === true ? m.input.length : literal.end;
+    if (TERNARY_ELSE_LITERAL.test(m.input)) return false;
+  }
+  return envDefaultIsSecret(m, ctx, at);
+}
+
+// Go: an `if` that tests one variable for empty (`v == ""`, `"" == v`, `len(v) == 0`, `len(v) < 1`) or an ok flag (`!ok`), then its
+// block up to the first brace (read ahead, not consumed). One compiled pattern for every file: the tested and the assigned names are
+// captured and compared with the read's variable as strings, so no pattern is ever built from file text (no escaping, no per-name cost).
+const GO_IDENT_CHAIN = String.raw`[A-Za-z_][A-Za-z0-9_]{0,63}(?:\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3}`;
+const GO_EMPTY_TEST = new RegExp(
+  String.raw`(?<![A-Za-z0-9_])if[ \t]+(?:(?<a>${GO_IDENT_CHAIN})[ \t]*==[ \t]*(?:""|\x60\x60)|(?:""|\x60\x60)[ \t]*==[ \t]*(?<b>${GO_IDENT_CHAIN})(?![A-Za-z0-9_.])|` +
+    String.raw`len\((?<c>${GO_IDENT_CHAIN})\)[ \t]*(?:==[ \t]*0|<[ \t]*1)|!(?<ok>[A-Za-z_][A-Za-z0-9_]{0,63})(?![A-Za-z0-9_]))[^{}\n]{0,160}\{(?=(?<body>[^{}]{0,480}))`,
+  'g',
+);
+// An assignment in that block: `name = ` (not `==`, not `:=`, not a field of something else).
+const GO_ASSIGNMENT = new RegExp(String.raw`(?<![A-Za-z0-9_.])(?<t>${GO_IDENT_CHAIN})[ \t]*=(?!=)[ \t]*(?=\S)`, 'g');
+// How far into the block the assignment may start.
+const GO_BLOCK_CHARS = 400;
+
+/**
+ * Go: after `v := os.Getenv("N")`, an `if` within ENV_GO_DEFAULT_LINES lines that tests v for empty and assigns v a constant in its
+ * block (`if v == "" { v = "x" }`). The window, the test and the block are all bounded; the block is read up to its first brace.
+ */
+function goEnvDefaultIsSecret(m, ctx) {
+  if (!isSecretLikeName(m.groups.name) || (m.groups.wrap !== undefined && m.groups.close === undefined)) return false;
+  const from = m.index + m[0].length;
+  let end = Math.min(m.input.length, from + ENV_GO_DEFAULT_CHARS);
+  let lines = 0;
+  for (let at = m.input.indexOf('\n', from); at !== -1 && at < end; at = m.input.indexOf('\n', at + 1)) {
+    lines += 1;
+    if (lines > ENV_GO_DEFAULT_LINES) end = at;
+  }
+  const window = m.input.slice(from, end);
+  if (!window.includes('if')) return false;
+  const { v, ok } = m.groups;
+  GO_EMPTY_TEST.lastIndex = 0;
+  for (let test = GO_EMPTY_TEST.exec(window); test !== null; test = GO_EMPTY_TEST.exec(window)) {
+    const tested = test.groups.a ?? test.groups.b ?? test.groups.c;
+    if (tested === undefined ? ok === undefined || test.groups.ok !== ok : tested !== v) continue;
+    const blockAt = test.index + test[0].length;
+    const body = test.groups.body;
+    GO_ASSIGNMENT.lastIndex = 0;
+    for (let assign = GO_ASSIGNMENT.exec(body); assign !== null && assign.index <= GO_BLOCK_CHARS; assign = GO_ASSIGNMENT.exec(body)) {
+      if (assign.groups.t !== v) continue;
+      const at = from + blockAt + assign.index + assign[0].length;
+      const literal = fallbackConstant(m.input, at, ctx.path, ctx);
+      if (literal === null) return false;
+      return judgeEnvDefault(m, ctx, m.groups.name, literal, at);
+    }
+  }
+  return false;
+}
+
 export const RULES = [
   {
     id: 'url-password',
@@ -4137,12 +5232,14 @@ export const RULES = [
   {
     id: 'private-key-block',
     lockfile: true,
-    description: 'PEM private key block (header followed by key material)',
+    description:
+      'Private key material: a PEM private key block (line breaks real, escaped, as XML references or continuations, or blanks on one line), ' +
+      'the private lines of a PuTTY .ppk file, a base64-encoded PEM private key, or a bare base64 DER private key (PKCS#8, PKCS#1, SEC1)',
     matchers: [
       {
         pattern: new RegExp(
           String.raw`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----` +
-            PEM_SEPARATOR +
+            PRIVATE_PEM_SEPARATOR +
             String.raw`(?:(?:Proc-Type|DEK-Info|Version|Comment):[^\n]*` +
             PEM_SEPARATOR +
             String.raw`)*([A-Za-z0-9+/=]{20,}[^\n]*)`,
@@ -4150,6 +5247,14 @@ export const RULES = [
         ),
         accept: (m) => !placeholderOf(m[1]),
       },
+      {
+        // PuTTY .ppk: "PuTTY-User-Key-File-2: ssh-rsa" ... "Private-Lines: N" and the private key lines after it.
+        hint: /Private-Lines/,
+        pattern: new RegExp(String.raw`Private-Lines:[ \t]*\d{1,4}` + PEM_SEPARATOR + String.raw`([A-Za-z0-9+/=]{20,}[^\n]*)`, 'g'),
+        accept: (m) => !placeholderOf(m[1]),
+      },
+      { hint: /LS0tLS1CRUdJTi/, pattern: BASE64_PEM_PRIVATE, accept: (m) => base64PemIsPrivate(m[0]) },
+      { pattern: DER_PRIVATE_KEY, accept: (m) => !placeholderOf(m[0]) && varied(m[0].slice(-40)) },
     ],
   },
   {
@@ -4267,6 +5372,7 @@ export const RULES = [
   ...PROVIDER_RULES,
   LOCKFILE_RULE,
   SQL_RULE,
+  CONNECTION_STRING_RULE,
   {
     id: 'webhook-url',
     lockfile: true,
@@ -4332,6 +5438,7 @@ export const RULES = [
     hint: SECRET_HINT,
     matchers: [
       SECRET_ASSIGNMENT_MATCHER,
+      WRAPPED_ASSIGNMENT_MATCHER,
       DEFINITION_ASSIGNMENT_MATCHER,
       PROPERTIES_BLANK_MATCHER,
       SYSTEMD_SETTING_MATCHER,
@@ -4479,15 +5586,17 @@ export const RULES = [
         pattern: ENV_SETTER_CALL,
         accept: (m, ctx) => {
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
-          const call = envSetterArguments(m.input, m.index + m[0].length, ctx.path);
+          const call = envSetterArguments(m.input, m.index + m[0].length, ctx.path, ctx);
           if (call === null) return false;
           const kind = nameKindFor(call.name, ctx);
           if (!kind) return false;
           const literal = call.literal;
           if (literal === null) return false;
           m.spanEnd = literal.end;
+          const read = callLiteralTexts(m, ctx, literal, call.valueStart); // a value over lines is judged like a heredoc; an unterminated one is reported
+          if (read.verdict !== undefined) return read.verdict;
           if (literal.interpolated && /[{}]/.test(literal.text)) return false; // an interpolated string is built from other values
-          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
+          return read.texts.some((text) => powershellValueIsSecret(kind, { text }, ctx));
         },
       },
       {
@@ -4497,10 +5606,12 @@ export const RULES = [
           if (ctx.mode === 'prose' && ctx.fenceLang(m.index) === undefined) return false;
           const kind = nameKindFor(m[2], ctx);
           if (!kind) return false;
-          const literal = callStringLiteral(m.input, m.index + m[0].length, ctx.path);
+          const literal = callStringLiteral(m.input, m.index + m[0].length, ctx.path, ctx);
           if (literal === null) return false;
           m.spanEnd = literal.end;
-          return powershellValueIsSecret(kind, { text: literal.text }, ctx);
+          const read = callLiteralTexts(m, ctx, literal, m.index + m[0].length);
+          if (read.verdict !== undefined) return read.verdict;
+          return read.texts.some((text) => powershellValueIsSecret(kind, { text }, ctx));
         },
       },
       {
@@ -4874,17 +5985,26 @@ export const RULES = [
           /(?:\.auth\(|(?<![A-Za-z0-9_$])(?:auth[ \t]{0,8}=[ \t]{0,8}\(|(?:HTTP(?:Basic|Digest|Proxy)Auth|BasicAuth|BasicCredentials|Credentials\.basic|PasswordAuthentication|UsernamePasswordCredentials|NetworkCredential|SetBasicAuth|Basic|basicAuth|basic_auth|withBasicAuth)[ \t]{0,4}\())[^,()\n]{1,200},[ \t]{0,8}(?=[@$rRbBfFuUL#]{0,3}["'\x60])/g,
         accept: (m, ctx) => {
           const start = m.index + m[0].length;
-          if (!'"\'`'.includes(m.input[start])) {
-            // a prefixed or raw literal (r"pw", @"pw", r#"pw"#): read as a whole literal
-            const literal = callStringLiteral(m.input, start, ctx.path);
-            if (literal === null || literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
+          // A backtick (Go raw strings run over lines), a Rust string, and triple quotes are read as whole literals too.
+          const whole =
+            !'"\'`'.includes(m.input[start]) ||
+            m.input[start] === '`' ||
+            (m.input[start] === '"' && /\.rs$/i.test(ctx.path)) ||
+            (m.input.startsWith('"""', start) && SPANNING_TRIPLE_QUOTES.test(ctx.path));
+          if (whole) {
+            // a prefixed or raw literal (r"pw", @"pw", r#"pw"#): read as a whole literal; one over lines is judged like a heredoc
+            const literal = callStringLiteral(m.input, start, ctx.path, ctx);
+            if (literal === null) return false;
             m.spanEnd = literal.end;
-            return isSecretValue({ kind: 'strong', value: literal.text, quoted: true, separator: '=', mode: 'config' });
+            const read = callLiteralTexts(m, ctx, literal, start);
+            if (read.verdict !== undefined) return read.verdict;
+            if (literal.text === '' || (literal.interpolated && /[{}]/.test(literal.text))) return false;
+            return read.texts.some((text) => isSecretValue({ kind: 'strong', value: text, quoted: true, separator: '=', mode: 'config', allowPath: false }));
           }
           const argument = quotedArgument(m.input, start);
           if (argument === null || argument.raw.length === 0) return false;
           m.spanEnd = argument.end;
-          return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config' });
+          return isSecretValue({ kind: 'strong', value: unescapeQuoted(argument.raw), quoted: true, separator: '=', mode: 'config', allowPath: false });
         },
       },
     ],
@@ -4924,7 +6044,7 @@ export const RULES = [
           const kind = nameKindFor(m.groups.name, ctx);
           const value = directiveValue(m.groups);
           // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
-          return kind === 'strong' && directiveIsSecret(value);
+          return kind === 'strong' && directiveIsSecret(value, { allowPath: true });
         },
       },
       {
@@ -4970,7 +6090,7 @@ export const RULES = [
           const kind = nameKindFor(m.groups.name, ctx);
           const value = directiveValue(m.groups);
           // Only names that end in a secret noun: a weak name (`password_file`, `X-Vault-Key`) usually holds a path or an id.
-          return kind === 'strong' && directiveIsSecret(value);
+          return kind === 'strong' && directiveIsSecret(value, { allowPath: true });
         },
       },
       {
@@ -4986,7 +6106,7 @@ export const RULES = [
         // Erlang application config (RabbitMQ advanced.config / rabbitmq.config, sys.config): {default_pass, <<"P">>}, {password, "P"}
         pattern: /\{[ \t\r\n]{0,16}(?<name>[a-z][A-Za-z0-9_@]{0,127})[ \t\r\n]{0,16},[ \t\r\n]{0,16}(?:<<[ \t]{0,4})?"(?<dq>(?:[^"\\\n]|\\.){0,4096})"/g,
         appliesTo: (ctx) => ctx.mode === 'config' && /\.config(?:\.src)?$|\.app\.src$/i.test(ctx.path),
-        accept: (m, ctx) => nameKindFor(m.groups.name, ctx) === 'strong' && directiveIsSecret({ text: unescapeQuoted(m.groups.dq), quoted: true }),
+        accept: (m, ctx) => nameKindFor(m.groups.name, ctx) === 'strong' && directiveIsSecret({ text: unescapeQuoted(m.groups.dq), quoted: true }, { allowPath: true }),
       },
       {
         // OpenVPN inline credentials: <auth-user-pass> / user / password / </auth-user-pass>
@@ -5051,7 +6171,7 @@ export const RULES = [
   {
     id: 'hardcoded-secret-fallback',
     description:
-      'process.env.<SECRET-like name> || "<literal>" in code, including env["X"], destructuring defaults and os.getenv("X", "<literal>") (a hardcoded default secret)',
+      'process.env.<SECRET-like name> || "<literal>" in code, including env["X"], destructuring defaults, os.getenv("X", "<literal>") and the getter/default forms of other languages (C# ??, Kotlin ?:, Java getOrDefault / orElse, Ruby ENV.fetch, PHP ?:, Rust unwrap_or, Go if v == "") (a hardcoded default secret)',
     appliesTo: (ctx) => ctx.mode === 'code',
     hint: SECRET_HINT,
     matchers: [
@@ -5065,6 +6185,23 @@ export const RULES = [
         accept: (m) => isSecretLikeName(m[1] ?? m[3]) && !m[5].includes('${'),
       },
       {
+        // process.env.NAME ?? `...` with a template literal that runs over lines (one line is read by the matcher above)
+        pattern: new RegExp(
+          String.raw`${ENV_ROOT}(?:\.([A-Za-z_$][A-Za-z0-9_$]{0,1023})|\[\s*(["'\x60])([^"'\x60\]\n]{1,1023})\2\s*\])\s*(?:\|\||\?\?)\s*(?=\x60)`,
+          'g',
+        ),
+        accept: (m, ctx) => {
+          if (!isSecretLikeName(m[1] ?? m[3])) return false;
+          const at = m.index + m[0].length;
+          const literal = callStringLiteral(m.input, at, ctx.path, ctx);
+          if (literal === null || (literal.exhausted !== true && !literal.text.includes('\n'))) return false;
+          m.spanEnd = literal.end;
+          const read = callLiteralTexts(m, ctx, literal, at);
+          if (read.verdict !== undefined) return read.verdict;
+          return read.texts.some((text) => !text.includes('${'));
+        },
+      },
+      {
         // destructuring defaults: const { NAME = "x" } = process.env, with a secret-like NAME
         pattern: new RegExp(String.raw`\{([^{}]{1,500})\}\s*=\s*${ENV_ROOT}\b`, 'g'),
         accept: (m) => {
@@ -5076,6 +6213,108 @@ export const RULES = [
         // Python defaults: os.getenv("NAME", "x") and os.environ.get("NAME", "x"), with a secret-like NAME
         pattern: /\b(?:os\.environ\.get|os\.getenv|environ\.get|getenv)\(\s*(["'])([A-Za-z0-9_]{1,1023})\1\s*,\s*(["'])([^"'\n]{1,4096})\3/g,
         accept: (m) => isSecretLikeName(m[2]),
+      },
+      // The getter/default forms of the other languages (see ENV_GETTER and the section above it): the same finding, judged the same way.
+      {
+        // C# GetEnvironmentVariable("N") ?? "v", Kotlin System.getenv("N") ?: "v", Ruby ENV["N"] || "v", PHP $_ENV["N"] ?? "v", Python ... or "v"
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_OPERATOR,
+        accept: (m, ctx) => (m.groups.op !== '//' || m.groups.getter.startsWith('$ENV')) && envDefaultIsSecret(m, ctx, m.index + m[0].length, { operator: true }),
+      },
+      {
+        // Java getenv().getOrDefault("N", "v"), Ruby ENV.fetch("N", "v") / ENV.fetch("N") { "v" }, Scala, Elixir, Dart, Laravel env("N", "v"), getEnv helpers
+        pattern: ENV_DEFAULT_ARGUMENT,
+        accept: (m, ctx) =>
+          (m.groups.block === undefined || /^ENV\.fetch$|getOrElse$/.test(m.groups.callee)) && envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Java Optional.ofNullable(System.getenv("N")).orElse("v"), Rust env::var("N").unwrap_or("v".into()) / .unwrap_or_else(|_| "v".to_string())
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_METHOD,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Java Objects.requireNonNullElse(System.getenv("N"), "v"), StringUtils.defaultIfBlank(...), MoreObjects.firstNonNull(...)
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_WRAPPER,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // getter == null ? "v" : x, getter != null ? x : "v", C# getter is { } v ? v : "v"
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_TERNARY_TEST,
+        accept: (m, ctx) => ternaryTestIsSecret(m, ctx),
+      },
+      {
+        // System.getenv("N") != null ? System.getenv("N") : "v"
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_TERNARY_ELSE,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // string.IsNullOrEmpty(Environment.GetEnvironmentVariable("N")) ? "v" : Environment.GetEnvironmentVariable("N")
+        hint: ENV_GETTER_HINT,
+        pattern: ENV_DEFAULT_TERNARY_THEN,
+        accept: (m, ctx) => ternaryThenIsSecret(m, ctx),
+      },
+      {
+        // Go: v := os.Getenv("N") ... if v == "" { v = "v" }
+        appliesTo: (ctx) => /\.go$/i.test(ctx.path),
+        pattern: ENV_GO_READ,
+        accept: (m, ctx) => goEnvDefaultIsSecret(m, ctx),
+      },
+      {
+        // Go: cmp.Or(os.Getenv("N"), "v")
+        appliesTo: (ctx) => /\.go$/i.test(ctx.path),
+        hint: /cmp\.Or/,
+        pattern: GO_CMP_OR,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Go: if v := os.Getenv("N"); v != "" { return v } return "v"
+        appliesTo: (ctx) => /\.go$/i.test(ctx.path),
+        hint: /if[ \t]/,
+        pattern: GO_IF_INIT_RETURN,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Rust: match env::var("N") { Ok(v) => v, Err(_) => "v".to_string() }
+        appliesTo: (ctx) => /\.rs$/i.test(ctx.path),
+        hint: /match/,
+        pattern: RUST_ENV_MATCH,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Python: os.environ["N"] if "N" in os.environ else "v"
+        appliesTo: (ctx) => /\.pyw?$/i.test(ctx.path),
+        hint: ENV_GETTER_HINT,
+        pattern: PY_ENV_CONDITIONAL,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Ruby: ENV.fetch "N", "v"
+        hint: /ENV\.fetch/,
+        pattern: RUBY_FETCH_BARE,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // PowerShell: $env:N ?? 'v', if ($env:N) { $env:N } else { 'v' }
+        appliesTo: (ctx) => /\.ps[md]?1$/i.test(ctx.path),
+        hint: /\$env:/i,
+        pattern: PS_ENV_DEFAULT,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length, { operator: true }),
+      },
+      {
+        appliesTo: (ctx) => /\.ps[md]?1$/i.test(ctx.path),
+        hint: /\$env:/i,
+        pattern: PS_ENV_IF_ELSE,
+        accept: (m, ctx) => envDefaultIsSecret(m, ctx, m.index + m[0].length),
+      },
+      {
+        // Java: Map<String, String> env = System.getenv(); ... env.getOrDefault("N", "v")
+        hint: /System\.getenv\(\)/,
+        pattern: JAVA_ENV_MAP_GET,
+        accept: (m, ctx) => javaEnvMapVariables(ctx, m.input).has(m.groups.v) && envDefaultIsSecret(m, ctx, m.index + m[0].length),
       },
     ],
   },
@@ -5097,6 +6336,168 @@ export const RULES = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Public PEM blocks
+// ---------------------------------------------------------------------------
+
+// A public key or a certificate is verification material: it is committed on purpose (a JWT verification key, a CA bundle, a
+// pinned server certificate), and its base64 body is as random-looking as any secret, so every name-based reader (YAML block
+// scalars, heredocs, escaped JSON / dotenv strings, name/value pairs, ...) would report it under a secret-like name. Only these
+// labels count. A PRIVATE KEY of any kind never matches (nothing in the alternation says PRIVATE), and it has a rule of its own.
+const PUBLIC_PEM_BEGIN = '-----BEGIN ';
+const PUBLIC_PEM_LABEL =
+  /((?:RSA |EC |DSA )?PUBLIC KEY|(?:NEW )?CERTIFICATE REQUEST|(?:TRUSTED |X509 )?CERTIFICATE|X509 CRL|PGP PUBLIC KEY BLOCK)-----/y;
+// Between the lines of a block: the line breaks private-key-block accepts (PEM_LINE_BREAK: real, escaped once or twice, \u000a, an XML
+// character reference, a backslash line continuation) and blanks, plus the `", "` between the elements of a JSON or JS array that holds
+// one line per element. Each repetition must consume a line break or a quoted comma, so the match stays linear.
+const PUBLIC_PEM_SEPARATOR = new RegExp(String.raw`(?:[ \t]*(?:${PEM_LINE_BREAK}|["'][ \t]*,[ \t]*(?:\r?\n[ \t]*)?["']))+[ \t]*`, 'y');
+// One body line: strict base64 ("/" may be written "\/", as PHP json_encode and org.json do). No headers (Proc-Type / DEK-Info belong
+// to encrypted private keys), and padding ends the body. The two alternatives start with different characters (linear).
+const PUBLIC_PEM_BODY_LINE = /(?:[A-Za-z0-9+]|\\?\/)+(={1,2})?/y;
+// PGP armor: header lines ("Version: GnuPG v2") before the body, and a "=XXXX" CRC-24 line after it.
+const PGP_ARMOR_HEADER = /[A-Za-z][A-Za-z-]{0,30}: [^\n\r\\"]{0,200}/y;
+const PGP_CHECKSUM = /=[A-Za-z0-9+/]{4}/y;
+// The smallest public key or certificate that exists: an Ed25519 / X25519 SubjectPublicKeyInfo is 44 bytes.
+const MIN_PUBLIC_DER_BYTES = 44;
+
+/** The first bytes of a base64 run (up to 6, from its first 8 characters), or null. */
+const base64Head = (head) => (head.length < 4 ? null : [...Buffer.from(head.slice(0, head.length - (head.length % 4)), 'base64')]);
+
+/**
+ * Is a block body with this start (`head`, base64) and this many base64 characters (`chars`, padding left out) one complete
+ * object of its kind? PEM: a DER SEQUENCE (first byte 0x30) whose encoded length is exactly the decoded body. PGP: one public-key
+ * packet (tag 6, old or new format) that fits in the body. Either way at least MIN_PUBLIC_DER_BYTES. So a password dressed in
+ * BEGIN / END lines (`-----BEGIN PUBLIC KEY-----\nMyS3cret...\n-----END PUBLIC KEY-----`) is not taken for a key.
+ */
+function publicBodyIsWhole(head, chars, pgp) {
+  const decoded = Math.floor((chars * 6) / 8);
+  const b = base64Head(head);
+  if (b === null || b.length < 2 || decoded < MIN_PUBLIC_DER_BYTES) return false;
+  if (pgp) {
+    if ((b[0] & 0x80) === 0) return false;
+    if (b[0] & 0x40) {
+      if ((b[0] & 0x3f) !== 6) return false;
+      const len = b[1] < 192 ? b[1] + 2 : b[1] < 224 && b.length > 2 ? ((b[1] - 192) << 8) + b[2] + 192 + 3 : -1;
+      return len > 0 && len <= decoded;
+    }
+    if (((b[0] >> 2) & 0x0f) !== 6) return false;
+    const type = b[0] & 3;
+    const len = type === 0 ? b[1] + 2 : type === 1 && b.length > 2 ? ((b[1] << 8) | b[2]) + 3 : -1;
+    return len > 0 && len <= decoded;
+  }
+  if (b[0] !== 0x30) return false;
+  let total = -1;
+  if (b[1] < 0x80) total = 2 + b[1];
+  else if (b[1] === 0x81 && b.length > 2) total = 3 + b[2];
+  else if (b[1] === 0x82 && b.length > 3) total = 4 + ((b[2] << 8) | b[3]);
+  else if (b[1] === 0x83 && b.length > 4) total = 5 + ((b[2] << 16) | (b[3] << 8) | b[4]);
+  return total === decoded;
+}
+
+/**
+ * Where the complete public PEM block that starts at `at` (a "-----BEGIN " index) ends: a public label, one or more base64 lines,
+ * and the END line of the same label. Returns -1 for anything else: an unclosed block, another label at the end, a stray line
+ * (a header, a non-base64 character, text after the padding), no body, or a body that is not one whole DER object of the length its
+ * header states (see publicBodyIsWhole; every DER body starts with "M" in base64). PGP armor may carry header lines and ends with a
+ * checksum line. The walk stops at the first character that is neither a separator nor base64, so it never passes another BEGIN line.
+ */
+function publicPemBlockEnd(text, at) {
+  PUBLIC_PEM_LABEL.lastIndex = at + PUBLIC_PEM_BEGIN.length;
+  const label = PUBLIC_PEM_LABEL.exec(text);
+  if (label === null) return -1;
+  const pgp = label[1] === 'PGP PUBLIC KEY BLOCK';
+  const close = `-----END ${label[1]}-----`;
+  let i = PUBLIC_PEM_LABEL.lastIndex;
+  let lines = 0;
+  let headers = 0;
+  let padded = false;
+  let head = '';
+  let chars = 0;
+  const separator = () => {
+    PUBLIC_PEM_SEPARATOR.lastIndex = i;
+    if (PUBLIC_PEM_SEPARATOR.exec(text) === null) return false;
+    i = PUBLIC_PEM_SEPARATOR.lastIndex;
+    return true;
+  };
+  for (;;) {
+    if (!separator()) return -1;
+    if (pgp && lines === 0) {
+      PGP_ARMOR_HEADER.lastIndex = i;
+      if (PGP_ARMOR_HEADER.exec(text) !== null) {
+        if ((headers += 1) > 16) return -1;
+        i = PGP_ARMOR_HEADER.lastIndex;
+        continue;
+      }
+    }
+    if (lines > 0 && pgp && text[i] === '=') {
+      PGP_CHECKSUM.lastIndex = i;
+      if (PGP_CHECKSUM.exec(text) === null) return -1;
+      i = PGP_CHECKSUM.lastIndex;
+      if (!separator() || !text.startsWith(close, i)) return -1;
+      return publicBodyIsWhole(head, chars, true) ? i + close.length : -1;
+    }
+    if (lines > 0 && !pgp && text.startsWith(close, i)) return publicBodyIsWhole(head, chars, false) ? i + close.length : -1;
+    if (padded) return -1;
+    PUBLIC_PEM_BODY_LINE.lastIndex = i;
+    const body = PUBLIC_PEM_BODY_LINE.exec(text);
+    if (body === null || (lines === 0 && !(pgp ? /[mx]/ : /M/).test(body[0][0]))) return -1;
+    const run = body[0].replace(/[\\=]/g, '');
+    if (head.length < 8) head += run.slice(0, 8 - head.length);
+    chars += run.length;
+    lines += 1;
+    padded = body[1] !== undefined;
+    i = PUBLIC_PEM_BODY_LINE.lastIndex;
+  }
+}
+
+/**
+ * The text with every complete public PEM block (PUBLIC KEY, RSA PUBLIC KEY, CERTIFICATE, a certificate chain: see
+ * publicPemBlockEnd) blanked, from its BEGIN marker to its END marker. Line breaks stay, and so do offsets and line numbers.
+ * The name-based rules read this text, so a public key is not judged as a secret under any name (a YAML public_key block, a
+ * JWT_SECRET variable that holds a PEM public key, a CA bundle in a k8s value); anything around the block (a password line after
+ * it, text glued to an escaped block) is still judged. The shape rules (private-key-block, provider tokens, URL passwords) read
+ * the original text. Linear: a failed attempt only walks separators and base64, which cannot hold the next BEGIN marker.
+ */
+export function blankPublicPemBlocks(text) {
+  if (!text.includes(PUBLIC_PEM_BEGIN)) return text;
+  const blank = (from, to) => text.slice(from, to).replace(/[^\r\n]+/g, (run) => ' '.repeat(run.length));
+  // An escaped line break written next to a block ("\n-----BEGIN", "-----END ...-----\n" in a JSON or dotenv string) goes with it,
+  // or unescaping would leave an "n" per block behind, and a chain would read as a long "n n n" value. Only blanks and \n / \r
+  // escapes on the block's own line: a password next to the block is never touched.
+  const isEscapedBreak = (i) => text[i] === '\\' && (text[i + 1] === 'n' || text[i + 1] === 'r');
+  const pieces = [];
+  let copied = 0;
+  for (let at = text.indexOf(PUBLIC_PEM_BEGIN); at !== -1; ) {
+    let end = publicPemBlockEnd(text, at);
+    if (end === -1) {
+      at = text.indexOf(PUBLIC_PEM_BEGIN, at + 1);
+      continue;
+    }
+    let start = at;
+    PUBLIC_PEM_SEPARATOR.lastIndex = copied;
+    if (copied > 0 && PUBLIC_PEM_SEPARATOR.exec(text) !== null && PUBLIC_PEM_SEPARATOR.lastIndex === at) {
+      start = copied; // the separator between two blocks of a chain, in any form a block line break may take
+    } else {
+      for (;;) {
+        if (start > copied && (text[start - 1] === ' ' || text[start - 1] === '\t')) start -= 1;
+        else if (start - 1 > copied && isEscapedBreak(start - 2)) start -= 2;
+        else break;
+      }
+    }
+    for (;;) {
+      if (text[end] === ' ' || text[end] === '\t') end += 1;
+      else if (isEscapedBreak(end)) end += 2;
+      else break;
+    }
+    pieces.push(text.slice(copied, start), blank(start, end));
+    copied = end;
+    at = text.indexOf(PUBLIC_PEM_BEGIN, end);
+  }
+  if (copied === 0) return text;
+  pieces.push(text.slice(copied));
+  return pieces.join('');
+}
 
 // ---------------------------------------------------------------------------
 // Scanning
@@ -5237,15 +6638,22 @@ function scanRanges(filePath, text) {
       return lo < fences.length && fences[lo].start <= index ? fences[lo].lang : undefined;
     },
   };
+  // Public keys and certificates are not judged as secrets by the name-based rules (see blankPublicPemBlocks). The rules flagged
+  // `lockfile: true` are the shape rules (PEM private keys, provider-shaped tokens, URL passwords, webhook URLs): they never look
+  // at a name, so they keep reading the original text, and a private key or a token stays a finding whatever name holds it. The
+  // blanked text has the same length and line breaks, so ctx's line index and fences serve both; its look-behind (hasBefore) reads
+  // the original text, which can only make a rule look at more, never less.
+  const judged = lockfile ? text : blankPublicPemBlocks(text);
   for (const rule of RULES) {
     if (lockfile && !rule.lockfile) continue; // lockfiles: targeted rules only (see LOCKFILE_NAMES)
     if (rule.appliesTo && !rule.appliesTo(ctx)) continue;
+    const input = rule.lockfile ? text : judged;
     // The name hint is a speed-up for ordinary files; a credential file is always scanned in full.
-    if (rule.hint && !strict && !rule.hint.test(text)) continue;
+    if (rule.hint && !strict && !rule.hint.test(input)) continue;
     for (const matcher of rule.matchers) {
       if (matcher.appliesTo && !matcher.appliesTo(ctx)) continue;
-      if (matcher.hint && !matcher.hint.test(text)) continue;
-      for (const match of text.matchAll(matcher.pattern)) {
+      if (matcher.hint && !matcher.hint.test(input)) continue;
+      for (const match of input.matchAll(matcher.pattern)) {
         newlineIndex();
         const line = lineAt(newlines, match.index);
         const key = `${rule.id}:${line}`;
@@ -5728,13 +7136,15 @@ function objectHead(root, oid) {
  * and reports a finding only when no parent's version of that file has the same finding (same rule, same matched text, compared
  * by digest and never printed). A credential a parent already held is that parent's, reported wherever the parent's side is
  * scanned; blaming it on the merge would blame a branch for commits that come in from its base.
- * @returns {{hits: Map<string, object>, oversize: number, oversizeLimits: Map<number, number>, unscanned: number}}
+ * A merge result of the scanner's own test files (isScannerFixture) is left out like any other version of them, and counted.
+ * @returns {{hits: Map<string, object>, oversize: number, oversizeLimits: Map<number, number>, unscanned: number, skipped: Record<string, number>}}
  */
 function scanMergeResults(root, merges) {
   const hits = new Map();
   const oversizeLimits = new Map();
   let oversize = 0;
   let unscanned = 0;
+  const skipped = {};
   for (let from = 0; from < merges.length; from += MERGE_BATCH) {
     const batch = merges.slice(from, from + MERGE_BATCH);
     const run = spawnSync('git', ['diff-tree', '--stdin', '-m', '-r', '-z', '--no-renames', '--raw'], {
@@ -5753,6 +7163,10 @@ function scanMergeResults(root, merges) {
         if (entry.status === 'D' || entry.newMode === '160000') continue;
         const others = perParent.map((group) => group.get(key));
         if (others.some((other) => other === undefined || other.status === 'D')) continue; // equal to a parent's version
+        if (isScannerFixture(displayPath(entry.raw))) {
+          skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
+          continue;
+        }
         candidates.push({
           commit,
           file: displayPath(entry.raw),
@@ -5801,7 +7215,7 @@ function scanMergeResults(root, merges) {
       }
     }
   }
-  return { hits, oversize, oversizeLimits, unscanned };
+  return { hits, oversize, oversizeLimits, unscanned, skipped };
 }
 
 /**
@@ -5813,21 +7227,31 @@ function scanMergeResults(root, merges) {
  * @returns {Promise<{hits: {commit: string, path: string, rule: string, count: number}[], commits: number, oversize: number, oversizeLimits: Map<number, number>, unscanned: number, skipped: Record<string, number>}>}
  * `unscanned` counts every file version whose added lines were not examined (oversize, or content git would not show).
  * `skipped` counts the file versions left out on purpose, as the tree scan does: a verified binary (see isBinaryContent, checked
- * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`.
+ * on the version's own first 8 KB, so a binary asset over the size limit does not count as oversize) is `binary`; a version of
+ * the scanner's own test files (see isScannerFixture) is `scanner-fixture`.
  * `revisions` selects the commits (default every ref; range mode passes `<head> --not <base>`, so the walk and the diffs
- * cost what the range holds, not what the repository holds); `maxCount` limits the walk (range mode with an unknown base).
+ * cost what the range holds, not what the repository holds); `stdinRevisions` are more of them, one per line, written to git's
+ * standard input (`--stdin`) so that any number of them fits (an all-zero base subtracts every other branch tip as `^<id>`);
+ * `maxCount` limits the walk (range mode with an all-zero base).
  */
-async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}) {
+async function scanHistory(root, { revisions = ['--all'], stdinRevisions = null, maxCount = null } = {}) {
   const child = spawn(
     'git',
     [
       '-c', 'core.quotepath=false',
-      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
-      '-p', '--cc', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
+      'log', ...(maxCount === null ? [] : [`--max-count=${maxCount}`]), ...(stdinRevisions === null ? [] : ['--stdin']),
+      '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--text',
+      // Explicit prefixes: the parser strips "b/" from each "+++ " line, and a user's diff.noprefix (or mnemonicPrefix /
+      // srcPrefix / dstPrefix) would otherwise drop it, so that a real top-level b/ directory got stripped instead.
+      '-p', '--cc', '--src-prefix=a/', '--dst-prefix=b/', `-U${HISTORY_CONTEXT}`, '--format=commit %H%nparents %P',
       ...revisions, '--',
     ],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+    { cwd: root, stdio: [stdinRevisions === null ? 'ignore' : 'pipe', 'pipe', 'pipe'] },
   );
+  if (stdinRevisions !== null) {
+    child.stdin.on('error', () => {}); // a git that exits early reports through its status, not through EPIPE here
+    child.stdin.end(stdinRevisions.map((r) => `${r}\n`).join(''));
+  }
   let stderr = '';
   child.stderr.on('data', (chunk) => {
     if (stderr.length < 4096) stderr += chunk.toString('utf8');
@@ -5883,6 +7307,10 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   const flush = () => {
     if (commit && !file && addedAny) {
       unscanned += 1; // added lines under a header this parser could not attribute to a path
+    } else if (commit && file && addedAny && isScannerFixture(file)) {
+      // The scanner's own test file (exact path, see isScannerFixture): left out by design whatever its size, counted and
+      // named in the report, reviewed by hand. The path is matched, never the content, so no fixture value is ever judged.
+      skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
     } else if (commit && file && addedAny) {
       let text = lines.join('\n');
       // UTF-16 files (and binary blobs) show up with NUL bytes; drop them so ASCII content stays scannable.
@@ -5951,7 +7379,8 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
     } else if (!inHunk && line.startsWith('Binary files ')) {
       // git refused to show this version's content (for example above core.bigFileThreshold). Only a verified binary is
       // left out (counted, as the tree scan counts it); anything else, or a path this parser cannot name, is unscanned.
-      if (headerPath !== null && versionIsVerifiedBinary(root, commit, headerPath)) skipped.binary = (skipped.binary ?? 0) + 1;
+      if (headerPath !== null && isScannerFixture(headerPath)) skipped[SCANNER_FIXTURE_REASON] = (skipped[SCANNER_FIXTURE_REASON] ?? 0) + 1;
+      else if (headerPath !== null && versionIsVerifiedBinary(root, commit, headerPath)) skipped.binary = (skipped.binary ?? 0) + 1;
       else unscanned += 1;
     } else if (line.startsWith('@@')) {
       inHunk = true;
@@ -6048,6 +7477,7 @@ async function scanHistory(root, { revisions = ['--all'], maxCount = null } = {}
   const merged = scanMergeResults(root, merges);
   for (const [key, entry] of merged.hits) if (!hits.has(key)) hits.set(key, entry);
   for (const [limit, n] of merged.oversizeLimits) oversizeLimits.set(limit, (oversizeLimits.get(limit) ?? 0) + n);
+  for (const [reason, n] of Object.entries(merged.skipped)) skipped[reason] = (skipped[reason] ?? 0) + n;
   return { hits: [...hits.values()], commits, oversize: oversize + merged.oversize, oversizeLimits, unscanned: unscanned + merged.unscanned, skipped };
 }
 
@@ -6115,9 +7545,24 @@ export function formatUnreadableReport(paths) {
   ].join('\n');
 }
 
+/**
+ * The one line that names the versions of the scanner's own test files a history or range scan left out (see isScannerFixture),
+ * or an empty string when there were none. It is part of the report so the exemption is never silent.
+ */
+export function formatFixtureNote(skipped = {}) {
+  const n = skipped[SCANNER_FIXTURE_REASON] ?? 0;
+  if (n === 0) return '';
+  return (
+    `note: ${n} version${n === 1 ? '' : 's'} of the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js) ` +
+    `${n === 1 ? 'was' : 'were'} not scanned: they hold secret-shaped fixtures by design and are reviewed by hand (the tree scan still covers them).`
+  );
+}
+
 /** Format history-scan hits: commit, path, rule and counts only. */
-export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history', oversizeLimits = undefined } = {}) {
+export function formatHistoryReport(hits, { commits = 0, shallow = false, oversize = 0, unscanned = oversize, label = '--history', oversizeLimits = undefined, skipped = {} } = {}) {
   const lines = [];
+  const fixtureNote = formatFixtureNote(skipped);
+  if (fixtureNote !== '') lines.push(fixtureNote, '');
   if (shallow) {
     lines.push(
       'warning: this is a shallow clone, so only part of the history was scanned.',
@@ -6157,14 +7602,23 @@ const skippedNote = (skipped) => {
 // CLI
 // ---------------------------------------------------------------------------
 
+// The most commits --range reads for an all-zero base (see newBranchRevisions). With no other branch to subtract, a new branch
+// can stand for the whole repository; that is --history's job, and an unbounded walk would run into the CI step's timeout. A
+// branch with more new commits than this exits 2 (incomplete), never "no hits", after reporting any hit in the newest ones.
+const NEW_BRANCH_MAX_COMMITS = 2000;
+
 const USAGE = `Usage: node scripts/check-secrets.mjs [--history | --range <base>..<head>]
 
   (no flags)  scan all git-tracked text files; exit 1 on any finding
   --history   scan added lines of every commit on every ref (owner-run, not for CI)
   --range     scan added lines of the commits reachable from <head> but not from <base> (what CI runs on a pull
               request or push: catches a secret committed and removed again inside the range). Needs full history:
-              a shallow clone or a commit that is not present exits 2. An all-zero <base> (a new branch) scans the
-              <head> commit only.
+              a shallow clone or a commit that is not present exits 2. An all-zero <base> (a new or recreated
+              branch) scans the commits reachable from <head> and from no branch under refs/remotes/origin/ that
+              does not contain <head> (a branch at or past <head> never hides it; with no other branch, every
+              commit reachable from <head>); more than ${NEW_BRANCH_MAX_COMMITS} exits 2. Recreating a branch at exactly
+              another branch's tip therefore re-audits its whole history: check known old hits by hand with
+              --range <fork-point>..<head>.
   --help      show this message
 
 The report lists file path, line number and rule name only. Matched text is never printed.
@@ -6199,11 +7653,40 @@ function resolveCommit(root, revision) {
 }
 
 /**
+ * The revisions an all-zero --range base stands for: <head>, minus the tip of every branch under refs/remotes/origin/ that does NOT
+ * contain <head> (`git for-each-ref --no-contains`). A push that creates a branch, or deletes and recreates it, has no "before"
+ * commit, and scanning only its tip would pass a value that an earlier pushed commit added and the tip removed: the tree is clean
+ * and the range looks clean. What such a push introduced is what no older branch on the remote already holds. The clone cannot
+ * tell a branch that existed before the push from one created with it or after it (pushed in the same `git push`, or before a
+ * re-run): a branch that contains <head> (the pushed branch itself, origin/HEAD, a descendant such as a `next` branch built on the
+ * new tip, or another branch at exactly <head>) may be one of those, so it never subtracts anything. Only branches that do not
+ * reach <head> do, and they cannot hide <head> itself. The price is a fail-closed full walk when main is recreated at exactly
+ * another branch's tip (`git push origin develop:main`): that re-audits everything reachable from it (capped, see runRange).
+ * With no such branch at all (a first push, a clone of a one-branch repository, no `origin` remote) every commit reachable from
+ * <head> is new. Leaving a ref out only ever widens the walk, so anything that is not a plain commit id (a ref at a tag or tree
+ * object, a line this cannot parse) is left out. The tips go to git on standard input (`^<id>` lines), never on the command line,
+ * so a remote with tens of thousands of branches cannot overflow the argument list.
+ * @returns {{revisions: string[], stdinRevisions: string[], others: number}} the `git log` revisions (command line and standard
+ * input), and how many other branch tips they subtract
+ */
+function newBranchRevisions(root, head) {
+  const out = git(['for-each-ref', `--no-contains=${head}`, '--format=%(objecttype) %(objectname)', 'refs/remotes/origin/'], root).toString('utf8');
+  const tips = new Set();
+  for (const line of out.split('\n')) {
+    const match = /^commit ([0-9a-f]{40}(?:[0-9a-f]{24})?)$/.exec(line);
+    if (match && match[1] !== head) tips.add(match[1]);
+  }
+  return { revisions: [head], stdinRevisions: [...tips].map((tip) => `^${tip}`), others: tips.size };
+}
+
+/**
  * --range <base>..<head>: scan the added lines of the commits reachable from head and not from base (`git log head --not base`,
- * so base need not be an ancestor: a pull request is judged by what it adds, wherever its base has moved to). Same reader
- * as --history (added-line logic, split-pair context, lockfile rules, --cc for merges) and the same fail-closed semantics:
- * hits exit 1; an unresolvable revision, a shallow clone or an unscanned file version exit 2; a range without commits is clean.
- * The output holds commit short ids, paths, rule names and counts, never matched text.
+ * so base need not be an ancestor: a pull request is judged by what it adds, wherever its base has moved to). An all-zero base
+ * (a new or recreated branch) stands for every other branch of origin (see newBranchRevisions), and that walk is capped at
+ * NEW_BRANCH_MAX_COMMITS. Same reader as --history (added-line logic, split-pair context, lockfile rules, --cc for merges) and
+ * the same fail-closed semantics: hits exit 1; an unresolvable revision, a shallow clone, an unscanned file version or a capped
+ * walk exit 2; a range without commits is clean. The output holds commit short ids, paths, rule names and counts, never
+ * matched text.
  */
 async function runRange(spec, { cwd, stdout, stderr }) {
   const parts = /^([^\s.][^\s]*?)\.\.([^\s.][^\s]*)$/.exec(spec);
@@ -6237,20 +7720,64 @@ async function runRange(spec, { cwd, stdout, stderr }) {
       return 2;
     }
   }
+  // A normal base: what head has and base does not. An all-zero base: what no other branch of origin holds, counted first (one
+  // past the cap, which is cheap) so that a walk cut at the cap is known to be cut and never reported as complete.
+  let revisions = [head, '--not', base];
+  let stdinRevisions = null;
+  let others = 0;
+  let truncated = false;
+  if (newRef) {
+    ({ revisions, stdinRevisions, others } = newBranchRevisions(root, head));
+    const count = spawnSync('git', ['rev-list', '--count', `--max-count=${NEW_BRANCH_MAX_COMMITS + 1}`, '--stdin', ...revisions, '--'], {
+      cwd: root,
+      input: stdinRevisions.map((r) => `${r}\n`).join(''),
+      maxBuffer: 1024 * 1024,
+    });
+    if (count.error || count.status !== 0) throw new Error('git rev-list failed while counting the commits new to this branch');
+    const counted = count.stdout.toString('utf8').trim();
+    if (!/^\d+$/.test(counted)) throw new Error('git rev-list printed a count this scanner cannot parse');
+    truncated = Number(counted) > NEW_BRANCH_MAX_COMMITS;
+  }
   const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(
     root,
-    newRef ? { revisions: [head], maxCount: 1 } : { revisions: [head, '--not', base] },
+    newRef ? { revisions, stdinRevisions, maxCount: NEW_BRANCH_MAX_COMMITS } : { revisions },
   );
-  const scope = newRef ? 'the new branch\'s tip commit only (the base is all zeros, so no earlier commit is known)' : `${commits} commit${commits === 1 ? '' : 's'} in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}`;
+  const plural = commits === 1 ? '' : 's';
+  const headShort = printable(headRevision).slice(0, 12);
+  const newWhat = others > 0 ? 'new to this branch (reachable from no older branch under refs/remotes/origin/)' : `reachable from ${headShort}`;
+  let scope = `${commits} commit${plural} in ${baseRevision.slice(0, 12)}..${headShort}`;
+  if (newRef) {
+    scope =
+      others > 0
+        ? `${commits} commit${plural} new to this branch (reachable from ${headShort} and from none of the ${others} other branch tip${others === 1 ? '' : 's'} under refs/remotes/origin/ that do not contain it; the base is all zeros)`
+        : `all ${commits} commit${plural} reachable from ${headShort} (the base is all zeros and no branch under refs/remotes/origin/ without ${headShort} is known)`;
+  }
+  const cut =
+    `the base is all zeros and more than ${NEW_BRANCH_MAX_COMMITS} commits are ${newWhat}, so only the newest ${NEW_BRANCH_MAX_COMMITS} were scanned ` +
+    '(NEW_BRANCH_MAX_COMMITS). Run --history for the whole history, or --range with the commit the branch was created from as <base>.';
   if (hits.length > 0) {
-    stderr.write(`${formatHistoryReport(hits, { commits, oversize, oversizeLimits, unscanned, label: '--range' })}\n`);
+    stderr.write(`${formatHistoryReport(hits, { commits, oversize, oversizeLimits, unscanned, label: '--range', skipped })}\n`);
+    if (truncated) stderr.write(`warning: ${cut}\n`);
     return 1;
   }
-  if (unscanned > 0) {
-    stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n  ${describeUnscanned(unscanned, oversize, oversizeLimits)}\n`);
+  // An audit that did not look at everything is never reported as clean.
+  const gaps = [];
+  if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize, oversizeLimits));
+  if (truncated) gaps.push(cut);
+  const fixtureNote = formatFixtureNote(skipped);
+  if (gaps.length > 0) {
+    // The fixture exemption is named in every result, an incomplete one included.
+    if (fixtureNote !== '') stderr.write(`${fixtureNote}\n`);
+    stderr.write(`check-secrets --range: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
     return 2;
   }
-  stdout.write(commits === 0 ? `check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headRevision.slice(0, 12)}, nothing to scan\n` : `check-secrets --range: no hits in ${scope}${skippedNote(skipped)}\n`);
+  if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
+  if (commits === 0) {
+    // Never with an all-zero base: a subtracted branch does not contain <head>, so <head> itself is always walked.
+    stdout.write(`check-secrets --range: no commits in ${baseRevision.slice(0, 12)}..${headShort}, nothing to scan\n`);
+    return 0;
+  }
+  stdout.write(`check-secrets --range: no hits in ${scope}${skippedNote(skipped)}\n`);
   return 0;
 }
 
@@ -6285,17 +7812,20 @@ export async function main(
       const shallow = git(['rev-parse', '--is-shallow-repository'], root).toString('utf8').trim() === 'true';
       const { hits, commits, oversize, oversizeLimits, unscanned, skipped } = await scanHistory(root);
       if (hits.length > 0) {
-        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned })}\n`);
+        stderr.write(`${formatHistoryReport(hits, { commits, shallow, oversize, oversizeLimits, unscanned, skipped })}\n`);
         return 1;
       }
       // An audit that did not look at everything is never reported as clean.
       const gaps = [];
       if (unscanned > 0) gaps.push(describeUnscanned(unscanned, oversize, oversizeLimits));
       if (shallow) gaps.push('this is a shallow clone, so only part of the history was available. Run "git fetch --unshallow" or scan a full clone.');
+      const fixtureNote = formatFixtureNote(skipped);
       if (gaps.length > 0) {
+        if (fixtureNote !== '') stderr.write(`${fixtureNote}\n`);
         stderr.write(`check-secrets --history: INCOMPLETE, not a clean result (${commits} commits read, nothing found in them).\n${gaps.map((g) => `  ${g}`).join('\n')}\n`);
         return 2;
       }
+      if (fixtureNote !== '') stdout.write(`${fixtureNote}\n`);
       stdout.write(`check-secrets --history: no hits in ${commits} commits${skippedNote(skipped)}\n`);
       return 0;
     }

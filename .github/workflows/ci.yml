@@ -82,9 +82,17 @@ jobs:
       # push, and that value is still in the pushed history. This step scans the ADDED lines of every commit in the range:
       #   pull_request  base.sha..head.sha (commits reachable from the PR head and not from its base; a fork's head commit
       #                 arrives through the PR merge commit that checkout fetches, and is present with fetch-depth 0)
-      #   push          before..sha (a new branch has an all-zero "before": only the pushed tip commit is scanned)
+      #   push          before..sha (a new or recreated branch has an all-zero "before": the step scans the commits reachable
+      #                 from sha and from no branch under refs/remotes/origin/ that does not contain sha, which the full fetch
+      #                 provides; a branch at or past sha (origin/main itself, or one pushed with it) never hides it. With no
+      #                 such branch it scans every commit reachable from sha. Either way more than 2,000 commits exits 2 rather
+      #                 than passing on a partial walk)
       # A commit that is not in the clone (a force-push removed the old tip, a fetch was partial) or a shallow clone fails the
       # step with exit code 2 and a message. It never passes silently and never falls back to the full-history audit.
+      # The one path this step does not read is the scanner's own test files (app/src/lib/__tests__/checkSecrets*.test.js, exact
+      # paths): they hold secret-shaped fixtures by design, and a rule added later in a PR can match a fixture line an earlier commit
+      # of the same PR added and then rewrote, which history cannot fix. Those versions are counted and named in a "note:" line and
+      # the files are reviewed by hand, like the scanner and this workflow (SECURITY_NOTICE.md). The tip scan above still reads them.
       # Event values reach the script only through env vars, are checked to be plain commit ids, and are quoted.
       - name: Scan commits in this change for secrets
         env:
