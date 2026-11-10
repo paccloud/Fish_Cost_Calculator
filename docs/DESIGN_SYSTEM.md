@@ -1,5 +1,7 @@
 # Design system notes
 
+> **Direction:** [`STYLE_GUIDE.md`](STYLE_GUIDE.md) (November 2026) sets where the look, words and navigation are going. This file describes how the calculator is built today.
+
 Supersedes the navy/rust direction in `docs/superpowers/specs/2026-03-27-branding-redesign-design.md`
 (replaced by the teal/terracotta/yellow brand in July 2026).
 
