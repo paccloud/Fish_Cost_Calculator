@@ -18,7 +18,15 @@ const raw = readFileSync(input, 'utf8');
 const lines = raw.split('\n');
 const cells = (line) => line.split('|').slice(1, -1).map((c) => c.trim());
 const plain = (s) => s.replace(/\[\^[^\]]*\]/g, '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
-const between = (start, end) => { const a = lines.findIndex((l) => l.trim() === start); const b = lines.findIndex((l, i) => i > a && l.trim() === end); return lines.slice(a + 1, b === -1 ? undefined : b); };
+// Both headings must be there and in order. A saved error page, or a copy with a heading missing,
+// would otherwise give empty tables or run one annex into the next under the wrong state.
+const fail = (msg) => { console.error(`${msg}\nNothing written.`); process.exit(1); };
+const between = (start, end) => {
+  const a = lines.findIndex((l) => l.trim() === start);
+  const b = lines.findIndex((l, i) => i > a && l.trim() === end);
+  if (a === -1 || b === -1) fail(`${input}: could not find "${start}" followed by "${end}". Is this the regulation's text?`);
+  return lines.slice(a + 1, b);
+};
 
 function codeTable(block, columns) {
   return block.filter((l) => l.startsWith('|') && !/^\|\s*-/.test(l)).map(cells).filter((c) => c.length === columns && /^[A-Z]{3}$/.test(c[0])).map((c) => c.map(plain));
@@ -53,6 +61,15 @@ const rows = [
   ...factors(between('## ANNEX XIII', '## ANNEX XIV'), 'fresh salted', 'XIII'),
   ...factors(between('## ANNEX XIV', '## ANNEX XV'), 'frozen', 'XIV'),
 ];
+
+const byAnnex = (a) => rows.filter((r) => r.annex === a).length;
+if (presentations.length < 20 || !presentations.some((p) => p.code === 'WHL') || !presentations.some((p) => p.code === 'GUT')) fail(`Only ${presentations.length} presentation codes found, or WHL/GUT missing.`);
+if (states.length < 5 || !states.some((s) => s.code === 'FRE')) fail(`Only ${states.length} state codes found, or FRE missing.`);
+if (byAnnex('XII') < 50 || byAnnex('XIII') < 1 || byAnnex('XIV') < 50) fail(`Too few factors: XII ${byAnnex('XII')}, XIII ${byAnnex('XIII')}, XIV ${byAnnex('XIV')}.`);
+const known = new Set(presentations.map((p) => p.code));
+const strange = [...new Set(rows.flatMap((r) => r.presentation.replace(/-C$/, '').split('+')).filter((c) => !known.has(c)))];
+if (strange.length) fail(`Factors use presentation codes that Annex I does not list: ${strange.join(', ')}.`);
+if (rows.some((r) => !(r.factor >= 1))) fail('A conversion factor below 1 was read; live weight cannot be less than product weight.');
 
 const provenance = {
   regulation: 'Commission Implementing Regulation (EU) 2025/2196 of 17 October 2025',

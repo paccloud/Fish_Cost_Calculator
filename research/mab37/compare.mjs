@@ -93,11 +93,16 @@ export function compareSpecies(appEntry, sourceRows) {
     const s = src.find((x) => !x.used && looseKey(x.from) === looseKey(a.from) && looseKey(x.to) === looseKey(a.to));
     if (!s) continue;
     take(a, s);
-    out.reworded.push({ app: a, source: s, valuesMatch: a.average === s.average && sameRange(a.range, s.range) });
+    // A different number is a different number however the row is worded, so it is counted there.
+    if (a.average === s.average && sameRange(a.range, s.range)) out.reworded.push({ app: a, source: s });
+    else out.valueDiffers.push({ app: a, source: s, reworded: true });
   }
   // 3. same product and the same numbers, under a different starting form: the two-column misread
   for (const a of app.filter((x) => !x.used)) {
-    const s = src.find((x) => !x.used && looseKey(x.to) === looseKey(a.to) && x.average === a.average && sameRange(x.range, a.range));
+    // The bulletin names a cured product with the form it ends in ("Round → Salted D/H-Off"); the
+    // app split that into a starting form and a bare product ("D/H-Off → Salted").
+    const curedAs = looseKey(`${a.to} ${a.from}`);
+    const s = src.find((x) => !x.used && (looseKey(x.to) === looseKey(a.to) || looseKey(x.to) === curedAs) && looseKey(x.from) !== looseKey(a.from) && x.average === a.average && sameRange(x.range, a.range));
     if (!s) continue;
     take(a, s);
     out.wrongFrom.push({ app: a, source: s });
@@ -138,7 +143,7 @@ async function main() {
   md.push('| | Rows |', '|---|---:|');
   md.push(`| Same starting form, product and numbers | ${totals.same} |`);
   md.push(`| Same row and numbers, spelled differently (for example \`SIB\` for \`S/B\`) | ${totals.spellingOnly} |`);
-  md.push(`| Same row, worded differently (plural, punctuation) | ${totals.reworded} |`);
+  md.push(`| Same row and numbers, worded differently (plural, punctuation) | ${totals.reworded} |`);
   md.push(`| **Numbers differ** | ${totals.valueDiffers} |`);
   md.push(`| **Right product and numbers, wrong starting form** | ${totals.wrongFrom} |`);
   md.push(`| **In the app, not found in the matched table** | ${totals.onlyInApp} |`);
@@ -165,11 +170,11 @@ async function main() {
     if (!n && p.match.tables.length) continue;
     md.push(`### ${p.name}`, '');
     md.push(`Matched to: ${p.match.tables.length ? p.match.tables.map((k) => `**${k}**`).join(', ') : '_nothing_'} (${p.match.how}).`, '');
-    for (const d of r.valueDiffers) md.push(`- Numbers differ. App: ${line(d.app)}. Bulletin \`${d.source.id}\`: ${line(d.source)}.`);
+    for (const d of r.valueDiffers) md.push(`- Numbers differ${d.reworded ? ' (and the row is worded differently)' : ''}. App: ${line(d.app)}. Bulletin \`${d.source.id}\`: ${line(d.source)}.`);
     for (const d of r.wrongFrom) md.push(`- Wrong starting form. App: ${line(d.app)}. Bulletin \`${d.source.id}\`: ${line(d.source)}.`);
     for (const d of r.onlyInApp) md.push(`- Only in the app: ${line(d)}.`);
     for (const d of r.onlyInSource) md.push(`- Missing from the app. Bulletin \`${d.id}\`: ${line(d)}.`);
-    for (const d of r.reworded) md.push(`- Worded differently${d.valuesMatch ? '' : ', and the numbers differ'}. App: ${line(d.app)}. Bulletin \`${d.source.id}\`: ${line(d.source)}.`);
+    for (const d of r.reworded) md.push(`- Worded differently. App: ${line(d.app)}. Bulletin \`${d.source.id}\`: ${line(d.source)}.`);
     if (r.spellingOnly.length) md.push(`- ${r.spellingOnly.length} row(s) differ only in spelling: ${[...new Set(r.spellingOnly.map((d) => `\`${d.app.to}\` for \`${d.source.to}\``))].join(', ')}.`);
     md.push('');
   }

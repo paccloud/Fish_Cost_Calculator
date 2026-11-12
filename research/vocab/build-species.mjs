@@ -42,13 +42,17 @@ for (const r of asfis) {
 const corrections = JSON.parse(readFileSync(join(HERE, 'corrections.json'), 'utf8'));
 const dataset = JSON.parse(readFileSync(join(HERE, '..', 'mab37', 'mab37.json'), 'utf8'));
 
-function lookup(printed) {
-  const fixed = corrections[printed];
-  const name = fixed?.name ?? printed;
-  const genusOnly = /\bspp?\.?$/.test(name.trim()) || !name.trim().includes(' ');
-  let hit = genusOnly ? byGenus.get(key(name)) : byName.get(key(name));
+// `misprint` is the bulletin's own spelling where the transcription had to correct it to read it
+// ("Haliotus" for Haliotis). It is kept as `printed`, so "as printed" is only said of a name that is.
+function lookup(read, misprint = null) {
+  const printed = misprint ?? read;
+  const fixed = corrections[read] ?? (misprint ? { name: read, why: 'Misspelled in the bulletin.' } : undefined);
+  const name = fixed?.name ?? read;
+  const genusOnly = /\bspp?\.?$/.test(name.trim());
+  // An exact name first: ASFIS lists some higher taxa as a single word ("Anguilliformes"), with no "spp".
+  let hit = genusOnly ? byGenus.get(key(name)) : byName.get(key(name)) ?? (name.trim().includes(' ') ? undefined : byGenus.get(key(name)));
   let match = hit ? (fixed ? 'corrected name' : 'as printed') : null;
-  if (!hit && !genusOnly) { hit = byGenus.get(key(name.split(' ')[0])); if (hit) match = 'genus only'; }
+  if (!hit && !genusOnly && name.trim().includes(' ')) { hit = byGenus.get(key(name.split(' ')[0])); if (hit) match = 'genus only'; }
   if (!hit) return { printed, ...(fixed ? { corrected: fixed.name, why: fixed.why } : {}), asfis: null, match: 'none' };
   const w = worms.get(hit.code);
   return {
@@ -83,7 +87,9 @@ for (const row of dataset.rows) {
       entries.push({ common_name: m ? m[1] : listed, ...lookup(m ? m[2] : listed) });
     }
   } else if (row.scientific_name) {
-    for (const name of splitNames(row.scientific_name)) entries.push({ common_name: row.species, ...lookup(name) });
+    const names = splitNames(row.scientific_name);
+    const asPrinted = row.scientific_name_as_printed ? splitNames(row.scientific_name_as_printed) : names;
+    names.forEach((name, i) => entries.push({ common_name: row.species, ...lookup(name, asPrinted.length === names.length && asPrinted[i] !== name ? asPrinted[i] : null) }));
   }
   tables.set(table, { table, pdf_page: row.pdf_page, taxa: entries });
 }

@@ -47,6 +47,28 @@ export function loadPages(dir = PAGES) {
   return files.map((file) => ({ file, page: JSON.parse(readFileSync(join(dir, file), 'utf8')) }));
 }
 
+// The tables are on PDF pages 5 to 16, two printed pages each. A page file that is missing, or that
+// says it is a different page than its name does, would drop or misplace whole tables without any
+// row looking wrong.
+export const FIRST_PAGE = 5;
+export const LAST_PAGE = 16;
+export function validateSet(pages, dir = PAGES) {
+  const problems = [];
+  const have = new Map(pages.map(({ file, page }) => [file, page]));
+  for (let n = FIRST_PAGE; n <= LAST_PAGE; n++) {
+    for (const side of ['left', 'right']) {
+      const file = `page-${String(n).padStart(2, '0')}-${side}.json`;
+      const page = have.get(file);
+      if (!page) { problems.push(`${file}: missing`); continue; }
+      if (page.pdf_page !== n || page.side !== side) problems.push(`${file}: says it is page ${page.pdf_page} ${page.side}`);
+      have.delete(file);
+    }
+  }
+  for (const file of have.keys()) problems.push(`${file}: outside PDF pages ${FIRST_PAGE} to ${LAST_PAGE}`);
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.json') && !/^page-\d{2}-(left|right)\.json$/.test(f))) problems.push(`${file}: not named page-NN-left.json or page-NN-right.json`);
+  return problems;
+}
+
 export function build(pages) {
   const rows = [];
   const notes = [];
@@ -86,7 +108,7 @@ const csvCell = (v) => {
 
 function main() {
   const pages = loadPages();
-  const problems = pages.flatMap(({ file, page }) => validatePage(page, file));
+  const problems = [...validateSet(pages), ...pages.flatMap(({ file, page }) => validatePage(page, file))];
   if (problems.length) {
     console.error(problems.join('\n'));
     console.error(`\n${problems.length} problem(s). Nothing written.`);

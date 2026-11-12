@@ -8,14 +8,16 @@
       "taxa": [
         {
           "common_name": "Abalone, Pinto",
-          "printed": "Haliotis kamtschatkana",
+          "printed": "Haliotus kamtschatkana",
+          "corrected": "Haliotis kamtschatkana",
+          "why": "Misspelled in the bulletin.",
           "asfis": "AIZ",
           "fao_name": "Threaded abalone",
           "fao_scientific_name": "Haliotis kamtschatkana",
           "isscaap_group": "52",
           "aphia_id": 405014,
           "accepted_name": "Haliotis kamtschatkana",
-          "match": "as printed"
+          "match": "corrected name"
         }
       ]
     },
@@ -277,8 +279,13 @@
         {
           "common_name": "Eels",
           "printed": "Anguilliformes",
-          "asfis": null,
-          "match": "none"
+          "asfis": "XAX",
+          "fao_name": "Eels, morays, congers NEI",
+          "fao_scientific_name": "Anguilliformes",
+          "isscaap_group": "34",
+          "aphia_id": 10295,
+          "accepted_name": "Anguilliformes",
+          "match": "as printed"
         }
       ]
     },

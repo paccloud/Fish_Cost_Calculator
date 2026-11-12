@@ -13,11 +13,11 @@ Evidence is labelled throughout. **Checked** means read from the source or measu
 
 | Question | Answer |
 |---|---|
-| Is the app's data right? | Mostly. 624 of its 655 conversions match the bulletin. **22 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 63 printed rows are missing.** Every one is listed in [`research/mab37/comparison.md`](../../research/mab37/comparison.md). Nothing in the app has been changed yet. |
+| Is the app's data right? | Mostly. 623 of its 655 conversions match the bulletin. **23 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 56 printed rows are missing.** Every one is listed in [`research/mab37/comparison.md`](../../research/mab37/comparison.md). Nothing in the app has been changed yet. |
 | Other datasets? | Yes. The best is the **US federal table of recovery rates for Alaska groundfish** (public domain, same species). The **EU's official conversion factors** are already extracted here: 250 factors for 63 species. USDA tables cover meat, poultry and produce. |
-| An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 81 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
+| An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 82 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
 | Implement GS1? | **Be compatible with it; do not issue it.** Build the data in the shape of the seafood traceability standard (GDST, which is built on GS1's event standard), with optional fields for a fisherman's own GS1 numbers. That costs nothing and needs no membership. See [ADR 0005](../adr/0005-standards-aligned-data-model.md) (proposed). |
-| Shipping and finding a buyer? | There is a real gap. Start with an **offline, by-port "ship it" resource**, then a **shareable catch notice**, and only later a network. Two rules shape it: air cargo needs Known Shipper status a week ahead, and in Alaska only a direct marketer licence allows shipping out of state. |
+| Shipping and finding a buyer? | There is a real gap. Start with an **offline, by-port "ship it" resource**, then a **shareable catch notice**, and only later a network. Two rules shape it: most air cargo out of Alaska needs Known Shipper status set up a week ahead, and in Alaska only a direct marketer licence allows shipping out of state. |
 
 ## 1. The bulletin, re-read
 
@@ -37,19 +37,22 @@ Against the 655 conversions in `app/src/data/fish_data_v3.js`:
 |---|---:|
 | Same starting form, product and numbers | 564 |
 | Same, but spelled `SIB` where the bulletin prints `S/B` | 40 |
-| Same, worded slightly differently | 20 |
-| **Numbers differ** | 22 |
-| **In the app but not in that species' table** | 9 |
-| **Printed in the bulletin, missing from the app** | 63 |
+| Same, worded slightly differently | 19 |
+| **Numbers differ** | 23 |
+| **Right product and numbers, wrong starting form** | 7 |
+| **In the app but not in that species' table** | 2 |
+| **Printed in the bulletin, missing from the app** | 56 |
 
 The ones that change a price:
 
 - **Rougheye and Shortraker rockfish use the wrong table.** The bulletin prints two rockfish tables. These two species belong to the second, whose fillet yields are 4 to 8 points lower (round to skin-on fillet is 28%, not 32%). The app understates their cost.
-- **Eight "salted" and "smoked" rows are under the wrong starting form.** The bulletin prints `Round → Smoked D/H-Off 57` for smelt; the app has `D/H-Off → Smoked 57`. So the app applies a whole-fish yield to a fish that has already been headed and gutted. The same slip affects cod, Atka mackerel, sturgeon, trout and eels.
+- **Eight "salted" and "smoked" rows are under the wrong starting form.** The bulletin prints `Round → Smoked D/H-Off 57` for smelt; the app has `D/H-Off → Smoked 57`. So the app applies a whole-fish yield to a fish that has already been headed and gutted. The same slip affects Atka mackerel, sturgeon, trout and eels (seven rows), and Pacific cod has the smoked row twice, once correctly and once under `D/H-Off`.
 - **Pacific hake has four wrong fillet yields** (54, 40, 34 and 74, where the bulletin prints 51, 38, 32 and 75), sablefish two (59 and 52 for 64 and 56), pollock two, trout one.
 - **Six averages were invented.** For hake roe, sturgeon roe, shad roe, oysters and both sea urchins the bulletin prints only a range. The app shows a number in the middle as if it were measured.
 - **Capelin has a row that belongs to Pacific cod** (belly flaps, 10%), carried across from the facing page.
-- **63 printed rows are missing**, mostly `Round → D/H-Off (Eastern)` and `Skin-On Fillet → Skinless Fillet` for the rockfish, the crab "during molt" ranges, salmon trim grades and cooked salmon steaks.
+- **56 printed rows are missing**, mostly `Round → D/H-Off (Eastern)` and `Skin-On Fillet → Skinless Fillet` for the rockfish, the crab "during molt" ranges, salmon trim grades and cooked salmon steaks.
+
+A reviewer of this work compared three rows with a web copy of the *Pacific Seafood Recoveries and Yields* booklet and found different numbers (the head-off ranges for rex, rock and yellowfin sole, and trout round to skinless fillet at 65 where the bulletin has 55). The scan was checked again: the transcription matches the 2004 bulletin in all three places. So that booklet is not an exact reprint, and a difference between the two is a lead on a correction or an edition change, not a reading error here.
 
 One earlier worry is settled: the 16 rockfish with identical tables are **faithful to the source**. The bulletin prints one table for three species and one for fourteen.
 
@@ -66,7 +69,7 @@ These are printed clearly and transcribed as printed. They need a second source 
 
 ### What to do
 
-Regenerate `fish_data_v3.js` from `mab37.json` with a script, so the app's reference yields are the bulletin's, row for row, with `S/B` spelled correctly, the missing rows added, no invented averages, and the flagged rows carrying a caution. That changes the price people see for 31 conversions (22 numbers, 9 moved to the right starting form or species), so it waits for the owner's go-ahead.
+Regenerate `fish_data_v3.js` from `mab37.json` with a script, so the app's reference yields are the bulletin's, row for row, with `S/B` spelled correctly, the missing rows added, no invented averages, and the flagged rows carrying a caution. That changes the price people see for 32 conversions (23 numbers, 9 moved to the right starting form or species), so it waits for the owner's go-ahead.
 
 The bulletin is Alaska Sea Grant's copyright. Individual yields are facts, but the PDF and its text are still in `research/` without permission (audit, section 2.6). That is more pressing now that the transcription is cleaner than the original extraction.
 
@@ -98,7 +101,7 @@ Only four species overlap, so the EU table extends the data to the Atlantic more
 | 5 | **USDA: SR Legacy refuse %, Table of Cooking Yields for Meat and Poultry, Food Buying Guide, Handbook 102** | Edible-portion and cooking yields for meat, poultry and produce. Handbook 102 is also in the bulletin's reference list (checked). | Public domain / CC0 | The path to chefs and to foods beyond fish. A second table shape: edible portion and cooking loss, not form to form. |
 | 6 | **FAO Circular 847 and Technical Paper 309; DFO Atlantic factors** | Wide but old (1989–2000). | Pre-2024 FAO terms; Crown copyright | Cross-check and cite. Do not bulk-import. |
 
-Ruled out: the Seafood Handbook, Book of Yields, Seafish, ASMI and AHDB guides (copyrighted or no yield tables found); FishBase (non-commercial licence); a "Pacific Seafood Recoveries and Yields" booklet that appears to reprint the bulletin.
+Ruled out: the Seafood Handbook, Book of Yields, Seafish, ASMI and AHDB guides (copyrighted or no yield tables found); FishBase (non-commercial licence); a "Pacific Seafood Recoveries and Yields" booklet that reprints the bulletin with some numbers changed (see section 1).
 
 ### What a multi-source dataset needs
 
@@ -115,9 +118,9 @@ No existing ontology covers this app's product forms. The recommendation is to a
 
 Each table in the bulletin now has its **FAO ASFIS 3-alpha code** (the code the EU, NAFO and the seafood traceability standard use) and its **WoRMS AphiaID** (the taxonomic anchor), in `research/vocab/species.json`.
 
-- 92 scientific names in 80 tables: **69 matched as printed, 12 after a correction, 11 not matched.**
-- The 12 corrections are names that have changed since 2004 or that the bulletin misprints, each checked against the FAO list (`research/vocab/corrections.json`). For example walleye pollock is now *Gadus chalcogrammus*, Dungeness crab *Metacarcinus magister*, and the bulletin puts thornyhead in the wrong genus.
-- The 11 unmatched are genus-level entries ("*Acipenser* sp.") where FAO has no genus code. Picking one species would invent precision, so they stay unmatched.
+- 92 scientific names in 80 tables: **69 matched as printed, 13 after a correction, 10 not matched.**
+- The 13 corrections are names that have changed since 2004 or that the bulletin misprints or misspells, each checked against the FAO list (12 in `research/vocab/corrections.json`, and one spelling fixed in the transcription). For example walleye pollock is now *Gadus chalcogrammus*, Dungeness crab *Metacarcinus magister*, and the bulletin puts thornyhead in the wrong genus.
+- The 10 unmatched are genus-level entries ("*Acipenser* sp.") where FAO has no genus code. Picking one species would invent precision, so they stay unmatched.
 - FishBase is **not** used: its data licence is non-commercial (search only), which conflicts with a tool for commercial fishers.
 
 ### Product forms (recommended; partly extracted)
@@ -152,7 +155,7 @@ Why level A is right:
 
 Two honest limits:
 
-- **A small boat cannot be fully valid against GDST's schema.** Its fishing event requires an IMO vessel number and satellite-tracking details. Aim for "GDST-shaped", not "GDST-valid", and do not claim "GDST-capable", which requires passing its test.
+- **A small boat may not be fully valid against GDST's schema** (search only; version 1.2 was the one read about). Its fishing event has fields for an IMO vessel number and satellite-tracking details. GDST's guidance is reported to make these conditional: an IMO number only if the vessel has one, and a data element only when the information exists. Read the conditional rules in the published version before deciding what to export. Until then aim for "GDST-shaped", not "GDST-valid", and do not claim "GDST-capable", which requires passing its test.
 - **Do not use the GS1 name or logo in branding.** "Works with GS1 identifiers" is the safe wording.
 
 The proposed shapes for a yield observation, a lot, an offer and a shipment are in [ADR 0005](../adr/0005-standards-aligned-data-model.md).
@@ -173,7 +176,7 @@ The practical consequence is a useful feature: a one-page **landing record** gen
 ### What exists (search only)
 
 - **Air cargo is how fresh Alaska fish moves**, and Alaska Air Cargo is the default carrier. Booking is by portal, email or phone. Parcel services (FedEx, UPS) suit boxed frozen product from road-system towns.
-- **The trap for a first shipment is paperwork.** Air cargo requires **Known Shipper** status, which for an individual takes a site visit and at least seven days. Someone on their way in with fish cannot get it that afternoon.
+- **The trap for a first shipment is paperwork.** Cargo that travels on a passenger flight requires **Known Shipper** status, which for an individual takes a site visit and at least seven days. Someone on their way in with fish cannot get it that afternoon. Alaska Air Cargo is reported to exempt shipments that stay within Alaska or travel only on freighter flights, so the checklist has to ask where the fish is going and on what kind of flight before it warns anyone off.
 - **Permits decide what is legal.** In Alaska a catcher-seller may sell their own unprocessed catch dockside but may not ship it out of state. A direct marketer licence allows that. Filleting or freezing counts as processing and needs a state permit and a HACCP plan.
 - **Shipping rate services** (Shippo, EasyPost) can quote parcel rates cheaply. None models air cargo. Buying labels through the app's own account would make the app a party to the shipment; showing quotes does not.
 - **Buyer-finding tools exist but are thin.** FishLine lists dockside sales to the public. The Local Catch Network's Seafood Finder lists sellers. Neither answers a fisherman's question on the way in.
@@ -190,7 +193,7 @@ The practical consequence is a useful feature: a one-page **landing record** gen
 | **B. A catch notice** | "800 lb of sockeye, gutted, landing Sitka Thursday 4 pm" becomes a shareable message, link or QR code the fisherman sends to their own buyers, with a rough shipping estimate from published rate sheets. Built on the lot shape in ADR 0005, so it is already in the standard's form. | No accounts, no payments. | An estimate taken as a quote; a notice implying a sale the permit does not allow. | Notices made and shared, repeat use, buyers asking how to receive them. |
 | **C. A network** | Opt-in buyer lists, notifications, live parcel quotes. | A backend, moderation, spam control. | Brokering, payments and label purchase bring liability and possibly licensing. | Only after B shows repeat use and a partner is interested. |
 
-Two design rules follow from the research. **Ask which permit the person holds first**, because it decides what the app may suggest. **Lead with the Known Shipper warning**, because it is what defeats a last-minute first shipment.
+Two design rules follow from the research. **Ask which permit the person holds first**, because it decides what the app may suggest. **Lead with the Known Shipper question** (is it needed for this route, and is it set up?), because it is what defeats a last-minute first shipment.
 
 ### Where it lives
 
@@ -198,7 +201,7 @@ ADR 0003 scoped this app to the calculator and said inventory belongs in a separ
 
 ## 6. Decisions for the owner
 
-1. **Correct the app's reference yields from the re-read bulletin?** 31 conversions change (22 numbers, 9 moved), 40 are respelled and 63 are added. Every change is listed in `comparison.md`.
+1. **Correct the app's reference yields from the re-read bulletin?** 32 conversions change (23 numbers, 9 moved), 40 are respelled and 56 are added. Every change is listed in `comparison.md`.
 2. **Adopt ADR 0005** (the standards-aligned data model) as the shape for the Firestore work and for any dataset release?
 3. **Shipping and buyers:** start Stage A in this app? Which ports and fisheries first? Are the first users catcher-sellers or licensed direct marketers? Fresh by air, or frozen by parcel?
 4. **Permission from Alaska Sea Grant** for the bulletin, and whether to ask them, NOAA or a Sea Grant agent to review the flagged values.

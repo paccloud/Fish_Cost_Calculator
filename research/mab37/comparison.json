@@ -1,12 +1,12 @@
 {
   "totals": {
     "same": 564,
-    "valueDiffers": 22,
+    "valueDiffers": 23,
     "spellingOnly": 40,
-    "reworded": 20,
-    "wrongFrom": 0,
-    "onlyInApp": 9,
-    "onlyInSource": 63
+    "reworded": 19,
+    "wrongFrom": 7,
+    "onlyInApp": 2,
+    "onlyInSource": 56
   },
   "matches": {
     "Pink Salmon": {
@@ -1267,9 +1267,9 @@
         "Sablefish"
       ],
       "same": 9,
-      "valueDiffers": 1,
+      "valueDiffers": 2,
       "spellingOnly": 0,
-      "reworded": 1,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 4
@@ -1296,9 +1296,9 @@
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 0,
-      "onlyInApp": 1,
-      "onlyInSource": 1
+      "wrongFrom": 1,
+      "onlyInApp": 0,
+      "onlyInSource": 0
     },
     {
       "name": "Pacific Herring",
@@ -1348,9 +1348,9 @@
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 0,
-      "onlyInApp": 2,
-      "onlyInSource": 3
+      "wrongFrom": 2,
+      "onlyInApp": 0,
+      "onlyInSource": 1
     },
     {
       "name": "Albacore Tuna",
@@ -1374,9 +1374,9 @@
       "valueDiffers": 1,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 0,
-      "onlyInApp": 2,
-      "onlyInSource": 3
+      "wrongFrom": 2,
+      "onlyInApp": 0,
+      "onlyInSource": 1
     },
     {
       "name": "Trout",
@@ -1387,9 +1387,9 @@
       "valueDiffers": 1,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 0,
-      "onlyInApp": 1,
-      "onlyInSource": 3
+      "wrongFrom": 1,
+      "onlyInApp": 0,
+      "onlyInSource": 2
     },
     {
       "name": "Norwegian Farmed Trout",
@@ -1426,9 +1426,9 @@
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 0,
-      "onlyInApp": 1,
-      "onlyInSource": 1
+      "wrongFrom": 1,
+      "onlyInApp": 0,
+      "onlyInSource": 0
     },
     {
       "name": "Rat-Tails",

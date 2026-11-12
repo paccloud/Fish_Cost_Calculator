@@ -50,6 +50,8 @@ another.
   "yieldPct": 42,
   "range": [41, 46],                 // null when the source gives none
   "basis": "compiled",               // compiled | measured | regulatory | derived
+  "measurement": null,               // measured only: { "input": { "value": 100, "unit": "LBR" },
+                                     //   "output": { "value": 42, "unit": "LBR" }, "at": "2026-07-17T18:30:00-08:00" }
   "source": { "id": "mab37-2004", "row": "p09R-21", "licence": "…" },
   "check": null                      // a caution shown beside the value
 }
@@ -72,8 +74,11 @@ another.
 { "id": "shp_…", "lot": "lot_…", "from": "USSIT", "to": "USSEA", "carrier": "…", "sscc": null }
 ```
 
-A yield with a measured input and output weight exports as an EPCIS
-`TransformationEvent`. A lot exports as the standard's landing record.
+A yield with a `measurement` exports as an EPCIS `TransformationEvent`: the
+input and output quantities and the event time come from it. A yield without
+one (a published average, a regulatory factor) is a reference value, not an
+event, and is not exported as one. A lot exports as the standard's landing
+record.
 
 ## Consequences
 
@@ -87,8 +92,9 @@ A yield with a measured input and output weight exports as an EPCIS
   them is labelled derived.
 - The app describes itself as "works with GS1 identifiers" and "shaped like
   GDST". It does not claim to be GDST-capable, which needs GDST's own test, and
-  does not use GS1's name or logo as a badge. A small boat cannot satisfy every
-  field GDST requires (it asks for an IMO number and vessel-tracking details).
+  does not use GS1's name or logo as a badge. A small boat may not be able to
+  fill every field GDST's fishing event has (an IMO number, vessel-tracking
+  details); which of those are conditional depends on the published version.
 - Lots, offers and shipments are inventory, which ADR 0003 keeps out of this app.
   Adopting this record fixes only their shape. Whether they are built here or in
   a separate tool is a separate decision.

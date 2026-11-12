@@ -2,9 +2,9 @@
 
 `species.json` gives each table in `research/mab37/mab37.json` its FAO ASFIS 3-alpha code and WoRMS AphiaID, so a yield can be joined to FAO, EU and NOAA data.
 
-- 80 tables, 92 scientific names: 69 found as printed, 12 after a correction, 11 not found. 11 tables print no scientific name.
-- `corrections.json` holds the 12 corrections: names that changed after 2004 (walleye pollock is now *Gadus chalcogrammus*) or that the bulletin misprints (thornyhead under *Sebastes*). Each was checked against the FAO list by hand.
-- The 11 not found are genus-level entries such as "*Acipenser* sp." where FAO has no code for the genus. They are left unmatched on purpose; picking one species would invent precision.
+- 80 tables, 92 scientific names: 69 found as printed, 13 after a correction, 10 not found. 11 tables print no scientific name.
+- `corrections.json` holds 12 of the corrections; the thirteenth is a misspelling ("Haliotus") that `mab37.json` already records beside the corrected name. They are names that changed after 2004 (walleye pollock is now *Gadus chalcogrammus*) or that the bulletin misprints (thornyhead under *Sebastes*). Each was checked against the FAO list by hand.
+- The 10 not found are genus-level entries such as "*Acipenser* sp." where FAO has no code for the genus. They are left unmatched on purpose; picking one species would invent precision.
 
 ## Rebuilding
 
