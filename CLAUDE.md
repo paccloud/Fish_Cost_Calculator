@@ -13,6 +13,7 @@ Read these before changing anything:
 - `CONTEXT.md` — the project's vocabulary. Use its terms.
 - `docs/adr/` — accepted decisions. ADR 0001 replaces both backends with Firebase Auth, Firestore and Firebase Hosting.
 - `docs/reviews/2026-11-product-audit.md` — the current state of the product and what to do next.
+- `docs/reviews/2026-11-data-and-standards.md` — what is wrong in the reference yields, other datasets, species and form codes, GS1, and the shipping idea. `research/mab37/` holds the bulletin as re-read; do not change a reference yield without the owner's agreement.
 - `docs/STYLE_GUIDE.md` — the look, the words and the components.
 
 The two backends described below (`server/` and `api/`) are in maintenance only until the move to Firebase (issues #123–#133); fix what is broken, but do not build new features on them. Short-term work is the calculator itself, on the web and on iOS through Capacitor (see `docs/ios.md`). Use Node 22.
