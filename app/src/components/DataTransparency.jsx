@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, ExternalLink, FileText, AlertCircle, Database, Users, Award } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { DATA_SOURCE, ACRONYMS, UNCERTAIN_DATA } from '../data/fish_data_v3';
 import { apiUrl } from '../config/api';
+
+const HEADING = 'font-display text-xl font-semibold text-text-primary';
+const SUBHEADING = 'text-base font-semibold text-text-primary';
 
 const DataTransparency = () => {
     const [contributors, setContributors] = useState([]);
@@ -9,213 +12,173 @@ const DataTransparency = () => {
     useEffect(() => {
         fetch(apiUrl('/api/contributors'))
             .then(res => res.json())
-            .then(data => setContributors(data))
+            .then(data => { if (Array.isArray(data)) setContributors(data); })
             .catch(err => console.error('Failed to load contributors:', err));
     }, []);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
-            {/* Header */}
-            <div className="text-center mb-10">
-                <div className="inline-flex items-center justify-center mb-4">
-                    <div className="bg-brand-teal p-4 rounded-lg">
-                        <BookOpen className="h-8 w-8 text-white" />
-                    </div>
-                </div>
-                <h1 className="text-3xl font-bold text-accent mb-3">Data Sources & Methodology</h1>
-                <p className="text-text-secondary max-w-xl mx-auto text-sm">
+        <div className="mx-auto max-w-2xl">
+            <header className="mb-8">
+                <h1 className="font-display text-3xl font-semibold text-text-primary">Data sources and methodology</h1>
+                <p className="mt-2 text-base text-text-secondary">
                     Transparency in data sourcing for accurate yield calculations
                 </p>
-            </div>
+            </header>
 
-            {/* Primary Source */}
-            <div className="card p-8">
-                <div className="flex items-center gap-3 mb-5">
-                    <FileText className="h-5 w-5 text-link" />
-                    <h2 className="text-xl font-semibold text-accent">Primary Data Source</h2>
-                </div>
+            <div className="space-y-6">
+                {/* Primary Source */}
+                <section className="card p-5 sm:p-6" aria-labelledby="source-primary">
+                    <h2 id="source-primary" className={HEADING}>Primary data source</h2>
 
-                <div className="bg-surface border border-line rounded p-6 mb-6">
-                    <h3 className="text-lg font-bold text-text-primary mb-2">{DATA_SOURCE.title}</h3>
-                    <p className="text-text-secondary mb-4 text-sm">
-                        <span className="text-accent font-medium">Publication:</span> {DATA_SOURCE.publication}
-                    </p>
-                    <div className="grid md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                            <p className="text-text-secondary">Authors:</p>
-                            <p className="text-text-primary">{DATA_SOURCE.authors.join(', ')}</p>
+                    <h3 className="mt-3 text-lg font-semibold text-text-primary">{DATA_SOURCE.title}</h3>
+                    <dl className="mt-3 grid gap-x-6 gap-y-3 text-base sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                            <dt className="text-sm text-text-secondary">Publication</dt>
+                            <dd className="text-text-primary">{DATA_SOURCE.publication}</dd>
                         </div>
                         <div>
-                            <p className="text-text-secondary">Publisher:</p>
-                            <p className="text-text-primary">{DATA_SOURCE.publisher}</p>
+                            <dt className="text-sm text-text-secondary">Authors</dt>
+                            <dd className="text-text-primary">{DATA_SOURCE.authors.join(', ')}</dd>
                         </div>
                         <div>
-                            <p className="text-text-secondary">Year:</p>
-                            <p className="text-text-primary">{DATA_SOURCE.year}</p>
+                            <dt className="text-sm text-text-secondary">Publisher</dt>
+                            <dd className="text-text-primary">{DATA_SOURCE.publisher}</dd>
                         </div>
                         <div>
-                            <p className="text-text-secondary">ISBN:</p>
-                            <p className="text-text-primary font-mono">{DATA_SOURCE.isbn}</p>
+                            <dt className="text-sm text-text-secondary">Year</dt>
+                            <dd className="tabular-nums text-text-primary">{DATA_SOURCE.year}</dd>
+                        </div>
+                        <div>
+                            <dt className="text-sm text-text-secondary">ISBN</dt>
+                            <dd className="tabular-nums text-text-primary">{DATA_SOURCE.isbn}</dd>
+                        </div>
+                    </dl>
+
+                    <a
+                        href="https://seagrant.uaf.edu/bookstore/pubs/MAB-37.html"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secondary mt-5"
+                    >
+                        View original publication
+                        <ExternalLink size={20} aria-hidden="true" />
+                        <span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                </section>
+
+                {/* Methodology */}
+                <section className="card p-5 sm:p-6" aria-labelledby="source-method">
+                    <h2 id="source-method" className={HEADING}>Methodology notes</h2>
+
+                    <div className="mt-3 max-w-prose space-y-4 text-base text-text-secondary">
+                        <div>
+                            <h3 className={SUBHEADING}>Average yields</h3>
+                            <p>Yields represent high quality, properly handled fresh fish and shellfish in good physiological condition. If fish condition is abnormal (post-spawning or starving state), actual yields may differ.</p>
+                        </div>
+
+                        <div>
+                            <h3 className={SUBHEADING}>Yield ranges</h3>
+                            <p>Ranges represent typical variations found within fish populations during the year. Many factors including handling, processing conditions, filleting skills, and refrigeration affect actual yields.</p>
+                        </div>
+
+                        <div>
+                            <h3 className={SUBHEADING}>Smoked products</h3>
+                            <p>Smoked fish yields were calculated using an average <strong className="text-text-primary">15% weight loss</strong> during salting/brining and <strong className="text-text-primary">10%</strong> during the smoking process.</p>
                         </div>
                     </div>
-                </div>
+                </section>
 
-                <a
-                    href="https://seagrant.uaf.edu/bookstore/pubs/MAB-37.html"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
-                >
-                    <ExternalLink className="h-4 w-4" />
-                    View Original Publication
-                </a>
-            </div>
+                {/* Acronym Glossary */}
+                <section className="card p-5 sm:p-6" aria-labelledby="source-acronyms">
+                    <h2 id="source-acronyms" className={HEADING}>Acronym glossary</h2>
 
-            {/* Methodology */}
-            <div className="card p-8">
-                <div className="flex items-center gap-3 mb-5">
-                    <Database className="h-5 w-5 text-link" />
-                    <h2 className="text-xl font-semibold text-accent">Methodology Notes</h2>
-                </div>
-
-                <div className="space-y-4 text-sm">
-                    <div className="bg-surface border border-line rounded p-4">
-                        <h4 className="font-semibold text-accent mb-2">Average Yields</h4>
-                        <p className="text-text-secondary">Yields represent high quality, properly handled fresh fish and shellfish in good physiological condition. If fish condition is abnormal (post-spawning or starving state), actual yields may differ.</p>
-                    </div>
-
-                    <div className="bg-surface border border-line rounded p-4">
-                        <h4 className="font-semibold text-accent mb-2">Yield Ranges</h4>
-                        <p className="text-text-secondary">Ranges represent typical variations found within fish populations during the year. Many factors including handling, processing conditions, filleting skills, and refrigeration affect actual yields.</p>
-                    </div>
-
-                    <div className="bg-surface border border-line rounded p-4">
-                        <h4 className="font-semibold text-accent mb-2">Smoked Products</h4>
-                        <p className="text-text-secondary">Smoked fish yields were calculated using an average <strong>15% weight loss</strong> during salting/brining and <strong>10%</strong> during the smoking process.</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Acronym Glossary */}
-            <div className="card p-8">
-                <h2 className="text-xl font-semibold text-accent mb-5 flex items-center gap-3">
-                    <span className="text-link font-bold">A–Z</span> Acronym Glossary
-                </h2>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                    {Object.entries(ACRONYMS).map(([abbr, definition]) => (
-                        <div key={abbr} className="bg-surface rounded p-4">
-                            <span className="text-accent font-bold text-base">{abbr}</span>
-                            <p className="text-text-secondary text-sm mt-1">{definition}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Uncertain Data */}
-            {UNCERTAIN_DATA && UNCERTAIN_DATA.length > 0 && (
-                <div className="card p-8">
-                    <div className="flex items-center gap-3 mb-5">
-                        <AlertCircle className="h-5 w-5 text-brand-yellow" />
-                        <h2 className="text-xl font-semibold text-accent">Data Quality Notes</h2>
-                    </div>
-
-                    <p className="text-text-secondary mb-4 text-sm">
-                        The following data entries were extracted from PDF scans and may have quality issues:
-                    </p>
-
-                    <div className="space-y-3">
-                        {UNCERTAIN_DATA.map((item, i) => (
-                            <div key={i} className="bg-brand-yellow/10 border border-brand-yellow/30 rounded p-4">
-                                <p className="text-text-primary font-medium text-sm">{item.species}</p>
-                                <p className="text-sm text-text-secondary">
-                                    <span className="text-link">{item.field}:</span> {item.note}
-                                </p>
+                    <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                        {Object.entries(ACRONYMS).map(([abbr, definition]) => (
+                            <div key={abbr}>
+                                <dt className="text-base font-bold text-text-primary">{abbr}</dt>
+                                <dd className="text-base text-text-secondary">{definition}</dd>
                             </div>
                         ))}
-                    </div>
-                </div>
-            )}
+                    </dl>
+                </section>
 
-            {/* User Data */}
-            <div className="card p-8">
-                <div className="flex items-center gap-3 mb-5">
-                    <Users className="h-5 w-5 text-link" />
-                    <h2 className="text-xl font-semibold text-accent">User-Contributed Data</h2>
-                </div>
+                {/* Uncertain Data */}
+                {UNCERTAIN_DATA && UNCERTAIN_DATA.length > 0 && (
+                    <section className="card p-5 sm:p-6" aria-labelledby="source-quality">
+                        <h2 id="source-quality" className={HEADING}>Data quality notes</h2>
 
-                <p className="text-text-secondary mb-4 text-sm">
-                    Logged-in users can upload their own yield data from personal experience. User-contributed data is:
-                </p>
+                        <p className="mt-3 max-w-prose text-base text-text-secondary">
+                            The following data entries were extracted from PDF scans and may have quality issues:
+                        </p>
 
-                <ul className="space-y-2 text-text-secondary text-sm">
-                    <li className="flex items-start gap-2">
-                        <span className="text-link mt-1">•</span>
-                        <span>Displayed separately from source data in the calculator</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                        <span className="text-link mt-1">•</span>
-                        <span>Associated with the user's account</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                        <span className="text-link mt-1">•</span>
-                        <span>Can be edited or deleted by the contributing user</span>
-                    </li>
-                </ul>
-            </div>
+                        <ul className="mt-3 divide-y divide-line-subtle">
+                            {UNCERTAIN_DATA.map((item, i) => (
+                                <li key={i} className="py-3 first:pt-0 last:pb-0">
+                                    <p className="text-base font-semibold text-text-primary">{item.species}</p>
+                                    <p className="text-base text-text-secondary">
+                                        <span className="font-semibold">{item.field}:</span> {item.note}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
-            {/* Community Contributors */}
-            {contributors.length > 0 && (
-                <div className="card p-8">
-                    <div className="flex items-center gap-3 mb-5">
-                        <Award className="h-5 w-5 text-brand-yellow" />
-                        <h2 className="text-xl font-semibold text-accent">Community Contributors</h2>
-                    </div>
+                {/* User Data */}
+                <section className="card p-5 sm:p-6" aria-labelledby="source-user">
+                    <h2 id="source-user" className={HEADING}>User-contributed data</h2>
 
-                    <p className="text-text-secondary mb-6 text-sm">
-                        These community members have contributed custom yield data to help expand our database.
+                    <p className="mt-3 max-w-prose text-base text-text-secondary">
+                        People who sign in can upload their own yield data from personal experience. User-contributed data is:
                     </p>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {contributors.map((contributor) => (
-                            <div
-                                key={contributor.id}
-                                className="bg-surface border border-line rounded p-4"
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <h3 className="font-semibold text-text-primary text-sm">
+                    <ul className="mt-3 max-w-prose list-disc space-y-2 pl-5 text-base text-text-secondary">
+                        <li>Displayed separately from source data in the calculator</li>
+                        <li>Associated with the user&apos;s account</li>
+                        <li>Can be edited or deleted by the contributing user</li>
+                    </ul>
+                </section>
+
+                {/* Community Contributors */}
+                {contributors.length > 0 && (
+                    <section className="card p-5 sm:p-6" aria-labelledby="source-contributors">
+                        <h2 id="source-contributors" className={HEADING}>Community contributors</h2>
+
+                        <p className="mt-3 max-w-prose text-base text-text-secondary">
+                            These community members have contributed custom yield data to help expand our database.
+                        </p>
+
+                        <ul className="mt-3 divide-y divide-line-subtle">
+                            {contributors.map((contributor) => (
+                                <li key={contributor.id} className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
+                                    <div className="min-w-0">
+                                        <h3 className="break-words text-base font-semibold text-text-primary">
                                             {contributor.display_name}
                                         </h3>
                                         {contributor.organization && (
-                                            <p className="text-sm text-link mt-1">
+                                            <p className="break-words text-base text-text-secondary">
                                                 {contributor.organization}
                                             </p>
                                         )}
                                         {contributor.bio && (
-                                            <p className="text-sm text-text-secondary mt-2">
+                                            <p className="mt-1 break-words text-sm text-text-secondary">
                                                 {contributor.bio}
                                             </p>
                                         )}
                                     </div>
-                                    <div className="text-right ml-4">
-                                        <p className="text-2xl font-bold text-accent">
-                                            {contributor.contribution_count}
-                                        </p>
-                                        <p className="text-xs text-text-secondary">
+                                    <p className="shrink-0 text-right text-xl font-bold tabular-nums text-text-primary">
+                                        {contributor.contribution_count}
+                                        <span className="block text-sm font-normal text-text-secondary">
                                             {contributor.contribution_count === 1 ? 'entry' : 'entries'}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                                        </span>
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    </section>
+                )}
 
-            {/* Footer */}
-            <div className="text-center py-4 text-text-secondary text-sm">
-                <p>
+                <p className="max-w-prose text-sm text-text-secondary">
                     For corrections or additions to the data, please contact the project maintainers via GitHub.
                 </p>
             </div>
