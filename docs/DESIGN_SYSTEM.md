@@ -1,6 +1,6 @@
 # Design system notes
 
-> **Direction:** [`STYLE_GUIDE.md`](STYLE_GUIDE.md) (November 2026) sets where the look, words and navigation are going. This file describes what is built: the tokens, the shared classes and components, and the app shell are on the style guide; the calculator and the secondary screens are still being moved onto them.
+> **Direction:** [`STYLE_GUIDE.md`](STYLE_GUIDE.md) (November 2026) sets where the look, words and navigation are going. This file describes what is built: the tokens, the shared classes and components, the app shell and the calculator are on the style guide; the secondary screens are still being moved onto them.
 
 Supersedes the navy/rust direction in `docs/superpowers/specs/2026-03-27-branding-redesign-design.md`
 (replaced by the teal/terracotta/yellow brand in July 2026).
@@ -161,42 +161,111 @@ under it. `/account` still works and shows the same without sign-in.
   `env(safe-area-inset-bottom)` where there is no tab bar. Its `offsetHeight` is then everything it
   covers, so `scroll-padding-bottom` can be set from that one number and a field you tab to lands above
   both bars (WCAG 2.4.11).
-- **Stopgap:** `Calculator.jsx` still pins its own result bar with utility classes. The last rule in
-  `index.css` (`main [role="region"][aria-label="Your result"]`) gives that bar the same padding. Delete
-  the rule when the calculator's result becomes a `.ticket.ticket-dock`.
+- The calculator's ticket is the one user of `.ticket-dock` today (on a wrapper, so a notice can sit
+  above the ticket inside the dock). It sets `scroll-padding-bottom` and its own bottom padding from
+  the dock's `offsetHeight`; see "Calculator layout" below.
 - The header adds `env(safe-area-inset-top)`, the header and `<main>` use the side insets when they are
   wider than the gutter, and a fixed strip of `surface` sits behind the status bar. These need
   `viewport-fit=cover` in `index.html`.
 
 ## Calculator layout ("Dockside")
 
-Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
+Chosen from the three mock-ups in `docs/design-mockups/` (direction A) and rebuilt on the style
+guide's components. `app/src/components/Calculator.jsx` holds the state and the page;
+`app/src/components/calculator/` holds its parts.
 
-- **Tap tiles, not dropdowns,** for "What you have" and "What you're making" (radio buttons styled as
-  tiles, so arrow keys and screen readers work as for any radio group). Species stays a native select:
-  there are 89 of them. Products show their yield on the tile; long lists show 6 plus "Show all".
-- **Steppers** (big − / + either side of a typed field) for price, pounds, yield, processing and shipping.
-- **Live result bar** pinned to the bottom (today `bg-brand-teal`, number in `brand-yellow`, 6.7:1; it
-  becomes the `.ticket` on `bar` when the calculator is rebuilt). It is worked out from what is on screen
-  via `app/src/lib/calcEngine.js`, so a saved result always matches its inputs.
-  When processing or shipping is set it also shows the parts (Fish + Processing + Shipping). Screen readers
-  get the answer once typing pauses, from a separate live region, not on every keystroke.
-- **Processing and shipping** are each charged per lb of **incoming** weight (the starting fish; spread over
-  fewer finished pounds, so divided by yield) or **outgoing** weight (the finished product; added as is).
-  Both choices are always visible, with a line spelling out what the charge comes to per finished lb.
-- **Number boxes read what people type** (`app/src/lib/numberInput.js`): "$4.50", "1,000", "42%" and "4,50"
-  all work. Text that isn't a number marks that box as invalid and the bar says to use numbers; it never
-  counts as 0, because a wrong answer is worse than none.
+| File | What it is |
+|---|---|
+| `ticketModel.js` | Pure: typed text and the chosen conversion in, everything the ticket says out (`buildTicketModel`), plus the field messages and `yieldSource` for the stamp. The screen does no arithmetic of its own |
+| `priceActions.js` | `savedPriceRecord`, `savePrice` (through `useData().saveCalc`) and `priceCardFor` (through `buildPriceCard`) |
+| `sharePrice.js`, `haptics.js` | The share sheet or the clipboard; a light haptic in the store app. The Capacitor plugins are imported only when used |
+| `remembered.js` | The last margin and portion size (`localStorage`) and whether the ticket's details are open (`sessionStorage`) |
+| `names.js` | Plain names for tiles and sentences; a person's own yields (`from: 'Custom'` in the merged data) are "Your yields" |
+| `Ticket`, `ChoiceTile`, `Stepper`, `Segmented`, `ExtraCost`, `FieldError`, `HelpTip` | The parts, one per file |
+
+- **One title** (`.type-title`, "What does it really cost?"), then the mode switch, then two numbered
+  cards. Step numbers are outlined circles beside a `.type-heading`.
+- **Segmented** ("Cost per lb" / "Pounds to buy"): 48px segments with 6px corners in a tray with 8px
+  corners. The pressed segment and the selected tiles are the only teal fills on the screen. Smaller
+  on/off choices (recent species, the Low / Average / High yields) show pressed with a doubled teal
+  edge and no fill.
+- **Species** stays a native select (there are 89), with up to five recent species above it as 44px
+  buttons (`recentSpecies.js`; a species already in the row keeps its place). Under it the chosen
+  species is set in `.type-species` with its scientific name in `.type-latin` and a `Stamp` for the
+  source (`MAB-37`, or `Your yields` when every yield for it is the person's own).
+- **Tap tiles, not dropdowns,** for "What you have" and "What you’re making": radio buttons drawn as
+  56px tiles (`ChoiceTile`), left-aligned, two columns on a phone and three from 640px, each row as
+  tall as its tallest tile. The plain name leads (`plainFormName`). A starting form has its trade
+  code on the second line. A product has its yield on the second line and its code on a third when
+  the code fits on one line of a phone tile (16 characters: "D/H-Off"); a longer code
+  ("SIB Fillet (Pinboning)") would make a six-line tile, so it is in the radio's name for screen
+  readers only. Long lists show 6 plus "Show all". The glossary of trade codes ("What do D/H-On, S/B
+  and Round mean?") is a disclosure directly under the tiles.
+- **Steppers** (a 56px minus and plus either side of a typed field) for price, pounds, yield, margin,
+  portion size, processing and shipping. The field is as wide as its text, so the `$` or unit sits
+  beside the number. In the store app a press gives a light haptic.
+- **Every yield has a Stamp.** Beside the yield box: `MAB-37 · 41–49%` while the yield is one of the
+  source's three figures (the average or either end of its range), `MAB-37` when no range is
+  reported, and `Your yield` once the person types their own or uses a yield they recorded. With
+  `Your yield`, the line under the box still gives the reference yield and range.
+- **Processing and shipping** start folded behind one ghost button, "Add processing or shipping", and
+  are open whenever either has a value. Open, the button hides them (when both are blank) or removes
+  them (clears both). Each is charged per lb of **incoming** weight (the starting fish; divided by
+  yield) or **outgoing** weight (the finished product; added as is), with a line spelling out what
+  the charge comes to per finished lb.
+- **What to charge** (cost mode only): "Your margin" (percent of the sell price, so it stops at 99)
+  and "Portion size" (ounces). Both optional, blank the first time, and remembered on the device.
+- **Number boxes read what people type** (`app/src/lib/numberInput.js`): "$4.50", "1,000", "42%" and
+  "4,50" all work. Text that isn't a number marks that box as invalid and the ticket says to use
+  numbers; it never counts as 0, because a wrong answer is worse than none. A message under a box
+  (`FieldError`) has an icon and says what to type.
 - **Works with no signal.** The calculator starts from the bundled reference yields
   (`FISH_DATA_V3`, given `from`/`to` by `app/src/lib/fishDataShape.js`) and the service worker serves
   the app, so it works on a boat with no connection. `/api/fish-data` replaces that data only when it
-  sends usable yields, and what is already picked stays picked. A signed-in person's custom yields come
+  sends usable yields, and what is already picked stays picked. A signed-in person's own yields come
   from the copy `DataContext` keeps on the device (merged by `app/src/lib/fishDataMerge.js`), which the
   sync refreshes when there is signal (and each time the calculator opens), so they work offline too.
   If a sync changes the yield you picked, the yield box follows it, unless you typed your own.
-- **Nothing hides behind the bar.** The calculator sets the page's `scroll-padding-bottom` to the bar's
-  height, so whatever you Tab to scrolls into view above it (WCAG 2.4.11). On a phone the bar's height
-  includes the tab bar under it (see "The bottom edge" above).
+
+### The ticket
+
+`Ticket.jsx` draws a `.ticket` inside a `.ticket-dock` wrapper from the ticket model.
+
+- **With an answer:** "Your cost per lb of" and the product in the display face, the figure in brass
+  with "/lb", Save and Share, then the line items under the dashed rule, in this order and each only
+  when it has something true to say:
+  1. the price across the conversion's typical yields, while the yield in use is inside that range;
+  2. Fish, Processing and Shipping, once processing or shipping adds to the price;
+  3. the sell price at the person's margin;
+  4. what one portion costs.
+- **Without one:** a single sentence saying what is missing ("Choose what you’re making.", "Type what
+  you pay per lb of whole fish."), or what to fix. There is an answer only when it is a finite amount
+  above zero that does not round away, so `$0.00`, `NaN` and `Infinity` cannot appear.
+- **"Pounds to buy"** shows the weight to buy and one line for what it makes. Margin, portion,
+  processing, shipping and Share do not apply and are not shown.
+- **On a phone** the line items sit behind "Price details" (a button with `aria-expanded`, closed by
+  default, remembered for the session) so the ticket is about 150px over the tab bar. **From 768px**
+  they are always shown. The dock is as wide as the window; an inner wrapper keeps what it says to
+  the content column.
+- **The figure never wraps or clips.** Its type shrinks with the number of characters and the screen
+  width (52px down to 28px); below that the actions wrap under it.
+- **Save** stores the price through `useData().saveCalc`: on the device first, for a guest and for
+  someone signed in alike, and the data layer then syncs a signed-in person's record. The button
+  reads "Saved" until a number changes, so one price is not saved twice. It is disabled while the app
+  is read-only.
+- **Share** builds plain text with `buildPriceCard` and hands it to the native share sheet in the
+  store app, to `navigator.share` on the web where it exists, and otherwise copies it. What was paid
+  is left out unless "Include what I paid" is ticked. Closing the share sheet is not an error.
+- **Notices** ("Saved.", "Copied.", and the two failures) appear just above the ticket, inside the
+  dock. Successes go after 8 seconds; everything goes when a number changes.
+- **Screen readers** get the answer once typing pauses, from a separate polite live region, not on
+  every keystroke.
+- **Nothing hides behind it.** The screen sets the page's `scroll-padding-bottom` and its own bottom
+  padding from the dock's height (ticket, notice and tab bar), so whatever you Tab or arrow to
+  scrolls into view above it (WCAG 2.4.11). If the ticket grows while a control has focus, the
+  control is scrolled back above it.
+- **A guest** sees one line under the cards: saved prices stay on this phone, and signing in keeps
+  them across devices. When `backendEnabled` is false the screen mentions no accounts at all.
 
 ## Guardrails
 
@@ -210,10 +279,12 @@ Chosen from the three mock-ups in `docs/design-mockups/` (direction A).
 
 ## Known follow-ups
 
-- **The calculator is not on the new components yet.** Its result bar is still teal rather than a
-  `.ticket`, its mode switch is `rounded-2xl` (16px, rounder than anything in the style guide), its
-  title is not in the display face, and its tiles lead with the trade code. See "Applying it" in the
-  style guide, steps 3 to 5.
+- **The calculator only merges a signed-in person's own yields.** A guest's yields kept on the
+  phone are not offered in the calculator yet (`myYields` in `Calculator.jsx`).
+- **A saved "Pounds to buy" answer is stored with `mode: 'weight'`,** but the list of saved prices
+  prints every `result` as dollars per lb.
+- **`ChoiceTile`, `Stepper` and `Segmented` live under `components/calculator/`.** Move them up a
+  level when a second screen needs one.
 - **`SyncStatusBadge` is still coloured for the retired teal top bar** (light text, label hidden on
   phones). `Account.jsx` sets it on a teal chip and forces the label on. Restyle the badge with the
   sync work, then drop the chip.
