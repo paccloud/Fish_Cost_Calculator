@@ -1,0 +1,444 @@
+{
+  "pdf_page": 10,
+  "side": "left",
+  "book_page": 12,
+  "rows": [
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 46,
+      "range": [
+        43,
+        55
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 36,
+      "range": [
+        32,
+        43
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 44,
+      "range": [
+        41,
+        53
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Trim",
+      "average": 16,
+      "range": [
+        13,
+        19
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 63,
+      "range": [
+        56,
+        77
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Dry-Salt Sides",
+      "average": 40,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Mild Cure Sides",
+      "average": 33,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Smoked Sides",
+      "average": 33,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 74,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 71,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillet",
+      "average": 58,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 45,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 55,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Trim",
+      "average": 19,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 80,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Dry-Salt Sides",
+      "average": 49,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Mild Cure Sides",
+      "average": 41,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Pink",
+      "scientific_name": "Oncorhynchus gorbuscha",
+      "scientific_name_as_printed": "Oncorhynchus gorbuscha",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Smoked Sides",
+      "average": 41,
+      "range": [
+        35,
+        50
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 89,
+      "range": [
+        79,
+        91
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 74,
+      "range": [
+        71,
+        77
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Canned",
+      "average": 67,
+      "range": [
+        60,
+        70
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 60,
+      "range": [
+        55,
+        63
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 57,
+      "range": [
+        52,
+        59
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 50,
+      "range": [
+        45,
+        53
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 36,
+      "range": [
+        30,
+        36
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 48,
+      "range": [
+        43,
+        51
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Trim",
+      "average": 15,
+      "range": [
+        12,
+        16
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 58,
+      "range": [
+        55,
+        65
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Dry-Salt Sides",
+      "average": 43,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Mild Cure Sides",
+      "average": 35,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked Sides",
+      "average": 35,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Chum",
+      "scientific_name": "Oncorhynchus keta",
+      "scientific_name_as_printed": "Oncorhynchus keta",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 8,
+      "range": [
+        4,
+        10
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

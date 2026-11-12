@@ -1,0 +1,462 @@
+{
+  "pdf_page": 11,
+  "side": "left",
+  "book_page": 14,
+  "rows": [
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "Round",
+      "to": "Mild Cure Sides",
+      "average": 33,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked Sides",
+      "average": 33,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 4,
+      "range": [
+        3,
+        6
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 80,
+      "range": [
+        70,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 57,
+      "range": [
+        53,
+        68
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 54,
+      "range": [
+        49,
+        62
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 50,
+      "range": [
+        43,
+        56
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 38,
+      "range": [
+        32,
+        41
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 48,
+      "range": [
+        42,
+        54
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Trim",
+      "average": 16,
+      "range": [
+        13,
+        28
+      ],
+      "check": "range: the page clearly prints 13-28 (checked at 450 dpi; OCR agrees). The same row for the other salmon is 13-19, 13-19, 13-18 and 13-20, so the high end may be an error in the source; transcribed as printed."
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 62,
+      "range": [
+        59,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Dry-Salt Sides",
+      "average": 44,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Mild Cure Sides",
+      "average": 36,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Smoked Sides",
+      "average": 36,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 72,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 69,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillet",
+      "average": 62,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 47,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 59,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Trim",
+      "average": 20,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 77,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Dry-Salt Sides",
+      "average": 54,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Mild Cure Sides",
+      "average": 45,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Sockeye",
+      "scientific_name": "Oncorhynchus nerka",
+      "scientific_name_as_printed": "Oncorhynchus nerka",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Smoked Sides",
+      "average": 45,
+      "range": [
+        35,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 92,
+      "range": [
+        87,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 75,
+      "range": [
+        70,
+        83
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Canned",
+      "average": 67,
+      "range": [
+        60,
+        70
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 57,
+      "range": [
+        52,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 55,
+      "range": [
+        50,
+        57
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 51,
+      "range": [
+        46,
+        56
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 38,
+      "range": [
+        30,
+        40
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 49,
+      "range": [
+        44,
+        54
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Trim",
+      "average": 14,
+      "range": [
+        12,
+        17
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

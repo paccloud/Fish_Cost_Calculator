@@ -1,0 +1,459 @@
+{
+  "pdf_page": 11,
+  "side": "right",
+  "book_page": 15,
+  "rows": [
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 62,
+      "range": [
+        58,
+        65
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Dry-Salt Sides",
+      "average": 43,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Mild Cure Sides",
+      "average": 36,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked Sides",
+      "average": 36,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 7,
+      "range": [
+        5,
+        10
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 82,
+      "range": [
+        76,
+        92
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 62,
+      "range": [
+        58,
+        67
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 59,
+      "range": [
+        56,
+        63
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 55,
+      "range": [
+        49,
+        63
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 41,
+      "range": [
+        32,
+        45
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 52,
+      "range": [
+        46,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Trim",
+      "average": 15,
+      "range": [
+        13,
+        18
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 66,
+      "range": [
+        63,
+        73
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Dry-Salt Sides",
+      "average": 47,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Mild Cure Sides",
+      "average": 39,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Smoked Sides",
+      "average": 39,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 76,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Machine)",
+      "average": 73,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillet",
+      "average": 68,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 51,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 64,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Trim",
+      "average": 19,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 81,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Dry-Salt Sides",
+      "average": 57,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Mild Cure Sides",
+      "average": 48,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Coho",
+      "scientific_name": "Oncorhynchus kisutch",
+      "scientific_name_as_printed": "Oncorhynchus kisutch",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Smoked Sides",
+      "average": 48,
+      "range": [
+        40,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 88,
+      "range": [
+        82,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 72,
+      "range": [
+        68,
+        74
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 55,
+      "range": [
+        52,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 46,
+      "range": [
+        41,
+        49
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 36,
+      "range": [
+        30,
+        40
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 45,
+      "range": [
+        40,
+        48
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Trim",
+      "average": 14,
+      "range": [
+        12,
+        16
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}
