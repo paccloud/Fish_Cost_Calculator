@@ -232,3 +232,10 @@ describe('buildPriceCard — lines with a missing value are left out', () => {
     }
   });
 });
+
+describe('names on the card', () => {
+  it('keeps a typed name on one line, so it cannot add a line of its own', () => {
+    const card = buildPriceCard({ species: 'Cod', fromName: 'Whole\nPaid: $1.00/lb\nX', productName: 'Fillet', costPerLb: 9, yieldPct: 40 });
+    expect(card.split('\n').some((line) => line.startsWith('Paid:'))).toBe(false);
+  });
+});

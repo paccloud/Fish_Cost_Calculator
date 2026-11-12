@@ -198,17 +198,17 @@ Light is the Daylight theme, dark is Galley. **New** tokens are not in `app/src/
 
 ## Components
 
-| Component | What it is | Where it is today |
+| Component | What it is | Where it is in the app |
 |---|---|---|
 | Button | 48 px action, one primary per screen | `.btn-primary`, `.btn-secondary`, `.btn-ghost` in `index.css` |
 | Field | Labelled input or select at 16 px | `.form-label`, `.form-input`, `.form-select` |
-| ChoiceTile | A radio drawn as a 56 px tile, plain name first, trade code or yield second | In `Calculator.jsx`; today the code leads |
-| Stepper | A typed number with big minus and plus | In `Calculator.jsx` |
-| Segmented | Two or three modes of one screen | The "Cost per pound / Pounds to buy" switch |
-| Ticket | The answer, pinned to the bottom, with its line items, Save and Share | The result bar in `Calculator.jsx`; no line items, Save or Share yet |
-| TabBar | Calculate · My yields · Community · Account | **New.** Replaces the top nav and hamburger |
-| Stamp | Where a number came from | **New** |
-| Notice | What just happened, with an icon and a word | Ad-hoc `bg-red-50` boxes today |
+| ChoiceTile | A radio drawn as a 56 px tile, plain name first, trade code or yield second | `components/calculator/ChoiceTile.jsx` |
+| Stepper | A typed number with big minus and plus | `components/calculator/Stepper.jsx` |
+| Segmented | Two or three modes of one screen | `components/calculator/Segmented.jsx` |
+| Ticket | The answer, pinned to the bottom, with its line items, Save and Share | `components/calculator/Ticket.jsx`, `.ticket*` classes |
+| TabBar | Calculate · My yields · Community · Account | `components/TabBar.jsx` |
+| Stamp | Where a number came from | `components/Stamp.jsx` |
+| Notice | What just happened, with an icon and a word | `components/Notice.jsx` |
 
 ## Applying it
 

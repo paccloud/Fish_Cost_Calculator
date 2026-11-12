@@ -18,10 +18,13 @@ export default function ExtraCost({
   const typed = parseAmount(amount);
   const unreadable = String(amount).trim() !== '' && Number.isNaN(typed);
   const spread = formatMoney(perFinishedLb);
+  // The engine falls back to 100% for a yield it cannot use; do not print a sum made that way
+  const yieldTyped = parseAmount(yieldPercent);
+  const yieldOk = yieldTyped > 0 && yieldTyped <= 100;
   let hint = `Choose which weight the ${title.toLowerCase()} price is per lb of.`;
   if (unreadable) {
     hint = `${title} is a price per lb. Type a number, like 0.50.`;
-  } else if (typed > 0 && basis === 'incoming' && perFinishedLb > 0 && spread) {
+  } else if (typed > 0 && basis === 'incoming' && perFinishedLb > 0 && spread && yieldOk) {
     hint = `${formatMoney(typed)} per lb of ${fromWords} comes to ${spread} per lb of ${productWords} at ${yieldPercent}% yield.`;
   } else if (typed > 0 && basis === 'outgoing') {
     hint = `${formatMoney(typed)} per lb of ${productWords}, added as is.`;

@@ -225,6 +225,10 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   ]);
 
   const yieldError = yieldProblem(yieldPercent, currentConversion);
+  // Text that is not a number never counts as 0: the box says so, and the ticket goes blank
+  const unreadable = (typed) => String(typed ?? '').trim() !== '' && Number.isNaN(parseAmount(typed));
+  const costUnreadable = unreadable(cost);
+  const targetUnreadable = unreadable(targetWeight);
   const source = yieldSource(currentConversion, yieldPercent);
 
   // Everything a saved price is made of. Margin and portion are not part of it.
@@ -563,7 +567,10 @@ const Calculator = ({ initial = NO_INITIAL }) => {
               placeholder="0.00"
               lessLabel="Lower the price by 25 cents"
               moreLabel="Raise the price by 25 cents"
+              describedBy={costUnreadable ? 'calc-cost-error' : undefined}
+              invalid={costUnreadable}
             />
+            {costUnreadable && <FieldError id="calc-cost-error">The price is a number, like 4.50.</FieldError>}
           </div>
         ) : (
           <div className="space-y-2">
@@ -580,7 +587,10 @@ const Calculator = ({ initial = NO_INITIAL }) => {
               placeholder="0"
               lessLabel="Lower the weight by 10 lbs"
               moreLabel="Raise the weight by 10 lbs"
+              describedBy={targetUnreadable ? 'calc-target-error' : undefined}
+              invalid={targetUnreadable}
             />
+            {targetUnreadable && <FieldError id="calc-target-error">The weight is a number, like 250.</FieldError>}
           </div>
         )}
 

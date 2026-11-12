@@ -191,7 +191,8 @@ export function buildTicketModel(inputs) {
   const fromName = tileName(fromState).name;
 
   if (!costMode) {
-    model.answer = { label: 'Buy this much', subject: fromName, figure, unit: 'lbs' };
+    // "Your yields" is where a custom conversion sits in the picker, not something to buy
+    model.answer = { label: 'Buy this much', subject: fromState === YOUR_YIELDS_FROM ? 'starting fish' : fromName, figure, unit: 'lbs' };
     model.sentence = `Buy ${figure} lbs of ${fromWords}`;
     // As typed, so 100 stays "100" and not "100.0"
     const made = mainNumber > 0 ? Number(mainNumber.toFixed(2)).toLocaleString('en-US') : '';
@@ -245,7 +246,8 @@ export function buildTicketModel(inputs) {
       model.sell = { price, marginPct };
       model.lines.push({
         id: 'sell',
-        label: `Sell price at ${plain(marginPct)}% margin`,
+        // As typed: rounding 99.999 to "100%" would name a margin no price can be worked out at
+        label: `Sell price at ${String(parseFloat(Number(marginPct).toPrecision(12)))}% margin`,
         value: `${money(price)}/lb`,
       });
     }

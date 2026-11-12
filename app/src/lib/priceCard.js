@@ -27,8 +27,9 @@ function positive(value) {
   return n !== null && n > 0 ? n : null;
 }
 
+// One line: a species or product name someone typed must not be able to add a line to the card
 function text(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
 }
 
 // "Skinless fillet" → "skinless fillet" for the middle of a line; "D/H-Off" and "SIB Trim" stay

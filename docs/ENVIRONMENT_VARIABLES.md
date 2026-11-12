@@ -55,7 +55,7 @@ These are only accessible on the server:
 | `DATABASE_URL` | **Required** | `api/_lib/db.js`, `scripts/*.js` | Neon PostgreSQL connection string. A secret |
 | `FIREBASE_PROJECT_ID` | **Required** | `api/_lib/firebase-auth.js` | Firebase project ID used to verify Firebase Auth ID tokens |
 | `ALLOWED_ORIGINS` | **Required** in production | `api/_lib/cors.js`, `server/server.js` | Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`). Defaults to the two localhost origins |
-| `JWT_SECRET` | Only for legacy login | `api/_lib/auth.js`, `api/login.js`, `server/server.js` | Signs and checks legacy JWTs. Without it `/api/login` returns 500 and legacy tokens are rejected. A secret |
+| `JWT_SECRET` | While legacy tokens are accepted | `api/_lib/auth.js`, `api/login.js`, `server/server.js` | Signs and checks legacy JWTs. Without it `/api/login` returns 500 and legacy tokens are rejected. A secret |
 | `JWT_EXPIRES_IN_SECONDS` | Optional | `api/login.js`, `server/server.js` | Legacy JWT lifetime in seconds (default 86400 / 24h) |
 | `CORS_ALLOW_CREDENTIALS` | Optional | `api/_lib/cors.js`, `server/server.js` | Set to `true` only if you need to send cookies with cross-origin requests |
 | `API_READ_ONLY` | Optional | `shared/readOnly.js` | Set to `true` to make both backends refuse every write except sign-in (503, `{"error":"read_only"}`). Off by default. See `docs/move-runbook.md` |

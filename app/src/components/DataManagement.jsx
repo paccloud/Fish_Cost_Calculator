@@ -229,7 +229,7 @@ const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete
 
 const DataManagement = () => {
   const { user, getAuthHeaders } = useAuth();
-  const { customYields, savedCalcs, dataLoaded: repoLoaded, storageFailed, addYield, updateYield, removeYield, removeCalc, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
+  const { customYields, savedCalcs, dataLoaded: repoLoaded, storageFailed, isOnline = true, addYield, updateYield, removeYield, removeCalc, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
   // If the browser will not let the app store anything, there is nothing to wait for: say so, and
   // show what the account has (a signed-in person's yields still come from the server).
   const dataLoaded = repoLoaded || Boolean(storageFailed);
@@ -291,6 +291,12 @@ const DataManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // The same rule the calculator reads yields by: above 0 and up to 100
+    const typedYield = parseFloat(formData.yield);
+    if (!(typedYield > 0 && typedYield <= 100)) {
+      setStatus({ type: 'error', message: 'Yield is a percentage above 0 and up to 100, like 42.' });
+      return;
+    }
     try {
       if (editingId) {
         const updated = await updateYield(editingId, {
@@ -337,7 +343,7 @@ const DataManagement = () => {
     if (!window.confirm(`Delete your yield for ${[item.species, item.product].filter(Boolean).join(', ')}${where}?`)) return;
     try {
       await removeYield(item.id);
-      setStatus({ type: 'success', message: 'Yield deleted.' });
+      setStatus({ type: 'success', message: user && !isOnline ? 'Yield deleted here. It leaves your account when there is signal.' : 'Yield deleted.' });
     } catch {
       setStatus({ type: 'error', message: 'That yield wasn’t deleted. Try again.' });
     }
@@ -348,7 +354,7 @@ const DataManagement = () => {
     if (!window.confirm(`Delete the saved price for ${calcLabel(calc)}${where}?`)) return;
     try {
       await removeCalc(calc.id);
-      setStatus({ type: 'success', message: 'Saved price deleted.' });
+      setStatus({ type: 'success', message: user && !isOnline ? 'Saved price deleted here. It leaves your account when there is signal.' : 'Saved price deleted.' });
     } catch {
       setStatus({ type: 'error', message: 'That saved price wasn’t deleted. Try again.' });
     }
@@ -523,8 +529,8 @@ const DataManagement = () => {
                       id="yield-percent"
                       type="number"
                       inputMode="decimal"
-                      step="0.1"
-                      min="0"
+                      step="any"
+                      min="0.01"
                       max="100"
                       value={formData.yield}
                       onChange={(e) => setFormData({ ...formData, yield: e.target.value })}

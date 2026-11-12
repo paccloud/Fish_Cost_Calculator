@@ -72,7 +72,7 @@ Calculator "Save" ──► IndexedDB (DataContext.saveCalc), guests included �
 Upload ─────────────► POST /api/upload-data   (straight to the API; the sync pulls it back)
 ```
 
-- Saving, My data and Upload all ask for sign-in. The storage layer also has a guest store, which older versions of the app wrote to; when someone signs in, the app offers to move any guest records it finds into the account.
+- A guest can save prices and manage them under My yields; they are kept in a guest store on the device. Sync, import (Upload) and sharing a yield need sign-in. When a guest signs in, the app offers to move the guest records it finds into the account.
 - Custom yields carry a revision number. An update or delete with a stale revision gets `409`, and the app asks which copy to keep.
 - `fishDataMerge.js` layers custom yields over the reference yields for the calculator.
 
