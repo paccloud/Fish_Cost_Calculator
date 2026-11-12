@@ -35,8 +35,8 @@ const UploadData = () => {
   const acceptFile = (f) => {
     if (!f) return;
     const ext = f.name.split('.').pop().toLowerCase();
-    if (!['xlsx', 'xls', 'csv'].includes(ext)) {
-      setStatus({ type: 'error', message: 'That file type isn’t supported. Choose an .xlsx, .xls or .csv file.' });
+    if (!['xlsx', 'csv'].includes(ext)) {
+      setStatus({ type: 'error', message: 'That file type isn’t supported. Choose an .xlsx or .csv file.' });
       return;
     }
     setFile(f);
@@ -167,7 +167,7 @@ const UploadData = () => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx, .xls, .csv"
+            accept=".xlsx, .csv"
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"
@@ -188,7 +188,7 @@ const UploadData = () => {
                 <span className="block text-base font-semibold text-text-primary">
                   {dragOver ? 'Drop it here' : 'Drop a spreadsheet here, or choose one'}
                 </span>
-                <span className="block text-sm text-text-secondary">.xlsx, .xls or .csv, up to 4 MB</span>
+                <span className="block text-sm text-text-secondary">.xlsx or .csv, up to 4 MB</span>
               </span>
             </p>
           )}

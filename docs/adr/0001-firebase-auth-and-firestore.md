@@ -20,9 +20,10 @@ provider. Firebase Auth was already in use, so no one signs up again.
   projects pause after a week idle, and it would change the sign-in system a
   third time.
 - **Keep Neon and delete the Express/SQLite backend** (the direction in
-  `AUDIT_REPORT.md` item 2.1): smallest change, but we'd still own API code,
+  `docs/archive/AUDIT_REPORT.md` item 2.1): smallest change, but we'd still own API code,
   token verification and a sync engine.
-- **Firebase SQL Connect** (proved in `dataconnect/`): needs a paid Cloud SQL
+- **Firebase SQL Connect** (proved in `dataconnect/`, since removed; see
+  `docs/archive/firebase-sql-connect-proof.md`): needs a paid Cloud SQL
   instance; more than this app needs.
 
 ## Consequences
@@ -76,4 +77,4 @@ provider. Firebase Auth was already in use, so no one signs up again.
   Vercel reduced to a redirect. Bookmarks follow the redirect; installed copies
   of the app need to be installed again from the new address. PR previews come
   from Firebase preview channels.
-- Supersedes `docs/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).
+- Supersedes `docs/archive/AUTH_MIGRATION_ROADMAP.md` (Better Auth + Cloudflare).

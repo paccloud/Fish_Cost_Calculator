@@ -22,7 +22,7 @@ Also found and harmless: test constants and a synthetic test token in the test f
 
 **How exposed.** The repository is public. On `main` the values were present from 2025-12-16 to 2026-03-28 (about 3.4 months). When scanned they were still retrievable: every branch contained the introducing commit, the values were at the tip of 8 branches (`docs/add-changelog`, `feature/custom-dropdown-options`, `feature/import-validation-ux`, `feature/pcs-maritime-ui-overhaul`, `fix/docs-env-vars`, `fix/neon-tuna-pdf-import`, `fix/oauth-authentication-config`, `vercel/set-up-vercel-web-analytics-in-qwrrs8`) and they appeared in 12 pull request refs (PRs 1 to 10, 12 and 73). Assume they were copied. The weak JWT fallback is also at the tip of the tag `v1.0.0` (the env files are not in that tag).
 
-**Current tree is clean.** At the current branch tip no tracked file contains a real credential; the four tracked env files hold placeholders only. Earlier notes (for example `AUDIT_REPORT.md` and the comments on #22) may name a different first commit, such as the oldest commit visible in a shallow clone. A shallow clone only holds the newest commits, so `git log` there will not show `1eef6e2`.
+**Current tree is clean.** At the current branch tip no tracked file contains a real credential; the four tracked env files hold placeholders only. Earlier notes (for example `docs/archive/AUDIT_REPORT.md` and the comments on #22) may name a different first commit, such as the oldest commit visible in a shallow clone. A shallow clone only holds the newest commits, so `git log` there will not show `1eef6e2`.
 
 ## Rotation checklist
 
@@ -72,7 +72,7 @@ Effect of changing it: every legacy token (issued by `/api/login` and kept in th
 
 - [ ] 5.1 Decide what to do about git history (see "Git history" below) and record it here: accepted the risk after rotation, or scrubbed it. Which, and why: ____ done on: ____
 - [ ] 5.2 Change the status block at the top of this file to say what was rotated and when, using the dates above, and to state the history decision from 5.1. done on: ____
-- [ ] 5.3 Optional, after rotation: trim the parts of `AUDIT_REPORT.md` that spell out how to pull the values out of history (the `git log -p` command and commit range). Not needed if you scrubbed history. done on: ____
+- [ ] 5.3 Optional, after rotation: trim the parts of `docs/archive/AUDIT_REPORT.md` that spell out how to pull the values out of history (the `git log -p` command and commit range). Not needed if you scrubbed history. done on: ____
 - [ ] 5.4 Close issue #22 with the dates from steps 1.7 and 2.1 and the history decision from 5.1. done on: ____
 
 ## Git history

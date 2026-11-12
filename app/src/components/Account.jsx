@@ -101,12 +101,7 @@ function SignedIn({ user }) {
           <p className="text-base font-semibold text-text-primary">Sync</p>
           <p className="text-sm text-text-secondary">Your yields and saved prices are kept on your account.</p>
         </div>
-        {/*
-          SyncStatusBadge is still coloured for the retired teal top bar (light text, and its label
-          hidden on phones), so it gets a teal chip to sit on and its label is forced on. Drop the
-          chip and the override when the badge is restyled with the sync work.
-        */}
-        <div className="focus-on-dark relative shrink-0 rounded-lg bg-brand-teal text-white [&_.hidden]:inline">
+        <div className="relative shrink-0">
           <SyncStatusBadge onToggleDetails={() => setSyncPanelOpen((open) => !open)} />
           {syncPanelOpen && <SyncDetailsPanel onClose={() => setSyncPanelOpen(false)} />}
         </div>
