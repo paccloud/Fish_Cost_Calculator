@@ -24,6 +24,7 @@ import { nameInSentence, tileName, REFERENCE_SOURCE, YOUR_YIELDS_FROM } from './
 import { priceCardFor, savedPriceRecord, savePrice } from './calculator/priceActions';
 import { readTicketOpen, readWhatToCharge, writeTicketOpen, writeWhatToCharge } from './calculator/remembered';
 import { sharePriceCard } from './calculator/sharePrice';
+import { usePaidOptIn } from './calculator/usePaidOptIn';
 import { buildTicketModel, marginProblem, portionProblem, yieldProblem, yieldSource } from './calculator/ticketModel';
 
 const money = (n) => n.toFixed(2);
@@ -90,8 +91,6 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   });
   const [recent, setRecent] = useState(() => readRecentSpecies());
   const [ticketOpen, setTicketOpen] = useState(() => readTicketOpen());
-  // "Include what I paid" is a yes for one price. It holds the key of the price it was given for.
-  const [paidOptIn, setPaidOptIn] = useState(null);
   // Which price the last save and the last notice were for, so both go as soon as a number changes
   const [savedKey, setSavedKey] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -238,9 +237,9 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   ]);
   const saved = savedKey === priceKey;
   // What someone paid is theirs to give away, one price at a time: a different fish, form or cost
-  // needs a new yes. On a phone the checkbox can be folded away while Share is still in reach.
-  const paidKey = JSON.stringify([species, fromState, toState, cost]);
-  const includePaid = paidOptIn === paidKey;
+  // needs a new yes, and going back to the old one does not bring the yes back. On a phone the
+  // checkbox can be folded away while Share is still in reach.
+  const [includePaid, setIncludePaid] = usePaidOptIn(JSON.stringify([species, fromState, toState, cost]));
   // What a shared card says. Margin, portion and the paid line are on it, so "Copied" goes as soon
   // as any of them changes: the clipboard no longer matches the ticket.
   const cardKey = JSON.stringify([priceKey, margin, portion, includePaid]);
@@ -786,7 +785,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
         saveDisabled={readOnly}
         onShare={handleShare}
         includePaid={includePaid}
-        onIncludePaid={(on) => setPaidOptIn(on ? paidKey : null)}
+        onIncludePaid={setIncludePaid}
       />
       <p className="sr-only" aria-live="polite">{announcement}</p>
     </div>
