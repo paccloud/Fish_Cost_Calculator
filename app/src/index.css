@@ -495,15 +495,3 @@
     }
   }
 }
-
-/*
- * STOPGAP, delete when the calculator is rebuilt on .ticket and .ticket-dock.
- * Calculator.jsx still pins its result bar with `fixed bottom-0 z-30` and pads it by the device's
- * bottom inset only. This makes that bar pad itself by the tab bar's height instead, exactly as
- * .ticket-dock does, so on a phone the tab bar (z-40) covers empty padding and never the price.
- * The calculator sets scroll-padding-bottom from the bar's offsetHeight, which now includes the
- * tab bar, so a field you tab to still lands above both.
- */
-main [role="region"][aria-label="Your result"] {
-  padding-bottom: max(var(--tabbar-height), env(safe-area-inset-bottom, 0px));
-}
