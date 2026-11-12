@@ -48,8 +48,9 @@ Find a CSF near you: [finder.localcatch.org](https://finder.localcatch.org/)
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
+- Node.js 22 or newer. The repository pins it in `.nvmrc`, so `nvm use` picks the right one.
+- npm (it comes with Node; the lockfiles are npm's)
+- For the iPhone build only: a Mac with Xcode. See [docs/ios.md](docs/ios.md).
 
 ### Installation
 
@@ -57,6 +58,7 @@ Find a CSF near you: [finder.localcatch.org](https://finder.localcatch.org/)
 # Clone the repository
 git clone https://github.com/paccloud/Fish_Cost_Calculator.git
 cd Fish_Cost_Calculator
+nvm use   # optional: switches to the Node version in .nvmrc
 
 # Install frontend dependencies
 cd app
@@ -84,6 +86,21 @@ cd app
 npm run dev
 # App runs on http://localhost:5173
 ```
+
+The calculator itself needs no server: the reference yields, the fonts and the icons are all in the build, and it keeps working with no signal.
+
+### iPhone app
+
+The same build is wrapped as an iOS app with [Capacitor](https://capacitorjs.com). The Xcode project is in `app/ios`. On a Mac with Xcode:
+
+```bash
+cd app
+npm ci
+npm run ios:sync   # builds the web app and copies it into the Xcode project
+npm run ios:open   # opens the project in Xcode
+```
+
+What has to be decided before the first TestFlight upload, and what the 1.0 build contains, is in [docs/ios.md](docs/ios.md).
 
 ## 🏗️ Project Structure
 
