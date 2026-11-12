@@ -31,7 +31,7 @@ export function track(eventName, props = {}) {
   }
 
   if (isDev) {
-    console.debug('[lifecycle]', payload); // eslint-disable-line no-console
+    console.debug('[lifecycle]', payload);
   }
 }
 
