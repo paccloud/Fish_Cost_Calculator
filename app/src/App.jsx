@@ -64,7 +64,7 @@ function AppContent() {
         <div className="min-h-screen bg-surface text-text-primary font-sans selection:bg-brand-terracotta/20 selection:text-link">
             <a
                 href="#main"
-                className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-[calc(env(safe-area-inset-top)+0.75rem)] focus:z-[60] focus:rounded-lg focus:bg-surface-raised focus:px-4 focus:py-2 focus:font-semibold focus:text-text-primary focus:shadow-lg"
+                className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-[calc(env(safe-area-inset-top)+0.75rem)] focus:z-[60] focus:inline-flex focus:min-h-target focus:items-center focus:rounded-lg focus:bg-surface-raised focus:px-4 focus:py-2 focus:font-semibold focus:text-text-primary focus:shadow-lg"
             >
                 Skip to main content
             </a>

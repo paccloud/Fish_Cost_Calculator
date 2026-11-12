@@ -107,7 +107,7 @@ describe('platform flags', () => {
   };
 
   it('is a web app with a backend by default', async () => {
-    expect(await load()).toMatchObject({ isNativeApp: false, backendEnabled: true });
+    expect(await load()).toMatchObject({ isNativeApp: false, backendEnabled: true, thisDevice: 'this phone' });
   });
 
   it('has no backend inside the Capacitor shell', async () => {
@@ -117,7 +117,7 @@ describe('platform flags', () => {
 
   it('treats Capacitor running in a browser as the web app', async () => {
     vi.stubGlobal('Capacitor', { isNativePlatform: () => false });
-    expect(await load()).toMatchObject({ isNativeApp: false, backendEnabled: true });
+    expect(await load()).toMatchObject({ isNativeApp: false, backendEnabled: true, thisDevice: 'this phone' });
   });
 
   it('can be built without a backend with VITE_BACKEND=off', async () => {

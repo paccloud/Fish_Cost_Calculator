@@ -36,7 +36,7 @@ async function renderCalculator({ initial, user = null, data = fakeUseData(), pl
   vi.resetModules();
   vi.doMock('../context/AuthContext', () => ({ useAuth: () => ({ user, getAuthHeaders: async () => ({}) }) }));
   vi.doMock('../context/DataContext', () => ({ useData: () => data }));
-  vi.doMock('../config/platform', () => platform);
+  vi.doMock('../config/platform', () => ({ thisDevice: 'this phone', ...platform }));
   const { MemoryRouter } = await import('react-router-dom');
   const { default: Calculator } = await import('./Calculator.jsx');
   return renderToStaticMarkup(

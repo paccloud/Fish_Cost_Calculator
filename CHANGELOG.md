@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Everything merged to `main` since 1.0.0. Entries from March 2026 on were rebuilt from the commit history in November 2026; the number is the pull request, or the commit where there was none.
 
 ### Added
+- The price ticket: the cost per lb with the price across the typical yield range, a sell price at your margin and the cost of one portion
+- Saving a price without an account (kept on the device, listed under My yields) and sharing a price as text
+- An iPhone app project (`app/ios`, Capacitor 8) built from the same code; see `docs/ios.md`
+- Four-tab navigation (Calculate, My yields, Community, Account) and an Account screen
+- Plain-language names for cuts ("Whole fish", "Gutted, head on") with the trade code beside them, and a label on every yield saying where it came from
+- Recent species above the species picker
+- A style guide (`docs/STYLE_GUIDE.md`) and the November 2026 product audit
 - `SECURITY.md` (how to report a vulnerability privately) and `CODE_OF_CONDUCT.md`
 - Notice of the coming move to a new address: a banner, a read-only stage for the app, a file download of changes that have not synced, and a switch that makes the API refuse writes ([#134])
 - Domain glossary (`CONTEXT.md`) and decision records for moving to Firebase Auth and Firestore with no server of our own ([#122])
@@ -37,6 +44,11 @@ Everything merged to `main` since 1.0.0. Entries from March 2026 on were rebuilt
 - Data validation module for ensuring fish data integrity
 
 ### Changed
+- Every screen follows one design: a serif for names and titles, the same layout and control sizes, and wording from one glossary
+- Fonts and icons ship with the app, so a first launch with no signal looks right; the home-screen icon is a PNG that iPhones accept
+- The app has one name, "Local Catch", in the title, the installed app and the navigation
+- Guests see what is saved on their device instead of a "Login Required" screen
+- Node 22 is required
 - Four unused components (`Footer`, `InstallPrompt`, `FeaturesRoadmap`, `SubmitRequest`) and the rejected SQL Connect proof (`dataconnect/`) were removed, and superseded documents moved to `docs/archive/`
 - The calculator is the home page; the old landing page content moved to About ([#13])
 - New look: teal, terracotta and yellow brand with named colour tokens ([#72]), readable in light and dark themes with contrast checked by a test ([#118])

@@ -2,7 +2,7 @@
 
 > **Direction:** [`STYLE_GUIDE.md`](STYLE_GUIDE.md) (November 2026) sets where the look, words and navigation are going. This file describes what is built: the tokens, the shared classes and components, the app shell and the calculator are on the style guide; the secondary screens are still being moved onto them.
 
-Supersedes the navy/rust direction in `docs/superpowers/specs/2026-03-27-branding-redesign-design.md`
+Supersedes the navy/rust direction in `docs/archive/2026-03-27-branding-redesign-design.md`
 (replaced by the teal/terracotta/yellow brand in July 2026).
 
 ## Who this is for
@@ -135,7 +135,8 @@ The ticket, as markup:
   `aria-current="true"`. Tapping the tab you are on scrolls it to the top.
 - **Account** holds what the old top bar did: sign in and out, the theme switch, sync status, and links
   to Import yields (`/upload`), Where the reference yields come from (`/data-sources`) and About
-  (`/about`). A guest sees one line: what they save stays on this phone until they sign in.
+  (`/about`). A guest sees one line: what they save stays on this phone until they sign in ("this device" on
+  anything that is not a narrow touch screen; the word comes from `thisDevice` in `config/platform.js`).
 - **A new screen starts at its top;** going back keeps the place the browser remembers.
 
 ### Builds with no backend
@@ -245,7 +246,8 @@ guide's components. `app/src/components/Calculator.jsx` holds the state and the 
   processing, shipping and Share do not apply and are not shown.
 - **On a phone** the line items sit behind "Price details" (a button with `aria-expanded`, closed by
   default, remembered for the session) so the ticket is about 150px over the tab bar. **From 768px**
-  they are always shown. The dock is as wide as the window; an inner wrapper keeps what it says to
+  they are always shown, beside the figure and its actions and not under them, so the ticket stays
+  about 170px tall on a wide screen. The dock is as wide as the window; an inner wrapper keeps what it says to
   the content column.
 - **The figure never wraps or clips.** Its type shrinks with the number of characters and the screen
   width (52px down to 28px); below that the actions wrap under it.
@@ -281,16 +283,9 @@ guide's components. `app/src/components/Calculator.jsx` holds the state and the 
 
 - **The calculator only merges a signed-in person's own yields.** A guest's yields kept on the
   phone are not offered in the calculator yet (`myYields` in `Calculator.jsx`).
-- **A saved "Pounds to buy" answer is stored with `mode: 'weight'`,** but the list of saved prices
-  prints every `result` as dollars per lb.
 - **`ChoiceTile`, `Stepper` and `Segmented` live under `components/calculator/`.** Move them up a
   level when a second screen needs one.
-- **`SyncStatusBadge` is still coloured for the retired teal top bar** (light text, label hidden on
-  phones). `Account.jsx` sets it on a teal chip and forces the label on. Restyle the badge with the
-  sync work, then drop the chip.
 - **The theme switch is light or dark.** `ThemeContext` follows the system setting until the person
   picks one, and has no way back to "follow the system".
 - **Tabs do not keep their scroll position or typed values** when you switch between them, which the
   style guide asks for.
-- **Unused components** `Footer.jsx` and `InstallPrompt.jsx` are not rendered anywhere and use tokens
-  that no longer exist (`bg-navy`, `text-teal`, `bg-rust`). Restyle before wiring them in, or delete.

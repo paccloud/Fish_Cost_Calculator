@@ -68,7 +68,7 @@ DataContext.jsx → localRepository.js → IndexedDB        (one store per accou
         ↕ when signed in and online
 syncCoordinator.js → apiClient.js → /api/saved-calcs, /api/user-data → SQLite or Neon
 
-Calculator "Save" ──► POST /api/save-calc     (straight to the API; the sync pulls it back)
+Calculator "Save" ──► IndexedDB (DataContext.saveCalc), guests included ──► sync ──► POST /api/save-calc when signed in
 Upload ─────────────► POST /api/upload-data   (straight to the API; the sync pulls it back)
 ```
 

@@ -7,6 +7,8 @@ import { apiClient } from '../lib/apiClient';
 import { createYieldShareFlow } from '../lib/yieldSharing';
 import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
+import { plainFormName } from '../lib/formNames';
+import { thisDevice } from '../config/platform';
 
 const TITLE = 'font-display text-3xl font-semibold text-text-primary';
 const HEADING = 'font-display text-xl font-semibold text-text-primary';
@@ -28,6 +30,13 @@ function describeResult(calc) {
   if (!Number.isFinite(n)) return '';
   if (calc.mode === 'weight') return `${Number(n.toFixed(2))} lb to buy`;
   return `$${n.toFixed(2)}/lb`;
+}
+
+// "Round → Skinless Fillet" the way a person says it: "Whole fish → Skinless fillet".
+// Anything the name table does not know (a product someone typed) is left as written.
+function plainConversion(product) {
+  if (!product) return '';
+  return String(product).split('→').map((part) => plainFormName(part.trim()).name || part.trim()).join(' → ');
 }
 
 function calcLabel(calc) {
@@ -71,7 +80,7 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
                 {calc.species || calc.name || 'Saved price'}
               </p>
               <p className="break-words text-base text-text-secondary">
-                {[calc.product, yieldText].filter(Boolean).join(' · ')}
+                {[plainConversion(calc.product), yieldText].filter(Boolean).join(' · ')}
               </p>
               {calc.species && calc.name && calc.name !== autoName && (
                 <p className="break-words text-sm text-text-secondary">Saved as “{calc.name}”</p>
@@ -313,7 +322,7 @@ const DataManagement = () => {
   };
 
   const handleDelete = async (item) => {
-    const where = user ? '' : ' from this phone';
+    const where = user ? '' : ` from ${thisDevice}`;
     if (!window.confirm(`Delete your yield for ${[item.species, item.product].filter(Boolean).join(', ')}${where}?`)) return;
     try {
       await removeYield(item.id);
@@ -324,7 +333,7 @@ const DataManagement = () => {
   };
 
   const handleDeleteCalc = async (calc) => {
-    const where = user ? '' : ' from this phone';
+    const where = user ? '' : ` from ${thisDevice}`;
     if (!window.confirm(`Delete the saved price for ${calcLabel(calc)}${where}?`)) return;
     try {
       await removeCalc(calc.id);
@@ -355,12 +364,12 @@ const DataManagement = () => {
         {status && <StatusNotice status={status} onDismiss={() => setStatus(null)} />}
 
         {!dataLoaded ? (
-          <p role="status" className="text-base text-text-secondary">Loading what’s saved on this phone…</p>
+          <p role="status" className="text-base text-text-secondary">Loading what’s saved on {thisDevice}…</p>
         ) : !hasSaved ? (
           <section className="card p-5 sm:p-6">
-            <h2 className={HEADING}>Nothing saved on this phone yet</h2>
+            <h2 className={HEADING}>Nothing saved on {thisDevice} yet</h2>
             <p className="mt-2 text-base text-text-secondary">
-              Prices you save from the calculator show up here. They stay on this phone until you sign in.
+              Prices you save from the calculator show up here. They stay on {thisDevice} until you sign in.
               Already have an account? <Link to="/login" className={INLINE_LINK}>Sign in</Link> to see your yields.
             </p>
             <Link to="/" className="btn-primary mt-5">Go to the calculator</Link>
@@ -370,7 +379,7 @@ const DataManagement = () => {
             <section className="card flex flex-wrap items-center justify-between gap-4 p-5" aria-label="Where this is saved">
               <p className="flex min-w-0 flex-1 basis-64 items-start gap-3 text-base text-text-primary">
                 <Smartphone size={20} className="mt-0.5 shrink-0 text-text-secondary" aria-hidden="true" />
-                <span>Saved on this phone until you sign in. Sign in to keep it on every device.</span>
+                <span>Saved on {thisDevice} until you sign in. Sign in to keep it on every device.</span>
               </p>
               <Link to="/login" className="btn-primary">Sign in</Link>
             </section>

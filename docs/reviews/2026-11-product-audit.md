@@ -4,6 +4,13 @@ Reviewed at commit `83c5f26` on 2026-11-10. It follows the [September platform r
 
 The companion to this document is [`docs/STYLE_GUIDE.md`](../STYLE_GUIDE.md).
 
+> **Since this audit (2026-11-12).** The short-term goal was narrowed to "a nice app that works on a phone and on the web, and as an iPhone app"; sign-in, sync and community stay on the Firebase plan. Done on the same branch:
+> - **Section 2.4:** the price range across yields, sell price at a margin, portion cost, recent species, save without an account, and share. Kilograms, a currency setting and species search are not done.
+> - **Section 4:** the style guide is applied to every screen: bundled fonts, the ticket, stamps, plain-language tiles, the four-tab navigation and an Account screen. The listed defects are fixed, and every route passes axe in both themes at 390 and 1280 px.
+> - **Section 6:** a Capacitor iOS project exists in `app/ios` (never compiled: it needs a Mac), with PNG icons and a branded splash. The bundle id is a placeholder. See `docs/ios.md`.
+> - **Section 2.7:** unused components and `dataconnect/` are deleted, superseded documents are in `docs/archive/`, Node is pinned to 22, and `npm audit` is down to tooling-only advisories with no in-range fix.
+> - **Not done:** sections 2.1 (the credential, yours), 2.2 (the Firebase move, issues 123–133), 2.3 (the secret scanner, awaiting your decision), 2.6 (reference data), turning off GitHub Pages, and everything in section 7.
+
 ## How this was checked
 
 - Ran the project's own gates: `npm run lint`, `npm test`, `npm run build`, and `npm audit` in all four packages.

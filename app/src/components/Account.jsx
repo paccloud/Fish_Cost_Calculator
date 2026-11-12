@@ -4,7 +4,7 @@ import { BookOpen, ChevronRight, Info, LogOut, Moon, Sun, Upload } from 'lucide-
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
-import { backendEnabled } from '../config/platform';
+import { backendEnabled, thisDevice } from '../config/platform';
 import Stamp from './Stamp';
 import SyncStatusBadge from './SyncStatusBadge';
 import SyncDetailsPanel from './SyncDetailsPanel';
@@ -118,14 +118,14 @@ function SignedIn({ user }) {
 function Guest() {
   return (
     <section className="card space-y-4 p-5 sm:p-6" aria-label="Where your work is saved">
-      <Stamp>Saved on this phone</Stamp>
+      <Stamp>Saved on {thisDevice}</Stamp>
       {backendEnabled ? (
         <>
-          <p className="text-base text-text-primary">What you save stays on this phone until you sign in.</p>
+          <p className="text-base text-text-primary">What you save stays on {thisDevice} until you sign in.</p>
           <Link to="/login" className="btn-primary w-full sm:w-auto">Sign in</Link>
         </>
       ) : (
-        <p className="text-base text-text-primary">What you save stays on this phone.</p>
+        <p className="text-base text-text-primary">What you save stays on {thisDevice}.</p>
       )}
     </section>
   );

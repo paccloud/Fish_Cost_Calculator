@@ -5,7 +5,7 @@ import { ACRONYMS, FISH_DATA_V3, PROFILES_DATA } from '../data/fish_data_v3';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
-import { backendEnabled, isNativeApp } from '../config/platform';
+import { backendEnabled, isNativeApp, thisDevice } from '../config/platform';
 import { parseAmount } from '../lib/numberInput';
 import { withConversionStates, hasUsableConversions } from '../lib/fishDataShape';
 import { mergeFishData } from '../lib/fishDataMerge';
@@ -365,12 +365,12 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   const notices = {
     saved: (
       <Notice title="Saved.">
-        {user ? 'It’s in My yields, and goes to your account when there is signal.' : 'It’s on this phone, in My yields.'}
+        {user ? 'It’s in My yields, and goes to your account when there is signal.' : `It’s on ${thisDevice}, in My yields.`}
       </Notice>
     ),
     'save-failed': (
       <Notice tone="error" title="Not saved.">
-        Nothing could be stored on this phone. Check that storage is allowed for this app, then save again.
+        Nothing could be stored on {thisDevice}. Check that storage is allowed for this app, then save again.
       </Notice>
     ),
     copied: <Notice title="Copied.">Paste the price into a message or a note.</Notice>,
@@ -710,7 +710,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
       {backendEnabled && !user && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-text-secondary">
-            Saved prices stay on this phone. Signing in keeps them across your devices.
+            Saved prices stay on {thisDevice}. Signing in keeps them across your devices.
           </p>
           <Link to="/login" className="btn-ghost shrink-0">Sign in</Link>
         </div>

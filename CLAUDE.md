@@ -110,7 +110,7 @@ Most endpoint logic lives once in **`shared/handlers/`**, behind a small databas
 1. Reference yields are bundled in `fish_data_v3.js` (from the MAB-37 PDF research document). The calculator also asks `GET /api/fish-data` and uses the answer only if it holds usable conversions, so it works with no backend.
 2. Custom yields (added on `/manage-data`, signed in) are written to IndexedDB first and then synced to the `user_data` table in SQLite (local) or Neon PostgreSQL (prod).
 3. Calculator merges reference + custom yields (`src/lib/fishDataMerge.js`), performs yield/cost calculations client-side
-4. Saving a calculation (signed in) posts it straight to `/api/save-calc`, into the `calculations` table. The sync then pulls saved calculations into IndexedDB, where `/manage-data` lists them.
+4. Saving a calculation writes it to IndexedDB first through `DataContext.saveCalc`, for guests and signed-in people alike, and `/manage-data` lists it from there. For a signed-in person the sync then pushes it to `/api/save-calc` (the `calculations` table).
 
 ### Key Data Structures
 Fish conversions use "From State → To Product" pattern with yield percentages:

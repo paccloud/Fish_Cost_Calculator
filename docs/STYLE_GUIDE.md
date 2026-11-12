@@ -2,8 +2,8 @@
 
 The look, the words and the components for Local Catch on the web and in the store apps. Written 2026-11-10 with the [November product audit](reviews/2026-11-product-audit.md) and revised 2026-11-12 after viewing the reference brands.
 
-- **Status: proposed.** Most colour tokens are the ones already in `app/src/index.css`. The display typeface, the ticket, the stamps and the tab bar are new, and three existing values change (the paper colour and two corner radii). "Applying it" at the end lists the work.
-- `docs/DESIGN_SYSTEM.md` still describes how the calculator is built today. Where the two disagree, this guide is the direction.
+- **Status: applied (2026-11-12).** The tokens, the display typeface, the ticket, the stamps, the tab bar and the wording rules are in the app. What is still open is listed under "Applying it" at the end.
+- `docs/DESIGN_SYSTEM.md` describes how it is built: class names, components and where each rule lives in the code. This guide is the reason behind them.
 - **What came from the reference brands** (Sitka Seafood Market, Wild Alaskan Company, Outerseas): dark blue ink instead of black, one yellow highlight, serif names at a regular weight over a plain working face, small uppercase labels, tight corners, and a ground that is bone or near-white. No colour value or typeface is copied from them. The measurements are in the audit, section 5.
 
 Local Catch turns what a fish costs whole into what each finished product really costs. It is used on a dock in glare, in a cold room, and at the pass mid-service, usually on a phone, often with wet or gloved hands, by people who know fish better than they know software.
@@ -212,15 +212,15 @@ Light is the Daylight theme, dark is Galley. **New** tokens are not in `app/src/
 
 ## Applying it
 
-In this order, so each step is small and shippable:
+Done in November 2026: tokens and corners, bundled fonts, the ticket with its line items, Save and Share, plain-language tiles, stamps, display-face titles, the four-tab navigation, the secondary screens, and the naming pass.
 
-1. **Tokens.** Add `--color-bar`, `--color-on-bar`, `--color-on-bar-muted` and `--color-on-primary` to `app/src/index.css` and `tailwind.config.js`, change `--color-surface` to `#f4f2ec` in the light theme, and add the new pairs to `designTokens.test.js`. Set the shared radii to 6 px (buttons, inputs) and 8 px (cards, tiles, steppers).
-2. **Fonts.** Bundle Inter and Fraunces as `woff2` files in the app (for example `@fontsource-variable/inter` and `@fontsource-variable/fraunces`), add a `font-display` family to the Tailwind config, and remove the Google Fonts links from `index.html` and the font caching rules from `vite.config.js`.
-3. **Ticket.** Move the result bar to `bar`, add the dashed line items (price across the yield range first), then Save and Share.
-4. **Tiles and stamps.** Plain-language names with the code on the second line; a stamp on every yield.
-5. **Titles.** Screen titles, section headings and the species name in the display face.
-6. **Navigation.** The four-tab bar on phones, a text row from 768 px, a paper top bar. Delete the hamburger menu.
-7. **Secondary screens.** Rebuild Sign in, My yields, Community and Account from these components as the Firebase issues (#123–#129) touch them. Do not restyle screens that ADR 0003 removes.
-8. **Words.** Apply the naming table across the app in one pass.
+Still open:
 
-The typeface and its weights were chosen by rendering candidates with the app's own copy, then adjusted after viewing the reference brands. Every text and edge pair in the token table was checked against WCAG 2 contrast (4.5:1 for text, 3:1 for control edges) in both themes.
+1. **A real mark.** The wordmark is type beside the Lucide fish, and the app icon is the same tile. Commission a logo and icon once the name is settled.
+2. **Species search.** The picker is a native select of 89 species with recent species above it.
+3. **Tabs keep their place.** Switching tabs does not yet preserve scroll position or typed values.
+4. **Follow the system theme again.** The switch is light or dark; there is no way back to "follow the system" once chosen.
+5. **Units.** Pounds, ounces and dollars only.
+6. **Illustration and photography** for the store listing and About.
+
+The typeface and its weights were chosen by rendering candidates with the app's own copy, then adjusted after viewing the reference brands. Every text and edge pair in the token table is checked against WCAG 2 contrast (4.5:1 for text, 3:1 for control edges) in both themes by `app/src/lib/__tests__/designTokens.test.js`.

@@ -13,7 +13,8 @@ const figureSize = (figure) =>
  * It draws a ticket model (see ticketModel.js) and decides nothing itself. With an answer it
  * shows the label, the figure, Save and Share, then the line items. On a phone the line items
  * sit behind "Price details" so the ticket does not eat the screen; from 768px they are always
- * shown. Without an answer it is one sentence saying what is missing, never a zero.
+ * shown, beside the figure rather than under it, so the ticket stays short on a wide screen.
+ * Without an answer it is one sentence saying what is missing, never a zero.
  *
  * `notice` is drawn just above the ticket, inside the dock, so the dock's height (which the
  * screen uses for scroll padding) includes it.
@@ -43,13 +44,14 @@ export default function Ticket({
           {!answer ? (
             <p className="py-1 text-lg font-bold leading-6">{prompt}</p>
           ) : (
-            <>
+            <div className="md:grid md:grid-cols-[17rem_minmax(0,1fr)] md:items-start md:gap-x-8">
+              <div>
               <p className="ticket-label">{answer.label} <b>{answer.subject}</b></p>
               <div className="ticket-row flex-wrap gap-y-2">
                 <p className="ticket-figure" style={{ fontSize: figureSize(answer.figure) }}>
                   {answer.figure}<small>{answer.unit === '/lb' ? '/lb' : ` ${answer.unit}`}</small>
                 </p>
-                <div className="ticket-actions ml-auto">
+                <div className="ticket-actions ml-auto md:ml-0">
                   <button
                     type="button"
                     className="ticket-action"
@@ -69,8 +71,9 @@ export default function Ticket({
                   )}
                 </div>
               </div>
+              </div>
               {hasDetails && (
-                <>
+                <div className="md:border-l md:border-dashed md:border-on-bar-muted md:pl-8">
                   <button
                     type="button"
                     aria-expanded={open}
@@ -87,7 +90,7 @@ export default function Ticket({
                   </button>
                   <div id={detailsId} className={open ? '' : 'hidden md:block'}>
                     {lines.length > 0 && (
-                      <ul className="ticket-lines max-md:mt-0">
+                      <ul className="ticket-lines max-md:mt-0 md:mt-0 md:border-t-0 md:pt-0">
                         {lines.map((line) => (
                           <li key={line.id}><span>{line.label}</span><span>{line.value}</span></li>
                         ))}
@@ -105,9 +108,9 @@ export default function Ticket({
                       </label>
                     )}
                   </div>
-                </>
+                </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </section>

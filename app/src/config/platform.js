@@ -7,5 +7,10 @@
 // True inside the Capacitor shell on a device, false in any browser.
 export const isNativeApp = Boolean(globalThis.Capacitor?.isNativePlatform?.());
 
+// What to call the thing a guest's data is saved on: a laptop is not a phone. Where the screen
+// cannot be asked (tests, server rendering) it is a phone, the main case.
+const narrowTouch = globalThis.matchMedia?.('(pointer: coarse) and (max-width: 640px)');
+export const thisDevice = !narrowTouch || narrowTouch.matches ? 'this phone' : 'this device';
+
 // False when there is no API to talk to. The shell hides sign-in and community when it is.
 export const backendEnabled = !isNativeApp && import.meta.env.VITE_BACKEND !== 'off';

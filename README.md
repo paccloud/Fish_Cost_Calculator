@@ -33,9 +33,12 @@ Find a CSF near you: [finder.localcatch.org](https://finder.localcatch.org/)
 
 - **89 Species Database** - Comprehensive yield data from salmon to sharks, rockfish to shellfish
 - **From → To Conversions** - Calculate yields between any processing states (Round, D/H-On, Fillets, etc.)
-- **Cost Calculator** - Factor in processing costs, cold storage, and shipping
+- **Cost Calculator** - Your true cost per lb as you type, with processing and shipping
+- **What to charge** - The price across the typical yield range, a sell price at your margin, and the cost of one portion
 - **Weight Calculator** - Determine how much input weight you need for a target output
-- **User Accounts** - Save calculations and add your own custom yield data
+- **Save and share** - Keep prices on your phone with no account, and share a price as text
+- **Works offline** - On the web, as an installed app, and as an iPhone app built from the same code
+- **User Accounts** - Keep saved prices and your own yields across devices
 - **Data Transparency** - Full source attribution and methodology documentation
 
 ## 📸 Screenshots

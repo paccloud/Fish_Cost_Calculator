@@ -63,7 +63,7 @@ describe('DataManagement for a guest', () => {
     expect(html()).toMatch(/<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="\/login"[^>]*>Sign in<\/a>/);
     expect(out).toContain('Saved prices');
     expect(out).toContain('Sockeye Salmon');
-    expect(out).toContain('Round → Skinless Fillet · 46% yield');
+    expect(out).toContain('Whole fish → Skinless fillet · 46% yield');
     expect(out).toContain('$9.78/lb');
     // A "Pounds to buy" result is a weight, not a price
     expect(out).toContain('250 lb to buy');
