@@ -1,5 +1,7 @@
 # Firebase SQL Connect Migration Verdict
 
+> **Archived.** Rejected by [ADR 0001](../adr/0001-firebase-auth-and-firestore.md). The `dataconnect/` directory it refers to has been deleted. Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 Parent PRD: https://github.com/paccloud/Fish_Cost_Calculator/issues/64
 
 ## Verdict

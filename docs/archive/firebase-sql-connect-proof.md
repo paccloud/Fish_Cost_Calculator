@@ -1,5 +1,7 @@
 # Firebase SQL Connect Proof
 
+> **Archived.** Rejected by [ADR 0001](../adr/0001-firebase-auth-and-firestore.md). The `dataconnect/` directory it describes has been deleted. Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 Issue #65 adds an isolated Firebase SQL Connect sandbox under `dataconnect/`.
 It is a proof path only; it does not replace the existing Neon, Stack Auth, or
 Vercel API behavior.

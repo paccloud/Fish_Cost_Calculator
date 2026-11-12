@@ -187,7 +187,7 @@ export function DataProvider({ children }) {
     }
 
     return { conflictCount: conflicts.length };
-  }, [repo, coordinator]);
+  }, [repo]);
 
   // Detect guest records when user transitions from null → authenticated.
   useEffect(() => {

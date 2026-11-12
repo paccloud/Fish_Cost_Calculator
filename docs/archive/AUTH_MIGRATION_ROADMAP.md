@@ -1,5 +1,7 @@
 # Auth Migration Roadmap: Stack Auth → Better Auth + Cloudflare
 
+> **Archived.** Superseded by [ADR 0001](../adr/0001-firebase-auth-and-firestore.md). Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 > Tracking issue: [#15](https://github.com/paccloud/Fish_Cost_Calculator/issues/15)
 > Related: [#14](https://github.com/paccloud/Fish_Cost_Calculator/issues/14) (redirect URL bug)
 
