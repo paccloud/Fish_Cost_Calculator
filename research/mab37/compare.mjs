@@ -28,10 +28,11 @@ export function groupTables(rows) {
   const tables = new Map();
   for (const row of rows) {
     const key = tableKey(row);
-    if (!tables.has(key)) tables.set(key, { key, group: row.group, species: row.species, subheading: row.subheading, scientific: new Set(), rows: [], pages: new Set() });
+    if (!tables.has(key)) tables.set(key, { key, group: row.group, species: row.species, subheading: row.subheading, scientific: new Set(), listed: new Set(), rows: [], pages: new Set() });
     const t = tables.get(key);
     if (row.scientific_name) t.scientific.add(sciKey(row.scientific_name));
-    for (const s of row.applies_to_species ?? []) t.scientific.add(sciKey(s));
+    // A heading that lists several species prints each as "Name Genus species"
+    for (const s of row.applies_to_species ?? []) t.listed.add(sciKey(s));
     t.rows.push(row);
     t.pages.add(row.pdf_page);
   }
@@ -42,12 +43,15 @@ export function matchSpecies(appData, tables, manual = {}) {
   const matches = {};
   for (const [name, entry] of Object.entries(appData)) {
     if (name in manual) {
-      const keys = [].concat(manual[name] ?? []);
-      matches[name] = { tables: keys.filter((k) => tables.has(k)), how: keys.length ? 'hand-checked list' : 'hand-checked: not in the bulletin', missing: keys.filter((k) => !tables.has(k)) };
+      // An entry is a table name, or { table, fromSuffix } where the app folds a table into the
+      // species by adding to the starting form (the thawed salmon tables become "D/H-On (Thawed)").
+      const entries = [].concat(manual[name] ?? []).map((e) => (typeof e === 'string' ? { table: e } : e));
+      const found = entries.filter((e) => tables.has(e.table));
+      matches[name] = { tables: found.map((e) => e.table), entries: found, how: entries.length ? 'hand-checked list' : 'hand-checked: not in the bulletin', missing: entries.filter((e) => !tables.has(e.table)).map((e) => e.table) };
       continue;
     }
     const sci = sciKey(entry.scientific_name);
-    const bySci = sci ? [...tables.values()].filter((t) => t.scientific.has(sci)) : [];
+    const bySci = sci ? [...tables.values()].filter((t) => t.scientific.has(sci) || [...t.listed].some((entry) => entry.endsWith(` ${sci}`))) : [];
     if (bySci.length === 1) { matches[name] = { tables: [bySci[0].key], how: 'scientific name' }; continue; }
     const want = words(name);
     let best = null;
@@ -116,7 +120,7 @@ async function main() {
   const usedTables = new Map();
   for (const [name, entry] of Object.entries(FISH_DATA_V3)) {
     const m = matches[name];
-    const rows = m.tables.flatMap((k) => tables.get(k).rows);
+    const rows = (m.entries ?? m.tables.map((table) => ({ table }))).flatMap((e) => tables.get(e.table).rows.map((r) => (e.fromSuffix ? { ...r, from: `${r.from}${e.fromSuffix}` } : r)));
     for (const k of m.tables) usedTables.set(k, [...(usedTables.get(k) ?? []), name]);
     const result = compareSpecies(entry, rows);
     for (const k of Object.keys(totals)) totals[k] += result[k].length;
