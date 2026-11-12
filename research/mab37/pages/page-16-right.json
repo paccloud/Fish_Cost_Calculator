@@ -1,0 +1,129 @@
+{
+  "pdf_page": 16,
+  "side": "right",
+  "book_page": 25,
+  "rows": [
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 75,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 35,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 83,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 39,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Tuna, Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "scientific_name_as_printed": "Thunnus alalunga",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 72,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Turbot, Greenland",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "scientific_name_as_printed": "Reinhardtius hippoglossoides",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Turbot, Greenland",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "scientific_name_as_printed": "Reinhardtius hippoglossoides",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 74,
+      "range": [70, 80],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Turbot, Greenland",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "scientific_name_as_printed": "Reinhardtius hippoglossoides",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 30,
+      "range": [25, 35],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}
