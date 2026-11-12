@@ -1,0 +1,160 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+
+const auth = { user: null, getAuthHeaders: async () => ({}) };
+const data = {};
+
+vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
+vi.mock('../context/DataContext', () => ({ useData: () => data }));
+
+import DataManagement from './DataManagement';
+
+const CALC = { id: 'c1', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: 4.5, yield: 46, result: 9.7826, name: 'Sockeye Salmon - Round → Skinless Fillet', syncStatus: 'local' };
+const WEIGHT_CALC = { id: 'c2', species: 'Halibut', product: 'Round → Fletch', mode: 'weight', yield: 40, result: 250, name: 'Friday order', syncStatus: 'local' };
+const YIELD = { id: 'y1', species: 'Lingcod', product: 'Round → Fillet', yield: '31.00', source: 'User Input', syncStatus: 'local' };
+
+function html() {
+  return renderToStaticMarkup(<MemoryRouter><DataManagement /></MemoryRouter>);
+}
+
+function text() {
+  return html().replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+}
+
+beforeEach(() => {
+  auth.user = null;
+  Object.assign(data, {
+    customYields: [],
+    savedCalcs: [],
+    dataLoaded: true,
+    readOnly: false,
+    addYield: vi.fn(),
+    updateYield: vi.fn(),
+    removeYield: vi.fn(),
+    removeCalc: vi.fn(),
+    updateYieldLocalOnly: vi.fn(),
+    requestPublish: vi.fn(),
+    unpublishCalc: vi.fn(),
+  });
+});
+
+describe('DataManagement for a guest', () => {
+  it('is never a sign-in wall', () => {
+    const out = text();
+    expect(out).not.toMatch(/login required/i);
+    expect(out).not.toMatch(/go to login/i);
+    expect(out).toContain('My yields');
+  });
+
+  it('with nothing saved, says what will appear and leads back to the calculator', () => {
+    const markup = html();
+    expect(text()).toContain('Nothing saved on this phone yet');
+    expect(text()).toContain('Prices you save from the calculator show up here.');
+    expect(markup).toMatch(/<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="\/"[^>]*>Go to the calculator<\/a>/);
+    // The sign-in route is still there, as an underlined inline link
+    expect(markup).toMatch(/<a[^>]*class="[^"]*\bunderline\b[^"]*"[^>]*href="\/login"/);
+  });
+
+  it('shows what is saved on this phone, where it lives, and a sign-in button', () => {
+    data.savedCalcs = [CALC, WEIGHT_CALC];
+    const out = text();
+    expect(out).toContain('Saved on this phone until you sign in.');
+    expect(html()).toMatch(/<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="\/login"[^>]*>Sign in<\/a>/);
+    expect(out).toContain('Saved prices');
+    expect(out).toContain('Sockeye Salmon');
+    expect(out).toContain('Round → Skinless Fillet · 46% yield');
+    expect(out).toContain('$9.78/lb');
+    // A "Pounds to buy" result is a weight, not a price
+    expect(out).toContain('250 lb to buy');
+    expect(out).toContain('Saved as “Friday order”');
+    expect(html()).toContain('aria-label="Delete Sockeye Salmon, Round → Skinless Fillet"');
+    expect(out).not.toContain('Nothing saved on this phone yet');
+  });
+
+  it('shows guest yields only when the phone has some, with delete and nothing that needs an account', () => {
+    data.savedCalcs = [CALC];
+    expect(text()).not.toContain('Your yields');
+
+    data.customYields = [YIELD];
+    const out = text();
+    expect(out).toContain('Your yields');
+    expect(out).toContain('Lingcod');
+    expect(out).toContain('31% yield');
+    expect(out).not.toContain('User Input');
+    expect(html()).toContain('aria-label="Delete Lingcod, Round → Fillet"');
+    expect(out).not.toContain('Edit');
+    expect(out).not.toContain('Share');
+    expect(out).not.toContain('Publish');
+    expect(out).not.toContain('Add a yield');
+  });
+
+  it('waits for the phone’s storage before calling it empty', () => {
+    data.dataLoaded = false;
+    const out = text();
+    expect(out).toContain('Loading what’s saved on this phone…');
+    expect(out).not.toContain('Nothing saved on this phone yet');
+  });
+
+  it('turns delete off while the app is read-only', () => {
+    data.savedCalcs = [CALC];
+    data.readOnly = true;
+    expect(html()).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Delete Sockeye Salmon/);
+  });
+});
+
+describe('DataManagement when signed in', () => {
+  beforeEach(() => {
+    auth.user = { uid: 'u1', username: 'dana' };
+  });
+
+  it('lists yields with share, edit and delete, and saved prices with publish', () => {
+    data.customYields = [
+      { ...YIELD, serverId: 7, syncStatus: 'synced', is_shared: true, source: 'Scale log' },
+      { ...YIELD, id: 'y2', species: 'Rockfish', syncStatus: 'local' },
+    ];
+    data.savedCalcs = [
+      { ...CALC, serverId: 3, syncStatus: 'synced', is_private: true },
+      { ...WEIGHT_CALC, serverId: 4, syncStatus: 'synced', is_private: false },
+    ];
+    const out = text();
+    const markup = html();
+    expect(out).toContain('Add a yield');
+    expect(out).toContain('Export CSV');
+    expect(out).toContain('Shared with the community');
+    expect(out).toContain('Source: Scale log');
+    expect(out).toContain('Waiting to sync');
+    expect(markup).toContain('aria-label="Stop sharing Lingcod, Round → Fillet"');
+    expect(markup).toContain('aria-label="Edit Rockfish, Round → Fillet"');
+    // An entry that has not reached the server cannot be shared yet
+    expect(markup).not.toContain('aria-label="Share Rockfish');
+    expect(markup).toContain('aria-label="Publish Sockeye Salmon, Round → Skinless Fillet"');
+    expect(markup).toContain('aria-label="Unpublish Halibut, Round → Fletch"');
+    expect(out).toContain('Private');
+    expect(out).toContain('Public');
+    expect(out).not.toContain('Saved on this phone until you sign in.');
+  });
+
+  it('says how to add the first yield and price when there are none', () => {
+    const out = text();
+    expect(out).toContain('No yields of your own yet.');
+    expect(out).toContain('No saved prices yet.');
+  });
+
+  it('turns every change off while the app is read-only', () => {
+    data.readOnly = true;
+    data.customYields = [{ ...YIELD, serverId: 7, syncStatus: 'synced' }];
+    const markup = html();
+    for (const name of ['Share Lingcod', 'Edit Lingcod', 'Delete Lingcod']) {
+      expect(markup).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*aria-label="${name}`));
+    }
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>(<svg.*?<\/svg>)?Add a yield/);
+  });
+
+  it('uses sentence case and the names from the style guide', () => {
+    const out = text();
+    for (const banned of ['Manage Your Data', 'Your Custom Data', 'Saved Calculations', 'Add Entry', 'Log in', 'Login', '!']) {
+      expect(out).not.toContain(banned);
+    }
+  });
+});

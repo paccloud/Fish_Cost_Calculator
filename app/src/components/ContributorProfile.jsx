@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react';
-import { User, Building2, FileText, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiUrl } from '../config/api';
 import { isAppReadOnly } from '../config/move';
 import { DEFAULT_PROFILE_FORM, profileToFormData, buildProfilePayload } from '../lib/contributorProfile';
+
+const TITLE = 'font-display text-3xl font-semibold text-text-primary';
+
+// A load that works clears the message a failed load left, and nothing else.
+const clearLoadError = (prev) => (prev?.source === 'load' ? null : prev);
 
 const ContributorProfile = () => {
     const { user, getAuthHeaders } = useAuth();
@@ -14,6 +19,10 @@ const ContributorProfile = () => {
     // Form is only editable/savable once the stored profile resolved (200 or
     // 404), so a failed or pending load can never overwrite stored consent.
     const [loaded, setLoaded] = useState(false);
+    // Bumped by "Try again" after a failed load.
+    const [loadAttempt, setLoadAttempt] = useState(0);
+    const nameInputRef = useRef(null);
+    const focusWhenLoaded = useRef(false);
 
     useEffect(() => {
         if (!user) return;
@@ -24,13 +33,14 @@ const ContributorProfile = () => {
                 const res = await fetch(apiUrl('/api/contributor'), { headers });
 
                 if (res.status === 404) {
+                    setStatus(clearLoadError);
                     setLoaded(true);
                     return;
                 }
 
                 if (!res.ok) {
                     const rawError = await res.text().catch(() => '');
-                    let message = `Unable to load your profile (HTTP ${res.status}). Please try again.`;
+                    let message = `Your details didn’t load (HTTP ${res.status}). Try again.`;
 
                     if (rawError) {
                         try {
@@ -44,7 +54,7 @@ const ContributorProfile = () => {
                         }
                     }
 
-                    setStatus({ type: 'error', message });
+                    setStatus({ type: 'error', source: 'load', message });
                     return;
                 }
 
@@ -52,15 +62,24 @@ const ContributorProfile = () => {
                 if (data) {
                     setFormData(profileToFormData(data));
                 }
+                setStatus(clearLoadError);
                 setLoaded(true);
             } catch (err) {
                 console.error('Failed to load profile:', err);
-                setStatus({ type: 'error', message: 'Unable to load your profile. Please try again.' });
+                setStatus({ type: 'error', source: 'load', message: 'Your details didn’t load. Check your connection and try again.' });
             }
         };
 
         loadProfile();
-    }, [user, getAuthHeaders]);
+    }, [user, getAuthHeaders, loadAttempt]);
+
+    // "Try again" disappears once the details load, so put focus on the first field.
+    useEffect(() => {
+        if (loaded && focusWhenLoaded.current) {
+            focusWhenLoaded.current = false;
+            nameInputRef.current?.focus();
+        }
+    }, [loaded]);
 
     const handleSubmit = async (e) => {
         if (isAppReadOnly) { e.preventDefault(); return; }
@@ -76,141 +95,154 @@ const ContributorProfile = () => {
             });
 
             if (res.ok) {
-                setStatus({ type: 'success', message: 'Profile saved successfully!' });
+                setStatus({ type: 'success', message: 'Saved. Taking you back to My yields.' });
                 setTimeout(() => navigate('/manage-data'), 2000);
             } else {
                 const errorData = await res.json().catch(() => ({}));
                 setStatus({
                     type: 'error',
-                    message: errorData.error || 'Failed to save profile.'
+                    message: errorData.error || 'Your details weren’t saved. Try again.'
                 });
             }
         } catch (error) {
             console.error('Save profile error:', error);
-            setStatus({ type: 'error', message: 'Error saving profile.' });
+            setStatus({ type: 'error', message: 'Your details didn’t reach the server. Check your connection and try again.' });
         }
     };
 
     if (!user) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-                <div className="bg-surface p-8 rounded-full">
-                    <User size={40} className="text-text-secondary" />
-                </div>
-                <h2 className="text-xl font-bold text-accent">Login Required</h2>
-                <p className="text-text-secondary max-w-md text-sm">
-                    You need to be logged in to create a contributor profile.
-                </p>
-                <Link to="/login" className="text-link hover:underline text-sm font-medium">
-                    Go to Login
-                </Link>
+            <div className="mx-auto max-w-2xl">
+                <header className="mb-8">
+                    <h1 className={TITLE}>How your name appears</h1>
+                </header>
+                <section className="card p-5 sm:p-6">
+                    <p className="text-base text-text-secondary">
+                        Choosing the name shown beside the yields you share needs an account.
+                    </p>
+                    <Link to="/login" className="btn-primary mt-5">Sign in</Link>
+                </section>
             </div>
         );
     }
 
     return (
-        <div className="max-w-2xl mx-auto px-4 py-8">
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
-                    <User className="text-link" size={22} />
-                    Contributor Profile
-                </h1>
-                <p className="text-text-secondary mt-1 text-sm">
-                    Share your information to be recognized on the Data Sources page
+        <div className="mx-auto max-w-2xl">
+            <header className="mb-8">
+                <h1 className={TITLE}>How your name appears</h1>
+                <p className="mt-2 text-base text-text-secondary">
+                    Share your information to be recognized on the Data sources page
                 </p>
-            </div>
+            </header>
 
             {status && (
-                <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
-                    status.type === 'success'
-                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-400'
-                        : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400'
-                }`}>
-                    {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-                    <p>{status.message}</p>
+                <div
+                    role={status.type === 'success' ? 'status' : 'alert'}
+                    className={`mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border bg-surface-raised p-4 ${
+                        status.type === 'success' ? 'border-success' : 'border-danger'
+                    }`}
+                >
+                    <p className="flex min-w-0 flex-1 basis-64 items-start gap-3 text-base text-text-primary">
+                        {status.type === 'success'
+                            ? <CheckCircle size={20} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+                            : <AlertCircle size={20} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />}
+                        <span className="min-w-0 break-words">{status.message}</span>
+                    </p>
+                    {status.source === 'load' && !loaded && (
+                        <button
+                            type="button"
+                            onClick={() => { focusWhenLoaded.current = true; setLoadAttempt((n) => n + 1); }}
+                            className="btn-secondary"
+                        >
+                            Try again
+                        </button>
+                    )}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="card p-8 space-y-5">
-              <fieldset disabled={!loaded || isAppReadOnly} className="space-y-5 border-0 p-0 m-0 min-w-0">
+            <form onSubmit={handleSubmit} className="card space-y-5 p-5 sm:p-6">
+              <fieldset disabled={!loaded || isAppReadOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
                 <div>
-                    <label className="form-label flex items-center gap-2">
-                        <User size={14} />
-                        Display Name *
+                    <label htmlFor="profile-display-name" className="form-label">
+                        Display name
                     </label>
                     <input
+                        id="profile-display-name"
+                        ref={nameInputRef}
                         type="text"
+                        autoComplete="nickname"
                         value={formData.display_name}
                         onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
                         className="form-input"
                         placeholder="Your name"
+                        aria-describedby="profile-display-name-help"
                         required
                     />
-                    <p className="mt-1 text-xs text-text-secondary">
-                        This is how your name will appear on the Data Sources page
+                    <p id="profile-display-name-help" className="mt-1.5 text-sm text-text-muted">
+                        Required. This is how your name will appear on the Data sources page.
                     </p>
                 </div>
 
                 <div>
-                    <label className="form-label flex items-center gap-2">
-                        <Building2 size={14} />
-                        Organization
+                    <label htmlFor="profile-organization" className="form-label">
+                        Organization (optional)
                     </label>
                     <input
+                        id="profile-organization"
                         type="text"
+                        autoComplete="organization"
                         value={formData.organization}
                         onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
                         className="form-input"
-                        placeholder="Your organization (optional)"
+                        placeholder="Your organization"
                     />
                 </div>
 
                 <div>
-                    <label className="form-label flex items-center gap-2">
-                        <FileText size={14} />
-                        Bio
+                    <label htmlFor="profile-bio" className="form-label">
+                        Bio (optional)
                     </label>
                     <textarea
+                        id="profile-bio"
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                         className="form-input"
-                        placeholder="Tell us about your expertise (max 200 characters)"
+                        placeholder="Tell us about your expertise"
                         rows="3"
                         maxLength="200"
+                        aria-describedby="profile-bio-help"
                     />
-                    <p className="mt-1 text-xs text-text-secondary text-right">
-                        {formData.bio.length}/200
+                    <p id="profile-bio-help" className="mt-1.5 text-sm tabular-nums text-text-muted">
+                        {formData.bio.length} of 200 characters
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <label htmlFor="show_on_page" className="flex min-h-[2.75rem] cursor-pointer items-center gap-3 text-base text-text-primary">
                     <input
                         type="checkbox"
                         id="show_on_page"
                         checked={formData.show_on_page}
                         onChange={(e) => setFormData({ ...formData, show_on_page: e.target.checked })}
-                        className="w-4 h-4 accent-brand-teal"
+                        className="h-6 w-6 shrink-0 accent-primary"
                     />
-                    <label htmlFor="show_on_page" className="text-sm text-text-secondary">
-                        Show my profile on the Data Sources page
-                    </label>
-                </div>
+                    Show my name, organization and bio on the Data sources page
+                </label>
 
               </fieldset>
 
-                <div className="flex gap-3 pt-2">
+                <div className="flex flex-wrap gap-3">
                     <button
                         type="submit"
                         disabled={!loaded || isAppReadOnly}
-                        className="flex-1 btn-primary flex items-center justify-center gap-2"
+                        className="btn-primary flex-1"
                     >
-                        <Save size={16} />
-                        Save Profile
+                        <Save size={20} aria-hidden="true" />
+                        Save changes
                     </button>
                     <button
                         type="button"
                         onClick={() => navigate('/manage-data')}
-                        className="px-5 py-3 bg-surface border border-line text-text-secondary rounded hover:bg-surface-raised transition text-sm"
+                        className="btn-secondary"
                     >
                         Cancel
                     </button>

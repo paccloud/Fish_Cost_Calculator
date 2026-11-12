@@ -1,37 +1,220 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Download, Search, AlertCircle } from 'lucide-react';
+import { AlertCircle, Download } from 'lucide-react';
 import { apiUrl } from '../config/api';
+import { useAuth } from '../context/AuthContext';
+
+const HEADING = 'font-display text-xl font-semibold text-text-primary';
+const INLINE_LINK = 'font-semibold text-link underline underline-offset-2';
+
+// "48.00" from the server reads as 48; a typed decimal (45.5) is kept.
+function formatYield(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? String(Number(n.toFixed(2))) : String(value ?? '');
+}
+
+function countLabel(count) {
+    return `${count} ${count === 1 ? 'yield' : 'yields'}`;
+}
+
+/**
+ * Everything under the Community title, for one load state at a time:
+ * loading, failed (the failure and a way forward, nothing else), or loaded
+ * (the yields, or an empty state when there are none).
+ */
+export const CommunityYieldsView = ({
+    status,
+    rows = [],
+    search = '',
+    onSearchChange,
+    onRetry,
+    retrying = false,
+    failures = 0,
+    onDownload,
+    downloadError = null,
+    signedIn = false,
+    headingRef,
+}) => {
+    if (status === 'loading') {
+        return <p role="status" className="text-base text-text-secondary">Loading community yields…</p>;
+    }
+
+    if (status === 'error') {
+        return (
+            <section className="card p-5 sm:p-6">
+                {/* Keyed so a second failed try is announced again */}
+                <div role="alert" key={failures}>
+                    <h2 className={`flex items-start gap-2 ${HEADING}`}>
+                        <AlertCircle size={22} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />
+                        Community yields didn’t load
+                    </h2>
+                    <p className="mt-2 text-base text-text-secondary">
+                        The calculator still works without them. Try again when you have signal.
+                    </p>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                        type="button"
+                        onClick={onRetry}
+                        aria-disabled={retrying}
+                        className="btn-primary w-full aria-disabled:cursor-wait aria-disabled:opacity-60 sm:w-auto"
+                    >
+                        {retrying ? 'Trying again…' : 'Try again'}
+                    </button>
+                    <Link to="/" className="btn-secondary w-full sm:w-auto">Go to the calculator</Link>
+                </div>
+            </section>
+        );
+    }
+
+    if (rows.length === 0) {
+        return (
+            <section className="card p-5 sm:p-6">
+                <h2 ref={headingRef} tabIndex={-1} className={HEADING}>No community yields yet</h2>
+                <p className="mt-2 text-base text-text-secondary">
+                    Yields that people measure and choose to share show up here. To add the first one,
+                    {signedIn ? ' ' : ' sign in, '}add a yield in My yields, then choose Share on it.
+                </p>
+                {signedIn ? (
+                    <Link to="/manage-data" className="btn-primary mt-5">Go to My yields</Link>
+                ) : (
+                    <Link to="/login" className="btn-primary mt-5">Sign in</Link>
+                )}
+            </section>
+        );
+    }
+
+    const query = search.trim().toLowerCase();
+    const filtered = query
+        ? rows.filter((row) =>
+            (row.species || '').toLowerCase().includes(query) ||
+            (row.product || '').toLowerCase().includes(query) ||
+            (row.contributor || '').toLowerCase().includes(query))
+        : rows;
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <label htmlFor="community-search" className="form-label">Search community yields</label>
+                <input
+                    id="community-search"
+                    type="search"
+                    value={search}
+                    onChange={(e) => onSearchChange?.(e.target.value)}
+                    placeholder="Species, product or contributor"
+                    className="form-input"
+                />
+            </div>
+
+            <section className="card overflow-hidden" aria-labelledby="community-list-heading">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line p-5">
+                    <h2 id="community-list-heading" ref={headingRef} tabIndex={-1} className={HEADING}>
+                        Shared yields
+                    </h2>
+                    <p aria-live="polite" className="text-sm text-text-secondary">
+                        {query ? `${filtered.length} of ${countLabel(rows.length)}` : countLabel(rows.length)}
+                    </p>
+                </div>
+
+                {filtered.length === 0 ? (
+                    <div className="p-5">
+                        <p className="text-base text-text-secondary">
+                            No yields match “{search.trim()}”. Try a species or product name.
+                        </p>
+                        <button type="button" onClick={() => onSearchChange?.('')} className="btn-ghost -mx-3 mt-1 text-base">
+                            Clear search
+                        </button>
+                    </div>
+                ) : (
+                    <ul className="divide-y divide-line-subtle">
+                        {filtered.map((row) => (
+                            <li key={row.id} className="flex items-start justify-between gap-4 px-5 py-4">
+                                <div className="min-w-0">
+                                    <p className="break-words font-display text-xl font-semibold text-text-primary">{row.species}</p>
+                                    <p className="break-words text-base text-text-secondary">{row.product}</p>
+                                    <p className="mt-1 break-words text-sm text-text-secondary">
+                                        Shared by {row.contributor || 'Anonymous'}
+                                        {row.organization ? ` (${row.organization})` : ''}
+                                        {row.source ? ` · Source: ${row.source}` : ''}
+                                    </p>
+                                </div>
+                                <p className="shrink-0 text-right text-xl font-bold tabular-nums text-text-primary">
+                                    {formatYield(row.yield)}%
+                                    <span className="block text-sm font-normal text-text-secondary">yield</span>
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
+            <div>
+                <button type="button" onClick={onDownload} className="btn-secondary">
+                    <Download size={20} aria-hidden="true" />
+                    Download CSV
+                </button>
+                {downloadError && (
+                    <p role="alert" className="mt-2 flex items-start gap-2 text-sm font-semibold text-danger">
+                        <AlertCircle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                        {downloadError}
+                    </p>
+                )}
+            </div>
+
+            <p className="text-base text-text-secondary">
+                Want to add yours?{' '}
+                {signedIn ? (
+                    <>Add a yield in <Link to="/manage-data" className={INLINE_LINK}>My yields</Link>, then choose Share on it.</>
+                ) : (
+                    <><Link to="/login" className={INLINE_LINK}>Sign in</Link>, add a yield in My yields, then choose Share on it.</>
+                )}
+            </p>
+        </div>
+    );
+};
 
 const CommunityData = () => {
-    const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { user } = useAuth();
+    const [load, setLoad] = useState({ status: 'loading', rows: [], retrying: false, failures: 0 });
+    const [attempt, setAttempt] = useState(0);
     const [search, setSearch] = useState('');
     const [downloadError, setDownloadError] = useState(null);
+    const headingRef = useRef(null);
+    const focusWhenLoaded = useRef(false);
 
     useEffect(() => {
+        let cancelled = false;
         fetch(apiUrl('/api/community-data'))
             .then(res => {
                 if (!res.ok) throw new Error('Server error');
                 return res.json();
             })
             .then(rows => {
-                if (Array.isArray(rows)) {
-                    setData(rows);
-                } else {
-                    setError('Unexpected response from server.');
-                }
+                if (!Array.isArray(rows)) throw new Error('Unexpected response');
+                if (!cancelled) setLoad((prev) => ({ ...prev, status: 'ready', rows, retrying: false }));
             })
-            .catch(() => setError('Failed to load community data. Please try again.'))
-            .finally(() => setLoading(false));
-    }, []);
+            .catch(() => {
+                if (!cancelled) {
+                    setLoad((prev) => ({ status: 'error', rows: [], retrying: false, failures: prev.failures + 1 }));
+                }
+            });
+        return () => { cancelled = true; };
+    }, [attempt]);
 
-    const filtered = data.filter(row =>
-        (row.species || '').toLowerCase().includes(search.toLowerCase()) ||
-        (row.product || '').toLowerCase().includes(search.toLowerCase()) ||
-        (row.contributor || '').toLowerCase().includes(search.toLowerCase())
-    );
+    // "Try again" disappears when the yields arrive, so put focus on what replaced it.
+    useEffect(() => {
+        if (load.status === 'ready' && focusWhenLoaded.current) {
+            focusWhenLoaded.current = false;
+            headingRef.current?.focus();
+        }
+    }, [load.status]);
+
+    const handleRetry = () => {
+        if (load.retrying) return;
+        focusWhenLoaded.current = true;
+        setLoad((prev) => ({ ...prev, retrying: true }));
+        setAttempt((n) => n + 1);
+    };
 
     const handleDownload = async () => {
         setDownloadError(null);
@@ -49,112 +232,32 @@ const CommunityData = () => {
             document.body.removeChild(a);
         } catch (e) {
             console.error('Download failed:', e);
-            setDownloadError('CSV download failed. Please try again.');
+            setDownloadError('The CSV didn’t download. Check your connection and try again.');
         }
     };
 
     return (
-        <div className="max-w-5xl mx-auto px-4 py-8">
-            <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
-                        <Users className="text-link" size={24} />
-                        Community Data Pool
-                    </h1>
-                    <p className="text-text-secondary mt-1 text-sm">
-                        Yield data shared by the Local Catch Network community — {data.length} entries from real fishing operations.
-                    </p>
-                </div>
-                <div>
-                    <button
-                        onClick={handleDownload}
-                        disabled={data.length === 0}
-                        className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                    >
-                        <Download size={16} />
-                        Download CSV
-                    </button>
-                    {downloadError && (
-                        <p className="mt-1 text-xs text-danger">{downloadError}</p>
-                    )}
-                </div>
-            </div>
+        <div className="mx-auto max-w-2xl">
+            <header className="mb-8">
+                <h1 className="font-display text-3xl font-semibold text-text-primary">Community yields</h1>
+                <p className="mt-2 text-base text-text-secondary">
+                    Yields shared by the Local Catch Network community, from real fishing operations.
+                </p>
+            </header>
 
-            {/* Search */}
-            <div className="relative mb-6">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-                <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by species, product, or contributor..."
-                    className="form-input pl-10"
-                />
-            </div>
-
-            {error && (
-                <div className="mb-6 p-4 rounded flex items-center gap-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30">
-                    <AlertCircle size={18} />
-                    {error}
-                </div>
-            )}
-
-            <div className="card overflow-hidden">
-                <div className="p-4 border-b border-line flex items-center justify-between">
-                    <h2 className="text-base font-semibold text-accent">Shared Yield Data</h2>
-                    {search && (
-                        <span className="text-sm text-text-secondary">{filtered.length} of {data.length} results</span>
-                    )}
-                </div>
-
-                {loading ? (
-                    <div className="p-8 text-center text-text-secondary">Loading...</div>
-                ) : filtered.length === 0 ? (
-                    <div className="p-8 text-center text-text-secondary">
-                        <Users size={40} className="mx-auto mb-4 opacity-30" />
-                        <p>{search ? 'No results match your search.' : 'No community data yet. Be the first to share your yield data!'}</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-line bg-surface">
-                                    <th className="text-left p-4 text-text-secondary font-medium">Species</th>
-                                    <th className="text-left p-4 text-text-secondary font-medium">Product</th>
-                                    <th className="text-right p-4 text-text-secondary font-medium">Yield %</th>
-                                    <th className="text-left p-4 text-text-secondary font-medium">Contributor</th>
-                                    <th className="text-left p-4 text-text-secondary font-medium hidden md:table-cell">Source</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filtered.map((row) => (
-                                    <tr
-                                        key={row.id}
-                                        className="border-b border-line-subtle hover:bg-surface transition"
-                                    >
-                                        <td className="p-4 text-text-primary font-medium">{row.species}</td>
-                                        <td className="p-4 text-text-secondary">{row.product}</td>
-                                        <td className="p-4 text-right text-accent font-semibold">{row.yield}%</td>
-                                        <td className="p-4 text-text-secondary">
-                                            {row.contributor || 'Anonymous'}
-                                            {row.organization && (
-                                                <span className="ml-1 text-text-muted text-xs">({row.organization})</span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-text-muted hidden md:table-cell">{row.source || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            <p className="mt-6 text-sm text-text-secondary text-center">
-                Want to contribute?{' '}
-                <Link to="/login" className="text-accent hover:underline">Log in</Link>,
-                add yield data in <strong>My Data</strong>, then toggle the share icon.
-            </p>
+            <CommunityYieldsView
+                status={load.status}
+                rows={load.rows}
+                search={search}
+                onSearchChange={setSearch}
+                onRetry={handleRetry}
+                retrying={load.retrying}
+                failures={load.failures}
+                onDownload={handleDownload}
+                downloadError={downloadError}
+                signedIn={Boolean(user)}
+                headingRef={headingRef}
+            />
         </div>
     );
 };

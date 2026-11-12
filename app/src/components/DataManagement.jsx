@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Database, AlertCircle, CheckCircle, Download, Share2, EyeOff, Globe, Lock } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus, Pencil, Trash2, Save, X, AlertCircle, CheckCircle, Download, Share2, EyeOff, Globe, Lock, RefreshCw, Smartphone, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { Link } from 'react-router-dom';
@@ -8,9 +8,211 @@ import { createYieldShareFlow } from '../lib/yieldSharing';
 import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 
+const TITLE = 'font-display text-3xl font-semibold text-text-primary';
+const HEADING = 'font-display text-xl font-semibold text-text-primary';
+const INLINE_LINK = 'font-semibold text-link underline underline-offset-2';
+const ROW_ACTION = 'btn-ghost disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline';
+const ROW_STATUS = 'inline-flex items-center gap-1.5 text-sm text-text-secondary';
+// What the form and the server fill in when no source was given; not worth showing.
+const DEFAULT_SOURCE = 'User Input';
+
+// "48.00" from the server reads as 48; a typed decimal (45.5) is kept.
+function formatPercent(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(Number(n.toFixed(2))) : String(value ?? '');
+}
+
+// A saved price is a cost per lb, unless it was saved from "Pounds to buy".
+function describeResult(calc) {
+  const n = Number(calc.result);
+  if (!Number.isFinite(n)) return '';
+  if (calc.mode === 'weight') return `${Number(n.toFixed(2))} lb to buy`;
+  return `$${n.toFixed(2)}/lb`;
+}
+
+function calcLabel(calc) {
+  return [calc.species, calc.product].filter(Boolean).join(', ') || calc.name || 'saved price';
+}
+
+const StatusNotice = ({ status, onDismiss }) => {
+  const ok = status.type === 'success';
+  return (
+    <div
+      role={ok ? 'status' : 'alert'}
+      className={`mb-6 flex items-start gap-3 rounded-lg border bg-surface-raised p-4 ${ok ? 'border-success' : 'border-danger'}`}
+    >
+      {ok
+        ? <CheckCircle size={20} className="mt-0.5 shrink-0 text-success" aria-hidden="true" />
+        : <AlertCircle size={20} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />}
+      <p className="min-w-0 flex-1 break-words text-base text-text-primary">{status.message}</p>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss message"
+        className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-secondary hover:text-text-primary"
+      >
+        <X size={20} aria-hidden="true" />
+      </button>
+    </div>
+  );
+};
+
+const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpublish }) => (
+  <ul className="divide-y divide-line-subtle">
+    {calcs.map((calc) => {
+      const label = calcLabel(calc);
+      const autoName = `${calc.species} - ${calc.product}`;
+      const yieldText = Number(calc.yield) > 0 ? `${formatPercent(calc.yield)}% yield` : '';
+      return (
+        <li key={calc.id} className="px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="break-words font-display text-xl font-semibold text-text-primary">
+                {calc.species || calc.name || 'Saved price'}
+              </p>
+              <p className="break-words text-base text-text-secondary">
+                {[calc.product, yieldText].filter(Boolean).join(' · ')}
+              </p>
+              {calc.species && calc.name && calc.name !== autoName && (
+                <p className="break-words text-sm text-text-secondary">Saved as “{calc.name}”</p>
+              )}
+              {signedIn && (
+                <p className="mt-1">
+                  {calc.is_private === false ? (
+                    <span className={ROW_STATUS}><Globe size={16} aria-hidden="true" />Public</span>
+                  ) : (
+                    <span className={ROW_STATUS}><Lock size={16} aria-hidden="true" />Private</span>
+                  )}
+                </p>
+              )}
+            </div>
+            <p className="shrink-0 text-right text-lg font-bold tabular-nums text-text-primary">
+              {describeResult(calc)}
+            </p>
+          </div>
+          <div className="-mx-3 mt-1 flex flex-wrap gap-x-1">
+            {signedIn && calc.serverId && (
+              calc.is_private === false ? (
+                <button
+                  type="button"
+                  onClick={() => onUnpublish(calc)}
+                  disabled={readOnly}
+                  className={ROW_ACTION}
+                  aria-label={`Unpublish ${label}`}
+                  title="Make private"
+                >
+                  <EyeOff size={18} aria-hidden="true" />
+                  Unpublish
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onPublish(calc)}
+                  disabled={readOnly}
+                  className={ROW_ACTION}
+                  aria-label={`Publish ${label}`}
+                  title="Publish to community feed"
+                >
+                  <Globe size={18} aria-hidden="true" />
+                  Publish
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              onClick={() => onDelete(calc)}
+              disabled={readOnly}
+              className={`${ROW_ACTION} text-danger`}
+              aria-label={`Delete ${label}`}
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              Delete
+            </button>
+          </div>
+        </li>
+      );
+    })}
+  </ul>
+);
+
+const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete }) => (
+  <ul className="divide-y divide-line-subtle">
+    {yields.map((item) => {
+      const label = [item.species, item.product].filter(Boolean).join(', ');
+      return (
+        <li key={item.id} className="px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="break-words font-display text-xl font-semibold text-text-primary">{item.species}</p>
+              <p className="break-words text-base text-text-secondary">{item.product}</p>
+              {item.source && item.source !== DEFAULT_SOURCE && (
+                <p className="break-words text-sm text-text-secondary">Source: {item.source}</p>
+              )}
+              {signedIn && (item.is_shared || item.syncStatus === 'local' || item.syncStatus === 'pending-delete') && (
+                <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  {item.is_shared ? (
+                    <span className={ROW_STATUS}><Users size={16} aria-hidden="true" />Shared with the community</span>
+                  ) : null}
+                  {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
+                    <span className={ROW_STATUS}>
+                      <RefreshCw size={16} aria-hidden="true" />
+                      {item.syncStatus === 'pending-delete' ? 'Deleting…' : 'Waiting to sync'}
+                    </span>
+                  ) : null}
+                </p>
+              )}
+            </div>
+            <p className="shrink-0 text-right text-lg font-bold tabular-nums text-text-primary">
+              {formatPercent(item.yield)}%
+              <span className="block text-sm font-normal text-text-secondary">yield</span>
+            </p>
+          </div>
+          <div className="-mx-3 mt-1 flex flex-wrap gap-x-1">
+            {signedIn && item.serverId && (
+              <button
+                type="button"
+                onClick={() => onToggleShare(item)}
+                disabled={readOnly}
+                className={ROW_ACTION}
+                aria-label={`${item.is_shared ? 'Stop sharing' : 'Share'} ${label}`}
+                title={item.is_shared ? 'Remove from community' : 'Share with community'}
+              >
+                {item.is_shared ? <EyeOff size={18} aria-hidden="true" /> : <Share2 size={18} aria-hidden="true" />}
+                {item.is_shared ? 'Stop sharing' : 'Share'}
+              </button>
+            )}
+            {signedIn && (
+              <button
+                type="button"
+                onClick={() => onEdit(item)}
+                disabled={readOnly}
+                className={ROW_ACTION}
+                aria-label={`Edit ${label}`}
+              >
+                <Pencil size={18} aria-hidden="true" />
+                Edit
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onDelete(item)}
+              disabled={readOnly}
+              className={`${ROW_ACTION} text-danger`}
+              aria-label={`Delete ${label}`}
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              Delete
+            </button>
+          </div>
+        </li>
+      );
+    })}
+  </ul>
+);
+
 const DataManagement = () => {
   const { user, getAuthHeaders } = useAuth();
-  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
+  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, removeCalc, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
   const [status, setStatus] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -19,7 +221,7 @@ const DataManagement = () => {
     species: '',
     product: '',
     yield: '',
-    source: 'User Input',
+    source: DEFAULT_SOURCE,
   });
 
   // Share-with-community confirmation (issue #26): sharing opens a preview of
@@ -36,11 +238,21 @@ const DataManagement = () => {
     });
   }, [shareFlow, getAuthHeaders, updateYieldLocalOnly]);
 
+  // "Add a yield" is replaced by the form while it is open; when the form
+  // closes, hand focus back to the button instead of dropping it.
+  const formOpen = showForm && !readOnly;
+  const addButtonRef = useRef(null);
+  const formWasOpen = useRef(false);
+  useEffect(() => {
+    if (formWasOpen.current && !formOpen) addButtonRef.current?.focus();
+    formWasOpen.current = formOpen;
+  }, [formOpen]);
+
   const reportShareResult = (result) => {
     if (result.ok && result.action === 'share') {
-      setStatus({ type: 'success', message: 'Shared with community!' });
+      setStatus({ type: 'success', message: 'Shared with the community.' });
     } else if (result.ok && result.action === 'unshare') {
-      setStatus({ type: 'success', message: 'Removed from community.' });
+      setStatus({ type: 'success', message: 'No longer shared with the community.' });
     } else if (!result.ok && result.error) {
       setStatus({ type: 'error', message: result.error });
     }
@@ -73,7 +285,7 @@ const DataManagement = () => {
           setStatus({ type: 'error', message: 'This yield was deleted on another device. Save to add it back.' });
           return;
         }
-        setStatus({ type: 'success', message: 'Updated successfully!' });
+        setStatus({ type: 'success', message: 'Yield updated.' });
       } else {
         await addYield({
           species: formData.species,
@@ -81,11 +293,11 @@ const DataManagement = () => {
           yield: parseFloat(formData.yield),
           source: formData.source,
         });
-        setStatus({ type: 'success', message: 'Added successfully!' });
+        setStatus({ type: 'success', message: 'Yield added.' });
       }
       resetForm();
     } catch {
-      setStatus({ type: 'error', message: 'Operation failed.' });
+      setStatus({ type: 'error', message: 'That yield wasn’t saved. Check the species, product and yield, then save again.' });
     }
   };
 
@@ -94,313 +306,276 @@ const DataManagement = () => {
       species: item.species,
       product: item.product,
       yield: String(item.yield),
-      source: item.source || 'User Input',
+      source: item.source || DEFAULT_SOURCE,
     });
     setEditingId(item.id);
     setShowForm(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+  const handleDelete = async (item) => {
+    const where = user ? '' : ' from this phone';
+    if (!window.confirm(`Delete your yield for ${[item.species, item.product].filter(Boolean).join(', ')}${where}?`)) return;
     try {
-      await removeYield(id);
-      setStatus({ type: 'success', message: 'Deleted successfully!' });
+      await removeYield(item.id);
+      setStatus({ type: 'success', message: 'Yield deleted.' });
     } catch {
-      setStatus({ type: 'error', message: 'Failed to delete.' });
+      setStatus({ type: 'error', message: 'That yield wasn’t deleted. Try again.' });
+    }
+  };
+
+  const handleDeleteCalc = async (calc) => {
+    const where = user ? '' : ' from this phone';
+    if (!window.confirm(`Delete the saved price for ${calcLabel(calc)}${where}?`)) return;
+    try {
+      await removeCalc(calc.id);
+      setStatus({ type: 'success', message: 'Saved price deleted.' });
+    } catch {
+      setStatus({ type: 'error', message: 'That saved price wasn’t deleted. Try again.' });
     }
   };
 
   const resetForm = () => {
-    setFormData({ species: '', product: '', yield: '', source: 'User Input' });
+    setFormData({ species: '', product: '', yield: '', source: DEFAULT_SOURCE });
     setEditingId(null);
     setShowForm(false);
   };
 
+  // A guest sees what is saved on this phone. Nothing here needs an account.
   if (!user) {
+    const hasSaved = savedCalcs.length > 0 || customYields.length > 0;
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-        <div className="bg-surface p-8 rounded-full">
-          <Database size={40} className="text-text-secondary" />
-        </div>
-        <h2 className="text-xl font-bold text-accent">Login Required</h2>
-        <p className="text-text-secondary max-w-md text-sm">
-          You need to be logged in to manage your custom yield data.
-        </p>
-        <Link to="/login" className="px-6 py-2 bg-brand-teal hover:bg-brand-teal-light text-white rounded transition text-sm font-medium">
-          Go to Login
-        </Link>
+      <div className="mx-auto max-w-2xl">
+        <header className="mb-8">
+          <h1 className={TITLE}>My yields</h1>
+          <p className="mt-2 text-base text-text-secondary">
+            Your saved prices and the yields you measured yourself.
+          </p>
+        </header>
+
+        {status && <StatusNotice status={status} onDismiss={() => setStatus(null)} />}
+
+        {!dataLoaded ? (
+          <p role="status" className="text-base text-text-secondary">Loading what’s saved on this phone…</p>
+        ) : !hasSaved ? (
+          <section className="card p-5 sm:p-6">
+            <h2 className={HEADING}>Nothing saved on this phone yet</h2>
+            <p className="mt-2 text-base text-text-secondary">
+              Prices you save from the calculator show up here. They stay on this phone until you sign in.
+              Already have an account? <Link to="/login" className={INLINE_LINK}>Sign in</Link> to see your yields.
+            </p>
+            <Link to="/" className="btn-primary mt-5">Go to the calculator</Link>
+          </section>
+        ) : (
+          <div className="space-y-6">
+            <section className="card flex flex-wrap items-center justify-between gap-4 p-5" aria-label="Where this is saved">
+              <p className="flex min-w-0 flex-1 basis-64 items-start gap-3 text-base text-text-primary">
+                <Smartphone size={20} className="mt-0.5 shrink-0 text-text-secondary" aria-hidden="true" />
+                <span>Saved on this phone until you sign in. Sign in to keep it on every device.</span>
+              </p>
+              <Link to="/login" className="btn-primary">Sign in</Link>
+            </section>
+
+            {savedCalcs.length > 0 && (
+              <section className="card overflow-hidden" aria-labelledby="saved-prices-heading">
+                <div className="border-b border-line p-5">
+                  <h2 id="saved-prices-heading" className={HEADING}>Saved prices</h2>
+                </div>
+                <SavedPriceList calcs={savedCalcs} signedIn={false} readOnly={readOnly} onDelete={handleDeleteCalc} />
+              </section>
+            )}
+
+            {customYields.length > 0 && (
+              <section className="card overflow-hidden" aria-labelledby="your-yields-heading">
+                <div className="border-b border-line p-5">
+                  <h2 id="your-yields-heading" className={HEADING}>Your yields</h2>
+                </div>
+                <YieldList yields={customYields} signedIn={false} readOnly={readOnly} onDelete={handleDelete} />
+              </section>
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-accent flex items-center gap-3">
-            <Database className="text-link" size={22} />
-            Manage Your Data
-          </h1>
-          <p className="text-text-secondary mt-1 text-sm">
-            Add, edit, or delete your custom yield data •{' '}
-            <Link to="/profile" className="text-link hover:underline">Edit Contributor Profile</Link>
-          </p>
-        </div>
+    <div className="mx-auto max-w-2xl">
+      <header className="mb-8">
+        <h1 className={TITLE}>My yields</h1>
+        <p className="mt-2 text-base text-text-secondary">
+          The yields you measured yourself, and the prices you saved.
+        </p>
+        <Link to="/profile" className="btn-ghost -mx-3 mt-1 text-base">
+          Change how your name appears
+        </Link>
+      </header>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => {
-              const csv = yieldsToCSV(customYields.filter(y => y.syncStatus !== 'pending-delete'));
-              downloadText(csv, 'custom-yield-data.csv');
-            }}
-            className="flex items-center gap-2 bg-surface-raised border border-line text-text-primary hover:bg-surface px-4 py-2 rounded transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-            disabled={customYields.length === 0}
-            title="Download your yield data as a CSV (works offline)"
-          >
-            <Download size={16} />
-            Export CSV
-          </button>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            disabled={readOnly}
-            className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
-          >
-            <Plus size={16} />
-            Add Entry
-          </button>
-        </div>
-      </div>
+      {status && <StatusNotice status={status} onDismiss={() => setStatus(null)} />}
 
-      {/* Status Message */}
-      {status && (
-        <div className={`mb-6 p-4 rounded flex items-center gap-3 text-sm ${
-          status.type === 'success'
-            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
-            : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-500/30'
-        }`}>
-          {status.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-          {status.message}
-          <button onClick={() => setStatus(null)} className="ml-auto">
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* Add/Edit Form */}
-      {showForm && !readOnly && (
-        <div className="card p-6 mb-8">
-          <h2 className="text-lg font-semibold text-accent mb-4">
-            {editingId ? 'Edit Entry' : 'Add New Entry'}
-          </h2>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="form-label">Species Name</label>
-                <input
-                  type="text"
-                  value={formData.species}
-                  onChange={(e) => setFormData({ ...formData, species: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. Atlantic Salmon"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="form-label">Product/Conversion</label>
-                <input
-                  type="text"
-                  value={formData.product}
-                  onChange={(e) => setFormData({ ...formData, product: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. Skinless Fillet"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="form-label">Yield (%)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  value={formData.yield}
-                  onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. 45"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="form-label">Source/Notes</label>
-                <input
-                  type="text"
-                  value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                  className="form-input"
-                  placeholder="e.g. Personal experience"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                className="flex items-center gap-2 bg-brand-teal hover:bg-brand-teal-light text-white px-4 py-2 rounded transition text-sm font-medium"
-              >
-                <Save size={16} />
-                {editingId ? 'Update' : 'Save'}
-              </button>
+      <div className="space-y-6">
+        {/* Your yields */}
+        <section className="card overflow-hidden" aria-labelledby="your-yields-heading">
+          <div className="border-b border-line p-5">
+            <h2 id="your-yields-heading" className={HEADING}>Your yields</h2>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {!formOpen && (
+                <button
+                  ref={addButtonRef}
+                  type="button"
+                  onClick={() => setShowForm(true)}
+                  disabled={readOnly}
+                  className="btn-primary flex-1 whitespace-nowrap px-4 sm:flex-none sm:px-5"
+                >
+                  <Plus size={20} aria-hidden="true" />
+                  Add a yield
+                </button>
+              )}
               <button
                 type="button"
-                onClick={resetForm}
-                className="flex items-center gap-2 bg-surface border border-line text-text-secondary hover:bg-surface-raised px-4 py-2 rounded transition text-sm font-medium"
+                onClick={() => {
+                  const csv = yieldsToCSV(customYields.filter(y => y.syncStatus !== 'pending-delete'));
+                  downloadText(csv, 'custom-yield-data.csv');
+                }}
+                className="btn-secondary flex-1 whitespace-nowrap px-4 sm:flex-none sm:px-5"
+                disabled={customYields.length === 0}
+                title="Download your yields as a CSV (works offline)"
               >
-                <X size={16} />
-                Cancel
+                <Download size={20} aria-hidden="true" />
+                Export CSV
               </button>
             </div>
-          </form>
-        </div>
-      )}
-
-      {/* Saved Calculations */}
-      <div className="card overflow-hidden mb-8">
-        <div className="p-4 border-b border-line">
-          <h2 className="text-base font-semibold text-accent">Saved Calculations</h2>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Publish a calculation to share it anonymously on the community feed.
-          </p>
-        </div>
-
-        {!dataLoaded ? (
-          <div className="p-8 text-center text-text-secondary">Loading...</div>
-        ) : savedCalcs.length === 0 ? (
-          <div className="p-8 text-center text-text-secondary">
-            <Database size={40} className="mx-auto mb-4 opacity-30" />
-            <p>No saved calculations yet.</p>
           </div>
-        ) : (
-          <div className="divide-y divide-line-subtle">
-            {savedCalcs.map((calc) => (
-              <div key={calc.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
-                <div>
-                  <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
-                    {calc.name || `${calc.species} — ${calc.product}`}
-                    {calc.is_private === false ? (
-                      <span className="text-xs bg-brand-teal/10 text-accent border border-brand-teal/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Globe size={10} />Public
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-surface-raised text-text-muted border border-line px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Lock size={10} />Private
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-sm text-text-secondary">
-                    {calc.species} · {calc.product} → <span className="text-accent font-medium">${Number(calc.result).toFixed(2)}/lb</span>
-                  </p>
-                </div>
-                <div className="flex gap-1">
-                  {calc.serverId && (
-                    calc.is_private === false ? (
-                      <button
-                        onClick={() => unpublishCalc(calc)}
-                        disabled={readOnly}
-                        className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-line text-text-secondary hover:text-text-primary hover:bg-surface transition"
-                        title="Make private"
-                      >
-                        <EyeOff size={13} />
-                        Unpublish
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => requestPublish(calc)}
-                        disabled={readOnly}
-                        className="disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-brand-teal/40 text-accent hover:bg-brand-teal/10 transition"
-                        title="Publish to community feed"
-                      >
-                        <Globe size={13} />
-                        Publish
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Data List */}
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-line">
-          <h2 className="text-base font-semibold text-accent">Your Custom Data</h2>
-        </div>
+          {/* Add/Edit Form */}
+          {formOpen && (
+            <div className="border-b border-line p-5">
+              <h3 className="text-lg font-semibold text-text-primary">
+                {editingId ? 'Edit this yield' : 'Add a yield'}
+              </h3>
 
-        {!dataLoaded ? (
-          <div className="p-8 text-center text-text-secondary">Loading...</div>
-        ) : customYields.length === 0 ? (
-          <div className="p-8 text-center text-text-secondary">
-            <Database size={40} className="mx-auto mb-4 opacity-30" />
-            <p>No custom data yet. Add your first entry above!</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-line-subtle">
-            {customYields.map((item) => (
-              <div key={item.id} className="p-4 flex items-center justify-between hover:bg-surface transition">
-                <div>
-                  <p className="text-text-primary font-medium flex items-center gap-2 text-sm">
-                    {item.species}
-                    {item.is_shared ? (
-                      <span className="text-xs bg-brand-teal/10 text-accent border border-brand-teal/20 px-2 py-0.5 rounded-full">Shared</span>
-                    ) : null}
-                    {item.syncStatus === 'local' || item.syncStatus === 'pending-delete' ? (
-                      <span className="text-xs text-yellow-500 border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 px-1.5 py-0.5 rounded-full">
-                        {item.syncStatus === 'pending-delete' ? 'Deleting…' : 'Pending'}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="text-sm text-text-secondary">
-                    {item.product} → <span className="text-accent font-medium">{item.yield}%</span>
-                    {item.source && <span className="ml-2 text-text-muted">({item.source})</span>}
-                  </p>
+              <form key={editingId || 'new'} onSubmit={handleSubmit} className="mt-4 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="yield-species" className="form-label">Species</label>
+                    <input
+                      id="yield-species"
+                      type="text"
+                      value={formData.species}
+                      onChange={(e) => setFormData({ ...formData, species: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. Atlantic Salmon"
+                      autoFocus
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="yield-product" className="form-label">Product</label>
+                    <input
+                      id="yield-product"
+                      type="text"
+                      value={formData.product}
+                      onChange={(e) => setFormData({ ...formData, product: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. Skinless Fillet"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="yield-percent" className="form-label">Yield (%)</label>
+                    <input
+                      id="yield-percent"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={formData.yield}
+                      onChange={(e) => setFormData({ ...formData, yield: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. 45"
+                      aria-describedby="yield-percent-help"
+                      required
+                    />
+                    <p id="yield-percent-help" className="mt-1.5 text-sm text-text-muted">
+                      The share of the weight you keep, up to 100.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="yield-source" className="form-label">Source or notes</label>
+                    <input
+                      id="yield-source"
+                      type="text"
+                      value={formData.source}
+                      onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                      className="form-input"
+                      placeholder="e.g. Personal experience"
+                    />
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  {item.serverId && (
-                    <button
-                      onClick={() => handleToggleShare(item)}
-                      disabled={readOnly}
-                      className={`disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded transition ${item.is_shared ? 'text-accent hover:text-text-secondary' : 'text-text-secondary hover:text-accent'}`}
-                      title={item.is_shared ? 'Remove from community' : 'Share with community'}
-                    >
-                      {item.is_shared ? <EyeOff size={16} /> : <Share2 size={16} />}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleEdit(item)}
-                    disabled={readOnly}
-                    className="disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded text-text-secondary hover:text-accent transition"
-                    title="Edit"
-                  >
-                    <Edit2 size={16} />
+
+                <div className="flex flex-wrap gap-3">
+                  <button type="submit" className="btn-primary flex-1 sm:flex-none">
+                    <Save size={20} aria-hidden="true" />
+                    {editingId ? 'Save changes' : 'Save yield'}
                   </button>
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    disabled={readOnly}
-                    className="disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded text-text-secondary hover:text-danger transition"
-                    title="Delete"
-                  >
-                    <Trash2 size={16} />
+                  <button type="button" onClick={resetForm} className="btn-secondary flex-1 sm:flex-none">
+                    Cancel
                   </button>
                 </div>
-              </div>
-            ))}
+              </form>
+            </div>
+          )}
+
+          {!dataLoaded ? (
+            <p role="status" className="p-5 text-base text-text-secondary">Loading your yields…</p>
+          ) : customYields.length === 0 ? (
+            <p className="p-5 text-base text-text-secondary">
+              No yields of your own yet. Weigh a fish before and after you cut it, then use Add a yield to keep the number.
+            </p>
+          ) : (
+            <YieldList
+              yields={customYields}
+              signedIn
+              readOnly={readOnly}
+              onToggleShare={handleToggleShare}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          )}
+        </section>
+
+        {/* Saved prices */}
+        <section className="card overflow-hidden" aria-labelledby="saved-prices-heading">
+          <div className="border-b border-line p-5">
+            <h2 id="saved-prices-heading" className={HEADING}>Saved prices</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Publish a saved price to share it anonymously on the community feed.
+            </p>
           </div>
-        )}
+
+          {!dataLoaded ? (
+            <p role="status" className="p-5 text-base text-text-secondary">Loading your saved prices…</p>
+          ) : savedCalcs.length === 0 ? (
+            <div className="p-5">
+              <p className="text-base text-text-secondary">
+                No saved prices yet. Save one from the calculator and it shows up here.
+              </p>
+              <Link to="/" className="btn-secondary mt-4">Go to the calculator</Link>
+            </div>
+          ) : (
+            <SavedPriceList
+              calcs={savedCalcs}
+              signedIn
+              readOnly={readOnly}
+              onDelete={handleDeleteCalc}
+              onPublish={requestPublish}
+              onUnpublish={unpublishCalc}
+            />
+          )}
+        </section>
       </div>
 
       {sharePending && (
