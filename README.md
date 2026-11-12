@@ -106,30 +106,24 @@ What has to be decided before the first TestFlight upload, and what the 1.0 buil
 
 ```
 Fish_Cost_Calculator/
-├── app/                          # React frontend (Vite)
+├── app/                      # The React app (Vite): the whole product on the web
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Calculator.jsx    # Main yield/cost calculator
-│   │   │   ├── Login.jsx         # User authentication
-│   │   │   ├── UploadData.jsx    # Excel/CSV data import
-│   │   │   ├── DataManagement.jsx # CRUD for user data
-│   │   │   ├── DataTransparency.jsx # Data sources page
-│   │   │   └── About.jsx         # About page
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx   # Authentication state
-│   │   ├── data/
-│   │   │   └── fish_data_v3.js   # 89 species yield database
-│   │   ├── App.jsx               # Main app with routing
-│   │   └── main.jsx              # Entry point
-│   └── package.json
-│
-├── server/                       # Express backend
-│   ├── server.js                 # API endpoints
-│   ├── fish_app.db              # SQLite database
-│   └── package.json
-│
-└── research/                     # Source research materials (MAB-37 PDF, extraction scripts)
+│   │   ├── components/       # Screens and shared components (Calculator, TabBar, Stamp, Notice…)
+│   │   ├── context/          # Sign-in, saved data and theme state
+│   │   ├── lib/              # Pure logic with tests beside it (calcEngine, formNames, priceCard…)
+│   │   ├── data/             # fish_data_v3.js: the 89-species reference yields
+│   │   ├── index.css         # Design tokens and shared classes
+│   │   └── App.jsx           # Routes and the app shell
+│   ├── ios/                  # Capacitor iOS project (see docs/ios.md)
+│   └── public/icons/         # App icons
+├── api/                      # Vercel functions: the production API (Neon Postgres)
+├── server/                   # Express + SQLite: the API for local development
+├── shared/                   # Handler code both APIs use
+├── docs/                     # Style guide, design system, ADRs, reviews, API reference
+└── research/                 # Source material for the reference yields (MAB-37)
 ```
+
+`api/`, `server/` and `shared/` are in maintenance: [ADR 0001](docs/adr/0001-firebase-auth-and-firestore.md) replaces them with Firebase. The direction is in [`CONTEXT.md`](CONTEXT.md), the [November 2026 audit](docs/reviews/2026-11-product-audit.md) and the [style guide](docs/STYLE_GUIDE.md).
 
 ## 🔧 Technology Stack
 
@@ -296,8 +290,8 @@ git checkout -b feature/my-feature
 # Make your changes
 # Test locally
 
-# Commit with descriptive message
-git commit -m "Add: [description of change]"
+# Commit with a conventional prefix (feat:, fix:, docs:, chore:)
+git commit -m "feat: describe the change"
 
 # Push and create PR
 git push origin feature/my-feature
