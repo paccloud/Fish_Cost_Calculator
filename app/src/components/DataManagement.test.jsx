@@ -179,6 +179,43 @@ describe('when the browser will not store anything', () => {
     expect(out).toContain('Lingcod');
     expect(out).not.toContain('Loading your yields');
   });
+
+  // The rows a signed-in person sees here are the server's own, read straight from the account
+  const ACCOUNT_YIELD = { id: 7, species: 'Lingcod', product: 'Round → Fillet', yield: '31.00', source: 'User Input', is_shared: false, revision: 2 };
+
+  it('tells a signed-in person too, and why their yields cannot be changed here', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { dataLoaded: false, storageFailed: true, customYields: [ACCOUNT_YIELD] });
+    const out = text();
+    expect(html()).toMatch(/<div class="notice notice-error" role="alert">/);
+    expect(out).toContain('Nothing can be kept on this phone.');
+    expect(out).toContain('You can still see the yields in your account, but changing them needs storage on this phone.');
+    expect(out).toContain('Allow site data in your browser settings, then reload.');
+    // The guest wording is about saving here, which is not what a signed-in person is doing
+    expect(out).not.toContain('what you save here will not stay');
+  });
+
+  it('turns off adding, editing and deleting a yield for a signed-in person, since each is written on the phone first', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { dataLoaded: false, storageFailed: true, customYields: [ACCOUNT_YIELD] });
+    const markup = html();
+    for (const name of ['Edit Lingcod', 'Delete Lingcod']) {
+      expect(markup).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*aria-label="${name}`));
+    }
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>(<svg.*?<\/svg>)?Add a yield/);
+    // Downloading them needs no storage
+    expect(markup.match(/<button[^>]*title="Download your yields[^>]*>/)[0]).not.toContain('disabled');
+  });
+
+  it('leaves them on, with no storage warning, when storage works', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { customYields: [{ ...YIELD, serverId: 7, syncStatus: 'synced' }] });
+    const markup = html();
+    expect(text()).not.toContain('Nothing can be kept on this phone.');
+    expect(markup).toContain('aria-label="Edit Lingcod, Round → Fillet"');
+    expect(markup).toContain('aria-label="Delete Lingcod, Round → Fillet"');
+    expect(markup).not.toMatch(/<button[^>]*disabled=""/);
+  });
 });
 
 // In-memory stand-in for the device store
