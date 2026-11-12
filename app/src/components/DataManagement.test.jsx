@@ -158,3 +158,34 @@ describe('DataManagement when signed in', () => {
     }
   });
 });
+
+describe('when the browser will not store anything', () => {
+  it('says so and is not stuck on loading', () => {
+    Object.assign(data, { dataLoaded: false, storageFailed: true });
+    const out = text();
+    expect(out).toContain('Nothing can be kept on this phone.');
+    expect(out).not.toContain('Loading');
+  });
+
+  it('still shows a signed-in person the yields their account has', () => {
+    auth.user = { id: 1, username: 'dana' };
+    Object.assign(data, { dataLoaded: false, storageFailed: true, customYields: [YIELD] });
+    const out = text();
+    expect(out).toContain('Lingcod');
+    expect(out).not.toContain('Loading your yields');
+  });
+});
+
+describe('a "Pounds to buy" answer that came back from the server without its mode', () => {
+  it('is still shown as a weight, not as dollars per lb', () => {
+    data.savedCalcs = [{ id: 's1', species: 'Halibut', product: 'Round → Fletch', cost: 0, yield: 40, result: 217.39, syncStatus: 'synced' }];
+    const out = text();
+    expect(out).toContain('217.39 lb to buy');
+    expect(out).not.toContain('$217.39/lb');
+  });
+
+  it('leaves a price with a cost as a price', () => {
+    data.savedCalcs = [{ id: 's2', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: '4.50', yield: 46, result: 9.78, syncStatus: 'synced' }];
+    expect(text()).toContain('$9.78/lb');
+  });
+});

@@ -88,7 +88,9 @@ export default function Ticket({
                       className={`shrink-0 text-on-bar-muted ${open ? 'rotate-180' : ''}`}
                     />
                   </button>
-                  <div id={detailsId} className={open ? '' : 'hidden md:block'}>
+                  {/* On a short phone, or one on its side, six lines would push the figure and Save
+                      off the top: the details scroll inside the ticket instead */}
+                  <div id={detailsId} className={`max-md:max-h-[32dvh] max-md:overflow-y-auto ${open ? '' : 'hidden md:block'}`}>
                     {lines.length > 0 && (
                       <ul className="ticket-lines max-md:mt-0 md:mt-0 md:border-t-0 md:pt-0">
                         {lines.map((line) => (

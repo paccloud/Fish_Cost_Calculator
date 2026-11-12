@@ -100,7 +100,7 @@ Two families, both bundled with the app so it works with no signal.
 
 - Respect the safe areas: the Ticket and TabBar add the bottom inset to their own padding; the first row clears the status bar.
 - Fonts, icons and every reference yield are in the bundle. Nothing on the Calculate tab needs the network.
-- No browser furniture: no "open in browser" links, no pinch-zoom, no text selection on controls, no web-style underlined navigation.
+- No browser furniture: no "open in browser" links, no text selection on controls, no web-style underlined navigation. Pinch-zoom stays on: people with low vision rely on it.
 - Share uses the system share sheet. Sign-in is a sheet over the screen the person was on, never a page that loses their numbers.
 - Text respects the system text-size setting up to 130%; layouts wrap, they do not clip.
 

@@ -687,6 +687,8 @@ export function DataProvider({ children }) {
     publishPreviewCalc,
     publishLoading,
     readOnly: isAppReadOnly,
+    // True when the browser refused to open the device store; screens say so, not "loading"
+    storageFailed,
     unsentCount,
     accountUnsentCount,
     saveUnsentChanges,

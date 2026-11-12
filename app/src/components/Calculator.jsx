@@ -90,7 +90,8 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   });
   const [recent, setRecent] = useState(() => readRecentSpecies());
   const [ticketOpen, setTicketOpen] = useState(() => readTicketOpen());
-  const [includePaid, setIncludePaid] = useState(false);
+  // "Include what I paid" is a yes for one price. It holds the key of the price it was given for.
+  const [paidOptIn, setPaidOptIn] = useState(null);
   // Which price the last save and the last notice were for, so both go as soon as a number changes
   const [savedKey, setSavedKey] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -232,7 +233,15 @@ const Calculator = ({ initial = NO_INITIAL }) => {
     processingCost, weightType, shipping, shippingWeightType,
   ]);
   const saved = savedKey === priceKey;
-  const shownNotice = notice && notice.key === priceKey ? notice.kind : null;
+  // What someone paid is theirs to give away, one price at a time: a different fish, form or cost
+  // needs a new yes. On a phone the checkbox can be folded away while Share is still in reach.
+  const paidKey = JSON.stringify([species, fromState, toState, cost]);
+  const includePaid = paidOptIn === paidKey;
+  // What a shared card says. Margin, portion and the paid line are on it, so "Copied" goes as soon
+  // as any of them changes: the clipboard no longer matches the ticket.
+  const cardKey = JSON.stringify([priceKey, margin, portion, includePaid]);
+  const noticeKey = notice && (notice.kind === 'copied' || notice.kind === 'share-failed') ? cardKey : priceKey;
+  const shownNotice = notice && notice.key === noticeKey ? notice.kind : null;
 
   // Screen readers hear the answer once typing pauses, not on every keystroke
   const { sentence } = model;
@@ -301,7 +310,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   };
 
   const handleShare = async () => {
-    const key = priceKey;
+    const key = cardKey;
     const outcome = await sharePriceCard(priceCardFor({ species, fromState, toState }, model, { includePaid }));
     if (outcome === 'copied') setNotice({ key, kind: 'copied' });
     else if (outcome === 'failed') setNotice({ key, kind: 'share-failed' });
@@ -764,7 +773,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
         saveDisabled={readOnly}
         onShare={handleShare}
         includePaid={includePaid}
-        onIncludePaid={setIncludePaid}
+        onIncludePaid={(on) => setPaidOptIn(on ? paidKey : null)}
       />
       <p className="sr-only" aria-live="polite">{announcement}</p>
     </div>

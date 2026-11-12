@@ -9,6 +9,7 @@ import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 import { plainFormName } from '../lib/formNames';
 import { backendEnabled, thisDevice } from '../config/platform';
+import Notice from './Notice';
 
 const TITLE = 'font-display text-3xl font-semibold text-text-primary';
 const HEADING = 'font-display text-xl font-semibold text-text-primary';
@@ -24,11 +25,18 @@ function formatPercent(value) {
   return Number.isFinite(n) ? String(Number(n.toFixed(2))) : String(value ?? '');
 }
 
-// A saved price is a cost per lb, unless it was saved from "Pounds to buy".
+// A saved price is a cost per lb, unless it was saved from "Pounds to buy". The server keeps no
+// mode, so a record that comes back from another device has lost it. What it still has is a cost
+// of 0, which only "Pounds to buy" saves: a price cannot be worked out from nothing paid.
+function isWeightResult(calc) {
+  if (calc.mode) return calc.mode === 'weight';
+  return calc.cost !== undefined && calc.cost !== null && calc.cost !== '' && Number(calc.cost) === 0;
+}
+
 function describeResult(calc) {
   const n = Number(calc.result);
   if (!Number.isFinite(n)) return '';
-  if (calc.mode === 'weight') return `${Number(n.toFixed(2))} lb to buy`;
+  if (isWeightResult(calc)) return `${Number(n.toFixed(2))} lb to buy`;
   return `$${n.toFixed(2)}/lb`;
 }
 
@@ -221,7 +229,10 @@ const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete
 
 const DataManagement = () => {
   const { user, getAuthHeaders } = useAuth();
-  const { customYields, savedCalcs, dataLoaded, addYield, updateYield, removeYield, removeCalc, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
+  const { customYields, savedCalcs, dataLoaded: repoLoaded, storageFailed, addYield, updateYield, removeYield, removeCalc, updateYieldLocalOnly, requestPublish, unpublishCalc, readOnly } = useData();
+  // If the browser will not let the app store anything, there is nothing to wait for: say so, and
+  // show what the account has (a signed-in person's yields still come from the server).
+  const dataLoaded = repoLoaded || Boolean(storageFailed);
   const [status, setStatus] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -362,6 +373,14 @@ const DataManagement = () => {
         </header>
 
         {status && <StatusNotice status={status} onDismiss={() => setStatus(null)} />}
+
+        {storageFailed && (
+          <div className="mb-6">
+            <Notice tone="error" title={`Nothing can be kept on ${thisDevice}.`}>
+              Storage is blocked for this app, so what you save here will not stay. Allow site data in your browser settings, then reload.
+            </Notice>
+          </div>
+        )}
 
         {!dataLoaded ? (
           <p role="status" className="text-base text-text-secondary">Loading what’s saved on {thisDevice}…</p>

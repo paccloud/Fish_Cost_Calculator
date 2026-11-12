@@ -82,7 +82,9 @@ describe('the filled calculator', () => {
     const [, expanded, controls] = ticket.match(/<button type="button" aria-expanded="(true|false)" aria-controls="([^"]+)"[^>]*>Price details/);
     expect(expanded).toBe('false');
     // Closed on a phone, always shown from 768px
-    expect(ticket).toContain(`<div id="${controls}" class="hidden md:block">`);
+    expect(ticket).toMatch(new RegExp(`<div id="${controls}" class="[^"]*\\bhidden md:block"`));
+    // ...and it scrolls inside the ticket on a short screen instead of pushing Save off the top
+    expect(ticket).toMatch(new RegExp(`<div id="${controls}" class="[^"]*max-md:overflow-y-auto`));
     expect(textOf(ticket)).toContain('Include what I paid');
     expect(ticket).not.toMatch(/<input type="checkbox"[^>]*checked/);
   });
