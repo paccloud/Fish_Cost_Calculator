@@ -1,0 +1,330 @@
+{
+  "pdf_page": 7,
+  "side": "left",
+  "book_page": 6,
+  "rows": [
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 90,
+      "range": [
+        84,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 74,
+      "range": [
+        70,
+        80
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 34,
+      "range": [
+        25,
+        39
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Surimi",
+      "average": 11,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Kurimi",
+      "average": 48,
+      "range": null,
+      "check": "to/average: printed clearly as 'Kurimi' 48, directly under 'Surimi' 11; 48 is above Skinless Fillet 34 in the same From group. Reading is certain; flagged for plausibility only."
+    },
+    {
+      "group": "Flounders",
+      "species": "Arrowtooth",
+      "scientific_name": "Atheresthes stomias",
+      "scientific_name_as_printed": "Atheresthes stomias",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B fillets",
+      "average": 25,
+      "range": [
+        18,
+        30
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Starry",
+      "scientific_name": "Platichthys stellatus",
+      "scientific_name_as_printed": "Platichthys stellatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 84,
+      "range": [
+        79,
+        86
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Starry",
+      "scientific_name": "Platichthys stellatus",
+      "scientific_name_as_printed": "Platichthys stellatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 67,
+      "range": [
+        63,
+        69
+      ],
+      "check": null
+    },
+    {
+      "group": "Flounders",
+      "species": "Starry",
+      "scientific_name": "Platichthys stellatus",
+      "scientific_name_as_printed": "Platichthys stellatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 33,
+      "range": [
+        25,
+        40
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 80,
+      "range": [
+        70,
+        85
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 60,
+      "range": [
+        56,
+        71
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillets",
+      "average": 43,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillets",
+      "average": 32,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillets",
+      "average": 27,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Surimi (Decanter Process)",
+      "average": 27,
+      "range": [
+        26,
+        30
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": null,
+      "range": [
+        2,
+        8
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 71,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillets",
+      "average": 51,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillets",
+      "average": 38,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillets",
+      "average": 32,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Skinless Fillets",
+      "average": 75,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Trim",
+      "average": 12,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "S/B Fillets",
+      "average": 63,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Hake, Pacific",
+      "scientific_name": "Merluccius productus",
+      "scientific_name_as_printed": "Merluccius productus",
+      "subheading": null,
+      "from": "Trim",
+      "to": "Mince",
+      "average": 90,
+      "range": null,
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

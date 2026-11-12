@@ -1,0 +1,378 @@
+{
+  "pdf_page": 5,
+  "side": "right",
+  "book_page": 3,
+  "rows": [
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 81,
+      "range": [
+        72,
+        90
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 63,
+      "range": [
+        56,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillets (V-cut)",
+      "average": 45,
+      "range": [
+        38,
+        48
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillets (V-cut)",
+      "average": 39,
+      "range": [
+        22,
+        45
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillets (V-cut)",
+      "average": 33,
+      "range": [
+        18,
+        39
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillets",
+      "average": 38,
+      "range": null,
+      "check": "to: printed with no cut qualifier, between the (V-cut) rows and the (J-cut) rows; by position it is probably the J-cut skin-on fillet, but the page does not say so. Reading of the cell is certain."
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillets (J-cut)",
+      "average": 32,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillets (J-cut)",
+      "average": 26,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 62,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Salted D/H-Off",
+      "average": 45,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked D/H-Off",
+      "average": 58,
+      "range": [
+        50,
+        65
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Belly Flaps",
+      "average": 10,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Liver",
+      "average": 5,
+      "range": [
+        3,
+        7
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 4,
+      "range": [
+        1,
+        7
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 78,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillets",
+      "average": 55,
+      "range": [
+        42,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillets",
+      "average": 48,
+      "range": [
+        34,
+        56
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillets",
+      "average": 41,
+      "range": [
+        20,
+        48
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillets",
+      "average": 71,
+      "range": [
+        54,
+        80
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillets",
+      "average": 62,
+      "range": [
+        31,
+        81
+      ],
+      "check": "range: printed clearly as 31-81; the upper bound is above the Skin-On Fillets row in the same From group (54-80). Reading is certain; possible misprint in the source, not changed."
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillets",
+      "average": 52,
+      "range": [
+        25,
+        70
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Skinless Fillets",
+      "average": 87,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Trim",
+      "average": 12,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "S/B Fillets",
+      "average": 73,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Skinless Fillets",
+      "to": "S/B Fillets",
+      "average": 84,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Skinless Fillets",
+      "to": "Trim",
+      "average": 13,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Cod, Pacific",
+      "scientific_name": "Gadus macrocephalus",
+      "scientific_name_as_printed": "Gadus macrocephalus",
+      "subheading": null,
+      "from": "Trim",
+      "to": "Mince",
+      "average": 90,
+      "range": [
+        80,
+        95
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}
