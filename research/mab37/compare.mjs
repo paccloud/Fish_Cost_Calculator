@@ -17,7 +17,9 @@ const squash = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 // Spelling the scan's text layer got wrong, and nothing else: the comparison should not hide real differences.
 const formKey = (s) => squash(s).replace(/\bsib\b/g, 's/b').replace(/\bo\/h\b/g, 'd/h').replace(/\s*\(\s*/g, ' (').replace(/\s*\)/g, ')');
 // A looser key used only to suggest that two differently worded rows are the same row.
-const looseKey = (s) => formKey(s).replace(/fillets\b/g, 'fillet').replace(/meats\b/g, 'meat').replace(/[^a-z0-9/]+/g, ' ').trim();
+// The app shortened two of the bulletin's qualifiers: "(Hand-V-Cut)" to "(V-Cut)" and
+// "(Decanter Process)" to "(Decanter)".
+const looseKey = (s) => formKey(s).replace(/fillets\b/g, 'fillet').replace(/meats\b/g, 'meat').replace(/hand-v-cut/g, 'v-cut').replace(/ process\)/g, ')').replace(/[^a-z0-9/]+/g, ' ').trim();
 const sciKey = (s) => squash(s).replace(/\bspp?\.?$/, '').replace(/[^a-z ]/g, '').trim();
 const words = (s) => new Set(squash(s).replace(/[^a-z ]/g, ' ').split(' ').filter((w) => w.length > 2 && !['and', 'the', 'general', 'including'].includes(w)));
 const sameRange = (a, b) => (a === null && b === null) || (Array.isArray(a) && Array.isArray(b) && a[0] === b[0] && a[1] === b[1]);

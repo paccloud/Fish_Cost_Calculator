@@ -1,0 +1,39 @@
+{
+  "Pink Salmon": [
+    "Salmon / Pink",
+    {
+      "table": "Salmon, Frozen and Thawed / Pink (Thawed)",
+      "fromSuffix": " (Thawed)"
+    }
+  ],
+  "Chum Salmon": [
+    "Salmon / Chum",
+    {
+      "table": "Salmon, Frozen and Thawed / Chum (Thawed)",
+      "fromSuffix": " (Thawed)"
+    }
+  ],
+  "Sockeye Salmon": [
+    "Salmon / Sockeye",
+    {
+      "table": "Salmon, Frozen and Thawed / Sockeye (Thawed)",
+      "fromSuffix": " (Thawed)"
+    }
+  ],
+  "Coho Salmon": [
+    "Salmon / Coho",
+    {
+      "table": "Salmon, Frozen and Thawed / Silver (Thawed)",
+      "fromSuffix": " (Thawed)"
+    }
+  ],
+  "Chinook Salmon": [
+    "Salmon / Other Salmon, including Chinook and Cherry"
+  ],
+  "Redstriped Rockfish": [
+    "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+  ],
+  "Sharks General": [
+    "Shark / Sharks, General"
+  ]
+}

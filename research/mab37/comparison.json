@@ -1,0 +1,1772 @@
+{
+  "totals": {
+    "same": 564,
+    "valueDiffers": 22,
+    "spellingOnly": 40,
+    "reworded": 20,
+    "wrongFrom": 0,
+    "onlyInApp": 9,
+    "onlyInSource": 63
+  },
+  "matches": {
+    "Pink Salmon": {
+      "tables": [
+        "Salmon / Pink",
+        "Salmon, Frozen and Thawed / Pink (Thawed)"
+      ],
+      "entries": [
+        {
+          "table": "Salmon / Pink"
+        },
+        {
+          "table": "Salmon, Frozen and Thawed / Pink (Thawed)",
+          "fromSuffix": " (Thawed)"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Chum Salmon": {
+      "tables": [
+        "Salmon / Chum",
+        "Salmon, Frozen and Thawed / Chum (Thawed)"
+      ],
+      "entries": [
+        {
+          "table": "Salmon / Chum"
+        },
+        {
+          "table": "Salmon, Frozen and Thawed / Chum (Thawed)",
+          "fromSuffix": " (Thawed)"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Sockeye Salmon": {
+      "tables": [
+        "Salmon / Sockeye",
+        "Salmon, Frozen and Thawed / Sockeye (Thawed)"
+      ],
+      "entries": [
+        {
+          "table": "Salmon / Sockeye"
+        },
+        {
+          "table": "Salmon, Frozen and Thawed / Sockeye (Thawed)",
+          "fromSuffix": " (Thawed)"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Coho Salmon": {
+      "tables": [
+        "Salmon / Coho",
+        "Salmon, Frozen and Thawed / Silver (Thawed)"
+      ],
+      "entries": [
+        {
+          "table": "Salmon / Coho"
+        },
+        {
+          "table": "Salmon, Frozen and Thawed / Silver (Thawed)",
+          "fromSuffix": " (Thawed)"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Chinook Salmon": {
+      "tables": [
+        "Salmon / Other Salmon, including Chinook and Cherry"
+      ],
+      "entries": [
+        {
+          "table": "Salmon / Other Salmon, including Chinook and Cherry"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Norwegian Farmed Salmon": {
+      "tables": [
+        "Salmon, Farmed / Norwegian"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Chilean Farmed Salmon": {
+      "tables": [
+        "Salmon, Farmed / Chilean"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Pacific Cod": {
+      "tables": [
+        "Cod, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Walleye Pollock": {
+      "tables": [
+        "Pollock, Walleye"
+      ],
+      "how": "scientific name"
+    },
+    "Pacific Hake": {
+      "tables": [
+        "Hake, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Pacific Halibut": {
+      "tables": [
+        "Halibut, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Arrowtooth Flounder": {
+      "tables": [
+        "Flounders / Arrowtooth"
+      ],
+      "how": "scientific name"
+    },
+    "Starry Flounder": {
+      "tables": [
+        "Flounders / Starry"
+      ],
+      "how": "scientific name"
+    },
+    "Flathead Sole": {
+      "tables": [
+        "Soles / Flathead"
+      ],
+      "how": "scientific name"
+    },
+    "Petrale Sole": {
+      "tables": [
+        "Soles / Petrale"
+      ],
+      "how": "scientific name"
+    },
+    "Dover Sole": {
+      "tables": [
+        "Soles / Dover"
+      ],
+      "how": "scientific name"
+    },
+    "Rex Sole": {
+      "tables": [
+        "Soles / Rex"
+      ],
+      "how": "scientific name"
+    },
+    "Rock Sole": {
+      "tables": [
+        "Soles / Rock"
+      ],
+      "how": "scientific name"
+    },
+    "Yellowfin Sole": {
+      "tables": [
+        "Soles / Yellowfin"
+      ],
+      "how": "scientific name"
+    },
+    "English Sole": {
+      "tables": [
+        "Soles / English"
+      ],
+      "how": "scientific name"
+    },
+    "Dabs": {
+      "tables": [
+        "Soles / Dabs"
+      ],
+      "how": "scientific name"
+    },
+    "Alaska Plaice": {
+      "tables": [
+        "Plaice, Alaska"
+      ],
+      "how": "scientific name"
+    },
+    "Greenland Turbot": {
+      "tables": [
+        "Turbot, Greenland"
+      ],
+      "how": "scientific name"
+    },
+    "Black Rockfish": {
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "how": "scientific name"
+    },
+    "Greenstriped Rockfish": {
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "how": "scientific name"
+    },
+    "Thornyhead Rockfish": {
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "how": "scientific name"
+    },
+    "Canary Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "China Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Dusky Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Quillback Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Redbanded Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Redstriped Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Rosethorn Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Rougheye Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Shortraker Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Silvergray Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Tiger Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Widow Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Yelloweye Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Yellowtail Rockfish": {
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "how": "scientific name"
+    },
+    "Pacific Ocean Perch": {
+      "tables": [
+        "Pacific Ocean Perch"
+      ],
+      "how": "scientific name"
+    },
+    "Salmon Shark": {
+      "tables": [
+        "Shark / Salmon"
+      ],
+      "how": "scientific name"
+    },
+    "Sevengill Shark": {
+      "tables": [
+        "Shark / Sevengill (Cow Shark)"
+      ],
+      "how": "scientific name"
+    },
+    "Soupfin Shark": {
+      "tables": [
+        "Shark / Soupfin"
+      ],
+      "how": "scientific name"
+    },
+    "Blue Shark": {
+      "tables": [
+        "Shark / Blue"
+      ],
+      "how": "scientific name"
+    },
+    "Thresher Shark": {
+      "tables": [
+        "Shark / Thresher"
+      ],
+      "how": "scientific name"
+    },
+    "Blacktip Shark": {
+      "tables": [
+        "Shark / Blacktip"
+      ],
+      "how": "scientific name"
+    },
+    "Spiny Dogfish": {
+      "tables": [
+        "Dogfish"
+      ],
+      "how": "scientific name"
+    },
+    "Sharks General": {
+      "tables": [
+        "Shark / Sharks, General"
+      ],
+      "entries": [
+        {
+          "table": "Shark / Sharks, General"
+        }
+      ],
+      "how": "hand-checked list",
+      "missing": []
+    },
+    "Pacific Saury": {
+      "tables": [
+        "Saury, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Sablefish": {
+      "tables": [
+        "Sablefish"
+      ],
+      "how": "scientific name"
+    },
+    "Lingcod": {
+      "tables": [
+        "Lingcod"
+      ],
+      "how": "scientific name"
+    },
+    "Atka Mackerel": {
+      "tables": [
+        "Mackerel, Atka"
+      ],
+      "how": "scientific name"
+    },
+    "Pacific Herring": {
+      "tables": [
+        "Herring, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Pacific Lamprey": {
+      "tables": [
+        "Lamprey, Pacific"
+      ],
+      "how": "scientific name"
+    },
+    "Capelin": {
+      "tables": [
+        "Capelin"
+      ],
+      "how": "scientific name"
+    },
+    "Smelt": {
+      "tables": [
+        "Smelt"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Albacore Tuna": {
+      "tables": [
+        "Tuna, Albacore"
+      ],
+      "how": "scientific name"
+    },
+    "Sturgeon": {
+      "tables": [
+        "Sturgeon"
+      ],
+      "how": "scientific name"
+    },
+    "Trout": {
+      "tables": [
+        "Trout"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Norwegian Farmed Trout": {
+      "tables": [
+        "Trout, Farmed / Norwegian"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "American Shad": {
+      "tables": [
+        "Shad, American"
+      ],
+      "how": "scientific name"
+    },
+    "Eels": {
+      "tables": [
+        "Eels"
+      ],
+      "how": "scientific name"
+    },
+    "Rat-Tails": {
+      "tables": [
+        "Rat-Tails"
+      ],
+      "how": "scientific name"
+    },
+    "Dungeness Crab": {
+      "tables": [
+        "Crab / Dungeness"
+      ],
+      "how": "scientific name"
+    },
+    "King Crab (Red/Brown/Golden)": {
+      "tables": [
+        "Crab / King (Red, Brown or Golden)"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Blue King Crab": {
+      "tables": [
+        "Crab / King (Blue)"
+      ],
+      "how": "scientific name"
+    },
+    "Tanner Crab": {
+      "tables": [
+        "Crab / Tanner"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Pink Shrimp": {
+      "tables": [
+        "Shrimp / Pink"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Spot Shrimp": {
+      "tables": [
+        "Shrimp / Spot"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Softshell Clams": {
+      "tables": [
+        "Clams / Softshell"
+      ],
+      "how": "scientific name"
+    },
+    "Macoma Clams": {
+      "tables": [
+        "Clams / Macoma"
+      ],
+      "how": "scientific name"
+    },
+    "Cockles": {
+      "tables": [
+        "Clams / Cockles"
+      ],
+      "how": "scientific name"
+    },
+    "Littleneck Clams": {
+      "tables": [
+        "Clams / Littlenecks"
+      ],
+      "how": "scientific name"
+    },
+    "Geoduck Clams": {
+      "tables": [
+        "Clams / Geoducks"
+      ],
+      "how": "scientific name"
+    },
+    "Razor Clams": {
+      "tables": [
+        "Clams / Razors"
+      ],
+      "how": "scientific name"
+    },
+    "Butter Clams": {
+      "tables": [
+        "Clams / Butter"
+      ],
+      "how": "scientific name"
+    },
+    "Mussels": {
+      "tables": [
+        "Mussels"
+      ],
+      "how": "scientific name"
+    },
+    "Oysters": {
+      "tables": [
+        "Oysters"
+      ],
+      "how": "scientific name"
+    },
+    "Scallops": {
+      "tables": [
+        "Scallops"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Snails": {
+      "tables": [
+        "Snails"
+      ],
+      "how": "scientific name"
+    },
+    "Abalone (Pinto)": {
+      "tables": [
+        "Abalone, Pinto"
+      ],
+      "how": "scientific name"
+    },
+    "Squid": {
+      "tables": [
+        "Squid"
+      ],
+      "how": "scientific name"
+    },
+    "Octopus": {
+      "tables": [
+        "Octopus"
+      ],
+      "how": "scientific name"
+    },
+    "Sea Cucumber": {
+      "tables": [
+        "Sea Cucumber"
+      ],
+      "how": "scientific name"
+    },
+    "Sea Urchin (Green)": {
+      "tables": [
+        "Sea Urchin / Green"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Sea Urchin (Red)": {
+      "tables": [
+        "Sea Urchin / Red"
+      ],
+      "how": "name (100% of words shared)"
+    },
+    "Skates": {
+      "tables": [
+        "Skates"
+      ],
+      "how": "scientific name"
+    },
+    "Sculpin": {
+      "tables": [
+        "Sculpin"
+      ],
+      "how": "name (100% of words shared)"
+    }
+  },
+  "perSpecies": [
+    {
+      "name": "Pink Salmon",
+      "tables": [
+        "Salmon / Pink",
+        "Salmon, Frozen and Thawed / Pink (Thawed)"
+      ],
+      "same": 30,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 3,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Chum Salmon",
+      "tables": [
+        "Salmon / Chum",
+        "Salmon, Frozen and Thawed / Chum (Thawed)"
+      ],
+      "same": 30,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 3,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sockeye Salmon",
+      "tables": [
+        "Salmon / Sockeye",
+        "Salmon, Frozen and Thawed / Sockeye (Thawed)"
+      ],
+      "same": 30,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 3,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Coho Salmon",
+      "tables": [
+        "Salmon / Coho",
+        "Salmon, Frozen and Thawed / Silver (Thawed)"
+      ],
+      "same": 30,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 3,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Chinook Salmon",
+      "tables": [
+        "Salmon / Other Salmon, including Chinook and Cherry"
+      ],
+      "same": 22,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 3,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Norwegian Farmed Salmon",
+      "tables": [
+        "Salmon, Farmed / Norwegian"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Chilean Farmed Salmon",
+      "tables": [
+        "Salmon, Farmed / Chilean"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Pacific Cod",
+      "tables": [
+        "Cod, Pacific"
+      ],
+      "same": 21,
+      "valueDiffers": 0,
+      "spellingOnly": 6,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 1,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Walleye Pollock",
+      "tables": [
+        "Pollock, Walleye"
+      ],
+      "same": 6,
+      "valueDiffers": 2,
+      "spellingOnly": 1,
+      "reworded": 2,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Pacific Hake",
+      "tables": [
+        "Hake, Pacific"
+      ],
+      "same": 4,
+      "valueDiffers": 5,
+      "spellingOnly": 2,
+      "reworded": 1,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 3
+    },
+    {
+      "name": "Pacific Halibut",
+      "tables": [
+        "Halibut, Pacific"
+      ],
+      "same": 13,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Arrowtooth Flounder",
+      "tables": [
+        "Flounders / Arrowtooth"
+      ],
+      "same": 5,
+      "valueDiffers": 0,
+      "spellingOnly": 1,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Starry Flounder",
+      "tables": [
+        "Flounders / Starry"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Flathead Sole",
+      "tables": [
+        "Soles / Flathead"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Petrale Sole",
+      "tables": [
+        "Soles / Petrale"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Dover Sole",
+      "tables": [
+        "Soles / Dover"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Rex Sole",
+      "tables": [
+        "Soles / Rex"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Rock Sole",
+      "tables": [
+        "Soles / Rock"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Yellowfin Sole",
+      "tables": [
+        "Soles / Yellowfin"
+      ],
+      "same": 5,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "English Sole",
+      "tables": [
+        "Soles / English"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Dabs",
+      "tables": [
+        "Soles / Dabs"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Alaska Plaice",
+      "tables": [
+        "Plaice, Alaska"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Greenland Turbot",
+      "tables": [
+        "Turbot, Greenland"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Black Rockfish",
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "same": 8,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Greenstriped Rockfish",
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Thornyhead Rockfish",
+      "tables": [
+        "Rockfish / Black / Greenstriped / Thornyhead"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Canary Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "China Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Dusky Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Quillback Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Redbanded Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Redstriped Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 9,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Rosethorn Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 9,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Rougheye Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 3,
+      "valueDiffers": 4,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Shortraker Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 3,
+      "valueDiffers": 4,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Silvergray Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Tiger Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Widow Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Yelloweye Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Yellowtail Rockfish",
+      "tables": [
+        "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 2
+    },
+    {
+      "name": "Pacific Ocean Perch",
+      "tables": [
+        "Pacific Ocean Perch"
+      ],
+      "same": 5,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Salmon Shark",
+      "tables": [
+        "Shark / Salmon"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sevengill Shark",
+      "tables": [
+        "Shark / Sevengill (Cow Shark)"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Soupfin Shark",
+      "tables": [
+        "Shark / Soupfin"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Blue Shark",
+      "tables": [
+        "Shark / Blue"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Thresher Shark",
+      "tables": [
+        "Shark / Thresher"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Blacktip Shark",
+      "tables": [
+        "Shark / Blacktip"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Spiny Dogfish",
+      "tables": [
+        "Dogfish"
+      ],
+      "same": 8,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 3
+    },
+    {
+      "name": "Sharks General",
+      "tables": [
+        "Shark / Sharks, General"
+      ],
+      "same": 15,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Pacific Saury",
+      "tables": [
+        "Saury, Pacific"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sablefish",
+      "tables": [
+        "Sablefish"
+      ],
+      "same": 9,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 1,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 4
+    },
+    {
+      "name": "Lingcod",
+      "tables": [
+        "Lingcod"
+      ],
+      "same": 8,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 1,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Atka Mackerel",
+      "tables": [
+        "Mackerel, Atka"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 1,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Pacific Herring",
+      "tables": [
+        "Herring, Pacific"
+      ],
+      "same": 8,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 4
+    },
+    {
+      "name": "Pacific Lamprey",
+      "tables": [
+        "Lamprey, Pacific"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Capelin",
+      "tables": [
+        "Capelin"
+      ],
+      "same": 2,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 1,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Smelt",
+      "tables": [
+        "Smelt"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 2,
+      "onlyInSource": 3
+    },
+    {
+      "name": "Albacore Tuna",
+      "tables": [
+        "Tuna, Albacore"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sturgeon",
+      "tables": [
+        "Sturgeon"
+      ],
+      "same": 8,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 2,
+      "onlyInSource": 3
+    },
+    {
+      "name": "Trout",
+      "tables": [
+        "Trout"
+      ],
+      "same": 9,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 1,
+      "onlyInSource": 3
+    },
+    {
+      "name": "Norwegian Farmed Trout",
+      "tables": [
+        "Trout, Farmed / Norwegian"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "American Shad",
+      "tables": [
+        "Shad, American"
+      ],
+      "same": 4,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Eels",
+      "tables": [
+        "Eels"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 1,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Rat-Tails",
+      "tables": [
+        "Rat-Tails"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Dungeness Crab",
+      "tables": [
+        "Crab / Dungeness"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "King Crab (Red/Brown/Golden)",
+      "tables": [
+        "Crab / King (Red, Brown or Golden)"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Blue King Crab",
+      "tables": [
+        "Crab / King (Blue)"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Tanner Crab",
+      "tables": [
+        "Crab / Tanner"
+      ],
+      "same": 7,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Pink Shrimp",
+      "tables": [
+        "Shrimp / Pink"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Spot Shrimp",
+      "tables": [
+        "Shrimp / Spot"
+      ],
+      "same": 6,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Softshell Clams",
+      "tables": [
+        "Clams / Softshell"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Macoma Clams",
+      "tables": [
+        "Clams / Macoma"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Cockles",
+      "tables": [
+        "Clams / Cockles"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Littleneck Clams",
+      "tables": [
+        "Clams / Littlenecks"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Geoduck Clams",
+      "tables": [
+        "Clams / Geoducks"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Razor Clams",
+      "tables": [
+        "Clams / Razors"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 1
+    },
+    {
+      "name": "Butter Clams",
+      "tables": [
+        "Clams / Butter"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Mussels",
+      "tables": [
+        "Mussels"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Oysters",
+      "tables": [
+        "Oysters"
+      ],
+      "same": 1,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Scallops",
+      "tables": [
+        "Scallops"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Snails",
+      "tables": [
+        "Snails"
+      ],
+      "same": 1,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Abalone (Pinto)",
+      "tables": [
+        "Abalone, Pinto"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Squid",
+      "tables": [
+        "Squid"
+      ],
+      "same": 5,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Octopus",
+      "tables": [
+        "Octopus"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sea Cucumber",
+      "tables": [
+        "Sea Cucumber"
+      ],
+      "same": 4,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sea Urchin (Green)",
+      "tables": [
+        "Sea Urchin / Green"
+      ],
+      "same": 0,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sea Urchin (Red)",
+      "tables": [
+        "Sea Urchin / Red"
+      ],
+      "same": 0,
+      "valueDiffers": 1,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Skates",
+      "tables": [
+        "Skates"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    },
+    {
+      "name": "Sculpin",
+      "tables": [
+        "Sculpin"
+      ],
+      "same": 3,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
+      "wrongFrom": 0,
+      "onlyInApp": 0,
+      "onlyInSource": 0
+    }
+  ]
+}
