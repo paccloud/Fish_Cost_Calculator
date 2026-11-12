@@ -8,7 +8,7 @@ import { createYieldShareFlow } from '../lib/yieldSharing';
 import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 import { plainFormName } from '../lib/formNames';
-import { thisDevice } from '../config/platform';
+import { backendEnabled, thisDevice } from '../config/platform';
 
 const TITLE = 'font-display text-3xl font-semibold text-text-primary';
 const HEADING = 'font-display text-xl font-semibold text-text-primary';
@@ -369,8 +369,11 @@ const DataManagement = () => {
           <section className="card p-5 sm:p-6">
             <h2 className={HEADING}>Nothing saved on {thisDevice} yet</h2>
             <p className="mt-2 text-base text-text-secondary">
-              Prices you save from the calculator show up here. They stay on {thisDevice} until you sign in.
-              Already have an account? <Link to="/login" className={INLINE_LINK}>Sign in</Link> to see your yields.
+              Prices you save from the calculator show up here. They stay on {thisDevice}
+              {/* With no API (the store build) there is nothing to sign in to, so nothing offers it */}
+              {backendEnabled
+                ? <> until you sign in. Already have an account? <Link to="/login" className={INLINE_LINK}>Sign in</Link> to see your yields.</>
+                : '.'}
             </p>
             <Link to="/" className="btn-primary mt-5">Go to the calculator</Link>
           </section>
@@ -379,9 +382,13 @@ const DataManagement = () => {
             <section className="card flex flex-wrap items-center justify-between gap-4 p-5" aria-label="Where this is saved">
               <p className="flex min-w-0 flex-1 basis-64 items-start gap-3 text-base text-text-primary">
                 <Smartphone size={20} className="mt-0.5 shrink-0 text-text-secondary" aria-hidden="true" />
-                <span>Saved on {thisDevice} until you sign in. Sign in to keep it on every device.</span>
+                <span>
+                  {backendEnabled
+                    ? `Saved on ${thisDevice} until you sign in. Sign in to keep it on every device.`
+                    : `Saved on ${thisDevice}.`}
+                </span>
               </p>
-              <Link to="/login" className="btn-primary">Sign in</Link>
+              {backendEnabled && <Link to="/login" className="btn-primary">Sign in</Link>}
             </section>
 
             {savedCalcs.length > 0 && (

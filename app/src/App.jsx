@@ -86,7 +86,7 @@ function AppContent() {
                     <Routes>
                         <Route path="/" element={<Calculator />} />
                         <Route path="/login" element={needsBackend(<Login />)} />
-                        <Route path="/upload" element={<UploadData />} />
+                        <Route path="/upload" element={needsBackend(<UploadData />)} />
                         <Route path="/about" element={backendEnabled ? <About /> : (
                             // About is the third tab here and there is no Account tab,
                             // so the theme switch and the other screens are reached from it

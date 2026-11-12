@@ -59,7 +59,8 @@ function ThemeSwitch() {
  * no backend, where About is the third tab and there is no Account tab.
  */
 export function AppSettings({ aboutLink = true }) {
-  const links = aboutLink ? LINKS : LINKS.filter(({ to }) => to !== '/about');
+  // Importing yields needs the API, so the link goes where there is none
+  const links = LINKS.filter(({ to }) => (aboutLink || to !== '/about') && (backendEnabled || to !== '/upload'));
 
   return (
     <div className="space-y-4">
