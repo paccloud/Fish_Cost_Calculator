@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Architecture documentation (`docs/ARCHITECTURE.md`)
   - Deployment guide (`DEPLOYMENT.md`)
   - Contributing guidelines (`CONTRIBUTING.md`)
-  - Implementation summary (`IMPLEMENTATION_SUMMARY.md`)
+  - Implementation summary (`IMPLEMENTATION_SUMMARY.md`, now in `docs/archive/`)
 
 ### Data
 Based on Marine Advisory Bulletin No. 37 (MAB-37) research publication "Recoveries and Yields from Pacific Fish and Shellfish" by Chuck Crapo, Brian Paust, and Jerry Babbitt (Alaska Sea Grant, 2004):

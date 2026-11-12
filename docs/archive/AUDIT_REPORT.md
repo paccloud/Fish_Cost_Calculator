@@ -1,5 +1,7 @@
 # Repository Audit & Improvement Plan — Fish Cost Calculator
 
+> **Archived.** Superseded by the reviews in [`docs/reviews/`](../reviews/). Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 **Date:** 2026-06-10
 **Scope:** Full repository at commit `f8b05a6` (branch `main`)
 **Method:** Every claim below was verified against actual files (cited as `file:line`), or by running the project's own tooling (`npm test`, `npm run lint`, `npm run build`, `npm audit`). Facts and judgments are labeled where they could be confused.

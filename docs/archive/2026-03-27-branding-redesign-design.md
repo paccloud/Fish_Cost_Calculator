@@ -1,5 +1,7 @@
 # Fish Cost Calculator — Branding Redesign Spec
 
+> **Archived.** Superseded by [`docs/STYLE_GUIDE.md`](../STYLE_GUIDE.md). Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 ## Goal
 Align Fish Cost Calculator's visual identity with the maritime/seafood industry ecosystem (localcatch.org, namanet.org, dontcageouroceans.org) while maintaining its own distinct identity as a professional industry tool.
 

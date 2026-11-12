@@ -1,5 +1,7 @@
 # Auth Architecture
 
+> **Archived.** Replaced by [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) for sign-in as it works today, and by [ADR 0001](../adr/0001-firebase-auth-and-firestore.md) for the design that replaces it. Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 The application now uses Firebase Auth for browser sign-in while preserving the
 existing Neon PostgreSQL `users` table as the app-owned identity map.
 

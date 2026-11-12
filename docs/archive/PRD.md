@@ -1,5 +1,7 @@
 # Product Requirements Document
 
+> **Archived.** Replaced by [`CONTEXT.md`](../../CONTEXT.md), [ADR 0003](../adr/0003-five-pages-inventory-is-separate.md) and the [November 2026 product audit](../reviews/2026-11-product-audit.md). Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 ## Value Add Cost Calculator
 
 **Version:** 2.0  

@@ -224,8 +224,8 @@ project used by `FIREBASE_PROJECT_ID`.
 4. Confirm the remaining integration and environment variables match the
    intended Firebase and Neon projects.
 
-See `AUTH_ARCHITECTURE.md` for the current auth architecture and migration
-options.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how sign-in works today and
+[ADR 0001](docs/adr/0001-firebase-auth-and-firestore.md) for what replaces it.
 
 ---
 

@@ -1,5 +1,7 @@
 # Implementation Summary: Vercel + Neon Deployment
 
+> **Archived.** Replaced by [`DEPLOYMENT.md`](../../DEPLOYMENT.md) and [ADR 0001](../adr/0001-firebase-auth-and-firestore.md). Kept for the record only; see the [archive index](README.md). File paths below are as they were when this was written.
+
 ## ✅ Completed Tasks
 
 ### 1. Database Migration (SQLite → PostgreSQL)
