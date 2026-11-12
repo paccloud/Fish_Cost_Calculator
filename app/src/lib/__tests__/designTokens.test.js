@@ -32,6 +32,7 @@ function contrast(a, b) {
 }
 
 const themes = { light: readTokens(':root'), dark: readTokens('\\.dark') };
+const { brand } = tailwindConfig.theme.extend.colors;
 
 describe.each(Object.entries(themes))('%s theme tokens', (_theme, t) => {
   const backgrounds = ['surface', 'surface-raised'];
@@ -39,7 +40,8 @@ describe.each(Object.entries(themes))('%s theme tokens', (_theme, t) => {
   it('defines every token the tests rely on', () => {
     for (const name of [
       ...backgrounds, 'text-primary', 'text-secondary', 'text-muted', 'border-strong',
-      'primary', 'primary-hover', 'accent', 'link', 'focus', 'success', 'danger',
+      'primary', 'primary-hover', 'on-primary', 'accent', 'link', 'focus', 'success', 'danger',
+      'bar', 'on-bar', 'on-bar-muted',
     ]) {
       expect(t[name], `--color-${name}`).toMatch(/^#[0-9a-f]{6}$/i);
     }
@@ -60,19 +62,75 @@ describe.each(Object.entries(themes))('%s theme tokens', (_theme, t) => {
     }
   });
 
-  it.each(['primary', 'primary-hover'])('white button text on %s is at least 4.5:1', (name) => {
-    expect(contrast('#ffffff', t[name])).toBeGreaterThanOrEqual(4.5);
+  it.each(['primary', 'primary-hover'])('on-primary button text on %s is at least 4.5:1', (name) => {
+    expect(contrast(t['on-primary'], t[name])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The ticket: labels, line items and the price itself, on the one bar-coloured block
+  it.each(['on-bar', 'on-bar-muted'])('%s text is at least 4.5:1 on bar', (name) => {
+    expect(contrast(t[name], t.bar), `${name} on bar`).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps the brass price figure and focus ring readable on bar', () => {
+    expect(contrast(brand.yellow, t.bar)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps on-primary text readable on the fixed brand fills', () => {
+    for (const name of ['cta', 'cta-hover', 'teal']) {
+      expect(contrast(t['on-primary'], brand[name]), `on-primary on brand.${name}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // The tab bar sits on surface-raised: resting tabs are text-secondary, the current one is accent
+  it.each(['text-secondary', 'accent'])('%s tab labels are at least 4.5:1 on the tab bar', (name) => {
+    expect(contrast(t[name], t['surface-raised'])).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe('style guide values', () => {
+  // docs/STYLE_GUIDE.md, token table. Daylight paper is bone, not the pinker #f5f0eb it replaced.
+  it('uses the bone paper ground in daylight', () => {
+    expect(themes.light.surface.toLowerCase()).toBe('#f4f2ec');
+  });
+
+  it.each([
+    ['light', { bar: '#0b2a33', 'on-bar': '#f5f0eb', 'on-bar-muted': '#a9c0c7', 'on-primary': '#ffffff' }],
+    ['dark', { bar: '#06141a', 'on-bar': '#f5f0eb', 'on-bar-muted': '#a9c0c7', 'on-primary': '#ffffff' }],
+  ])('defines the ticket and on-primary tokens for the %s theme', (theme, expected) => {
+    for (const [name, value] of Object.entries(expected)) {
+      expect(themes[theme][name].toLowerCase(), `--color-${name}`).toBe(value);
+    }
+  });
+
+  it('exposes every theme token as a Tailwind colour', () => {
+    const { colors } = tailwindConfig.theme.extend;
+    for (const [name, token] of [
+      ['bar', 'bar'], ['on-bar', 'on-bar'], ['on-bar-muted', 'on-bar-muted'], ['on-primary', 'on-primary'],
+      ['surface', 'surface'], ['surface-raised', 'surface-raised'],
+    ]) {
+      expect(colors[name], name).toBe(`var(--color-${token})`);
+    }
+  });
+
+  it('keeps corners tight: 6px for buttons and inputs, 8px for cards and tiles', () => {
+    const { borderRadius } = tailwindConfig.theme.extend;
+    expect(borderRadius.lg).toBe('6px');
+    expect(borderRadius.xl).toBe('8px');
+  });
+
+  it('names the bundled font families first', () => {
+    const { fontFamily } = tailwindConfig.theme.extend;
+    expect(fontFamily.sans.slice(0, 2)).toEqual(['Inter Variable', 'Inter']);
+    expect(fontFamily.display).toEqual(['Fraunces Variable', 'Fraunces', 'Georgia', 'serif']);
   });
 });
 
 describe('fixed brand colors', () => {
-  const { brand } = tailwindConfig.theme.extend.colors;
-
   it.each(['cta', 'cta-hover'])('white text on brand.%s is at least 4.5:1', (name) => {
     expect(contrast('#ffffff', brand[name])).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('keeps yellow readable on the teal navbar', () => {
+  it('keeps yellow readable on brand-teal fills', () => {
     expect(contrast(brand.yellow, brand.teal)).toBeGreaterThanOrEqual(4.5);
   });
 });

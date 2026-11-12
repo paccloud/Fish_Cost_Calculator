@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 /*
- * Design tokens.
+ * Design tokens (docs/STYLE_GUIDE.md has the table; docs/DESIGN_SYSTEM.md says how to use them).
  * Text pairs are checked against WCAG AA (4.5:1) and form-control edges against
  * 3:1 by src/lib/__tests__/designTokens.test.js — change a value here and that
  * test will tell you if it stops being readable in sunlight or a dim kitchen.
  */
 :root {
   color-scheme: light;
-  --color-surface: #f5f0eb;
+  --color-surface: #f4f2ec;
   --color-surface-raised: #ffffff;
   --color-text-primary: #1a2e35;
   --color-text-secondary: #4a6572;
@@ -20,11 +20,23 @@
   --color-border-strong: #857a70;
   --color-primary: #014457;
   --color-primary-hover: #025a72;
+  --color-on-primary: #ffffff;
   --color-accent: #014457;
   --color-link: #a34329;
   --color-focus: #014457;
   --color-success: #166534;
   --color-danger: #b42318;
+  --color-bar: #0b2a33;
+  --color-on-bar: #f5f0eb;
+  --color-on-bar-muted: #a9c0c7;
+
+  /*
+   * The phone tab bar. --tabbar-height is everything it takes off the bottom of the screen
+   * (one row of tabs, its top edge, and the device's bottom inset) and is 0 from 768px, where
+   * the tabs sit in the top bar. Anything else pinned to the bottom edge must clear it.
+   */
+  --tab-height: 3.5rem;
+  --tabbar-height: calc(var(--tab-height) + 1px + env(safe-area-inset-bottom, 0px));
 }
 
 .dark {
@@ -39,11 +51,21 @@
   --color-border-strong: #6f8b96;
   --color-primary: #0b7a99;
   --color-primary-hover: #096a86;
+  --color-on-primary: #ffffff;
   --color-accent: #7fd0e3;
   --color-link: #ec8f72;
   --color-focus: #f7c648;
   --color-success: #4ade80;
   --color-danger: #fca5a5;
+  --color-bar: #06141a;
+  --color-on-bar: #f5f0eb;
+  --color-on-bar-muted: #a9c0c7;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --tabbar-height: 0px;
+  }
 }
 
 @layer base {
@@ -51,7 +73,10 @@
     -webkit-text-size-adjust: 100%;
   }
 
+  /* Paper all the way down, so a rubber-band scroll in the store app never shows white */
   body {
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
@@ -64,14 +89,22 @@
     outline-offset: 2px;
   }
 
-  /* The navbar is teal in both themes, so its focus ring must be light */
-  .focus-on-dark :focus-visible {
+  /* On the ticket and on teal fills the ring is brass in both themes */
+  .focus-on-dark :focus-visible,
+  .ticket :focus-visible {
     outline-color: #f7c648;
   }
 
-  /* ...but popovers rendered inside the navbar (sync details) sit on a normal surface */
+  /* ...but popovers rendered inside a dark block (sync details) sit on a normal surface */
   .focus-on-dark [role="dialog"] :focus-visible {
     outline-color: var(--color-focus);
+  }
+
+  @media (min-width: 768px) {
+    /* Whatever is tabbed to or jumped to lands below the sticky top bar (WCAG 2.4.11) */
+    html {
+      scroll-padding-top: 4.5rem;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -87,7 +120,7 @@
 }
 
 @layer components {
-  /* Buttons: 48px tall so they're easy to hit with wet or gloved hands */
+  /* ---------- Buttons: 48px tall so they're easy to hit with wet or gloved hands ---------- */
   .btn-primary,
   .btn-secondary {
     @apply inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-lg px-5 py-3 text-base font-semibold
@@ -95,7 +128,7 @@
   }
 
   .btn-primary {
-    @apply bg-primary text-white hover:bg-primary-hover;
+    @apply bg-primary text-on-primary hover:bg-primary-hover;
   }
 
   .btn-secondary {
@@ -108,7 +141,7 @@
   }
 
   .card {
-    @apply rounded-xl border border-line bg-surface-raised shadow-sm;
+    @apply rounded-xl border border-line bg-surface-raised shadow-card;
   }
 
   .form-label {
@@ -129,4 +162,348 @@
   .section-divider {
     @apply my-6 border-t border-line-subtle;
   }
+
+  /* ---------- Display type: the names of things (species, products, screens, sections) ---------- */
+  /* The sturdy cut of Fraunces: lining figures, SOFT and WONK at 0, and none of Inter's feature flags */
+  .font-display,
+  .type-display,
+  .type-title,
+  .type-species,
+  .type-heading,
+  .ticket-label b {
+    font-family: theme('fontFamily.display');
+    font-feature-settings: normal;
+    font-variant-numeric: lining-nums;
+    font-variation-settings: "SOFT" 0, "WONK" 0;
+  }
+
+  /* 40/44, weight 500. Store listing, About and sign-in headline; never inside the calculator */
+  .type-display {
+    @apply text-text-primary;
+    font-size: 2.5rem;
+    line-height: 2.75rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  /* 30/34, weight 550. The screen title; one per screen */
+  .type-title {
+    @apply text-text-primary;
+    font-size: 1.875rem;
+    line-height: 2.125rem;
+    font-weight: 550;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  /* 24/28, weight 550. The chosen species, and species names in lists */
+  .type-species {
+    @apply text-text-primary;
+    font-size: 1.5rem;
+    line-height: 1.75rem;
+    font-weight: 550;
+  }
+
+  /* 20/26, weight 600. A section heading inside a screen */
+  .type-heading {
+    @apply text-text-primary;
+    font-size: 1.25rem;
+    line-height: 1.625rem;
+    font-weight: 600;
+  }
+
+  /* Scientific name under a species: sans italic at helper size */
+  .type-latin {
+    @apply font-sans text-text-secondary;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  /* ---------- Stamp: where a number came from. A printed label, not a button ---------- */
+  .stamp {
+    @apply inline-flex max-w-full items-center whitespace-nowrap rounded text-text-secondary;
+    gap: 0.375rem;
+    padding: 0.1875rem 0.5rem;
+    border: 1.5px solid currentColor;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .stamp-yours {
+    @apply text-link;
+  }
+
+  .stamp-community {
+    @apply text-accent;
+  }
+
+  /* ---------- Notice: what just happened, with an icon and a bold first sentence ---------- */
+  .notice {
+    @apply flex items-start gap-3 rounded-lg border border-line bg-surface-raised px-4 py-3 text-base text-text-primary;
+    line-height: 1.5rem;
+  }
+
+  .notice strong {
+    display: block;
+    font-weight: 600;
+  }
+
+  .notice > svg {
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.125rem;
+  }
+
+  .notice-success {
+    border-color: var(--color-success);
+  }
+
+  .notice-success > svg,
+  .notice-success strong {
+    color: var(--color-success);
+  }
+
+  .notice-error {
+    border-color: var(--color-danger);
+  }
+
+  .notice-error > svg,
+  .notice-error strong {
+    color: var(--color-danger);
+  }
+
+  /* ---------- Ticket: the answer. The one bar-coloured block on a screen ---------- */
+  .ticket {
+    @apply bg-bar text-on-bar shadow-ticket;
+    border-top: 4px solid theme('colors.brand.yellow');
+    padding: 0.75rem 1rem calc(1rem + var(--ticket-bottom-inset, 0px));
+  }
+
+  /*
+   * Pins a ticket to the bottom edge. It stays at bottom: 0 and pads itself by the tab bar's
+   * height (or, where there is no tab bar, the device's bottom inset), so its offsetHeight is
+   * everything it covers and scroll-padding-bottom can be set from that one number.
+   * Use on the .ticket itself or on a wrapper around it.
+   */
+  .ticket-dock {
+    --ticket-bottom-inset: max(var(--tabbar-height), env(safe-area-inset-bottom, 0px));
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+  }
+
+  .ticket-label {
+    margin: 0;
+    color: var(--color-on-bar-muted);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+  }
+
+  /* The product named in the label, in the display face */
+  .ticket-label b {
+    color: var(--color-on-bar);
+    font-size: 1rem;
+    line-height: 1.25rem;
+    font-weight: 550;
+  }
+
+  .ticket-row {
+    @apply mt-1 flex items-end justify-between gap-4;
+  }
+
+  /* figure-hero: 52/52, weight 800, brass on bar. One per screen */
+  .ticket-figure {
+    margin: 0;
+    color: theme('colors.brand.yellow');
+    font-size: 3.25rem;
+    line-height: 3.25rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  /* The unit beside the figure: "/lb" */
+  .ticket-figure small {
+    margin-left: 0.125rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .ticket-actions {
+    @apply flex gap-2;
+  }
+
+  .ticket-action {
+    @apply inline-flex min-h-[2.75rem] min-w-[2.75rem] items-center justify-center rounded-lg text-on-bar transition-colors;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    border: 1.5px solid var(--color-on-bar-muted);
+    background: none;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-weight: 600;
+  }
+
+  .ticket-action:hover {
+    border-color: var(--color-on-bar);
+  }
+
+  .ticket-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  /* Line items under a dashed rule: label left, number right */
+  .ticket-lines {
+    display: grid;
+    gap: 0.125rem;
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0 0;
+    border-top: 1px dashed var(--color-on-bar-muted);
+    list-style: none;
+  }
+
+  .ticket-lines li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--color-on-bar-muted);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+  }
+
+  .ticket-lines li > :last-child {
+    color: var(--color-on-bar);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums lining-nums;
+    white-space: nowrap;
+  }
+
+  /* ---------- Tab bar: the whole of the app's navigation ---------- */
+  /* On a phone: pinned to the bottom edge, icon over label, under the ticket */
+  .tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    min-height: var(--tabbar-height);
+    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    border-top: 1px solid var(--color-border);
+    background-color: var(--color-surface-raised);
+  }
+
+  .tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    min-height: var(--tab-height);
+    padding: 0.375rem 0.25rem;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+    transition: color 150ms;
+  }
+
+  .tab > svg {
+    flex: none;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .tab:hover {
+    color: var(--color-text-primary);
+  }
+
+  /* The ring is drawn inside the tab so the screen edge never clips it */
+  .tab:focus-visible {
+    outline-offset: -3px;
+  }
+
+  .tab[aria-current] {
+    color: var(--color-accent);
+  }
+
+  /* A 3px rule along the top of the current tab, just inside the bar's edge so it still
+     reads when the ticket sits directly above it */
+  .tab[aria-current]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 24%;
+    left: 24%;
+    height: 3px;
+    border-radius: 0 0 4px 4px;
+    background-color: currentColor;
+  }
+
+  /* From 768px: a row of text labels in the paper top bar */
+  @media (min-width: 768px) {
+    .tabbar {
+      position: static;
+      z-index: auto;
+      display: flex;
+      align-self: stretch;
+      gap: 0.5rem;
+      min-height: 0;
+      padding: 0;
+      border-top: 0;
+      background-color: transparent;
+    }
+
+    .tab {
+      flex-direction: row;
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+      padding: 0 0.75rem;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+    }
+
+    .tab > svg {
+      display: none;
+    }
+
+    .tab[aria-current]::before {
+      top: auto;
+      right: 0.75rem;
+      bottom: -1px;
+      left: 0.75rem;
+      border-radius: 4px 4px 0 0;
+    }
+  }
+}
+
+/*
+ * STOPGAP, delete when the calculator is rebuilt on .ticket and .ticket-dock.
+ * Calculator.jsx still pins its result bar with `fixed bottom-0 z-30` and pads it by the device's
+ * bottom inset only. This makes that bar pad itself by the tab bar's height instead, exactly as
+ * .ticket-dock does, so on a phone the tab bar (z-40) covers empty padding and never the price.
+ * The calculator sets scroll-padding-bottom from the bar's offsetHeight, which now includes the
+ * tab bar, so a field you tab to still lands above both.
+ */
+main [role="region"][aria-label="Your result"] {
+  padding-bottom: max(var(--tabbar-height), env(safe-area-inset-bottom, 0px));
 }
