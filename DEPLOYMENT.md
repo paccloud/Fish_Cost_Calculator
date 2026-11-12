@@ -2,10 +2,13 @@
 
 This guide will help you deploy Local Catch to Vercel with Firebase Auth and Neon PostgreSQL.
 
+> **This stack is being replaced.** [ADR 0001](docs/adr/0001-firebase-auth-and-firestore.md) moves the app to Firebase Auth, Cloud Firestore and Firebase Hosting, with no Vercel functions and no Neon database (issues #123–#133). This guide describes the deployment that runs today and stays valid until that move. The steps for retiring it are in [`docs/move-runbook.md`](docs/move-runbook.md). Do not start a new deployment from this guide without reading the ADR first.
+
 ## Prerequisites
 
-- [x] Neon account (you mentioned you have one)
+- [ ] Neon account
 - [ ] Vercel account (free Hobby plan)
+- [ ] Firebase project with Authentication turned on
 - [ ] GitHub repository
 
 ## Step 1: Neon Database Setup
@@ -25,6 +28,10 @@ This guide will help you deploy Local Catch to Vercel with Firebase Auth and Neo
    ```
    postgresql://user:password@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require
    ```
+
+`scripts/neon-schema.sql` creates the four tables the API writes to (`users`, `calculations`, `user_data`, `contributors`) with every current column. A database made from an older copy of it also needs the files in `db/migrations/`, run in order.
+
+`GET /api/fish-data` reads three more tables (`species`, `fish_yields`, `species_profiles`). They are optional: without them that endpoint answers 500 and the app uses the reference yields bundled with it. `scripts/import-fish-data-to-neon.js` creates and fills `species` and `fish_yields`, but it creates a table named `profiles`, not `species_profiles`, so on its own it does not make the endpoint work.
 
 ### 1.2 Migrate Existing Data from SQLite
 
@@ -70,13 +77,13 @@ Save this value - you'll need it for environment variables.
 
 ## Step 3: Push to GitHub
 
-1. Create a new GitHub repository or use existing one
-2. Commit all changes:
+Vercel builds from the GitHub repository. Changes reach `main` only through a pull request (see "Git Workflow" in `CLAUDE.md`); do not push to `main` directly.
 
 ```bash
-git add .
-git commit -m "Add Vercel deployment configuration with Neon"
-git push origin main
+git checkout -b feature/my-change
+git commit -m "feat: describe the change"
+git push -u origin feature/my-change
+gh pr create
 ```
 
 ---
@@ -100,13 +107,15 @@ Before deploying, add these environment variables in Vercel:
 | `JWT_SECRET` | Your generated secret | Required while either the legacy JWT login endpoint or legacy JWT bearer-token validation remains enabled; used for both issuing and validating legacy tokens — remove only after both paths are disabled |
 | `FIREBASE_PROJECT_ID` | Firebase project ID | Required for backend Firebase ID token verification |
 | `VITE_FIREBASE_API_KEY` | Firebase web API key | Required for frontend email/password auth |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID | Must match `FIREBASE_PROJECT_ID` |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain | Usually `<project>.firebaseapp.com` |
-| `VITE_FIREBASE_APP_ID` | Firebase web app ID | From Firebase web app settings |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID | From Firebase web app settings |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase project ID | Must match `FIREBASE_PROJECT_ID`. The app itself does not read it |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth domain | Usually `<project>.firebaseapp.com`. Not read by the current code |
+| `VITE_FIREBASE_APP_ID` | Firebase web app ID | From Firebase web app settings. Not read by the current code |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase sender ID | From Firebase web app settings. Not read by the current code |
 | `ALLOWED_ORIGINS` | Comma-separated allowlist (e.g. `https://your-app.vercel.app,http://localhost:5173`) | Required for CORS |
 | `CORS_ALLOW_CREDENTIALS` | `true` or `false` | Only enable when you need cookies across origins |
 | `JWT_EXPIRES_IN_SECONDS` | Optional, default `86400` | JWT lifetime (same value should be used locally) |
+
+The full list, with the file that reads each variable, is in [`docs/ENVIRONMENT_VARIABLES.md`](docs/ENVIRONMENT_VARIABLES.md). `VITE_MOVE_STAGE`, `VITE_NEW_APP_URL` and `API_READ_ONLY` are used only for the move to Firebase.
 
 **How to add:**
 1. In Vercel project settings → Environment Variables
@@ -237,11 +246,12 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for how sign-in works today a
 2. Test public pages:
    - Home (calculator) - works without login
    - Data Sources page - should load contributors
+   - Community page - should load shared yields
    - About page
 
 ### 6.2 Test Authentication
 
-1. Register a new account
+1. Register a new account with an email address, then open the verification email and follow its link. The app refuses to sign in an unverified email.
 2. Login
 3. Try:
    - Saving a calculation
@@ -283,6 +293,7 @@ Create `.env.local` in project root:
 
 ```
 DATABASE_URL=postgresql://user:pass@host.neon.tech/db?sslmode=require
+FIREBASE_PROJECT_ID=your-firebase-project-id
 JWT_SECRET=your-dev-secret
 ```
 
@@ -373,7 +384,7 @@ Production:
 ├─────────────────────────────────────┤
 │  API (api/*.js)                     │
 │  - Serverless Functions             │
-│  - Node.js 18+                      │
+│  - Node.js                          │
 │  - Auto-scales                      │
 └─────────────┬───────────────────────┘
               │
@@ -400,4 +411,4 @@ Production:
 
 - Vercel Docs: https://vercel.com/docs
 - Neon Docs: https://neon.tech/docs
-- Project Issues: [Your GitHub repo]/issues
+- Project Issues: https://github.com/paccloud/Fish_Cost_Calculator/issues
