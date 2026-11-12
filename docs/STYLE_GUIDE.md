@@ -1,10 +1,10 @@
 # Style guide
 
-The look, the words and the components for Local Catch on the web and in the store apps. Written 2026-11-10 with the [November product audit](reviews/2026-11-product-audit.md).
+The look, the words and the components for Local Catch on the web and in the store apps. Written 2026-11-10 with the [November product audit](reviews/2026-11-product-audit.md) and revised 2026-11-12 after viewing the reference brands.
 
-- **Status: proposed.** The colour tokens are the ones already in `app/src/index.css`. The display typeface, the ticket, the stamps and the tab bar are new and not in the app yet; "Applying it" at the end lists the changes.
+- **Status: proposed.** Most colour tokens are the ones already in `app/src/index.css`. The display typeface, the ticket, the stamps and the tab bar are new, and three existing values change (the paper colour and two corner radii). "Applying it" at the end lists the work.
 - `docs/DESIGN_SYSTEM.md` still describes how the calculator is built today. Where the two disagree, this guide is the direction.
-- The reference brands named for this work (Sitka Seafood Market, Wild Alaskan Company, Outerseas) could not be opened while it was written, so no colour or typeface here is copied from them. See the audit, sections 5 and 9.
+- **What came from the reference brands** (Sitka Seafood Market, Wild Alaskan Company, Outerseas): dark blue ink instead of black, one yellow highlight, serif names at a regular weight over a plain working face, small uppercase labels, tight corners, and a ground that is bone or near-white. No colour value or typeface is copied from them. The measurements are in the audit, section 5.
 
 Local Catch turns what a fish costs whole into what each finished product really costs. It is used on a dock in glare, in a cold room, and at the pass mid-service, usually on a phone, often with wet or gloved hands, by people who know fish better than they know software.
 
@@ -43,7 +43,7 @@ Write the way a good fishmonger talks to a chef: short, exact, no sales pitch.
 
 ## Colour
 
-The palette is deep-sea teal, warm paper, brass and sockeye red. It is used sparingly: most of a screen is `surface`, `surface-raised` and `text-primary`.
+The palette is deep-sea teal, bone paper, brass and sockeye red. It is used sparingly: most of a screen is `surface`, `surface-raised` and `text-primary`.
 
 - **Ground:** `surface` for the page, `surface-raised` for cards, tiles and the tab bar. Never put a card on a card.
 - **Text:** `text-primary` for anything a person reads or types; `text-secondary` for units and supporting lines; `text-muted` for help under a field and nothing more important than that.
@@ -60,7 +60,7 @@ The palette is deep-sea teal, warm paper, brass and sockeye red. It is used spar
 
 Two families, both bundled with the app so it works with no signal.
 
-- **Fraunces** (`display`, `title`, `species`, `heading`) for the names of things: species, products, screens, sections. Weight 600–650, lining figures, never italic, never below 20px, never in a button, label, tile or table. Keep `SOFT` and `WONK` at 0: the sturdy cut, not the wobbly one.
+- **Fraunces** (`display`, `title`, `species`, `heading`) for the names of things: species, products, screens, sections. Weight 500–600, lining figures, never italic, never below 20px, never in a button, label, tile or table. Keep `SOFT` and `WONK` at 0: the sturdy cut, not the wobbly one.
 - **Inter** (`control`, `body`, `label`, `helper`, `eyebrow`, and all `figure-*`) for everything a person operates and every number. Numbers always use `font-variant-numeric: tabular-nums lining-nums` so digits do not jump while typing and columns line up.
 - Scientific names are sans italic at `helper` size under the species: *Oncorhynchus nerka*.
 - `body` (16px) is the smallest text in a form; `helper` (14px) is the smallest text anyone must read; `eyebrow` (12px) is for Stamps and tab labels only.
@@ -69,7 +69,7 @@ Two families, both bundled with the app so it works with no signal.
 
 ## Shape, space and depth
 
-- Corners: `radius-md` (8px) for buttons and inputs, `radius-lg` (12px) for cards, tiles and stepper buttons, `radius-sm` (4px) for Stamps. `radius-pill` is for step numbers only.
+- Corners are tight: `radius-md` (6px) for buttons and inputs, `radius-lg` (8px) for cards, tiles and stepper buttons, `radius-sm` (4px) for Stamps. `radius-pill` is for step numbers only.
 - Spacing comes from the 4px scale: `space-4` side gutters on a phone, `space-5` inside cards, `space-4` between cards, `space-8` under a screen title.
 - Depth: cards are flat with a `border` edge and `shadow-card`. Only the Ticket (`shadow-ticket`) and dialogs sit above the page.
 - No gradients, no glass, no blur, no icon-in-a-coloured-square page headers, no decorative dividers.
@@ -85,7 +85,7 @@ Two families, both bundled with the app so it works with no signal.
 ## Icons and imagery
 
 - Icons are **Lucide** (`lucide-react`, the set the app already ships), 2px stroke, 20px in buttons and 24px in the tab bar, always in the text colour beside them. An icon never stands alone without an accessible name, and tab icons always have their label.
-- **There is no logo yet.** Set the name "Local Catch" in Fraunces 650 beside a `radius-sm` `brand-teal` tile holding the Lucide `fish` icon. Do not draw a mark, and do not use the Local Catch Network's logo without their say-so.
+- **There is no logo yet.** Set the name "Local Catch" in Fraunces 600 beside a `radius-sm` `brand-teal` tile holding the Lucide `fish` icon. Do not draw a mark, and do not use the Local Catch Network's logo without their say-so.
 - The app icon and store art use `brand-teal`, `brand-yellow` and `surface` only.
 - No stock photography and no decorative fish clip-art in the app. Photography belongs on the store listing and About: real boats, real cutting tables, real hands, natural light. Species illustrations, if commissioned, are single-colour line drawings in `text-primary`, used as small wayfinding marks beside species names.
 
@@ -106,17 +106,17 @@ Two families, both bundled with the app so it works with no signal.
 
 ## Tokens
 
-Light is the Daylight theme, dark is Galley. "New" tokens are not in `app/src/index.css` yet.
+Light is the Daylight theme, dark is Galley. **New** tokens are not in `app/src/index.css` yet; **Changed** ones have a different value there today.
 
 ### Colour
 
 | Token | Daylight | Galley | Use |
 |---|---|---|---|
-| `surface` | `#f5f0eb` | `#0d1f26` | Page ground. Warm paper in daylight, cold-water ink in the galley theme. |
+| `surface` | `#f4f2ec` | `#0d1f26` | Page ground. Bone paper in daylight, cold-water ink in the galley theme. **Changed:** the app has #f5f0eb in daylight, which reads pink beside the near-white and bone grounds of the reference brands. |
 | `surface-raised` | `#ffffff` | `#132830` | Cards, tiles, input rows and the tab bar, on surface. |
 | `text-primary` | `#1a2e35` | `#e8ddd4` | Body copy, labels, titles and typed numbers on surface and surface-raised (13:1 or better in both themes). |
 | `text-secondary` | `#4a6572` | `#8fa8b2` | Supporting copy and unit suffixes on surface and surface-raised (5.9:1 or better). |
-| `text-muted` | `#557080` | `#7f9aa6` | Helper lines and placeholders on surface and surface-raised (4.6:1 on surface in daylight, the tightest pair in the system; never go lighter). |
+| `text-muted` | `#557080` | `#7f9aa6` | Helper lines and placeholders on surface and surface-raised (4.7:1 on surface in daylight, the tightest pair in the system; never go lighter). |
 | `border` | `#d6ccc4` | `rgba(255, 255, 255, 0.12)` | Card edges and dividers. Decoration only (1.5:1); never the only edge of a control. |
 | `border-subtle` | `#ede7e0` | `rgba(255, 255, 255, 0.06)` | Rules between rows inside a card. Decoration only. |
 | `border-strong` | `#857a70` | `#6f8b96` | Edges of inputs, selects, tiles and steppers on surface and surface-raised (3.7:1 or better). |
@@ -143,9 +143,9 @@ Light is the Daylight theme, dark is Galley. "New" tokens are not in `app/src/in
 
 | Style | Family | Size / line | Weight | Use |
 |---|---|---|---|---|
-| `display` | Fraunces | 40px / 44px | 650 | Store listing, About and sign-in headline. One per screen, never inside the calculator. |
-| `title` | Fraunces | 30px / 34px | 650 | Screen title. |
-| `species` | Fraunces | 24px / 28px | 600 | The chosen species, and species names in lists. The fish is always the largest word in its card. |
+| `display` | Fraunces | 40px / 44px | 500 | Store listing, About and sign-in headline. One per screen, never inside the calculator. |
+| `title` | Fraunces | 30px / 34px | 550 | Screen title. |
+| `species` | Fraunces | 24px / 28px | 550 | The chosen species, and species names in lists. The fish is always the largest word in its card. |
 | `heading` | Fraunces | 20px / 26px | 600 | Section heading inside a screen. |
 | `control` | Inter | 18px / 24px | 700 | Tile and segmented-control labels. |
 | `body` | Inter | 16px / 24px | 400 | Running copy and input text. Never smaller in a form: 16px stops iOS zooming on focus. |
@@ -175,8 +175,8 @@ Light is the Daylight theme, dark is Galley. "New" tokens are not in `app/src/in
 | Token | Value | Use |
 |---|---|---|
 | `radius-sm` | `4px` | Stamps and the wordmark tile. Small and square reads as a printed label. |
-| `radius-md` | `8px` | Buttons and text inputs (Tailwind rounded-lg in the app). |
-| `radius-lg` | `12px` | Cards, tiles and stepper buttons (Tailwind rounded-xl in the app). |
+| `radius-md` | `6px` | Buttons and text inputs. **Changed:** 8px (Tailwind rounded-lg) in the app. |
+| `radius-lg` | `8px` | Cards, tiles and stepper buttons. **Changed:** 12px (Tailwind rounded-xl) in the app. |
 | `radius-pill` | `999px` | Step numbers and count badges only. Buttons are never pills. |
 
 ### Shadow
@@ -214,7 +214,7 @@ Light is the Daylight theme, dark is Galley. "New" tokens are not in `app/src/in
 
 In this order, so each step is small and shippable:
 
-1. **Tokens.** Add `--color-bar`, `--color-on-bar`, `--color-on-bar-muted` and `--color-on-primary` to `app/src/index.css` and `tailwind.config.js`, and add their pairs to `designTokens.test.js`.
+1. **Tokens.** Add `--color-bar`, `--color-on-bar`, `--color-on-bar-muted` and `--color-on-primary` to `app/src/index.css` and `tailwind.config.js`, change `--color-surface` to `#f4f2ec` in the light theme, and add the new pairs to `designTokens.test.js`. Set the shared radii to 6 px (buttons, inputs) and 8 px (cards, tiles, steppers).
 2. **Fonts.** Bundle Inter and Fraunces as `woff2` files in the app (for example `@fontsource-variable/inter` and `@fontsource-variable/fraunces`), add a `font-display` family to the Tailwind config, and remove the Google Fonts links from `index.html` and the font caching rules from `vite.config.js`.
 3. **Ticket.** Move the result bar to `bar`, add the dashed line items (price across the yield range first), then Save and Share.
 4. **Tiles and stamps.** Plain-language names with the code on the second line; a stamp on every yield.
@@ -223,4 +223,4 @@ In this order, so each step is small and shippable:
 7. **Secondary screens.** Rebuild Sign in, My yields, Community and Account from these components as the Firebase issues (#123–#129) touch them. Do not restyle screens that ADR 0003 removes.
 8. **Words.** Apply the naming table across the app in one pass.
 
-Type sizes for Fraunces were chosen by rendering the candidates with the app's own copy. Every text and edge pair in the token table was checked against WCAG 2 contrast (4.5:1 for text, 3:1 for control edges) in both themes.
+The typeface and its weights were chosen by rendering candidates with the app's own copy, then adjusted after viewing the reference brands. Every text and edge pair in the token table was checked against WCAG 2 contrast (4.5:1 for text, 3:1 for control edges) in both themes.

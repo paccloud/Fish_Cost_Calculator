@@ -9,7 +9,7 @@ The companion to this document is [`docs/STYLE_GUIDE.md`](../STYLE_GUIDE.md).
 - Ran the project's own gates: `npm run lint`, `npm test`, `npm run build`, and `npm audit` in all four packages.
 - Served the production build with **no backend** and drove it in a headless browser: every route at 390 px and 1280 px, in both themes, with axe (WCAG 2.2 AA rules), a tap-target measurement and a filled-in calculation.
 - Read the open issues, the last workflow runs and the code paths named below.
-- Two research passes: current App Store, Capacitor and Firebase requirements, and the reference brands. Section 9 says what could not be verified.
+- Read current App Store, Capacitor and Firebase requirements, and captured the three reference brands' sites on 2026-11-12. Section 9 says what could not be verified.
 
 ## Verdict
 
@@ -157,16 +157,29 @@ Each screen was captured at phone and desktop width in both themes.
 
 ## 5. The reference brands
 
-The brands named were resolved as **Sitka Seafood Market**, **Wild Alaskan Company**, and **Outerseas** (the new name of Alaskan Salmon Company), with meez and Galley as the chef-software comparison.
+The brands named were resolved as **Sitka Seafood Market**, **Wild Alaskan Company**, and **Outerseas** (the new name of Alaskan Salmon Company). Their home pages were captured on 2026-11-12 at phone and desktop width, and the values below were read from the pages' computed styles.
 
-Their sites could not be opened from this environment (section 9), so nothing in the style guide copies a colour or a typeface from them. What could be confirmed second-hand, from agency case studies and press:
+| | Ink | Grounds | Highlight | Names and headlines | Everything else | Corners |
+|---|---|---|---|---|---|---|
+| Sitka Seafood Market | Navy `#003c71`, used for all text | White, warm off-white `#f7f5f3`, pale blue `#edf6fd` | Green `#51815b` buttons, rust `#ab5b2e` eyebrows | Frank Ruhl Libre (serif), regular weight | Funnel Sans; condensed capitals (Bebas Neue) for small labels | Square |
+| Wild Alaskan Company | Navy `#0d334c` | White, cool grey `#e7edf1` | Gold `#ffb600` buttons with dark text | Their own sign-lettering face, in capitals | Seravek; 14 px uppercase, letter-spaced labels | Pills |
+| Outerseas | Indigo `#0f0a30` | White, bone `#eeefe8` | Butter yellow `#fdf5a4` | GT Alpina Extended (a wide serif), light | Pitch Sans, a monospace, in capitals for navigation, buttons and prices | 4 px |
 
-- **Provenance is the pitch.** Named boats, people and places: "wild-caught by small-boat fishermen", "Created by a fisherman, raised by the fleet."
-- **Custom illustration and print cues**, not stock photography: fish drawings, stamps, postcards, hand-cut sign lettering. Wild Alaskan's packaging uses Alaska's blue and gold.
-- **Short declarative headlines**, with a concrete noun and no hype.
-- **Chef software sells control**, in numbers: "one source of truth for every recipe", "30% less waste".
+What all three do, and what the style guide does with it:
 
-What carries over to a tool used with wet hands: provenance labels on every number, one characterful face used sparingly, terse trade-literate copy, and print cues (the result as a ticket, sources as stamps). What stays on the marketing site and the store listing: full-bleed photography, founder stories, decorative lockups.
+| They all | Local Catch |
+|---|---|
+| Set text in a dark blue, never black | Already true (`text-primary` is a teal-black). Kept. |
+| Use one yellow or gold as the thing to look at | Brass is reserved for the price on the ticket. |
+| Set names and headlines in a serif at a regular or light weight, and everything else in a plain face | Fraunces for species, products and titles at 500–600; Inter for controls and numbers. The first draft was heavier and was lightened after seeing them. |
+| Use small uppercase, letter-spaced labels; Outerseas sets them in a typewriter face, like a price tag | Stamps: the source of every yield, set as a printed label. |
+| Keep corners tight or square | Radii go from 8 and 12 px to 6 and 8 px. |
+| Use white, near-white or bone grounds | The paper moves from `#f5f0eb`, which reads pink beside them, to `#f4f2ec`. |
+| Show real boats, real people and a short provenance claim ("Traceable to the Source", "caught by us") | No stock imagery in the app; documentary photography on the store listing; provenance on every number. |
+
+Not taken, on purpose: uppercase button labels (slower to read at a glance with wet hands), pill buttons, and full-bleed photography inside a tool.
+
+**Chef software.** meez's page loaded without its stylesheet here (it is served from a host that is still blocked), so its design was not seen. From its copy, it sells control in numbers ("One source of truth for every kitchen"), which is the register the ticket's line items use.
 
 ## 6. What the App Store needs
 
@@ -229,7 +242,7 @@ For Android later: Capacitor's Android target reuses the same build and plugins.
 
 ## 9. What could not be verified
 
-- **The reference brands' sites.** This environment's network policy blocked every one of them, so their colours, typefaces and layouts were not seen. Section 5 is from case studies and search results only.
+- **Chef software.** meez's site rendered without its stylesheet, and Galley and Choco were not opened, so the chef-software comparison rests on their copy, not their design.
 - **Some platform facts** came from search snippets rather than the source page, because capacitorjs.com, firebase.google.com and Google's help centre were also blocked: Google's embedded-webview OAuth block, Firestore persistence details in WKWebView, the Play closed-test numbers, and Codemagic's free tier. Apple's requirements and the Capacitor and plugin versions were read from the source.
 - **Production itself.** Nothing here touched the live site, Vercel, Neon or Firebase. Whether the credential in #22 has in fact been rotated cannot be seen from the repository.
 - **Signed-in screens.** My Data, Upload and the profile were only seen in their signed-out state, because there was no backend or Firebase project to sign in to.
