@@ -4,7 +4,9 @@ import {
   getInstallationId,
   guestScope,
   accountScope,
+  isDeviceOnlyCalc,
 } from './localRepository';
+import { adoptGuestRecords } from './guestAdoption';
 
 // In-memory store that simulates idb-keyval get/set with reload persistence.
 function makeStore() {
@@ -999,5 +1001,87 @@ describe('clearAll', () => {
 
   it('is a no-op on an already empty scope', async () => {
     await expect(repo.clearAll()).resolves.not.toThrow();
+  });
+});
+
+// ---- "Pounds to buy" answers stay on the device ----
+
+describe('a "Pounds to buy" answer (mode: weight)', () => {
+  const WEIGHT = { species: 'Halibut', product: 'Round → Fletch', mode: 'weight', cost: 0, target_weight: 100, yield: 46, result: 217.39 };
+  const PRICE = { species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', mode: 'cost', cost: 4.5, yield: 46, result: 9.78 };
+  let repo, store;
+
+  beforeEach(() => {
+    store = makeStore();
+    repo = makeRepo('account:u1', store);
+  });
+
+  it('is device-only by its mode; a price is not, whatever it cost', () => {
+    expect(isDeviceOnlyCalc(WEIGHT)).toBe(true);
+    expect(isDeviceOnlyCalc(PRICE)).toBe(false);
+    // Nothing paid for the fish, processing paid for: a price saved with cost 0
+    expect(isDeviceOnlyCalc({ ...PRICE, cost: 0 })).toBe(false);
+    // Back from the server with no mode
+    expect(isDeviceOnlyCalc({ species: 'Halibut', cost: 0, result: 217.39 })).toBe(false);
+    // Sent to the account by an older version of the app: the normal sync still looks after it
+    expect(isDeviceOnlyCalc({ ...WEIGHT, serverId: 4 })).toBe(false);
+  });
+
+  it('is listed but never waits to sync', async () => {
+    const weight = await repo.addCalc(WEIGHT);
+    const price = await repo.addCalc(PRICE);
+
+    expect((await repo.getCalcs()).map((c) => c.id)).toEqual([weight.id, price.id]);
+    expect((await repo.getPendingSync()).calcs.map((c) => c.id)).toEqual([price.id]);
+  });
+
+  it('survives a merge of the account’s saved prices, with its mode', async () => {
+    const weight = await repo.addCalc(WEIGHT);
+    await repo.mergeServerCalcs([{ id: 7, species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: '4.50', yield: '46.00', result: '9.78', is_private: true }]);
+    await repo.mergeServerCalcs([]);
+
+    const calcs = await repo.getCalcs();
+    expect(calcs).toHaveLength(2);
+    expect(calcs.find((c) => c.id === weight.id)).toMatchObject({ mode: 'weight', result: 217.39, target_weight: 100 });
+    expect((await repo.getPendingSync()).calcs).toHaveLength(0);
+  });
+
+  it('survives sign-out, whether unsent changes are kept or discarded', async () => {
+    const weight = await repo.addCalc(WEIGHT);
+    const unsentPrice = await repo.addCalc(PRICE);
+
+    await repo.clearSyncedCache();
+    expect((await repo.getCalcs()).map((c) => c.id)).toEqual([weight.id, unsentPrice.id]);
+
+    await repo.discardUnsynchronized();
+    expect((await repo.getCalcs()).map((c) => c.id)).toEqual([weight.id]);
+  });
+
+  it('is deleted outright, with no tombstone to send', async () => {
+    const weight = await repo.addCalc(WEIGHT);
+    await repo.removeCalc(weight.id);
+
+    expect(await repo.getCalcs()).toHaveLength(0);
+    expect(store._db['fish-calc:repo:account:u1:calcs']).toEqual([]);
+  });
+
+  it('stays device-only when a guest signs in and keeps what they saved', async () => {
+    const guestRepo = makeRepo('guest:dev-1', store);
+    await guestRepo.addCalc(WEIGHT);
+    await guestRepo.addCalc(PRICE);
+
+    await adoptGuestRecords(guestRepo, repo);
+
+    const adopted = await repo.getCalcs();
+    expect(adopted.map((c) => c.mode)).toEqual(['weight', 'cost']);
+    expect((await repo.getPendingSync()).calcs.map((c) => c.mode)).toEqual(['cost']);
+  });
+
+  it('is still deleted from the account if an older version of the app sent it there', async () => {
+    const weight = await repo.addCalc(WEIGHT);
+    await repo.markCalcSynced(weight.id, 4);
+    await repo.removeCalc(weight.id);
+
+    expect((await repo.getPendingSync()).calcs).toMatchObject([{ id: weight.id, serverId: 4, syncStatus: 'pending-delete' }]);
   });
 });

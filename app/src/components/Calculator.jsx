@@ -295,7 +295,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   };
 
   // Saved on this device first, for a guest and for someone signed in alike; the data layer
-  // then syncs a signed-in person's record to their account
+  // then syncs a signed-in person's price to their account (a "Pounds to buy" answer stays here)
   const handleSave = async () => {
     if (saved || savingRef.current) return;
     const record = savedPriceRecord({ mode, species, fromState, toState, targetWeight: parseAmount(targetWeight) }, model);
@@ -378,7 +378,10 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   const notices = {
     saved: (
       <Notice title="Saved.">
-        {user ? 'It’s in My yields, and goes to your account when there is signal.' : `It’s on ${thisDevice}, in My yields.`}
+        {/* A "Pounds to buy" answer is not sent to the account: the server keeps prices only */}
+        {user && mode === 'weight' && `It’s in My yields, on ${thisDevice} only.`}
+        {user && mode !== 'weight' && 'It’s in My yields, and goes to your account when there is signal.'}
+        {!user && `It’s on ${thisDevice}, in My yields.`}
       </Notice>
     ),
     'save-failed': (

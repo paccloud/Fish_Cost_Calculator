@@ -8,6 +8,7 @@ import { createYieldShareFlow } from '../lib/yieldSharing';
 import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 import { plainFormName } from '../lib/formNames';
+import { isDeviceOnlyCalc } from '../lib/localRepository';
 import { backendEnabled, thisDevice } from '../config/platform';
 import Notice from './Notice';
 
@@ -25,12 +26,12 @@ function formatPercent(value) {
   return Number.isFinite(n) ? String(Number(n.toFixed(2))) : String(value ?? '');
 }
 
-// A saved price is a cost per lb, unless it was saved from "Pounds to buy". The server keeps no
-// mode, so a record that comes back from another device has lost it. What it still has is a cost
-// of 0, which only "Pounds to buy" saves: a price cannot be worked out from nothing paid.
+// A saved price is a cost per lb, unless it was saved from "Pounds to buy". Only the record's own
+// mode says so. A record with no mode came from the server, which is sent prices only, so it is a
+// price: a cost of 0 proves nothing, because a fish that cost nothing still has a price once
+// there is processing or shipping to pay for.
 function isWeightResult(calc) {
-  if (calc.mode) return calc.mode === 'weight';
-  return calc.cost !== undefined && calc.cost !== null && calc.cost !== '' && Number(calc.cost) === 0;
+  return calc.mode === 'weight';
 }
 
 function describeResult(calc) {
@@ -93,7 +94,11 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
               {calc.species && calc.name && calc.name !== autoName && (
                 <p className="break-words text-sm text-text-secondary">Saved as “{calc.name}”</p>
               )}
-              {signedIn && (
+              {isDeviceOnlyCalc(calc) ? (
+                <p className="mt-1">
+                  <span className={ROW_STATUS}><Smartphone size={16} aria-hidden="true" />Kept on {thisDevice} only</span>
+                </p>
+              ) : signedIn && (
                 <p className="mt-1">
                   {calc.is_private === false ? (
                     <span className={ROW_STATUS}><Globe size={16} aria-hidden="true" />Public</span>
@@ -121,7 +126,8 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
                   <EyeOff size={18} aria-hidden="true" />
                   Unpublish
                 </button>
-              ) : (
+              ) : !isWeightResult(calc) && (
+                // Only a price can go on the community feed
                 <button
                   type="button"
                   onClick={() => onPublish(calc)}
@@ -354,7 +360,8 @@ const DataManagement = () => {
     if (!window.confirm(`Delete the saved price for ${calcLabel(calc)}${where}?`)) return;
     try {
       await removeCalc(calc.id);
-      setStatus({ type: 'success', message: user && !isOnline ? 'Saved price deleted here. It leaves your account when there is signal.' : 'Saved price deleted.' });
+      const leavesAccountLater = user && !isOnline && !isDeviceOnlyCalc(calc);
+      setStatus({ type: 'success', message: leavesAccountLater ? 'Saved price deleted here. It leaves your account when there is signal.' : 'Saved price deleted.' });
     } catch {
       setStatus({ type: 'error', message: 'That saved price wasn’t deleted. Try again.' });
     }

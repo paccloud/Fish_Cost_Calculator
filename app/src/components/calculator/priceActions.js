@@ -7,8 +7,15 @@ import { buildPriceCard } from '../../lib/priceCard';
 import { tileName, YOUR_YIELDS_FROM } from './names';
 
 /**
- * The record for a saved price, in the shape "My yields" lists and the sync sends to the server
- * (name, species, product, cost, yield, result). `mode` and `target_weight` stay on the device.
+ * The record for a saved price, in the shape "My yields" lists.
+ *
+ * A price (`mode: 'cost'`) is what the sync sends to the server: name, species, product, cost,
+ * yield and result. The server keeps no `mode`, so a record that comes back without one is a
+ * price, whatever its cost: a fish that cost nothing still has a price once there is processing
+ * or shipping to pay for.
+ *
+ * A "Pounds to buy" answer (`mode: 'weight'`, `cost: 0`, the result in pounds) is never sent. It
+ * stays on the device it was saved on (`isDeviceOnlyCalc` in lib/localRepository.js).
  *
  * @param {{mode: string, species: string, fromState: string, toState: string, targetWeight: number}} chosen
  * @param {import('./ticketModel').TicketModel} model
@@ -32,8 +39,8 @@ export function savedPriceRecord({ mode, species, fromState, toState, targetWeig
 
 /**
  * Save a price through the data layer: on this device first, for a guest and for someone signed
- * in alike. A signed-in person's record then reaches their account by the sync that the data
- * layer already runs after every change.
+ * in alike. A signed-in person's price then reaches their account by the sync that the data
+ * layer already runs after every change. A "Pounds to buy" answer stays on the device.
  *
  * @param {{saveCalc: (record: object) => Promise<object|null>, readOnly?: boolean}} data — `useData()`
  * @param {object|null} record — from `savedPriceRecord`

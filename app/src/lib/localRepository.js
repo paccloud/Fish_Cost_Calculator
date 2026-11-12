@@ -28,6 +28,16 @@ export function accountScope(uid) {
   return `account:${uid}`;
 }
 
+// --- Records that stay on the device ---
+
+// A "Pounds to buy" answer is a weight, and the server keeps no mode: sent there, it would come
+// back as a price. So it stays on the device it was saved on and is never queued for the sync.
+// One that reached the server before this rule (it has a serverId) is left to the normal sync, so
+// it can still be unpublished or deleted there.
+export function isDeviceOnlyCalc(calc) {
+  return calc?.mode === 'weight' && !calc.serverId;
+}
+
 // --- Internal ---
 
 function idbKey(scope, collection) {
@@ -600,7 +610,8 @@ class LocalRepository {
     const allCalcs = calcsRaw || [];
     const allYields = yieldsRaw || [];
     return {
-      calcs: allCalcs.filter((c) => c.syncStatus === 'local' || c.syncStatus === 'pending-delete' || c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish'),
+      // A device-only record is 'local' for good and is not waiting for anything.
+      calcs: allCalcs.filter((c) => !isDeviceOnlyCalc(c) && (c.syncStatus === 'local' || c.syncStatus === 'pending-delete' || c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish')),
       yields: allYields.filter((y) => y.syncStatus === 'local' || y.syncStatus === 'pending-delete'),
     };
   }
@@ -646,8 +657,9 @@ class LocalRepository {
         const all = (await this._get(calcsKey)) || [];
         // Reset pending publication intents to synced (discard the queued change).
         // Remove records that were never synced (local) or are tombstoned (pending-delete).
+        // A device-only record was never going to sync, so it is not one of the changes discarded.
         await this._set(calcsKey, all
-          .filter((c) => c.syncStatus !== 'local' && c.syncStatus !== 'pending-delete')
+          .filter((c) => isDeviceOnlyCalc(c) || (c.syncStatus !== 'local' && c.syncStatus !== 'pending-delete'))
           .map((c) =>
             (c.syncStatus === 'pending-publish' || c.syncStatus === 'pending-unpublish')
               ? { ...c, syncStatus: 'synced' }
