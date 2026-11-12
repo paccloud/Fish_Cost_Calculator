@@ -1,0 +1,312 @@
+{
+  "pdf_page": 8,
+  "side": "left",
+  "book_page": 8,
+  "rows": [
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 90,
+      "range": [
+        83,
+        93
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 70,
+      "range": [
+        62,
+        74
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 35,
+      "range": [
+        29,
+        38
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 62,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 80,
+      "range": [
+        67,
+        89
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 39,
+      "range": [
+        31,
+        45
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 69,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillets",
+      "average": 49,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lingcod",
+      "scientific_name": "Ophiodon elongatus",
+      "scientific_name_as_printed": "Ophiodon elongatus",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 86,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mackerel, Atka",
+      "scientific_name": "Pleurogrammus monopterygius",
+      "scientific_name_as_printed": "Pleurogrammus monopterygius",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 87,
+      "range": [
+        83,
+        93
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mackerel, Atka",
+      "scientific_name": "Pleurogrammus monopterygius",
+      "scientific_name_as_printed": "Pleurogrammus monopterygius",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 68,
+      "range": [
+        62,
+        74
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mackerel, Atka",
+      "scientific_name": "Pleurogrammus monopterygius",
+      "scientific_name_as_printed": "Pleurogrammus monopterygius",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 31,
+      "range": [
+        29,
+        33
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mackerel, Atka",
+      "scientific_name": "Pleurogrammus monopterygius",
+      "scientific_name_as_printed": "Pleurogrammus monopterygius",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 57,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mackerel, Atka",
+      "scientific_name": "Pleurogrammus monopterygius",
+      "scientific_name_as_printed": "Pleurogrammus monopterygius",
+      "subheading": null,
+      "from": "Round",
+      "to": "Salted D/H-Off",
+      "average": 41,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mussels",
+      "scientific_name": "Mytilus sp.",
+      "scientific_name_as_printed": "Mytilus sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meat (wild)",
+      "average": 26,
+      "range": [
+        19,
+        32
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mussels",
+      "scientific_name": "Mytilus sp.",
+      "scientific_name_as_printed": "Mytilus sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meat (cultured)",
+      "average": 20,
+      "range": [
+        11,
+        27
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Mussels",
+      "scientific_name": "Mytilus sp.",
+      "scientific_name_as_printed": "Mytilus sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Steamed",
+      "average": 14,
+      "range": [
+        10,
+        18
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Octopus",
+      "scientific_name": "Octopus dofleini",
+      "scientific_name_as_printed": "Octopus dofleini",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Gutted/Skin-On",
+      "average": 80,
+      "range": [
+        80,
+        85
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Octopus",
+      "scientific_name": "Octopus dofleini",
+      "scientific_name_as_printed": "Octopus dofleini",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Gutted/Skinned",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Octopus",
+      "scientific_name": "Octopus dofleini",
+      "scientific_name_as_printed": "Octopus dofleini",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Viscera",
+      "average": 20,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Oysters",
+      "scientific_name": "Crassostrea sp.",
+      "scientific_name_as_printed": "Crassostrea sp.",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Raw Meats",
+      "average": null,
+      "range": [
+        5,
+        14
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Oysters",
+      "scientific_name": "Crassostrea sp.",
+      "scientific_name_as_printed": "Crassostrea sp.",
+      "subheading": null,
+      "from": "Raw Meats",
+      "to": "Cooked Meats",
+      "average": 61,
+      "range": null,
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

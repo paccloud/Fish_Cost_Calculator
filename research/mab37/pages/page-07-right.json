@@ -1,0 +1,381 @@
+{
+  "pdf_page": 7,
+  "side": "right",
+  "book_page": 7,
+  "rows": [
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 88,
+      "range": [
+        85,
+        92
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 72,
+      "range": [
+        68,
+        80
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 62,
+      "range": [
+        60,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillet",
+      "average": 49,
+      "range": [
+        45,
+        56
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet (Fletch)",
+      "average": 41,
+      "range": [
+        34,
+        44
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 83,
+      "range": [
+        73,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 76,
+      "range": [
+        71,
+        88
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet",
+      "average": 56,
+      "range": [
+        47,
+        64
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet (Fletch)",
+      "average": 46,
+      "range": [
+        38,
+        50
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet",
+      "average": 68,
+      "range": [
+        64,
+        73
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillet (Fletch)",
+      "average": 56,
+      "range": [
+        45,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 79,
+      "range": [
+        70,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Halibut, Pacific",
+      "scientific_name": "Hippoglossus stenolepis",
+      "scientific_name_as_printed": "Hippoglossus stenolepis",
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Roasts",
+      "average": 84,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 82,
+      "range": [
+        78,
+        87
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 70,
+      "range": [
+        60,
+        76
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillets",
+      "average": 53,
+      "range": [
+        45,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillets",
+      "average": 49,
+      "range": [
+        41,
+        58
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Salted Round",
+      "average": 82,
+      "range": [
+        79,
+        88
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Salted Gibbed",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Salted Fillets",
+      "average": 42,
+      "range": [
+        35,
+        47
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked D/H-Off",
+      "average": 60,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 10,
+      "range": [
+        3,
+        18
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Round",
+      "to": "Pickled D/H-On",
+      "average": 74,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Salted Fillets",
+      "average": 85,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Herring, Pacific",
+      "scientific_name": "Clupea harengus pallasi",
+      "scientific_name_as_printed": "Clupea harengus pallasi",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Pickled",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Lamprey, Pacific",
+      "scientific_name": "Lampetra tridentata",
+      "scientific_name_as_printed": "Lampetra tridentata",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 77,
+      "range": [
+        74,
+        85
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

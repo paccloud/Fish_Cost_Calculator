@@ -1,0 +1,327 @@
+{
+  "pdf_page": 6,
+  "side": "left",
+  "book_page": 4,
+  "rows": [
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Raw Sections",
+      "average": 60,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Whole",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Sections",
+      "average": 52,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat",
+      "average": 24,
+      "range": [
+        22,
+        25
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat (during molt)",
+      "average": null,
+      "range": [
+        13,
+        14
+      ],
+      "check": "to: the printed cell is only '(during molt)', right-aligned under the Cooked Meat row, with a range and no average; transcribed as a qualifier of Raw Whole -> Cooked Meat. Numbers are certain."
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Raw Sections",
+      "to": "Cooked Sections",
+      "average": 87,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Cooked Whole",
+      "to": "Cooked Meat",
+      "average": 27,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Dungeness",
+      "scientific_name": "Cancer magister",
+      "scientific_name_as_printed": "Cancer magister",
+      "subheading": null,
+      "from": "Cooked Sections",
+      "to": "Cooked Meat",
+      "average": 46,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Raw Sections",
+      "average": 69,
+      "range": [
+        67,
+        74
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Whole",
+      "average": 92,
+      "range": [
+        90,
+        95
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Sections",
+      "average": 60,
+      "range": [
+        52,
+        67
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat",
+      "average": 25,
+      "range": [
+        23,
+        28
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat (during molt)",
+      "average": null,
+      "range": [
+        16,
+        19
+      ],
+      "check": "to: the printed cell is only '(during molt)', right-aligned under the Cooked Meat row, with a range and no average; transcribed as a qualifier of Raw Whole -> Cooked Meat. Numbers are certain."
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Raw Sections",
+      "to": "Cooked Sections",
+      "average": 87,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Cooked Whole",
+      "to": "Cooked Meat",
+      "average": 27,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Red, Brown or Golden)",
+      "scientific_name": "Paralithodes camtschatica, Lithodes aequispina",
+      "scientific_name_as_printed": "Paralithodes camtschatica, Lithodes aequispina",
+      "subheading": null,
+      "from": "Cooked Sections",
+      "to": "Cooked Meat",
+      "average": 42,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Raw Sections",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Whole",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Sections",
+      "average": 55,
+      "range": [
+        50,
+        61
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat",
+      "average": 20,
+      "range": [
+        16,
+        23
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat (during molt)",
+      "average": null,
+      "range": [
+        13,
+        14
+      ],
+      "check": "to: the printed cell is only '(during molt)', right-aligned under the Cooked Meat row, with a range and no average; transcribed as a qualifier of Raw Whole -> Cooked Meat. Numbers are certain."
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Raw Sections",
+      "to": "Cooked Sections",
+      "average": 84,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Cooked Whole",
+      "to": "Cooked Meat",
+      "average": 22,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "King (Blue)",
+      "scientific_name": "Paralithodes platypus",
+      "scientific_name_as_printed": "Paralithodes platypus",
+      "subheading": null,
+      "from": "Cooked Sections",
+      "to": "Cooked Meat",
+      "average": 37,
+      "range": null,
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}
