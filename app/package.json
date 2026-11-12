@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint . --ignore-pattern ios",
+    "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "validate-data": "node src/data/validate_fish_data.js",

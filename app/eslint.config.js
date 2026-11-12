@@ -5,7 +5,8 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // ios/ holds the Capacitor project; `cap sync` copies the built bundle into it
+  globalIgnores(['dist', 'ios']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
