@@ -1,0 +1,168 @@
+{
+  "regulation": "Commission Implementing Regulation (EU) 2025/2196 of 17 October 2025",
+  "eli": "http://data.europa.eu/eli/reg_impl/2025/2196/oj",
+  "input_sha256": "8d1fd50af542cacc80719bd43062ccebe3e48755cf84eac1760f09c653cb137b",
+  "table": "Annex I, Table 1",
+  "codes": [
+    {
+      "code": "CBF",
+      "name": "Cod butterfly (escalado)",
+      "description": "HEA (Heads off) with skin on, spine on, tail on"
+    },
+    {
+      "code": "CLA",
+      "name": "Claws",
+      "description": "Claws only"
+    },
+    {
+      "code": "DWT",
+      "name": "ICCAT code",
+      "description": "Gilled, gutted, part of head off, fins off"
+    },
+    {
+      "code": "FIL",
+      "name": "Filleted",
+      "description": "HEA+GUT(Gutted)+TLD(Tailed)+bones off, each fish originates two fillets not joined by any par"
+    },
+    {
+      "code": "FIS",
+      "name": "Filleted and skinned fillets",
+      "description": "FIL+SKI(Skinned) Each fish originates two fillets not joined by any part"
+    },
+    {
+      "code": "FSB",
+      "name": "Filleted with skin and bones",
+      "description": "Filleted with skin and bones on"
+    },
+    {
+      "code": "FSP",
+      "name": "Filleted skinned with pinbone on",
+      "description": "Filleted with skin removed and pinbone on"
+    },
+    {
+      "code": "GHT",
+      "name": "Gutted headed and tailed",
+      "description": "GUH(Gutted and headed)+TLD"
+    },
+    {
+      "code": "GUG",
+      "name": "Gutted and gilled",
+      "description": "Guts and gills removed"
+    },
+    {
+      "code": "GUH",
+      "name": "Gutted and headed",
+      "description": "Guts and head removed"
+    },
+    {
+      "code": "GUL",
+      "name": "Gutted liver in",
+      "description": "GUT without removing liver parts"
+    },
+    {
+      "code": "GUS",
+      "name": "Gutted headed and skinned",
+      "description": "GUH+SKI"
+    },
+    {
+      "code": "GUT",
+      "name": "Gutted",
+      "description": "All guts removed"
+    },
+    {
+      "code": "HEA",
+      "name": "Headed",
+      "description": "Heads off"
+    },
+    {
+      "code": "JAP",
+      "name": "Japanese cut",
+      "description": "Transversal cut removing all parts from head to belly"
+    },
+    {
+      "code": "JAT",
+      "name": "Tailed Japanese cut",
+      "description": "Japanese cut with tail removed"
+    },
+    {
+      "code": "LAP",
+      "name": "Lappen",
+      "description": "Double fillet, HEA, skin+tails+fins ON"
+    },
+    {
+      "code": "LVR",
+      "name": "Liver",
+      "description": "Liver only, in case of collective presentation use code LVR-C"
+    },
+    {
+      "code": "OTH",
+      "name": "Other",
+      "description": "Any other presentation"
+    },
+    {
+      "code": "ROE",
+      "name": "Roe (s)",
+      "description": "Roe(s) only in case of collective presentation use code ROE-C"
+    },
+    {
+      "code": "SAD",
+      "name": "Salted dry",
+      "description": "Headed with skin on, spine on, tail on and salted directly"
+    },
+    {
+      "code": "SAL",
+      "name": "Salted wet light",
+      "description": "CBF+salted"
+    },
+    {
+      "code": "SGH",
+      "name": "Salted, gutted and headed",
+      "description": "GUH+salted"
+    },
+    {
+      "code": "SGT",
+      "name": "Salted gutted",
+      "description": "GUT+salted"
+    },
+    {
+      "code": "SKI",
+      "name": "Skinned",
+      "description": "Skin off"
+    },
+    {
+      "code": "SUR",
+      "name": "Surimi",
+      "description": "Surimi"
+    },
+    {
+      "code": "TAL",
+      "name": "Tail",
+      "description": "Tails only"
+    },
+    {
+      "code": "TLD",
+      "name": "Tailed",
+      "description": "Tail off"
+    },
+    {
+      "code": "TNG",
+      "name": "Tongue",
+      "description": "Tongue only. In case of collective presentation use code TNG-C"
+    },
+    {
+      "code": "TUB",
+      "name": "Tube only",
+      "description": "Tube only (Squid)"
+    },
+    {
+      "code": "WHL",
+      "name": "Whole",
+      "description": "No processing"
+    },
+    {
+      "code": "WNG",
+      "name": "Wings",
+      "description": "Wings only"
+    }
+  ]
+}

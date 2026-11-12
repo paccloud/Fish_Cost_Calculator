@@ -1,0 +1,2508 @@
+{
+  "regulation": "Commission Implementing Regulation (EU) 2025/2196 of 17 October 2025",
+  "eli": "http://data.europa.eu/eli/reg_impl/2025/2196/oj",
+  "input_sha256": "8d1fd50af542cacc80719bd43062ccebe3e48755cf84eac1760f09c653cb137b",
+  "note": "factor = live weight / product weight; yield_pct = 100 / factor, rounded to one decimal",
+  "rows": [
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ALB",
+      "name": "Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ALB",
+      "name": "Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ALF",
+      "name": "Alfonsinos",
+      "scientific_name": "Beryx spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANE",
+      "name": "Anchovy",
+      "scientific_name": "Engraulis encrasicholus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "GUT",
+      "factor": 1.22,
+      "yield_pct": 82
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "GUH",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "TAL",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ANI",
+      "name": "Mackerel icefish",
+      "scientific_name": "Champsocephalus gunnari",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ARU",
+      "name": "Greater silver smelt",
+      "scientific_name": "Argentina silus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "GUH",
+      "factor": 1.1,
+      "yield_pct": 90.9
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "GUH",
+      "factor": 1.29,
+      "yield_pct": 77.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BLI",
+      "name": "Blue ling",
+      "scientific_name": "Molva dypterygia",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BLI",
+      "name": "Blue ling",
+      "scientific_name": "Molva dypterygia",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BLL",
+      "name": "Brill",
+      "scientific_name": "Scophthalmus rhombus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BLL",
+      "name": "Brill",
+      "scientific_name": "Scophthalmus rhombus",
+      "presentation": "GUT",
+      "factor": 1.09,
+      "yield_pct": 91.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BSF",
+      "name": "Black scabbardfish",
+      "scientific_name": "Aphanopus carbo",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BSF",
+      "name": "Black scabbardfish",
+      "scientific_name": "Aphanopus carbo",
+      "presentation": "GUT",
+      "factor": 1.24,
+      "yield_pct": 80.6
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BSF",
+      "name": "Black scabbardfish",
+      "scientific_name": "Aphanopus carbo",
+      "presentation": "HEA",
+      "factor": 1.4,
+      "yield_pct": 71.4
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "BUM",
+      "name": "Atlantic blue marlin",
+      "scientific_name": "Makaira nigricans",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "CAP",
+      "name": "Capelin",
+      "scientific_name": "Mallotus villosus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "GUH",
+      "factor": 1.7,
+      "yield_pct": 58.8
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "HEA",
+      "factor": 1.38,
+      "yield_pct": 72.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "FIL",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "FIS",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DAB",
+      "name": "Common Dab",
+      "scientific_name": "Limanda limanda",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DAB",
+      "name": "Common Dab",
+      "scientific_name": "Limanda limanda",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DAB",
+      "name": "Common Dab",
+      "scientific_name": "Limanda limanda",
+      "presentation": "GUH",
+      "factor": 1.39,
+      "yield_pct": 71.9
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DGS",
+      "name": "Picked dogfish",
+      "scientific_name": "Squalus acanthias",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DGS",
+      "name": "Picked dogfish",
+      "scientific_name": "Squalus acanthias",
+      "presentation": "GUT",
+      "factor": 1.35,
+      "yield_pct": 74.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "DGS",
+      "name": "Picked dogfish",
+      "scientific_name": "Squalus acanthias",
+      "presentation": "GUS",
+      "factor": 2.52,
+      "yield_pct": 39.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "FLE",
+      "name": "European flounder",
+      "scientific_name": "Platichthys flesus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "FLE",
+      "name": "European flounder",
+      "scientific_name": "Platichthys flesus",
+      "presentation": "GUT",
+      "factor": 1.08,
+      "yield_pct": 92.6
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "FLE",
+      "name": "European flounder",
+      "scientific_name": "Platichthys flesus",
+      "presentation": "GUS",
+      "factor": 1.39,
+      "yield_pct": 71.9
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "GUH",
+      "factor": 1.4,
+      "yield_pct": 71.4
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "GHL",
+      "name": "Greenland halibut",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "GHL",
+      "name": "Greenland halibut",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "presentation": "GUT",
+      "factor": 1.08,
+      "yield_pct": 92.6
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "GUH",
+      "factor": 1.46,
+      "yield_pct": 68.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HAL",
+      "name": "Atlantic halibut",
+      "scientific_name": "Hippoglossus hippoglossus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HER",
+      "name": "Herring",
+      "scientific_name": "Clupea harengus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HER",
+      "name": "Herring",
+      "scientific_name": "Clupea harengus",
+      "presentation": "GUT",
+      "factor": 1.12,
+      "yield_pct": 89.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HER",
+      "name": "Herring",
+      "scientific_name": "Clupea harengus",
+      "presentation": "GUH",
+      "factor": 1.19,
+      "yield_pct": 84
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "GUH",
+      "factor": 1.4,
+      "yield_pct": 71.4
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "HKW",
+      "name": "White hake",
+      "scientific_name": "Urophycis tenuis",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "JAX",
+      "name": "Horse mackerel",
+      "scientific_name": "Trachurus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "JAX",
+      "name": "Horse mackerel",
+      "scientific_name": "Trachurus spp.",
+      "presentation": "GUT",
+      "factor": 1.08,
+      "yield_pct": 92.6
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "KRI",
+      "name": "Antarctic krill",
+      "scientific_name": "Euphausia superba",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LEM",
+      "name": "Lemon sole",
+      "scientific_name": "Microstomus kitt",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LEM",
+      "name": "Lemon sole",
+      "scientific_name": "Microstomus kitt",
+      "presentation": "GUT",
+      "factor": 1.05,
+      "yield_pct": 95.2
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LEZ",
+      "name": "Megrims",
+      "scientific_name": "Lepidorhombus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LEZ",
+      "name": "Megrims",
+      "scientific_name": "Lepidorhombus spp.",
+      "presentation": "GUT",
+      "factor": 1.06,
+      "yield_pct": 94.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LEZ",
+      "name": "Megrims",
+      "scientific_name": "Lepidorhombus spp.",
+      "presentation": "FIL",
+      "factor": 2.5,
+      "yield_pct": 40
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LIC",
+      "name": "Unicorn icefish",
+      "scientific_name": "Channichthys rhinoceratus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "GUT",
+      "factor": 1.14,
+      "yield_pct": 87.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "GUH",
+      "factor": 1.32,
+      "yield_pct": 75.8
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "FIL",
+      "factor": 2.64,
+      "yield_pct": 37.9
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "MAC",
+      "name": "Atlantic mackerel",
+      "scientific_name": "Scomber scombrus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "MAC",
+      "name": "Atlantic mackerel",
+      "scientific_name": "Scomber scombrus",
+      "presentation": "GUT",
+      "factor": 1.09,
+      "yield_pct": 91.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "NEP",
+      "name": "Norway lobster",
+      "scientific_name": "Nephrops norvegicus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "NEP",
+      "name": "Norway lobster",
+      "scientific_name": "Nephrops norvegicus",
+      "presentation": "TAL",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "NOG",
+      "name": "Humped rockcod",
+      "scientific_name": "Notothenia gibberifrons",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "NOP",
+      "name": "Norway pout",
+      "scientific_name": "Trisopterus esmarkii",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "NOR",
+      "name": "Marbled rockcod",
+      "scientific_name": "Notothenia rossii",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "ORY",
+      "name": "Orange roughy",
+      "scientific_name": "Hoplostethus atlanticus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PCR",
+      "name": "Pacific snow crab",
+      "scientific_name": "Chionoecetes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PEN",
+      "name": "White shrimps",
+      "scientific_name": "Penaeus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "GUT",
+      "factor": 1.05,
+      "yield_pct": 95.2
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "GUH",
+      "factor": 1.39,
+      "yield_pct": 71.9
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "FIL",
+      "factor": 2.4,
+      "yield_pct": 41.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "GUT",
+      "factor": 1.19,
+      "yield_pct": 84
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "POL",
+      "name": "Pollack",
+      "scientific_name": "Pollachius pollachius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "POL",
+      "name": "Pollack",
+      "scientific_name": "Pollachius pollachius",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "PRA",
+      "name": "Northern prawn",
+      "scientific_name": "Pandalus borealis",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "GUT",
+      "factor": 1.19,
+      "yield_pct": 84
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RHG",
+      "name": "Rough-head grenadier",
+      "scientific_name": "Macrourus berglax",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "GUH",
+      "factor": 1.92,
+      "yield_pct": 52.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "GHT",
+      "factor": 3.2,
+      "yield_pct": 31.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SAN",
+      "name": "Sandeels",
+      "scientific_name": "Ammodytes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SBR",
+      "name": "Blackspot seabream",
+      "scientific_name": "Pagellus bogaraveo",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SBR",
+      "name": "Blackspot seabream",
+      "scientific_name": "Pagellus bogaraveo",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SDH",
+      "name": "Rough longnose dogfish",
+      "scientific_name": "Deania histricosa",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SDU",
+      "name": "Arrowhead dogfish",
+      "scientific_name": "Deania profundorum",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SGI",
+      "name": "South Georgia icefish",
+      "scientific_name": "Pseudochaenichthys georgianus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SOL",
+      "name": "Common sole",
+      "scientific_name": "Solea solea",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SOL",
+      "name": "Common sole",
+      "scientific_name": "Solea solea",
+      "presentation": "GUT",
+      "factor": 1.04,
+      "yield_pct": 96.2
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SPR",
+      "name": "European sprat",
+      "scientific_name": "Sprattus sprattus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SQI",
+      "name": "Northern squid",
+      "scientific_name": "Illex illecebrosus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SQS",
+      "name": "Squid",
+      "scientific_name": "Martialia hyadesi",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "GUT",
+      "factor": 1.13,
+      "yield_pct": 88.5
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "WNG",
+      "factor": 2.09,
+      "yield_pct": 47.8
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "GUH",
+      "factor": 1.31,
+      "yield_pct": 76.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "TOP",
+      "name": "Patagonian toothfish",
+      "scientific_name": "Dissostichus eleginoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "TUR",
+      "name": "Turbot",
+      "scientific_name": "Psetta maxima",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "TUR",
+      "name": "Turbot",
+      "scientific_name": "Psetta maxima",
+      "presentation": "GUT",
+      "factor": 1.09,
+      "yield_pct": 91.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "USK",
+      "name": "Tusk",
+      "scientific_name": "Brosme brosme",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "USK",
+      "name": "Tusk",
+      "scientific_name": "Brosme brosme",
+      "presentation": "GUT",
+      "factor": 1.14,
+      "yield_pct": 87.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "GUT",
+      "factor": 1.15,
+      "yield_pct": 87
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WHG",
+      "name": "Whiting",
+      "scientific_name": "Merlangius merlangus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WHG",
+      "name": "Whiting",
+      "scientific_name": "Merlangius merlangus",
+      "presentation": "GUT",
+      "factor": 1.18,
+      "yield_pct": 84.7
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WHM",
+      "name": "Atlantic white marlin",
+      "scientific_name": "Tetrapturus albidus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WIT",
+      "name": "Witch flounder",
+      "scientific_name": "Glyptocephalus cynoglossus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "WIT",
+      "name": "Witch flounder",
+      "scientific_name": "Glyptocephalus cynoglossus",
+      "presentation": "GUT",
+      "factor": 1.06,
+      "yield_pct": 94.3
+    },
+    {
+      "annex": "XII",
+      "state": "fresh",
+      "asfis": "YEL",
+      "name": "Yellowtail flounder",
+      "scientific_name": "Limanda ferruginea",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIII",
+      "state": "fresh salted",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "WHL",
+      "factor": 2.8,
+      "yield_pct": 35.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ALB",
+      "name": "Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ALB",
+      "name": "Albacore",
+      "scientific_name": "Thunnus alalunga",
+      "presentation": "GUT",
+      "factor": 1.23,
+      "yield_pct": 81.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ALF",
+      "name": "Alfonsinos",
+      "scientific_name": "Beryx spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANE",
+      "name": "Anchovy",
+      "scientific_name": "Engraulis encrasicholus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "GUT",
+      "factor": 1.22,
+      "yield_pct": 82
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "GUH",
+      "factor": 3.04,
+      "yield_pct": 32.9
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "TAL",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANF",
+      "name": "Anglerfish",
+      "scientific_name": "Lophiidae",
+      "presentation": "FIS",
+      "factor": 5.6,
+      "yield_pct": 17.9
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ANI",
+      "name": "Mackerel icefish",
+      "scientific_name": "Champsocephalus gunnari",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ARU",
+      "name": "Greater silver smelt",
+      "scientific_name": "Argentina silus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "GUH",
+      "factor": 1.29,
+      "yield_pct": 77.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BET",
+      "name": "Bigeye tuna",
+      "scientific_name": "Thunnus obesus",
+      "presentation": "HEA",
+      "factor": 1.25,
+      "yield_pct": 80
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BLI",
+      "name": "Blue ling",
+      "scientific_name": "Molva dypterygia",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BLI",
+      "name": "Blue ling",
+      "scientific_name": "Molva dypterygia",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BLI",
+      "name": "Blue ling",
+      "scientific_name": "Molva dypterygia",
+      "presentation": "GUH",
+      "factor": 1.4,
+      "yield_pct": 71.4
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BLL",
+      "name": "Brill",
+      "scientific_name": "Scophthalmus rhombus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BSF",
+      "name": "Black scabbardfish",
+      "scientific_name": "Aphanopus carbo",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BSF",
+      "name": "Black scabbardfish",
+      "scientific_name": "Aphanopus carbo",
+      "presentation": "GUT",
+      "factor": 1.48,
+      "yield_pct": 67.6
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "BUM",
+      "name": "Atlantic blue marlin",
+      "scientific_name": "Makaira nigricans",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "CAP",
+      "name": "Capelin",
+      "scientific_name": "Mallotus villosus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "GUH",
+      "factor": 1.7,
+      "yield_pct": 58.8
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "FIL",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "FIS",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "FSP",
+      "factor": 2.95,
+      "yield_pct": 33.9
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "COD",
+      "name": "Cod",
+      "scientific_name": "Gadus morhua",
+      "presentation": "CBF",
+      "factor": 1.63,
+      "yield_pct": 61.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "DAB",
+      "name": "Common Dab",
+      "scientific_name": "Limanda limanda",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "DGS",
+      "name": "Picked dogfish",
+      "scientific_name": "Squalus acanthias",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "DGS",
+      "name": "Picked dogfish",
+      "scientific_name": "Squalus acanthias",
+      "presentation": "GUS",
+      "factor": 2.52,
+      "yield_pct": 39.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "FLE",
+      "name": "European flounder",
+      "scientific_name": "Platichthys flesus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "GUT",
+      "factor": 1.12,
+      "yield_pct": 89.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GFB",
+      "name": "Greater forkbeard",
+      "scientific_name": "Phycis blennoides",
+      "presentation": "GUH",
+      "factor": 1.4,
+      "yield_pct": 71.4
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GHL",
+      "name": "Greenland halibut",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GHL",
+      "name": "Greenland halibut",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "presentation": "GUT",
+      "factor": 1.08,
+      "yield_pct": 92.6
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "GHL",
+      "name": "Greenland halibut",
+      "scientific_name": "Reinhardtius hippoglossoides",
+      "presentation": "GUH",
+      "factor": 1.39,
+      "yield_pct": 71.9
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "GUH",
+      "factor": 1.46,
+      "yield_pct": 68.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "FIL",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "FIS",
+      "factor": 2.6,
+      "yield_pct": 38.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "FSB",
+      "factor": 2.7,
+      "yield_pct": 37
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAD",
+      "name": "Haddock",
+      "scientific_name": "Melanogrammus aeglefinus",
+      "presentation": "FSP",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HAL",
+      "name": "Atlantic halibut",
+      "scientific_name": "Hippoglossus hippoglossus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HER",
+      "name": "Hering",
+      "scientific_name": "Clupea harengus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "GUT",
+      "factor": 1.34,
+      "yield_pct": 74.6
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HKE",
+      "name": "European hake",
+      "scientific_name": "Merluccius merluccius",
+      "presentation": "GUH",
+      "factor": 1.67,
+      "yield_pct": 59.9
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "HKW",
+      "name": "White hake",
+      "scientific_name": "Urophycis tenuis",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "JAX",
+      "name": "Horse mackerel",
+      "scientific_name": "Trachurus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "JAX",
+      "name": "Horse mackerel",
+      "scientific_name": "Trachurus spp.",
+      "presentation": "GUT",
+      "factor": 1.08,
+      "yield_pct": 92.6
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "KRI",
+      "name": "Antarctic krill",
+      "scientific_name": "Euphausia superba",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LEM",
+      "name": "Lemon sole",
+      "scientific_name": "Microstomus kitt",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LEM",
+      "name": "Lemon sole",
+      "scientific_name": "Microstomus kitt",
+      "presentation": "GUT",
+      "factor": 1.05,
+      "yield_pct": 95.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LEZ",
+      "name": "Megrims",
+      "scientific_name": "Lepidorhombus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LEZ",
+      "name": "Megrims",
+      "scientific_name": "Lepidorhombus spp.",
+      "presentation": "GUT",
+      "factor": 1.06,
+      "yield_pct": 94.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIC",
+      "name": "Unicorn icefish",
+      "scientific_name": "Channichthys rhinoceratus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "GUT",
+      "factor": 1.14,
+      "yield_pct": 87.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "GUH",
+      "factor": 1.33,
+      "yield_pct": 75.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "FIL",
+      "factor": 2.8,
+      "yield_pct": 35.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "LIN",
+      "name": "Ling",
+      "scientific_name": "Molva molva",
+      "presentation": "FSP",
+      "factor": 2.3,
+      "yield_pct": 43.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "MAC",
+      "name": "Atlantic mackerel",
+      "scientific_name": "Scomber scombrus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "MAC",
+      "name": "Atlantic mackerel",
+      "scientific_name": "Scomber scombrus",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "NEP",
+      "name": "Norway lobster",
+      "scientific_name": "Nephrops norvegicus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "NEP",
+      "name": "Norway lobster",
+      "scientific_name": "Nephrops norvegicus",
+      "presentation": "TAL",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "NOG",
+      "name": "Humped rockcod",
+      "scientific_name": "Notothenia gibberifrons",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "NOP",
+      "name": "Norway pout",
+      "scientific_name": "Trisopterus esmarkii",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "NOR",
+      "name": "Marbled rockcod",
+      "scientific_name": "Notothenia rossii",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "ORY",
+      "name": "Orange roughy",
+      "scientific_name": "Hoplostethus atlanticus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "PCR",
+      "name": "Pacific snow crab",
+      "scientific_name": "Chionoecetes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "PEN",
+      "name": "White shrimps",
+      "scientific_name": "Penaeus spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "PLE",
+      "name": "European plaice",
+      "scientific_name": "Pleuronectes platessa",
+      "presentation": "GUT",
+      "factor": 1.07,
+      "yield_pct": 93.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "GUT",
+      "factor": 1.19,
+      "yield_pct": 84
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "GUH",
+      "factor": 1.44,
+      "yield_pct": 69.4
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "FIS",
+      "factor": 2.78,
+      "yield_pct": 36
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "FSB",
+      "factor": 2.12,
+      "yield_pct": 47.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POK",
+      "name": "Saithe",
+      "scientific_name": "Pollachius virens",
+      "presentation": "FSP",
+      "factor": 2.43,
+      "yield_pct": 41.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POL",
+      "name": "Pollack",
+      "scientific_name": "Pollachius pollachius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "POL",
+      "name": "Pollack",
+      "scientific_name": "Pollachius pollachius",
+      "presentation": "GUT",
+      "factor": 1.17,
+      "yield_pct": 85.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "PRA",
+      "name": "Northern prawn",
+      "scientific_name": "Pandalus borealis",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "GUT",
+      "factor": 1.19,
+      "yield_pct": 84
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "GUH",
+      "factor": 1.78,
+      "yield_pct": 56.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "FIS",
+      "factor": 3.37,
+      "yield_pct": 29.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "FSP",
+      "factor": 3,
+      "yield_pct": 33.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RED",
+      "name": "Atlantic redfishes",
+      "scientific_name": "Sebastes spp.",
+      "presentation": "JAT",
+      "factor": 1.9,
+      "yield_pct": 52.6
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RHG",
+      "name": "Rough-head grenadier",
+      "scientific_name": "Macrourus berglax",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "RNG",
+      "name": "Roundnose grenadier",
+      "scientific_name": "Coryphaenoides rupestris",
+      "presentation": "GUH",
+      "factor": 1.92,
+      "yield_pct": 52.1
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SAN",
+      "name": "Sandeels",
+      "scientific_name": "Ammodytes spp.",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SBR",
+      "name": "Blackspot seabream",
+      "scientific_name": "Pagellus bogaraveo",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SBR",
+      "name": "Blackspot seabream",
+      "scientific_name": "Pagellus bogaraveo",
+      "presentation": "GUT",
+      "factor": 1.11,
+      "yield_pct": 90.1
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SDH",
+      "name": "Rough longnose dogfish",
+      "scientific_name": "Deania histricosa",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SDU",
+      "name": "Arrowhead dogfish",
+      "scientific_name": "Deania profundorum",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SGI",
+      "name": "South Georgia icefish",
+      "scientific_name": "Pseudochaenichthys georgianus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SOL",
+      "name": "Common sole",
+      "scientific_name": "Solea solea",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SPR",
+      "name": "European sprat",
+      "scientific_name": "Sprattus sprattus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SQI",
+      "name": "Northern squid",
+      "scientific_name": "Illex illecebrosus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SQS",
+      "name": "Squid",
+      "scientific_name": "Martialia hyadesi",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "GUT",
+      "factor": 1.13,
+      "yield_pct": 88.5
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SRX",
+      "name": "Skates",
+      "scientific_name": "Rajidae",
+      "presentation": "WNG",
+      "factor": 2.09,
+      "yield_pct": 47.8
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "GUT",
+      "factor": 1.12,
+      "yield_pct": 89.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "GUH",
+      "factor": 1.31,
+      "yield_pct": 76.3
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "HEA",
+      "factor": 1.33,
+      "yield_pct": 75.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "SWO",
+      "name": "Swordfish",
+      "scientific_name": "Xiphias gladius",
+      "presentation": "GHT",
+      "factor": 1.33,
+      "yield_pct": 75.2
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "TOP",
+      "name": "Patagonian toothfish",
+      "scientific_name": "Dissostichus eleginoides",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "TUR",
+      "name": "Turbot",
+      "scientific_name": "Psetta maxima",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "TUR",
+      "name": "Turbot",
+      "scientific_name": "Psetta maxima",
+      "presentation": "GUT",
+      "factor": 1.09,
+      "yield_pct": 91.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "USK",
+      "name": "Tusk",
+      "scientific_name": "Brosme brosme",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "GUT",
+      "factor": 1.15,
+      "yield_pct": 87
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "FIS",
+      "factor": 2.65,
+      "yield_pct": 37.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHB",
+      "name": "Blue whiting",
+      "scientific_name": "Micromesistius poutassou",
+      "presentation": "SUR",
+      "factor": 2.97,
+      "yield_pct": 33.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHG",
+      "name": "Whiting",
+      "scientific_name": "Merlangius merlangus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHG",
+      "name": "Whiting",
+      "scientific_name": "Merlangius merlangus",
+      "presentation": "GUT",
+      "factor": 1.18,
+      "yield_pct": 84.7
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WHM",
+      "name": "Atlantic white marlin",
+      "scientific_name": "Tetrapturus albidus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "WIT",
+      "name": "Witch flounder",
+      "scientific_name": "Glyptocephalus cynoglossus",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    },
+    {
+      "annex": "XIV",
+      "state": "frozen",
+      "asfis": "YEL",
+      "name": "Yellowtail flounder",
+      "scientific_name": "Limanda ferruginea",
+      "presentation": "WHL",
+      "factor": 1,
+      "yield_pct": 100
+    }
+  ]
+}

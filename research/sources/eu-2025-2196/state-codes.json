@@ -1,0 +1,32 @@
+{
+  "regulation": "Commission Implementing Regulation (EU) 2025/2196 of 17 October 2025",
+  "eli": "http://data.europa.eu/eli/reg_impl/2025/2196/oj",
+  "input_sha256": "8d1fd50af542cacc80719bd43062ccebe3e48755cf84eac1760f09c653cb137b",
+  "table": "Annex I, Table 2",
+  "codes": [
+    {
+      "code": "ALI",
+      "name": "Alive"
+    },
+    {
+      "code": "BOI",
+      "name": "Boiled"
+    },
+    {
+      "code": "DRI",
+      "name": "Dried"
+    },
+    {
+      "code": "FRE",
+      "name": "Fresh"
+    },
+    {
+      "code": "FRO",
+      "name": "Frozen"
+    },
+    {
+      "code": "SAL",
+      "name": "Salted"
+    }
+  ]
+}
