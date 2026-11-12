@@ -9,6 +9,9 @@ vi.mock('../context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('../context/DataContext', () => ({ useData: () => data }));
 
 import DataManagement from './DataManagement';
+import { createRepository, accountScope } from '../lib/localRepository';
+import { buildTicketModel } from './calculator/ticketModel';
+import { savedPriceRecord } from './calculator/priceActions';
 
 const CALC = { id: 'c1', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: 4.5, yield: 46, result: 9.7826, name: 'Sockeye Salmon - Round → Skinless Fillet', syncStatus: 'local' };
 const WEIGHT_CALC = { id: 'c2', species: 'Halibut', product: 'Round → Fletch', mode: 'weight', yield: 40, result: 250, name: 'Friday order', syncStatus: 'local' };
@@ -28,6 +31,7 @@ beforeEach(() => {
     customYields: [],
     savedCalcs: [],
     dataLoaded: true,
+    storageFailed: false,
     readOnly: false,
     addYield: vi.fn(),
     updateYield: vi.fn(),
@@ -67,6 +71,7 @@ describe('DataManagement for a guest', () => {
     expect(out).toContain('$9.78/lb');
     // A "Pounds to buy" result is a weight, not a price
     expect(out).toContain('250 lb to buy');
+    expect(out).toContain('Kept on this phone only');
     expect(out).toContain('Saved as “Friday order”');
     expect(html()).toContain('aria-label="Delete Sockeye Salmon, Round → Skinless Fillet"');
     expect(out).not.toContain('Nothing saved on this phone yet');
@@ -174,18 +179,122 @@ describe('when the browser will not store anything', () => {
     expect(out).toContain('Lingcod');
     expect(out).not.toContain('Loading your yields');
   });
-});
 
-describe('a "Pounds to buy" answer that came back from the server without its mode', () => {
-  it('is still shown as a weight, not as dollars per lb', () => {
-    data.savedCalcs = [{ id: 's1', species: 'Halibut', product: 'Round → Fletch', cost: 0, yield: 40, result: 217.39, syncStatus: 'synced' }];
+  // The rows a signed-in person sees here are the server's own, read straight from the account
+  const ACCOUNT_YIELD = { id: 7, species: 'Lingcod', product: 'Round → Fillet', yield: '31.00', source: 'User Input', is_shared: false, revision: 2 };
+
+  it('tells a signed-in person too, and why their yields cannot be changed here', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { dataLoaded: false, storageFailed: true, customYields: [ACCOUNT_YIELD] });
     const out = text();
-    expect(out).toContain('217.39 lb to buy');
-    expect(out).not.toContain('$217.39/lb');
+    expect(html()).toMatch(/<div class="notice notice-error" role="alert">/);
+    expect(out).toContain('Nothing can be kept on this phone.');
+    expect(out).toContain('You can still see the yields in your account, but changing them needs storage on this phone.');
+    expect(out).toContain('Allow site data in your browser settings, then reload.');
+    // The guest wording is about saving here, which is not what a signed-in person is doing
+    expect(out).not.toContain('what you save here will not stay');
   });
 
-  it('leaves a price with a cost as a price', () => {
+  it('turns off adding, editing and deleting a yield for a signed-in person, since each is written on the phone first', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { dataLoaded: false, storageFailed: true, customYields: [ACCOUNT_YIELD] });
+    const markup = html();
+    for (const name of ['Edit Lingcod', 'Delete Lingcod']) {
+      expect(markup).toMatch(new RegExp(`<button[^>]*disabled=""[^>]*aria-label="${name}`));
+    }
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>(<svg.*?<\/svg>)?Add a yield/);
+    // Downloading them needs no storage
+    expect(markup.match(/<button[^>]*title="Download your yields[^>]*>/)[0]).not.toContain('disabled');
+  });
+
+  it('leaves them on, with no storage warning, when storage works', () => {
+    auth.user = { uid: 'u1', username: 'dana' };
+    Object.assign(data, { customYields: [{ ...YIELD, serverId: 7, syncStatus: 'synced' }] });
+    const markup = html();
+    expect(text()).not.toContain('Nothing can be kept on this phone.');
+    expect(markup).toContain('aria-label="Edit Lingcod, Round → Fillet"');
+    expect(markup).toContain('aria-label="Delete Lingcod, Round → Fillet"');
+    expect(markup).not.toMatch(/<button[^>]*disabled=""/);
+  });
+});
+
+// In-memory stand-in for the device store
+function memoryStore() {
+  const db = {};
+  return {
+    get: async (key) => structuredClone(db[key]),
+    set: async (key, value) => { db[key] = structuredClone(value); },
+  };
+}
+
+// What the sync sends for a saved price, and so all that comes back from the server
+const sentToServer = ({ name, species, product, cost, yield: yieldUsed, result }) => ({ name, species, product, cost, yield: yieldUsed, result });
+
+describe('a saved price that came back from the server without its mode', () => {
+  const CHOSEN = { species: 'Sockeye Salmon', fromState: 'Round', toState: 'Skinless Fillet' };
+  const SOCKEYE = { yield: 46, range: [41, 49], from: 'Round', to: 'Skinless Fillet' };
+
+  it('is a price, even when the fish cost nothing and only the processing was paid for', async () => {
+    // A fisher pricing their own catch: $0 for the fish, $1.00/lb to process it
+    const model = buildTicketModel({ mode: 'cost', ...CHOSEN, cost: '0', processingCost: '1.00', yieldPercent: '46', conversion: SOCKEYE });
+    const record = savedPriceRecord({ mode: 'cost', ...CHOSEN, targetWeight: NaN }, model);
+    expect(record).toMatchObject({ mode: 'cost', cost: 0 });
+
+    // Another device gets it from the account, with no mode
+    const otherDevice = createRepository(accountScope('u1'), { store: memoryStore() });
+    await otherDevice.mergeServerCalcs([{ id: 9, ...sentToServer(record), is_private: true }]);
+    const [pulled] = await otherDevice.getCalcs();
+    expect(pulled.mode).toBeUndefined();
+    expect(pulled.cost).toBe(0);
+
+    auth.user = { uid: 'u1', username: 'dana' };
+    data.savedCalcs = [pulled];
+    const out = text();
+    expect(out).toContain('$2.17/lb');
+    expect(out).not.toContain('lb to buy');
+    expect(out).not.toContain('Kept on this phone only');
+    expect(html()).toContain('aria-label="Publish Sockeye Salmon, Round → Skinless Fillet"');
+  });
+
+  it('is a price when it has a cost, too', () => {
     data.savedCalcs = [{ id: 's2', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: '4.50', yield: 46, result: 9.78, syncStatus: 'synced' }];
     expect(text()).toContain('$9.78/lb');
+  });
+});
+
+describe('a "Pounds to buy" answer', () => {
+  beforeEach(() => {
+    auth.user = { uid: 'u1', username: 'dana' };
+  });
+
+  it('is a weight kept on this phone only, with delete and no publish', () => {
+    data.savedCalcs = [WEIGHT_CALC];
+    const out = text();
+    const markup = html();
+    expect(out).toContain('250 lb to buy');
+    expect(out).not.toContain('$250.00/lb');
+    expect(out).toContain('Kept on this phone only');
+    // Not in the account, so neither private nor public there
+    expect(out).not.toContain('Private');
+    expect(out).not.toContain('Public');
+    expect(markup).not.toContain('aria-label="Publish Halibut');
+    expect(markup).toContain('aria-label="Delete Halibut, Round → Fletch"');
+  });
+
+  it('cannot be published even if an older version of the app sent it to the account', () => {
+    data.savedCalcs = [{ ...WEIGHT_CALC, serverId: 4, syncStatus: 'synced', is_private: true }];
+    const out = text();
+    const markup = html();
+    expect(out).toContain('250 lb to buy');
+    expect(markup).not.toContain('aria-label="Publish Halibut');
+    // It is in the account, so it is not called device-only
+    expect(out).not.toContain('Kept on this phone only');
+    expect(out).toContain('Private');
+    expect(markup).toContain('aria-label="Delete Halibut, Round → Fletch"');
+  });
+
+  it('can still be taken down if an older version of the app published it', () => {
+    data.savedCalcs = [{ ...WEIGHT_CALC, serverId: 4, syncStatus: 'synced', is_private: false }];
+    expect(html()).toContain('aria-label="Unpublish Halibut, Round → Fletch"');
   });
 });

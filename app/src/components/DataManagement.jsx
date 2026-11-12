@@ -8,6 +8,7 @@ import { createYieldShareFlow } from '../lib/yieldSharing';
 import ShareYieldModal from './ShareYieldModal';
 import { yieldsToCSV, downloadText } from '../lib/dataExport';
 import { plainFormName } from '../lib/formNames';
+import { isDeviceOnlyCalc } from '../lib/localRepository';
 import { backendEnabled, thisDevice } from '../config/platform';
 import Notice from './Notice';
 
@@ -25,12 +26,12 @@ function formatPercent(value) {
   return Number.isFinite(n) ? String(Number(n.toFixed(2))) : String(value ?? '');
 }
 
-// A saved price is a cost per lb, unless it was saved from "Pounds to buy". The server keeps no
-// mode, so a record that comes back from another device has lost it. What it still has is a cost
-// of 0, which only "Pounds to buy" saves: a price cannot be worked out from nothing paid.
+// A saved price is a cost per lb, unless it was saved from "Pounds to buy". Only the record's own
+// mode says so. A record with no mode came from the server, which is sent prices only, so it is a
+// price: a cost of 0 proves nothing, because a fish that cost nothing still has a price once
+// there is processing or shipping to pay for.
 function isWeightResult(calc) {
-  if (calc.mode) return calc.mode === 'weight';
-  return calc.cost !== undefined && calc.cost !== null && calc.cost !== '' && Number(calc.cost) === 0;
+  return calc.mode === 'weight';
 }
 
 function describeResult(calc) {
@@ -93,7 +94,11 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
               {calc.species && calc.name && calc.name !== autoName && (
                 <p className="break-words text-sm text-text-secondary">Saved as “{calc.name}”</p>
               )}
-              {signedIn && (
+              {isDeviceOnlyCalc(calc) ? (
+                <p className="mt-1">
+                  <span className={ROW_STATUS}><Smartphone size={16} aria-hidden="true" />Kept on {thisDevice} only</span>
+                </p>
+              ) : signedIn && (
                 <p className="mt-1">
                   {calc.is_private === false ? (
                     <span className={ROW_STATUS}><Globe size={16} aria-hidden="true" />Public</span>
@@ -121,7 +126,8 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
                   <EyeOff size={18} aria-hidden="true" />
                   Unpublish
                 </button>
-              ) : (
+              ) : !isWeightResult(calc) && (
+                // Only a price can go on the community feed
                 <button
                   type="button"
                   onClick={() => onPublish(calc)}
@@ -152,7 +158,9 @@ const SavedPriceList = ({ calcs, signedIn, readOnly, onDelete, onPublish, onUnpu
   </ul>
 );
 
-const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete }) => (
+// noStorage: the device store could not be opened. Edit and Delete both write there first, so
+// neither can work; sharing goes straight to the account and is left alone.
+const YieldList = ({ yields, signedIn, readOnly, noStorage, onToggleShare, onEdit, onDelete }) => (
   <ul className="divide-y divide-line-subtle">
     {yields.map((item) => {
       const label = [item.species, item.product].filter(Boolean).join(', ');
@@ -202,7 +210,7 @@ const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete
               <button
                 type="button"
                 onClick={() => onEdit(item)}
-                disabled={readOnly}
+                disabled={readOnly || noStorage}
                 className={ROW_ACTION}
                 aria-label={`Edit ${label}`}
               >
@@ -213,7 +221,7 @@ const YieldList = ({ yields, signedIn, readOnly, onToggleShare, onEdit, onDelete
             <button
               type="button"
               onClick={() => onDelete(item)}
-              disabled={readOnly}
+              disabled={readOnly || noStorage}
               className={`${ROW_ACTION} text-danger`}
               aria-label={`Delete ${label}`}
             >
@@ -233,6 +241,7 @@ const DataManagement = () => {
   // If the browser will not let the app store anything, there is nothing to wait for: say so, and
   // show what the account has (a signed-in person's yields still come from the server).
   const dataLoaded = repoLoaded || Boolean(storageFailed);
+  const noStorage = Boolean(storageFailed);
   const [status, setStatus] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -260,7 +269,7 @@ const DataManagement = () => {
 
   // "Add a yield" is replaced by the form while it is open; when the form
   // closes, hand focus back to the button instead of dropping it.
-  const formOpen = showForm && !readOnly;
+  const formOpen = showForm && !readOnly && !noStorage;
   const addButtonRef = useRef(null);
   const formWasOpen = useRef(false);
   useEffect(() => {
@@ -354,7 +363,8 @@ const DataManagement = () => {
     if (!window.confirm(`Delete the saved price for ${calcLabel(calc)}${where}?`)) return;
     try {
       await removeCalc(calc.id);
-      setStatus({ type: 'success', message: user && !isOnline ? 'Saved price deleted here. It leaves your account when there is signal.' : 'Saved price deleted.' });
+      const leavesAccountLater = user && !isOnline && !isDeviceOnlyCalc(calc);
+      setStatus({ type: 'success', message: leavesAccountLater ? 'Saved price deleted here. It leaves your account when there is signal.' : 'Saved price deleted.' });
     } catch {
       setStatus({ type: 'error', message: 'That saved price wasn’t deleted. Try again.' });
     }
@@ -453,6 +463,16 @@ const DataManagement = () => {
 
       {status && <StatusNotice status={status} onDismiss={() => setStatus(null)} />}
 
+      {/* The yields below came straight from the account. A change is written on this device
+          first, so without storage there is nowhere to make one. */}
+      {noStorage && (
+        <div className="mb-6">
+          <Notice tone="error" title={`Nothing can be kept on ${thisDevice}.`}>
+            Storage is blocked for this app. You can still see the yields in your account, but changing them needs storage on {thisDevice}. Allow site data in your browser settings, then reload.
+          </Notice>
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Your yields */}
         <section className="card overflow-hidden" aria-labelledby="your-yields-heading">
@@ -464,7 +484,7 @@ const DataManagement = () => {
                   ref={addButtonRef}
                   type="button"
                   onClick={() => setShowForm(true)}
-                  disabled={readOnly}
+                  disabled={readOnly || noStorage}
                   className="btn-primary flex-1 whitespace-nowrap px-4 sm:flex-none sm:px-5"
                 >
                   <Plus size={20} aria-hidden="true" />
@@ -581,6 +601,7 @@ const DataManagement = () => {
               yields={customYields}
               signedIn
               readOnly={readOnly}
+              noStorage={noStorage}
               onToggleShare={handleToggleShare}
               onEdit={handleEdit}
               onDelete={handleDelete}

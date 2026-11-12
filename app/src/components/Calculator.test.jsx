@@ -2,12 +2,14 @@
  * The calculator screen, rendered to markup with a fake `useAuth` and `useData` (there is no DOM
  * in this test run, as for the shell tests), plus what Save and Share do with the price on it.
  */
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRepository, guestScope } from '../lib/localRepository';
 import { buildTicketModel } from './calculator/ticketModel';
 import { priceCardFor, savedPriceRecord, savePrice } from './calculator/priceActions';
 import { sharePriceCard } from './calculator/sharePrice';
+import { usePaidOptIn } from './calculator/usePaidOptIn';
 
 // The hand-worked example: Sockeye Salmon, whole fish to skinless fillet, $4.50/lb at 46% yield
 const CHOSEN = { species: 'Sockeye Salmon', fromState: 'Round', toState: 'Skinless Fillet' };
@@ -326,6 +328,44 @@ describe('sharing the price', () => {
     });
     expect(outcome).toBe('copied');
     expect(writeText).toHaveBeenCalledExactlyOnceWith(FULL_CARD);
+  });
+
+  // With no DOM to click in, the steps are played as renders of the hook the calculator keeps the
+  // checkbox in. React's server renderer renders again, keeping state, each time state is set
+  // while rendering, so one step is one render: what the box shows, then what the person does.
+  // The markup is what the box showed at each step.
+  function playPaidOptIn(steps) {
+    function Script() {
+      const [{ at, shown }, setScript] = useState({ at: 0, shown: [] });
+      const { price, tick } = steps[at];
+      const [includePaid, setIncludePaid] = usePaidOptIn(JSON.stringify([price.species, price.fromState, price.toState, price.cost]));
+      const shownSoFar = [...shown, includePaid];
+      if (at < steps.length - 1) {
+        if (tick) setIncludePaid(true);
+        setScript({ at: at + 1, shown: shownSoFar });
+      }
+      return JSON.stringify(shownSoFar);
+    }
+    return JSON.parse(renderToStaticMarkup(<Script />));
+  }
+
+  it('asks again before including what was paid once the price changes, even if it changes back', () => {
+    const price = { ...CHOSEN, cost: '4.50' };
+    const changes = [
+      { ...price, cost: '5.25' },
+      { ...price, species: 'Pink Salmon' },
+      { ...price, fromState: 'D/H-On' },
+      { ...price, toState: 'Fillet' },
+    ];
+    for (const changed of changes) {
+      const shown = playPaidOptIn([
+        { price, tick: true }, // not ticked yet; the person ticks it
+        { price }, // ticked
+        { price: changed }, // a different price: not ticked
+        { price }, // the first price again: still not ticked
+      ]);
+      expect(shown, JSON.stringify(changed)).toEqual([false, true, false, false]);
+    }
   });
 
   it('has no card for a pounds-to-buy answer or for no answer', () => {

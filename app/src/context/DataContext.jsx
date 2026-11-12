@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createRepository, accountScope, guestScope } from '../lib/localRepository';
+import { createRepository, accountScope, guestScope, isDeviceOnlyCalc } from '../lib/localRepository';
 import { getCustomSpecies, setCustomSpecies as setSpeciesLocal } from '../lib/localStore';
 import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
@@ -417,6 +417,8 @@ export function DataProvider({ children }) {
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
     if (isAppReadOnly) return;
+    // The community feed lists prices; a "Pounds to buy" answer is not one.
+    if (calc?.mode === 'weight') return;
     setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
@@ -527,16 +529,18 @@ export function DataProvider({ children }) {
     if (isAppReadOnly) return null;
     const newCalc = await repo.addCalc(calc);
     setSavedCalcs((prev) => [...prev, newCalc]);
-    debouncedSync();
+    // A device-only record has nothing to send, so the badge is not set to "waiting" for it.
+    if (!isDeviceOnlyCalc(newCalc)) debouncedSync();
     return newCalc;
   }, [repo, debouncedSync]);
 
   const removeCalc = useCallback(async (id) => {
     if (isAppReadOnly) return;
+    const deviceOnly = savedCalcs.some((c) => c.id === id && isDeviceOnlyCalc(c));
     await repo.removeCalc(id);
     setSavedCalcs((prev) => prev.filter((c) => c.id !== id));
-    debouncedSync();
-  }, [repo, debouncedSync]);
+    if (!deviceOnly) debouncedSync();
+  }, [repo, debouncedSync, savedCalcs]);
 
   // ---- Custom Yields ----
 
