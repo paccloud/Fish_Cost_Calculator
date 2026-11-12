@@ -1,6 +1,0 @@
-connectorId: "identity"
-generate:
-  javascriptSdk:
-    outputDir: "./generated/identity"
-    package: "@fish-cost-calculator/sql-connect-identity-proof"
-    react: true

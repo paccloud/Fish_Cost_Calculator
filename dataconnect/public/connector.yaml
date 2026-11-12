@@ -1,6 +1,0 @@
-connectorId: "public"
-generate:
-  javascriptSdk:
-    outputDir: "./generated/public"
-    package: "@fish-cost-calculator/sql-connect-public-proof"
-    react: true
