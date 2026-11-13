@@ -1,0 +1,267 @@
+{
+  "source": "50 CFR Part 679, Table 2a: Species Codes: FMP Groundfish",
+  "read_from": "eCFR (ecfr.gov), as of 2026-11-10",
+  "note": "In print order. Short names such as \"Arrowtooth\" or \"Dover\" sit under a heading (FLOUNDER, ROCKFISH, SOLE) in the regulation.",
+  "codes": [
+    {
+      "code": "193",
+      "name": "Atka mackerel (greenling)"
+    },
+    {
+      "code": "120",
+      "name": "Flatfish, miscellaneous (flatfish species without separate codes)"
+    },
+    {
+      "code": "133",
+      "name": "Alaska plaice"
+    },
+    {
+      "code": "121",
+      "name": "Arrowtooth"
+    },
+    {
+      "code": "116",
+      "name": "Bering"
+    },
+    {
+      "code": "117",
+      "name": "Kamchatka"
+    },
+    {
+      "code": "129",
+      "name": "Starry"
+    },
+    {
+      "code": "870",
+      "name": "Octopuses"
+    },
+    {
+      "code": "110",
+      "name": "Pacific cod"
+    },
+    {
+      "code": "270",
+      "name": "Pollock"
+    },
+    {
+      "code": "185",
+      "name": "Aurora (Sebastes aurora)"
+    },
+    {
+      "code": "142",
+      "name": "Black (BSAI) (S. melanops)"
+    },
+    {
+      "code": "177",
+      "name": "Blackgill (S. melanostomus)"
+    },
+    {
+      "code": "167",
+      "name": "Blue (BSAI) (S. mystinus)"
+    },
+    {
+      "code": "137",
+      "name": "Bocaccio (S. paucispinis)"
+    },
+    {
+      "code": "146",
+      "name": "Canary (S. pinniger)"
+    },
+    {
+      "code": "178",
+      "name": "Chilipepper (S. goodei)"
+    },
+    {
+      "code": "149",
+      "name": "China (S. nebulosus)"
+    },
+    {
+      "code": "138",
+      "name": "Copper (S. caurinus)"
+    },
+    {
+      "code": "159",
+      "name": "Darkblotched (S. crameri)"
+    },
+    {
+      "code": "172",
+      "name": "Dusky (S. variabilis)"
+    },
+    {
+      "code": "135",
+      "name": "Greenstriped (S. elongatus)"
+    },
+    {
+      "code": "176",
+      "name": "Harlequin (S. variegatus)"
+    },
+    {
+      "code": "136",
+      "name": "Northern (S. polyspinis)"
+    },
+    {
+      "code": "141",
+      "name": "Pacific Ocean Perch (S. alutus)"
+    },
+    {
+      "code": "179",
+      "name": "Pygmy (S. wilsoni)"
+    },
+    {
+      "code": "147",
+      "name": "Quillback (S. maliger)"
+    },
+    {
+      "code": "153",
+      "name": "Redbanded (S. babcocki)"
+    },
+    {
+      "code": "158",
+      "name": "Redstripe (S. proriger)"
+    },
+    {
+      "code": "150",
+      "name": "Rosethorn (S. helvomaculatus)"
+    },
+    {
+      "code": "151",
+      "name": "Rougheye (S. aleutianus)"
+    },
+    {
+      "code": "166",
+      "name": "Sharpchin (S. zacentrus)"
+    },
+    {
+      "code": "181",
+      "name": "Shortbelly (S. jordani)"
+    },
+    {
+      "code": "152",
+      "name": "Shortraker (S. borealis)"
+    },
+    {
+      "code": "157",
+      "name": "Silvergray (S. brevispinis)"
+    },
+    {
+      "code": "182",
+      "name": "Splitnose (S. diploproa)"
+    },
+    {
+      "code": "183",
+      "name": "Stripetail (S. saxicola)"
+    },
+    {
+      "code": "143",
+      "name": "Thornyhead (all Sebastolobus species)"
+    },
+    {
+      "code": "148",
+      "name": "Tiger (S. nigrocinctus)"
+    },
+    {
+      "code": "184",
+      "name": "Vermilion (S. miniatus)"
+    },
+    {
+      "code": "156",
+      "name": "Widow (S. entomelas)"
+    },
+    {
+      "code": "145",
+      "name": "Yelloweye (S. ruberrimus)"
+    },
+    {
+      "code": "175",
+      "name": "Yellowmouth (S. reedi)"
+    },
+    {
+      "code": "155",
+      "name": "Yellowtail (S. flavidus)"
+    },
+    {
+      "code": "710",
+      "name": "Sablefish (blackcod)"
+    },
+    {
+      "code": "689",
+      "name": "Other (if salmon, spiny dogfish or Pacific sleeper shark—use specific species code)"
+    },
+    {
+      "code": "692",
+      "name": "Pacific sleeper"
+    },
+    {
+      "code": "690",
+      "name": "Salmon"
+    },
+    {
+      "code": "691",
+      "name": "Spiny dogfish"
+    },
+    {
+      "code": "703",
+      "name": "Alaska (Bathyraja parmifera)"
+    },
+    {
+      "code": "704",
+      "name": "Aleutian (B. aleutica)"
+    },
+    {
+      "code": "705",
+      "name": "Whiteblotched (B. maculate)"
+    },
+    {
+      "code": "702",
+      "name": "Big (Raja binoculata)"
+    },
+    {
+      "code": "701",
+      "name": "Longnose (R. rhina)"
+    },
+    {
+      "code": "700",
+      "name": "Other (if Alaska, Aleutian, whiteblotched, big, or longnose skate—use specific species code)"
+    },
+    {
+      "code": "126",
+      "name": "Butter"
+    },
+    {
+      "code": "124",
+      "name": "Dover"
+    },
+    {
+      "code": "128",
+      "name": "English"
+    },
+    {
+      "code": "122",
+      "name": "Flathead"
+    },
+    {
+      "code": "131",
+      "name": "Petrale"
+    },
+    {
+      "code": "125",
+      "name": "Rex"
+    },
+    {
+      "code": "123",
+      "name": "Rock"
+    },
+    {
+      "code": "132",
+      "name": "Sand"
+    },
+    {
+      "code": "127",
+      "name": "Yellowfin"
+    },
+    {
+      "code": "134",
+      "name": "Turbot, Greenland"
+    }
+  ]
+}

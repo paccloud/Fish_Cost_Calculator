@@ -1,0 +1,1632 @@
+{
+  "source": "50 CFR Part 679, Table 3: Product Recovery Rates for Groundfish Species and Conversion Rates for Pacific Halibut [80 FR 11910, Mar. 5, 2015]",
+  "read_from": "Code of Federal Regulations, Title 50, Volume 13, 10-1-24 edition, pages 974 to 976 (govinfo.gov, CFR-2024-title50-vol13-part679.pdf, PDF pages 447 to 449). The table is printed as three page images; it was read from them by eye on 2026-11-13.",
+  "notes": [
+    "A rate is product weight divided by round weight. To obtain round weight of groundfish, divide the product weight by the rate.",
+    "Pacific halibut rates convert to net weight (gutted, head off), not round weight. Round weight is net weight divided by 0.75.",
+    "Codes 88, 89 (infested or decomposed fish, 0.00) and 98, 99 (discards, 1.00; 0.75 for halibut) are accounting codes, not products, and are not transcribed.",
+    "The six flatfish with their own species codes (122 to 134) appear only on the third printed page, where every species has the same meal rate."
+  ],
+  "rows": [
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.85,
+      "yield_pct": 85,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "06",
+      "product": "H&G with roe",
+      "rate": 0.63,
+      "yield_pct": 63,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.57,
+      "yield_pct": 57,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.47,
+      "yield_pct": 47,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "10",
+      "product": "H&G w/o tail",
+      "rate": 0.44,
+      "yield_pct": 44,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "12",
+      "product": "Salted & Split",
+      "rate": 0.45,
+      "yield_pct": 45,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "14",
+      "product": "Roe",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "15",
+      "product": "Pectoral Girdle",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "17",
+      "product": "Cheeks",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "19",
+      "product": "Belly",
+      "rate": 0.01,
+      "yield_pct": 1,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.45,
+      "yield_pct": 45,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.35,
+      "yield_pct": 35,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "30",
+      "product": "Surimi",
+      "rate": 0.15,
+      "yield_pct": 15,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "31",
+      "product": "Mince",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": "Printed as 0.5, with one decimal where every other rate has two."
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "110",
+      "species": "Pacific Cod",
+      "product_code": "37",
+      "product": "Butterfly Backbone Removed",
+      "rate": 0.43,
+      "yield_pct": 43,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.9,
+      "yield_pct": 90,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "06",
+      "product": "H&G with roe",
+      "rate": 0.8,
+      "yield_pct": 80,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.72,
+      "yield_pct": 72,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.65,
+      "yield_pct": 65,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "10",
+      "product": "H&G w/o tail",
+      "rate": 0.62,
+      "yield_pct": 62,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "11",
+      "product": "Kirimi",
+      "rate": 0.48,
+      "yield_pct": 48,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "14",
+      "product": "Roe",
+      "rate": 0.08,
+      "yield_pct": 8,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.32,
+      "yield_pct": 32,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.27,
+      "yield_pct": 27,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.27,
+      "yield_pct": 27,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.22,
+      "yield_pct": 22,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "30",
+      "product": "Surimi",
+      "rate": 0.18,
+      "yield_pct": 18,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Flatfish other than Pacific Halibut",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "122",
+      "species": "Flathead Sole",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "123",
+      "species": "Rock Sole",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "124",
+      "species": "Dover Sole",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "125",
+      "species": "Rex Sole",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "127",
+      "species": "Yellowfin Sole",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "134",
+      "species": "Greenland Turbot",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.88,
+      "yield_pct": 88,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "06",
+      "product": "H&G with roe",
+      "rate": 0.55,
+      "yield_pct": 55,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.6,
+      "yield_pct": 60,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "16",
+      "product": "Heads",
+      "rate": 0.2,
+      "yield_pct": 20,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "17",
+      "product": "Cheeks",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "18",
+      "product": "Chins",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "19",
+      "product": "Belly",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.4,
+      "yield_pct": 40,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.35,
+      "yield_pct": 35,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "143",
+      "species": "Thornyhead Rockfish",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.87,
+      "yield_pct": 87,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.4,
+      "yield_pct": 40,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "160",
+      "species": "Sculpins",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.87,
+      "yield_pct": 87,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "06",
+      "product": "H&G with roe",
+      "rate": 0.67,
+      "yield_pct": 67,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.64,
+      "yield_pct": 64,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.61,
+      "yield_pct": 61,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "30",
+      "product": "Surimi",
+      "rate": 0.15,
+      "yield_pct": 15,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "193",
+      "species": "Atka Mackerel",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "214",
+      "species": "Giant grenadiers",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "214",
+      "species": "Giant grenadiers",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "214",
+      "species": "Giant grenadiers",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "214",
+      "species": "Giant grenadiers",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 24.3,
+      "yield_pct": null,
+      "basis": "round weight",
+      "check": "Printed as 24.3. A rate cannot be above 1; it is probably 0.243 with the percentage left in. Transcribed as printed and excluded from comparisons."
+    },
+    {
+      "species_code": "214",
+      "species": "Giant grenadiers",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.8,
+      "yield_pct": 80,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "06",
+      "product": "H&G with roe",
+      "rate": 0.7,
+      "yield_pct": 70,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.65,
+      "yield_pct": 65,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.56,
+      "yield_pct": 56,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "10",
+      "product": "H&G w/o tail",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "11",
+      "product": "Kirimi",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "14",
+      "product": "Roe",
+      "rate": 0.07,
+      "yield_pct": 7,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "16",
+      "product": "Heads",
+      "rate": 0.15,
+      "yield_pct": 15,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.35,
+      "yield_pct": 35,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.21,
+      "yield_pct": 21,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "24",
+      "product": "Fillets deep skin",
+      "rate": 0.16,
+      "yield_pct": 16,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "30",
+      "product": "Surimi",
+      "rate": 0.16,
+      "yield_pct": 16,
+      "basis": "round weight",
+      "check": "Two rates are printed: 0.16 for January through June and 0.17 for July through December."
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "30",
+      "product": "Surimi",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": "Two rates are printed: 0.16 for January through June and 0.17 for July through December."
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "31",
+      "product": "Mince",
+      "rate": 0.22,
+      "yield_pct": 22,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "270",
+      "species": "Pollock",
+      "product_code": "37",
+      "product": "Butterfly Backbone Removed",
+      "rate": 0.43,
+      "yield_pct": 43,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.82,
+      "yield_pct": 82,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.71,
+      "yield_pct": 71,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.38,
+      "yield_pct": 38,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "510",
+      "species": "Smelts",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "511",
+      "species": "Eulachon",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "511",
+      "species": "Eulachon",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "511",
+      "species": "Eulachon",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.82,
+      "yield_pct": 82,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "511",
+      "species": "Eulachon",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.71,
+      "yield_pct": 71,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "511",
+      "species": "Eulachon",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "516",
+      "species": "Capelin",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "516",
+      "species": "Capelin",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "516",
+      "species": "Capelin",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.89,
+      "yield_pct": 89,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "516",
+      "species": "Capelin",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.78,
+      "yield_pct": 78,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "516",
+      "species": "Capelin",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.83,
+      "yield_pct": 83,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.72,
+      "yield_pct": 72,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Sharks",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.9,
+      "yield_pct": 90,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.32,
+      "yield_pct": 32,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "13",
+      "product": "Wings",
+      "rate": 0.32,
+      "yield_pct": 32,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Skates",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.89,
+      "yield_pct": 89,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.68,
+      "yield_pct": 68,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.63,
+      "yield_pct": 63,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "10",
+      "product": "H&G w/o tail",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "17",
+      "product": "Cheeks",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.35,
+      "yield_pct": 35,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "710",
+      "species": "Sablefish",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "870",
+      "species": "Octopus",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "870",
+      "species": "Octopus",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "870",
+      "species": "Octopus",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.81,
+      "yield_pct": 81,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "870",
+      "species": "Octopus",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "870",
+      "species": "Octopus",
+      "product_code": "36",
+      "product": "Mantles",
+      "rate": 0.85,
+      "yield_pct": 85,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "875",
+      "species": "Squid",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "875",
+      "species": "Squid",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "875",
+      "species": "Squid",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.69,
+      "yield_pct": 69,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "875",
+      "species": "Squid",
+      "product_code": "32",
+      "product": "Meal",
+      "rate": 0.17,
+      "yield_pct": 17,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "875",
+      "species": "Squid",
+      "product_code": "36",
+      "product": "Mantles",
+      "rate": 0.75,
+      "yield_pct": 75,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "01",
+      "product": "Whole fish (codes 1, 41, 86, 92, 93, 95)",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "03",
+      "product": "Bled",
+      "rate": 0.98,
+      "yield_pct": 98,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.88,
+      "yield_pct": 88,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "07",
+      "product": "H&G west cut",
+      "rate": 0.6,
+      "yield_pct": 60,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "08",
+      "product": "H&G east cut",
+      "rate": 0.5,
+      "yield_pct": 50,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "16",
+      "product": "Heads",
+      "rate": 0.15,
+      "yield_pct": 15,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "17",
+      "product": "Cheeks",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "18",
+      "product": "Chins",
+      "rate": 0.05,
+      "yield_pct": 5,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "19",
+      "product": "Belly",
+      "rate": 0.1,
+      "yield_pct": 10,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "20",
+      "product": "Fillets with skin & ribs",
+      "rate": 0.4,
+      "yield_pct": 40,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "21",
+      "product": "Fillets with skin no ribs",
+      "rate": 0.3,
+      "yield_pct": 30,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "22",
+      "product": "Fillets with ribs no skin",
+      "rate": 0.33,
+      "yield_pct": 33,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": null,
+      "species": "Rockfish",
+      "product_code": "23",
+      "product": "Fillets skinless boneless",
+      "rate": 0.25,
+      "yield_pct": 25,
+      "basis": "round weight",
+      "check": null
+    },
+    {
+      "species_code": "200",
+      "species": "Pacific Halibut (conversion rates to net weight)",
+      "product_code": "04",
+      "product": "Gutted head on",
+      "rate": 0.9,
+      "yield_pct": 90,
+      "basis": "net weight",
+      "check": null
+    },
+    {
+      "species_code": "200",
+      "species": "Pacific Halibut (conversion rates to net weight)",
+      "product_code": "05",
+      "product": "Gutted head off",
+      "rate": 1,
+      "yield_pct": 100,
+      "basis": "net weight",
+      "check": null
+    }
+  ]
+}

@@ -19,4 +19,4 @@ Each output file records the SHA-256 of the input it was built from.
 
 ## Source and licence
 
-The official text is at <http://data.europa.eu/eli/reg_impl/2025/2196/oj>. EUR-Lex could not be reached from the environment this was built in, so the input was a Markdown copy of the EUR-Lex text from a third-party GitHub mirror, read on 2026-11-12. **Check the values against EUR-Lex before relying on them.** EU legal texts may be reused with attribution under Commission Decision 2011/833/EU.
+The official text is at <http://data.europa.eu/eli/reg_impl/2025/2196/oj>. The extraction's input was a Markdown copy of the EUR-Lex text from a third-party GitHub mirror, read on 2026-11-12. On 2026-11-13 the output was checked against the official HTML on EUR-Lex (`https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=OJ:L_202502196`): all 250 factors and all 32 presentation codes match, with nothing missing and nothing extra. EU legal texts may be reused with attribution under Commission Decision 2011/833/EU.

@@ -14,7 +14,7 @@ Evidence is labelled throughout. **Checked** means read from the source or measu
 | Question | Answer |
 |---|---|
 | Is the app's data right? | Mostly. 623 of its 655 conversions match the bulletin. **23 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 56 printed rows are missing.** Every one is listed in [`research/mab37/comparison.md`](../../research/mab37/comparison.md). Nothing in the app has been changed yet. |
-| Other datasets? | Yes. The best is the **US federal table of recovery rates for Alaska groundfish** (public domain, same species). The **EU's official conversion factors** are already extracted here: 250 factors for 63 species. USDA tables cover meat, poultry and produce. |
+| Other datasets? | Yes, and two are now in the repository. The **US federal recovery rates for Alaska groundfish** (public domain, same species): 162 rates, set beside the bulletin in 126 places. The **EU's official conversion factors**: 250 factors for 63 species, checked against EUR-Lex. USDA tables cover meat, poultry and produce. |
 | An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 82 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
 | Implement GS1? | **Be compatible with it; do not issue it.** Build the data in the shape of the seafood traceability standard (GDST, which is built on GS1's event standard), with optional fields for a fisherman's own GS1 numbers. That costs nothing and needs no membership. See [ADR 0005](../adr/0005-standards-aligned-data-model.md) (proposed). |
 | Shipping and finding a buyer? | There is a real gap. Start with an **offline, by-port "ship it" resource**, then a **shareable catch notice**, and only later a network. Two rules shape it: most air cargo out of Alaska needs Known Shipper status set up a week ahead, and in Alaska only a direct marketer licence allows shipping out of state. |
@@ -77,7 +77,7 @@ The bulletin is Alaska Sea Grant's copyright. Individual yields are facts, but t
 
 ### Already here
 
-**EU conversion factors** (checked; extracted to `research/sources/eu-2025-2196/`). Commission Implementing Regulation (EU) 2025/2196 replaced Regulation 404/2011 on 10 January 2026. Its Annexes XII to XIV give official live-weight factors by FAO species code and presentation code: **250 factors for 63 North-East Atlantic species**, 123 of them for a processed form. Yield is 100 divided by the factor. They are point values with no range.
+**EU conversion factors** (checked against the official EUR-Lex text, all 250; extracted to `research/sources/eu-2025-2196/`). Commission Implementing Regulation (EU) 2025/2196 replaced Regulation 404/2011 on 10 January 2026. Its Annexes XII to XIV give official live-weight factors by FAO species code and presentation code: **250 factors for 63 North-East Atlantic species**, 123 of them for a processed form. Yield is 100 divided by the factor. They are point values with no range.
 
 Where the EU table and the bulletin cover the same species, they agree closely:
 
@@ -90,16 +90,23 @@ Where the EU table and the bulletin cover the same species, they agree closely:
 
 Only four species overlap, so the EU table extends the data to the Atlantic more than it corroborates the Pacific.
 
+**US federal recovery rates** (checked; in `research/sources/us-50cfr679/`). 50 CFR Part 679, Table 3 gives a standard recovery rate for each Alaska groundfish group and product code: **162 rates for 23 species lines**, public domain. Table 1a defines the 39 product codes and Table 2a the 65 species codes. Table 3 is published only as page images, so it was read by eye, once; a second reading is still owed. Set beside the bulletin (`comparison-with-mab37.md`, 126 pairs):
+
+- Where the bulletin prints a range, the federal rate falls inside it in 81 of 115 pairs. The two sources broadly agree on head-on and head-off yields.
+- **The bulletin's plain `D/H-Off` matches the federal Western cut**, not the Eastern (cod 63 against 57 and 47; sablefish 68 against 68 and 63). That settles what an unqualified "head-off" means in the app.
+- **The bulletin's fillet yields are consistently higher than the federal skinless, boneless rate** (pollock 34 against 21; soles 23 to 33 against 22). The federal product has skin and ribs removed. A chef pricing a fully trimmed fillet from the bulletin's "skinless fillet" number may be underestimating cost.
+- Pollock mince (50 against 22) and skate wings (23 against 32) disagree badly and need a third source.
+- The federal table has its own misprint: giant grenadier fillets at "24.3".
+
 ### Shortlist to bring in next (search only unless marked)
 
 | # | Source | What it is | Licence | Fit |
 |---|---|---|---|---|
-| 1 | **50 CFR Part 679, Table 3** (NOAA Fisheries, Alaska Region) | Standard product recovery rates by species and product code for Alaska groundfish and halibut. Product codes are in Table 1a, species codes in Table 2a. | US Government work, public domain | Direct. Same species and nearly the same product forms as the bulletin. First choice for corroboration. |
-| 2 | **Low et al. 1989 and Berger & Hare 1988** (NOAA technical memoranda) | A review of recovery rates for 70 species groups and 28 product forms, with observer-measured data. Both are in the bulletin's own reference list (checked), so they are probably part of its lineage. | NOAA authors; repository marks them public domain | Direct, but scanned PDFs that need the same careful transcription. |
-| 3 | **Norway, "Norske omregningsfaktorer"** | Official factors, measured for the main species, with a public data feed. | Not confirmed | Good for North Atlantic species. |
-| 4 | **New Zealand conversion factors notice** | Observer-based factors by species and landed state, with fine fillet detail. | Not confirmed | South Pacific species. |
-| 5 | **USDA: SR Legacy refuse %, Table of Cooking Yields for Meat and Poultry, Food Buying Guide, Handbook 102** | Edible-portion and cooking yields for meat, poultry and produce. Handbook 102 is also in the bulletin's reference list (checked). | Public domain / CC0 | The path to chefs and to foods beyond fish. A second table shape: edible portion and cooking loss, not form to form. |
-| 6 | **FAO Circular 847 and Technical Paper 309; DFO Atlantic factors** | Wide but old (1989–2000). | Pre-2024 FAO terms; Crown copyright | Cross-check and cite. Do not bulk-import. |
+| 1 | **Low et al. 1989 and Berger & Hare 1988** (NOAA technical memoranda) | A review of recovery rates for 70 species groups and 28 product forms, with observer-measured data. Both are in the bulletin's own reference list (checked), so they are probably part of its lineage. | NOAA authors; repository marks them public domain | Direct, but scanned PDFs that need the same careful transcription. |
+| 2 | **Norway, "Norske omregningsfaktorer"** | Official factors, measured for the main species, with a public data feed. | Not confirmed | Good for North Atlantic species. |
+| 3 | **New Zealand conversion factors notice** | Observer-based factors by species and landed state, with fine fillet detail. | Not confirmed | South Pacific species. |
+| 4 | **USDA: SR Legacy refuse %, Table of Cooking Yields for Meat and Poultry, Food Buying Guide, Handbook 102** | Edible-portion and cooking yields for meat, poultry and produce. Handbook 102 is also in the bulletin's reference list (checked). | Public domain / CC0 | The path to chefs and to foods beyond fish. A second table shape: edible portion and cooking loss, not form to form. |
+| 5 | **FAO Circular 847 and Technical Paper 309; DFO Atlantic factors** | Wide but old (1989–2000). | Pre-2024 FAO terms; Crown copyright | Cross-check and cite. Do not bulk-import. |
 
 Ruled out: the Seafood Handbook, Book of Yields, Seafish, ASMI and AHDB guides (copyrighted or no yield tables found); FishBase (non-commercial licence); a "Pacific Seafood Recoveries and Yields" booklet that reprints the bulletin with some numbers changed (see section 1).
 
@@ -128,7 +135,7 @@ Each table in the bulletin now has its **FAO ASFIS 3-alpha code** (the code the 
 | Layer | Use | State |
 |---|---|---|
 | **EU presentation and state codes** (`WHL` whole, `GUT` gutted, `GUH` gutted and headed, `FIL` fillet, `FIS` skinned fillet, `ROE`, `SUR`; states `FRE`, `FRO`, `SAL`…) | The international spine. The same list is used by NAFO, NEAFC and, in practice, the traceability standard. | Checked and extracted: 32 presentations, 6 states. |
-| **Alaska product codes** (50 CFR 679 Table 1a; ADF&G fish tickets use the same numbers) | The closest match to the bulletin's words. It is the only list with Eastern and Western cut. | Search only; needs the regulation text. |
+| **Alaska product codes** (50 CFR 679 Table 1a; ADF&G fish tickets use the same numbers) | The closest match to the bulletin's words. It is the only list with Eastern and Western cut. | Checked and extracted: 39 codes with definitions. |
 | **FoodOn** (open food ontology, CC BY 4.0) | Cross-reference layer for parts, states and processes, and the bridge to other foods later. | Checked; use a small extract, not the 40 MB file. |
 | **Our own facets** | Part, head, viscera, skin, bones, cut style, method, preservation, heat. | Proposed in ADR 0005. |
 
@@ -213,14 +220,14 @@ ADR 0003 scoped this app to the calculator and said inventory belongs in a separ
 - The bulletin transcription (image reading against the scan's text layer, 581 rows).
 - The comparison with the app's data.
 - The species codes (against the FAO list as published on GitHub by the FAO/FIRMS working group; that repository has no licence file, so cite FAO).
-- The EU presentation codes and conversion factors (from a Markdown copy of the EUR-Lex text on GitHub; to be checked against EUR-Lex itself).
+- The EU presentation codes and conversion factors (extracted from a Markdown copy on GitHub, then checked against the official EUR-Lex HTML: all 250 factors and 32 codes match).
+- The Alaska product codes, species codes and recovery rates (50 CFR Part 679 Tables 1a, 2a and 3, from the eCFR and the printed 2024 edition; Table 3 read once by eye).
 - The GS1 syntax dictionary and web vocabulary, GDST's documentation and schema, and FoodOn's licence.
 
 **Search only, to verify before relying on it:**
-- The Alaska product and recovery-rate tables and their current numbering.
 - GS1 US prices; GDST 2.0, which was due in September 2026 and may have changed names in the standard.
 - The FDA traceability rule's compliance date and the first-receiver question for someone who sells their own catch.
 - Every carrier fact, rate and cut-off; the permit rules in each state.
 - Licences for the Norwegian, New Zealand and Canadian tables.
 
-**Hosts that were blocked from this environment** and are needed to turn the leads into data: `www.ecfr.gov` and `www.govinfo.gov` (the Alaska tables), `eur-lex.europa.eu`, `repository.library.noaa.gov`, `api.fiskeridir.no`, `fdc.nal.usda.gov`, `www.fao.org`, `www.marinespecies.org`, `ref.gs1.org`, `thegdst.org`, `www.fda.gov`, and the carrier and state agency sites.
+**Hosts.** The owner has since allowed `www.ecfr.gov`, `www.govinfo.gov`, `eur-lex.europa.eu`, `www.fisheries.noaa.gov`, `repository.library.noaa.gov`, `www.fao.org`, `api.fiskeridir.no`, `fdc.nal.usda.gov` and `www.marinespecies.org`; the first three have been used. The eCFR refuses automated requests for its table images, so those came from the printed edition on govinfo. Still blocked, and needed for the remaining leads: `ref.gs1.org`, `thegdst.org`, `www.fda.gov`, and the carrier and state agency sites.
