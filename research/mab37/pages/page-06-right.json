@@ -1,0 +1,351 @@
+{
+  "pdf_page": 6,
+  "side": "right",
+  "book_page": 5,
+  "rows": [
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Raw Sections",
+      "average": 68,
+      "range": [
+        65,
+        72
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Whole",
+      "average": 92,
+      "range": [
+        90,
+        95
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Sections",
+      "average": 60,
+      "range": [
+        58,
+        66
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat",
+      "average": 17,
+      "range": [
+        15,
+        21
+      ],
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Whole",
+      "to": "Cooked Meat (during molt)",
+      "average": null,
+      "range": [
+        10,
+        14
+      ],
+      "check": "to: the printed cell is only '(during molt)', right-aligned under the Cooked Meat row, with a range and no average; transcribed as a qualifier of Raw Whole -> Cooked Meat. Numbers are certain."
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Raw Sections",
+      "to": "Cooked Sections",
+      "average": 88,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Cooked Whole",
+      "to": "Cooked Meat",
+      "average": 19,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Crab",
+      "species": "Tanner",
+      "scientific_name": "Chionoecetes bairdi, C. opilio",
+      "scientific_name_as_printed": "Chionoecetes bairdi, C. opilio",
+      "subheading": null,
+      "from": "Cooked Sections",
+      "to": "Cooked Meat",
+      "average": 28,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 75,
+      "range": [
+        69,
+        80
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 55,
+      "range": [
+        41,
+        68
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Edible Portion",
+      "average": 36,
+      "range": [
+        32,
+        40
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Backs",
+      "average": 30,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Belly Flaps",
+      "average": 5,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Tails and Fins",
+      "average": 4,
+      "range": [
+        4,
+        6
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Liver",
+      "average": 13,
+      "range": [
+        10,
+        21
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "Round",
+      "to": "Viscera",
+      "average": 51,
+      "range": null,
+      "check": "average: printed clearly as 51; implausible beside Round -> D/H-On 75 in the same From group (the two sum to more than 100). Reading is certain; possible misprint in the source, not changed."
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 69,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Backs",
+      "average": 38,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Dogfish",
+      "scientific_name": "Squalus acanthias",
+      "scientific_name_as_printed": "Squalus acanthias",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Belly Flaps",
+      "average": 7,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Eels",
+      "scientific_name": "Anguilliformes",
+      "scientific_name_as_printed": "Anguilliformes",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Eels",
+      "scientific_name": "Anguilliformes",
+      "scientific_name_as_printed": "Anguilliformes",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 72,
+      "range": [
+        70,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Eels",
+      "scientific_name": "Anguilliformes",
+      "scientific_name_as_printed": "Anguilliformes",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Flesh",
+      "average": 62,
+      "range": [
+        56,
+        65
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Eels",
+      "scientific_name": "Anguilliformes",
+      "scientific_name_as_printed": "Anguilliformes",
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked D/H-Off",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Fish Meal",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Lean Fish",
+      "to": "Meal",
+      "average": 18,
+      "range": [
+        16,
+        20
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Fish Meal",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Fatty Fish",
+      "to": "Meal",
+      "average": 22,
+      "range": [
+        20,
+        25
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

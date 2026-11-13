@@ -1,8 +1,13 @@
 /**
  * calcEngine.js — Pure calculation module for fish yield cost math.
  *
- * Pure function: inputs object in, result object out.
+ * Pure functions: inputs in, result out.
  * No React, no I/O, no hidden state.
+ *
+ *   calculate         — finished cost per lb, or lbs to buy
+ *   costAcrossYields  — that cost at both ends of a yield range
+ *   sellPriceAtMargin — what to charge for a given margin
+ *   portionCost       — what one portion costs
  *
  * Domain vocabulary:
  *   Round    — whole, un-processed fish
@@ -167,4 +172,118 @@ export function calculate(inputs) {
   }
 
   return { result: baseRes, appliedDiscount, breakdown };
+}
+
+// ---------------------------------------------------------------------------
+// What the price means: across the yield range, at a margin, per portion.
+//
+// `calculate` never refuses: text it cannot read counts as 0 and a missing yield counts as 100%,
+// and the screen decides whether to show the answer. The helpers below have no screen in front of
+// them, so they refuse instead. Each returns null when it cannot stand behind the number, and
+// never NaN, Infinity or a zero that only means "nothing was typed". A wrong price is worse than
+// none.
+// ---------------------------------------------------------------------------
+
+const PLAIN_NUMBER = /^(\d+\.?\d*|\.\d+)$/;
+
+/**
+ * A finite number, or text that is nothing but one ("4.50", "46"). Anything else is null, so
+ * "$4.50", "1,000" and "" are never guessed at. Read typed text with parseAmount first.
+ *
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+function toFiniteNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && PLAIN_NUMBER.test(value.trim())) return Number(value.trim());
+  return null;
+}
+
+/** A yield is a percentage above 0 and up to 100 (CONTEXT.md). */
+function toYieldPercent(value) {
+  const n = toFiniteNumber(value);
+  return n !== null && n > 0 && n <= 100 ? n : null;
+}
+
+// An optional per-lb charge left blank (undefined, null, '' or the NaN parseAmount gives for an
+// empty box) counts as 0, exactly as in `calculate`. One that is filled in but is not a plain
+// non-negative number would be dropped silently by `calculate`, so it is refused here.
+function isBlankOrAmount(value) {
+  if (value === undefined || value === null || Number.isNaN(value)) return true;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  const n = toFiniteNumber(value);
+  return n !== null && n >= 0;
+}
+
+/**
+ * Finished cost per lb at both ends of a yield range.
+ *
+ * Runs the same `calculate` path twice with only the yield changed, so the processing and shipping
+ * basis, cold storage, labor and any bulk discount are honoured at each end.
+ *
+ * @param {CalcInputs} inputs — cost-mode inputs, as passed to `calculate`. `yieldPercent` is ignored.
+ * @param {[number, number]|null|undefined} range — [lowYield, highYield] in percent, as in the
+ *   `range` of a conversion in fish_data_v3.js. Given backwards, it is read the right way round.
+ * @returns {{low: number, high: number}|null}
+ *   `low` is the cost at the HIGH yield (the fish cut well: cheapest); `high` is the cost at the
+ *   LOW yield (it cut badly: dearest). null when there is no range, when either bound is not a
+ *   yield above 0 and up to 100, in weight mode, when the price paid is missing or not a
+ *   non-negative number, when a processing, shipping or cold-storage charge is filled in with
+ *   something that is not one, or when either end does not come out as a finite cost above 0.
+ */
+export function costAcrossYields(inputs, range) {
+  if (!inputs || typeof inputs !== 'object' || inputs.mode === 'weight') return null;
+  if (!Array.isArray(range) || range.length !== 2) return null;
+
+  const first = toYieldPercent(range[0]);
+  const second = toYieldPercent(range[1]);
+  if (first === null || second === null) return null;
+
+  const paid = toFiniteNumber(inputs.cost);
+  if (paid === null || paid < 0) return null;
+  if (![inputs.processingCost, inputs.shipping, inputs.coldStorage].every(isBlankOrAmount)) return null;
+
+  const costAt = (yieldPercent) => {
+    const { result } = calculate({ ...inputs, yieldPercent });
+    return Number.isFinite(result) && result > 0 ? result : null;
+  };
+  const low = costAt(Math.max(first, second));
+  const high = costAt(Math.min(first, second));
+  return low === null || high === null ? null : { low, high };
+}
+
+/**
+ * The selling price per lb that leaves a given margin.
+ *
+ * Margin is on the selling price, the way a seafood counter or a kitchen quotes it:
+ * price = cost / (1 - margin / 100). A 35% margin on a $9.78 cost is $15.05, not $13.20 (which
+ * would be a 35% markup on cost).
+ *
+ * @param {number|string} costPerLb — finished cost per lb; must be above 0
+ * @param {number|string} marginPct — margin as a percentage, from 0 up to but not including 100
+ * @returns {number|null} null unless both are plain finite numbers in those bounds
+ */
+export function sellPriceAtMargin(costPerLb, marginPct) {
+  const cost = toFiniteNumber(costPerLb);
+  const margin = toFiniteNumber(marginPct);
+  if (cost === null || cost <= 0) return null;
+  if (margin === null || margin < 0 || margin >= 100) return null;
+  const price = cost / (1 - margin / 100);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+/**
+ * What one portion costs: cost per lb × ounces / 16.
+ *
+ * @param {number|string} costPerLb — finished cost per lb; must be above 0
+ * @param {number|string} ounces — portion size in ounces; must be above 0
+ * @returns {number|null} null unless both are plain finite numbers above 0
+ */
+export function portionCost(costPerLb, ounces) {
+  const cost = toFiniteNumber(costPerLb);
+  const oz = toFiniteNumber(ounces);
+  if (cost === null || cost <= 0) return null;
+  if (oz === null || oz <= 0) return null;
+  const portion = (cost * oz) / 16;
+  return Number.isFinite(portion) && portion > 0 ? portion : null;
 }

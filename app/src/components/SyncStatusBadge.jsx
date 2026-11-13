@@ -2,18 +2,20 @@ import React from 'react';
 import { Cloud, CloudOff, Loader2, AlertCircle, CheckCircle, TriangleAlert, Clock } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
+// Colours are theme tokens that read on surface and surface-raised in both themes. The word
+// always shows beside the icon, so the state never rests on colour alone.
 const CONFIG = {
-  synced:   { icon: CheckCircle,   label: 'Synced',   color: 'text-green-300' },
-  syncing:  { icon: Loader2,       label: 'Syncing…', color: 'text-brand-yellow', spin: true },
-  pending:  { icon: Clock,         label: 'Pending',  color: 'text-yellow-300' },
-  offline:  { icon: CloudOff,      label: 'Offline',  color: 'text-white/80' },
-  error:    { icon: AlertCircle,   label: 'Error',    color: 'text-red-300' },
-  conflict: { icon: TriangleAlert, label: 'Conflict', color: 'text-orange-300' },
-  idle:     { icon: Cloud,         label: 'Idle',     color: 'text-white/80' },
+  synced:   { icon: CheckCircle,   label: 'Synced',        color: 'text-success' },
+  syncing:  { icon: Loader2,       label: 'Syncing…',      color: 'text-accent', spin: true },
+  pending:  { icon: Clock,         label: 'Waiting to sync', color: 'text-text-secondary' },
+  offline:  { icon: CloudOff,      label: 'Offline',       color: 'text-text-secondary' },
+  error:    { icon: AlertCircle,   label: 'Sync failed',   color: 'text-danger' },
+  conflict: { icon: TriangleAlert, label: 'Needs a look',  color: 'text-link' },
+  idle:     { icon: Cloud,         label: 'Not synced yet', color: 'text-text-secondary' },
 };
 
 /**
- * Compact sync status badge for the NavBar.
+ * Sync status button for the Account screen.
  * Clicking opens the details panel (via onToggleDetails).
  */
 export default function SyncStatusBadge({ onToggleDetails }) {
@@ -23,17 +25,17 @@ export default function SyncStatusBadge({ onToggleDetails }) {
   return (
     <button
       onClick={onToggleDetails}
-      className={`flex min-h-[2.75rem] items-center gap-1 px-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-white/10 ${color}`}
-      title={`Sync status: ${label}${pendingCount > 0 ? ` (${pendingCount} pending)` : ''}`}
-      aria-label={`Sync status: ${label}`}
+      type="button"
+      className={`flex min-h-target items-center gap-2 rounded-lg border border-line-strong bg-surface-raised px-3 text-sm font-semibold transition-colors hover:border-accent ${color}`}
     >
-      <Icon size={14} className={spin ? 'animate-spin' : ''} />
-      <span className="hidden sm:inline">{label}</span>
-      {pendingCount > 0 && syncStatus !== 'syncing' && (
-        <span className="bg-current/20 rounded-full px-1 text-[10px] leading-none py-0.5">
-          {pendingCount}
-        </span>
-      )}
+      <Icon size={16} aria-hidden="true" className={spin ? 'animate-spin' : ''} />
+      <span>
+        <span className="sr-only">Sync status: </span>
+        {label}
+        {pendingCount > 0 && syncStatus !== 'syncing' && (
+          <span className="font-normal text-text-secondary tabular-nums"> · {pendingCount} to send</span>
+        )}
+      </span>
     </button>
   );
 }

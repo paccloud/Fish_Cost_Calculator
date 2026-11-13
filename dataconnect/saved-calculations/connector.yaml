@@ -1,6 +1,0 @@
-connectorId: "saved-calculations"
-generate:
-  javascriptSdk:
-    outputDir: "./generated/saved-calculations"
-    package: "@fish-cost-calculator/sql-connect-saved-calculations-proof"
-    react: true

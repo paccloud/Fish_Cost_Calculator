@@ -2,6 +2,8 @@
 
 This document explains how to properly configure environment variables for the Local Catch application.
 
+> **This stack is being replaced.** The backend variables below belong to the Vercel + Neon API and the local Express server, which [ADR 0001](adr/0001-firebase-auth-and-firestore.md) replaces with Firebase (issues #123–#133). They stay accurate until that work lands.
+
 ## Important: No Quotes in .env Files
 
 When setting environment variables in `.env` files, **do NOT use quotes** around the values unless the quotes are part of the actual value. Vite will include quotes as part of the value if you add them.
@@ -27,49 +29,52 @@ When adding environment variables to Vercel (either via dashboard or CLI), ensur
 printf 'your-value-here' | vercel env add VARIABLE_NAME production
 ```
 
-## Required Environment Variables
+## Environment Variables
+
+Checked against the code in November 2026. "Read by" names the file that uses the value.
 
 ### Frontend (Vite) - Client-side
-These are bundled into the client code and exposed to the browser:
-- `VITE_FIREBASE_API_KEY` - Firebase web app API key (public browser config)
-- `VITE_FIREBASE_AUTH_DOMAIN` - Firebase Auth domain (for example, `your-project.firebaseapp.com`)
-- `VITE_FIREBASE_PROJECT_ID` - Firebase project ID
-- `VITE_FIREBASE_APP_ID` - Firebase web app ID
-- `VITE_FIREBASE_MESSAGING_SENDER_ID` - Firebase sender ID
-- `VITE_FIREBASE_STORAGE_BUCKET` - Optional Firebase storage bucket
-- `VITE_API_URL` - API base URL (empty for production, http://localhost:3000 for dev)
-- `VITE_GEMINI_API_KEY` - **Required**; Gemini API key used for Gemini integration and **bundled into client code (exposed to the browser)** (e.g. `AIza...`)
-- `VITE_OCR_ENDPOINT` - **Optional**; custom OCR backend endpoint URL (default: use the app's built-in OCR flow/config if unset; e.g. `http://localhost:3000/api/ocr`)
-- `VITE_MOVE_STAGE` - **Optional**; stage of the move to Firebase: `off` (default), `notice` or `read-only`. See `docs/move-runbook.md`.
-- `VITE_NEW_APP_URL` - **Optional**; the new app's address, shown in the move banner (e.g. `https://local-catch.web.app`)
+
+These are bundled into the client code and exposed to the browser. None of them is a secret.
+
+| Variable | Needed? | Read by | What it is |
+|---|---|---|---|
+| `VITE_FIREBASE_API_KEY` | **Required** for sign-in | `app/src/lib/firebaseRestAuth.js` | Firebase web app API key (public browser config) |
+| `VITE_API_URL` | Optional | `app/src/config/api.js` | API base URL. Empty in production (same origin); `http://localhost:3000` in development |
+| `VITE_MOVE_STAGE` | Optional | `app/src/config/move.js` | Stage of the move to Firebase: `off` (default), `notice` or `read-only`. See `docs/move-runbook.md` |
+| `VITE_NEW_APP_URL` | Optional | `app/src/config/move.js` | The new app's address, shown in the move banner (e.g. `https://local-catch.web.app`) |
+
+The rest of the Firebase web config is in the env templates but **no code reads it today**, because the app calls Firebase Auth's REST endpoints with the API key alone: `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_MESSAGING_SENDER_ID` and `VITE_FIREBASE_STORAGE_BUCKET`. `VITE_FIREBASE_PROJECT_ID` is read only by the API, as a last fallback when `FIREBASE_PROJECT_ID` is not set. Setting them does no harm.
 
 ### Backend (Vercel Functions) - Server-side only
 
 These are only accessible on the server:
 
-- `FIREBASE_PROJECT_ID` - Firebase project ID used to verify Firebase Auth ID tokens
-- `JWT_SECRET` - Secret for signing legacy JWT tokens (required only while `/api/login` remains enabled)
-- `JWT_EXPIRES_IN_SECONDS` - Optional; JWT lifetime in seconds (default 86400 / 24h)
-- `ALLOWED_ORIGINS` - Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`)
-- `CORS_ALLOW_CREDENTIALS` - Set to `true` only if you need to send cookies with cross-origin requests
-- `DATABASE_URL` - PostgreSQL connection string
-- `API_READ_ONLY` - **Optional**; set to `true` to make both backends refuse every write except sign-in (503, `{"error":"read_only"}`). Off by default. See `docs/move-runbook.md`.
-- All `POSTGRES_*` and `PG*` variables from Neon
-- `GEMINI_API_KEY` - **MUST be server-side only** (no `VITE_` prefix); Gemini API key for AI features (e.g., spreadsheet parsing). **NEVER expose to client code**. All Gemini API calls must be routed through server endpoints (e.g., `/api/parse-spreadsheet`) - the browser should never have direct access to this key.
+| Variable | Needed? | Read by | What it is |
+|---|---|---|---|
+| `DATABASE_URL` | **Required** | `api/_lib/db.js`, `scripts/*.js` | Neon PostgreSQL connection string. A secret |
+| `FIREBASE_PROJECT_ID` | **Required** | `api/_lib/firebase-auth.js` | Firebase project ID used to verify Firebase Auth ID tokens |
+| `ALLOWED_ORIGINS` | **Required** in production | `api/_lib/cors.js`, `server/server.js` | Comma-separated allowlist for CORS (e.g. `https://your-app.vercel.app,http://localhost:5173`). Defaults to the two localhost origins |
+| `JWT_SECRET` | While legacy tokens are accepted | `api/_lib/auth.js`, `api/login.js`, `server/server.js` | Signs and checks legacy JWTs. Without it `/api/login` returns 500 and legacy tokens are rejected. A secret |
+| `JWT_EXPIRES_IN_SECONDS` | Optional | `api/login.js`, `server/server.js` | Legacy JWT lifetime in seconds (default 86400 / 24h) |
+| `CORS_ALLOW_CREDENTIALS` | Optional | `api/_lib/cors.js`, `server/server.js` | Set to `true` only if you need to send cookies with cross-origin requests |
+| `API_READ_ONLY` | Optional | `shared/readOnly.js` | Set to `true` to make both backends refuse every write except sign-in (503, `{"error":"read_only"}`). Off by default. See `docs/move-runbook.md` |
 
-Mitigations / security guidance:
+Vercel sets `VERCEL_URL` itself, and the API adds that address to the CORS allowlist. The Neon integration also adds `POSTGRES_*` and `PG*` variables to the Vercel project; the code reads only `DATABASE_URL`.
 
-- **Client-side keys are not secrets**: anything prefixed with `VITE_` is shipped to browsers. Treat `VITE_GEMINI_API_KEY` as public.
-- **Prefer server-side proxying** for privileged features: use `GEMINI_API_KEY` only in server routes/functions and enforce auth/authorization there.
-- **Rate-limit Gemini-backed endpoints** to reduce abuse and cost exposure.
-- **Restrict keys in Google Cloud**: apply API restrictions (enable only the needed APIs), lock down allowed origins/referrers for browser keys (for `VITE_GEMINI_API_KEY`), and restrict server keys by IP/service account where possible.
-- **Scope and rotate keys**: use least-privilege API restrictions and rotate keys if exposure is suspected.
+The local Express server reads the same variables from `server/.env`, except `DATABASE_URL` (it uses a SQLite file), plus `PORT` (default 3000). With `NODE_ENV=development` and no `JWT_SECRET` it makes up a signing secret for that run.
+
+### Documented before, used by nothing
+
+`VITE_GEMINI_API_KEY`, `VITE_OCR_ENDPOINT` and `GEMINI_API_KEY` were listed here as required or optional, and `VITE_GEMINI_API_KEY` is still in `app/.env.example`. No code reads any of them and there is no Gemini or OCR feature in the app. Do not set them. If such a key was ever created, see step 4.1 in [`SECURITY_NOTICE.md`](../SECURITY_NOTICE.md).
+
+Anything prefixed with `VITE_` is shipped to every browser, so never put a secret behind that prefix.
 
 ## Common Issues
 
 ### Firebase Authentication 401 Errors
 If protected endpoints return 401 after Firebase sign-in, check:
-1. `FIREBASE_PROJECT_ID` on the backend matches `VITE_FIREBASE_PROJECT_ID` — a mismatch causes every token verification to fail.
+1. `FIREBASE_PROJECT_ID` on the backend names the Firebase project that `VITE_FIREBASE_API_KEY` belongs to (the same value as `VITE_FIREBASE_PROJECT_ID` in the templates) — a mismatch causes every token verification to fail.
 2. Your Firebase credentials have not expired or been revoked.
 3. Any variable change requires a full redeploy to take effect.
 

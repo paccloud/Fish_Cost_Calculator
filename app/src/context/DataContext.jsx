@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createRepository, accountScope, guestScope } from '../lib/localRepository';
+import { createRepository, accountScope, guestScope, isDeviceOnlyCalc } from '../lib/localRepository';
 import { getCustomSpecies, setCustomSpecies as setSpeciesLocal } from '../lib/localStore';
 import { createSyncCoordinator } from '../lib/syncCoordinator';
 import { hasAuthCredential } from '../lib/authHeaders';
@@ -14,7 +14,7 @@ import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 import { isAppReadOnly, isMoveNoticeOn } from '../config/move';
-import { buildUnsentChangesFile, countUnsentChanges, downloadUnsentChanges } from '../lib/unsentChanges';
+import { buildUnsentChangesFile, countUnsentParts, downloadUnsentChanges } from '../lib/unsentChanges';
 
 const DataContext = createContext(null);
 
@@ -187,7 +187,7 @@ export function DataProvider({ children }) {
     }
 
     return { conflictCount: conflicts.length };
-  }, [repo, coordinator]);
+  }, [repo]);
 
   // Detect guest records when user transitions from null → authenticated.
   useEffect(() => {
@@ -417,6 +417,8 @@ export function DataProvider({ children }) {
   // Open the preview modal — no API call yet.
   const requestPublish = useCallback((calc) => {
     if (isAppReadOnly) return;
+    // The community feed lists prices; a "Pounds to buy" answer is not one.
+    if (calc?.mode === 'weight') return;
     setPublishError(null);
     setPublishPreviewCalc(calc);
   }, []);
@@ -527,16 +529,18 @@ export function DataProvider({ children }) {
     if (isAppReadOnly) return null;
     const newCalc = await repo.addCalc(calc);
     setSavedCalcs((prev) => [...prev, newCalc]);
-    debouncedSync();
+    // A device-only record has nothing to send, so the badge is not set to "waiting" for it.
+    if (!isDeviceOnlyCalc(newCalc)) debouncedSync();
     return newCalc;
   }, [repo, debouncedSync]);
 
   const removeCalc = useCallback(async (id) => {
     if (isAppReadOnly) return;
+    const deviceOnly = savedCalcs.some((c) => c.id === id && isDeviceOnlyCalc(c));
     await repo.removeCalc(id);
     setSavedCalcs((prev) => prev.filter((c) => c.id !== id));
-    debouncedSync();
-  }, [repo, debouncedSync]);
+    if (!deviceOnly) debouncedSync();
+  }, [repo, debouncedSync, savedCalcs]);
 
   // ---- Custom Yields ----
 
@@ -581,14 +585,17 @@ export function DataProvider({ children }) {
   // ---- The move to Firebase (issue #130) ----
 
   // Everything on this device that never reached the server: the signed-in
-  // user's pending changes, anything saved here as a guest, and legacy records
+  // user's pending changes and the records that are never synced at all
+  // ("Pounds to buy" answers), anything saved here as a guest, and legacy records
   // waiting in the recovery scope (exported with the guest ones, as unowned).
   const collectUnsentParts = useCallback(async () => {
     const guestRepo = uid ? createRepository(guestScope()) : repo;
     const recoveryRepo = createRepository(recoveryScope());
-    const [pending, accountConflicts, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
+    const [pending, accountConflicts, accountCalcsAll, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
       uid ? repo.getPendingSync() : { calcs: [], yields: [] },
       uid ? repo.getConflictedYields() : [],
+      // getPendingSync leaves device-only records out of the sync queue, so they are read here
+      uid ? repo.getCalcs() : [],
       guestRepo.getCalcs(),
       guestRepo.getYields(),
       recoveryRepo.getCalcs(),
@@ -598,6 +605,7 @@ export function DataProvider({ children }) {
       accountCalcs: pending.calcs,
       accountYields: pending.yields,
       accountConflicts,
+      deviceOnlyCalcs: accountCalcsAll.filter(isDeviceOnlyCalc),
       guestCalcs: [...guestCalcs, ...recoveryCalcs],
       guestYields: [...guestYields, ...recoveryYields],
     };
@@ -616,12 +624,11 @@ export function DataProvider({ children }) {
     if (!isMoveNoticeOn || !dataLoaded) return;
     let cancelled = false;
     collectUnsentParts()
-      .then(({ accountCalcs, accountYields, accountConflicts, guestCalcs, guestYields }) => {
+      .then((parts) => {
         if (cancelled) return;
-        const account = countUnsentChanges(buildUnsentChangesFile({ accountCalcs, accountYields, accountConflicts }));
-        const guest = countUnsentChanges(buildUnsentChangesFile({ guestCalcs, guestYields }));
+        const { account, total } = countUnsentParts(parts);
         setAccountUnsentCount(account);
-        setUnsentCount(account + guest);
+        setUnsentCount(total);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -687,6 +694,8 @@ export function DataProvider({ children }) {
     publishPreviewCalc,
     publishLoading,
     readOnly: isAppReadOnly,
+    // True when the browser refused to open the device store; screens say so, not "loading"
+    storageFailed,
     unsentCount,
     accountUnsentCount,
     saveUnsentChanges,

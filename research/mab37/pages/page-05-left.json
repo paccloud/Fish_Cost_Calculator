@@ -1,0 +1,242 @@
+{
+  "pdf_page": 5,
+  "side": "left",
+  "book_page": 2,
+  "rows": [
+    {
+      "group": null,
+      "species": "Abalone, Pinto",
+      "scientific_name": "Haliotis kamtschatkana",
+      "scientific_name_as_printed": "Haliotus kamtschatkana",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Muscle",
+      "average": 42,
+      "range": [
+        40,
+        45
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Abalone, Pinto",
+      "scientific_name": "Haliotis kamtschatkana",
+      "scientific_name_as_printed": "Haliotus kamtschatkana",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Meat",
+      "average": 25,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Abalone, Pinto",
+      "scientific_name": "Haliotis kamtschatkana",
+      "scientific_name_as_printed": "Haliotus kamtschatkana",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Trimming",
+      "average": 16,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Abalone, Pinto",
+      "scientific_name": "Haliotis kamtschatkana",
+      "scientific_name_as_printed": "Haliotus kamtschatkana",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Dried Muscle",
+      "average": 10,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Capelin",
+      "scientific_name": "Mallotus villosus",
+      "scientific_name_as_printed": "Mallotus villosus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 89,
+      "range": [
+        84,
+        93
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Capelin",
+      "scientific_name": "Mallotus villosus",
+      "scientific_name_as_printed": "Mallotus villosus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 78,
+      "range": [
+        73,
+        81
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Softshell",
+      "scientific_name": "Mya sp.",
+      "scientific_name_as_printed": "Mya sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 57,
+      "range": [
+        53,
+        62
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Macoma",
+      "scientific_name": "Macoma sp.",
+      "scientific_name_as_printed": "Macoma sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 53,
+      "range": [
+        45,
+        59
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Cockles",
+      "scientific_name": "Clinocardium sp.",
+      "scientific_name_as_printed": "Clinocardium sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 42,
+      "range": [
+        38,
+        48
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Littlenecks",
+      "scientific_name": "Protothaca sp.",
+      "scientific_name_as_printed": "Protothaca sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 37,
+      "range": [
+        31,
+        46
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Geoducks",
+      "scientific_name": "Panope sp.",
+      "scientific_name_as_printed": "Panope sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 33,
+      "range": [
+        32,
+        35
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Geoducks",
+      "scientific_name": "Panope sp.",
+      "scientific_name_as_printed": "Panope sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Steaks",
+      "average": 22,
+      "range": [
+        20,
+        25
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Geoducks",
+      "scientific_name": "Panope sp.",
+      "scientific_name_as_printed": "Panope sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Necks",
+      "average": 12,
+      "range": [
+        9,
+        14
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Razors",
+      "scientific_name": "Siliqua sp.",
+      "scientific_name_as_printed": "Siliqua sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 44,
+      "range": [
+        42,
+        50
+      ],
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Razors",
+      "scientific_name": "Siliqua sp.",
+      "scientific_name_as_printed": "Siliqua sp.",
+      "subheading": null,
+      "from": "Raw Meat",
+      "to": "Cooked Meat",
+      "average": 60,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Clams",
+      "species": "Butter",
+      "scientific_name": "Saxidomus sp.",
+      "scientific_name_as_printed": "Saxidomus sp.",
+      "subheading": null,
+      "from": "Whole",
+      "to": "Edible Meats",
+      "average": 45,
+      "range": [
+        38,
+        46
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": [
+    {
+      "heading": "Blackcod",
+      "see": "Sablefish"
+    }
+  ]
+}

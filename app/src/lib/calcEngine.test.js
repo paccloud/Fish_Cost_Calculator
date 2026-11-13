@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculate } from './calcEngine.js';
+import { calculate, costAcrossYields, sellPriceAtMargin, portionCost } from './calcEngine.js';
 
 // Default price-break tiers matching Calculator.jsx DEFAULT_PRICE_BREAKS
 const DEFAULT_PRICE_BREAKS = [
@@ -437,5 +437,333 @@ describe('calculate — full combination', () => {
     });
     expect(actual.result).toBeCloseTo(5.67, 10);
     expect(actual.appliedDiscount).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hand-worked example used across the newer helpers
+//
+// Sockeye Salmon, Round → Skinless Fillet: yield 46%, range 41–49% (fish_data_v3.js).
+// Paid $4.50/lb for the whole fish.
+//   cost at 46%:  4.50 / 0.46 = 9.7826…  → $9.78
+//   cost at 49%:  4.50 / 0.49 = 9.1836…  → $9.18  (cut well: cheapest)
+//   cost at 41%:  4.50 / 0.41 = 10.9756… → $10.98 (cut badly: dearest)
+//   35% margin:   9.7826 / 0.65 = 15.0501… → $15.05
+//   6 oz portion: 9.7826 × 6 / 16 = 3.6684… → $3.67
+// ---------------------------------------------------------------------------
+
+const SOCKEYE = { mode: 'cost', yieldPercent: 46, cost: 4.5 };
+const SOCKEYE_RANGE = [41, 49];
+const cents = (n) => n.toFixed(2);
+
+describe('hand-worked Sockeye example', () => {
+  const cost = calculate(SOCKEYE).result;
+
+  it('costs $9.78/lb as skinless fillet', () => {
+    expect(cents(cost)).toBe('9.78');
+  });
+
+  it('runs $9.18–$10.98/lb across the 41–49% range', () => {
+    const range = costAcrossYields(SOCKEYE, SOCKEYE_RANGE);
+    expect(cents(range.low)).toBe('9.18');
+    expect(cents(range.high)).toBe('10.98');
+  });
+
+  it('sells at $15.05/lb for a 35% margin', () => {
+    expect(cents(sellPriceAtMargin(cost, 35))).toBe('15.05');
+  });
+
+  it('costs $3.67 for a 6 oz portion', () => {
+    expect(cents(portionCost(cost, 6))).toBe('3.67');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// costAcrossYields
+// ---------------------------------------------------------------------------
+
+describe('costAcrossYields', () => {
+  it('returns the cost at the high yield as low and at the low yield as high', () => {
+    const range = costAcrossYields(SOCKEYE, SOCKEYE_RANGE);
+    expect(range.low).toBeCloseTo(4.5 / 0.49, 10);
+    expect(range.high).toBeCloseTo(4.5 / 0.41, 10);
+    expect(range.low).toBeLessThan(range.high);
+  });
+
+  it('matches calculate run at each end of the range', () => {
+    const inputs = {
+      mode: 'cost', yieldPercent: 50, cost: 2,
+      processingCost: 0.5, weightType: 'incoming', shipping: 0.2, shippingWeightType: 'incoming', coldStorage: 0.1,
+    };
+    const range = costAcrossYields(inputs, [40, 60]);
+    expect(range.low).toBe(calculate({ ...inputs, yieldPercent: 60 }).result);
+    expect(range.high).toBe(calculate({ ...inputs, yieldPercent: 40 }).result);
+  });
+
+  it('spreads incoming charges over the yield and adds outgoing charges as they are', () => {
+    // cost=2, yields 40% and 50%
+    // incoming: (2 + 0.50 + 0.20) / 0.5 = 5.40 and / 0.4 = 6.75
+    const incoming = costAcrossYields(
+      { mode: 'cost', cost: 2, processingCost: 0.5, weightType: 'incoming', shipping: 0.2, shippingWeightType: 'incoming' },
+      [40, 50],
+    );
+    expect(incoming.low).toBeCloseTo(5.4, 10);
+    expect(incoming.high).toBeCloseTo(6.75, 10);
+    // outgoing: 2 / 0.5 + 0.70 = 4.70 and 2 / 0.4 + 0.70 = 5.70
+    const outgoing = costAcrossYields(
+      { mode: 'cost', cost: 2, processingCost: 0.5, weightType: 'outgoing', shipping: 0.2, shippingWeightType: 'outgoing' },
+      [40, 50],
+    );
+    expect(outgoing.low).toBeCloseTo(4.7, 10);
+    expect(outgoing.high).toBeCloseTo(5.7, 10);
+  });
+
+  it('applies the bulk discount at both ends', () => {
+    // 2 / 0.5 = 4 and 2 / 0.4 = 5, less 10% at 600 lbs
+    const range = costAcrossYields(
+      { mode: 'cost', cost: 2, showEconomyOfScale: true, quantity: '600', priceBreaks: DEFAULT_PRICE_BREAKS },
+      [40, 50],
+    );
+    expect(range.low).toBeCloseTo(3.6, 10);
+    expect(range.high).toBeCloseTo(4.5, 10);
+  });
+
+  it('ignores the yield in the inputs: only the range decides', () => {
+    const expected = costAcrossYields(SOCKEYE, SOCKEYE_RANGE);
+    expect(costAcrossYields({ ...SOCKEYE, yieldPercent: 99 }, SOCKEYE_RANGE)).toEqual(expected);
+    expect(costAcrossYields({ mode: 'cost', cost: 4.5 }, SOCKEYE_RANGE)).toEqual(expected);
+  });
+
+  it('reads a range given backwards the right way round', () => {
+    expect(costAcrossYields(SOCKEYE, [49, 41])).toEqual(costAcrossYields(SOCKEYE, [41, 49]));
+  });
+
+  it('accepts a yield of exactly 100 and bounds given as plain number text', () => {
+    expect(costAcrossYields(SOCKEYE, [50, 100])).toEqual({ low: 4.5, high: 9 });
+    expect(costAcrossYields({ mode: 'cost', cost: '4.50' }, ['50', '100'])).toEqual({ low: 4.5, high: 9 });
+  });
+
+  it('gives the same figure twice when the range is a single yield', () => {
+    const range = costAcrossYields(SOCKEYE, [46, 46]);
+    expect(range.low).toBe(range.high);
+    expect(range.low).toBe(calculate(SOCKEYE).result);
+  });
+
+  it('treats blank optional charges as none, like calculate', () => {
+    // parseAmount('') is NaN, which is what the calculator passes for an empty box
+    const blank = { ...SOCKEYE, processingCost: NaN, shipping: '', coldStorage: undefined };
+    expect(costAcrossYields(blank, SOCKEYE_RANGE)).toEqual(costAcrossYields(SOCKEYE, SOCKEYE_RANGE));
+  });
+
+  it('still gives a range when the fish was free but processing was not', () => {
+    // 0 / y + 1 / 0.5 = 2 and 1 / 0.4 = 2.5
+    const range = costAcrossYields({ mode: 'cost', cost: 0, processingCost: 1, weightType: 'incoming' }, [40, 50]);
+    expect(range.low).toBeCloseTo(2, 10);
+    expect(range.high).toBeCloseTo(2.5, 10);
+  });
+
+  it('never changes the inputs it was given', () => {
+    const inputs = { ...SOCKEYE };
+    const range = [...SOCKEYE_RANGE];
+    costAcrossYields(inputs, range);
+    expect(inputs).toEqual(SOCKEYE);
+    expect(range).toEqual(SOCKEYE_RANGE);
+  });
+
+  describe('returns null', () => {
+    it.each([
+      ['null', null],
+      ['undefined', undefined],
+      ['an empty array', []],
+      ['one bound', [41]],
+      ['three bounds', [41, 46, 49]],
+      ['the text "41-49"', '41-49'],
+      ['an object', { low: 41, high: 49 }],
+    ])('when the range is %s', (_label, range) => {
+      expect(costAcrossYields(SOCKEYE, range)).toBeNull();
+    });
+
+    it.each([
+      ['zero', [0, 49]],
+      ['negative', [-5, 49]],
+      ['over 100', [41, 101]],
+      ['NaN', [NaN, 49]],
+      ['Infinity', [41, Infinity]],
+      ['null', [null, 49]],
+      ['undefined', [41, undefined]],
+      ['empty text', ['', 49]],
+      ['text that is not a number', ['low', 'high']],
+      ['a percentage with its sign', ['41%', '49%']],
+    ])('when a bound is %s', (_label, range) => {
+      expect(costAcrossYields(SOCKEYE, range)).toBeNull();
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['null', null],
+      ['empty text', ''],
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['negative', -4.5],
+      ['text with a dollar sign', '$4.50'],
+      ['text with a thousands comma', '1,000'],
+      ['text that is not a number', 'abc'],
+    ])('when the price paid is %s', (_label, cost) => {
+      expect(costAcrossYields({ mode: 'cost', cost }, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it.each([
+      ['processingCost', 'abc'],
+      ['processingCost', '$0.50'],
+      ['processingCost', -0.5],
+      ['shipping', '0.20/lb'],
+      ['shipping', Infinity],
+      ['coldStorage', 'ten cents'],
+      ['coldStorage', -0.1],
+    ])('when %s is filled in with %j', (field, value) => {
+      expect(costAcrossYields({ ...SOCKEYE, [field]: value }, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it('in weight mode, which gives pounds and not a cost', () => {
+      expect(costAcrossYields({ mode: 'weight', targetWeight: 100, cost: 4.5 }, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it('when the cost comes out as zero', () => {
+      expect(costAcrossYields({ mode: 'cost', cost: 0 }, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it('when a 100% discount leaves nothing', () => {
+      const inputs = { ...SOCKEYE, showEconomyOfScale: true, quantity: '10', priceBreaks: [{ minQty: 1, discount: 100 }] };
+      expect(costAcrossYields(inputs, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it('when the cost overflows', () => {
+      expect(costAcrossYields({ mode: 'cost', cost: Number.MAX_VALUE }, SOCKEYE_RANGE)).toBeNull();
+    });
+
+    it.each([[null], [undefined], ['cost'], [42]])('when the inputs are %j', (inputs) => {
+      expect(costAcrossYields(inputs, SOCKEYE_RANGE)).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sellPriceAtMargin — margin on selling price
+// ---------------------------------------------------------------------------
+
+describe('sellPriceAtMargin', () => {
+  it.each([
+    // cost, margin, price = cost / (1 - margin / 100)
+    [6, 25, 8],
+    [10, 50, 20],
+    [9, 10, 10],
+    [3.5, 30, 5],
+  ])('a cost of %d at a margin of %d percent sells at %d', (cost, margin, price) => {
+    expect(sellPriceAtMargin(cost, margin)).toBeCloseTo(price, 10);
+  });
+
+  it('is margin on the selling price, not markup on cost', () => {
+    const price = sellPriceAtMargin(10, 35);
+    expect((price - 10) / price).toBeCloseTo(0.35, 10); // the margin is 35% of the price
+    expect(price).not.toBeCloseTo(13.5, 2); // a 35% markup would be $13.50
+  });
+
+  it('a 0% margin sells at cost', () => {
+    expect(sellPriceAtMargin(9.78, 0)).toBe(9.78);
+  });
+
+  it('reads plain number text', () => {
+    expect(sellPriceAtMargin('6', '25')).toBeCloseTo(8, 10);
+  });
+
+  describe('returns null', () => {
+    it.each([
+      ['zero', 0],
+      ['negative', -9.78],
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['null', null],
+      ['undefined', undefined],
+      ['empty text', ''],
+      ['text with a dollar sign', '$9.78'],
+      ['text that is not a number', 'abc'],
+      ['an array', [9.78]],
+    ])('when the cost is %s', (_label, cost) => {
+      expect(sellPriceAtMargin(cost, 35)).toBeNull();
+    });
+
+    it.each([
+      ['exactly 100', 100],
+      ['over 100', 150],
+      ['negative', -5],
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['null', null],
+      ['undefined', undefined],
+      ['empty text', ''],
+      ['text with a percent sign', '35%'],
+      ['text that is not a number', 'abc'],
+    ])('when the margin is %s', (_label, margin) => {
+      expect(sellPriceAtMargin(9.78, margin)).toBeNull();
+    });
+
+    it('when the price overflows', () => {
+      expect(sellPriceAtMargin(Number.MAX_VALUE, 99)).toBeNull();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// portionCost — cost per lb × ounces / 16
+// ---------------------------------------------------------------------------
+
+describe('portionCost', () => {
+  it.each([
+    // cost per lb, ounces, portion cost
+    [16, 1, 1],
+    [16, 16, 16],
+    [8, 6, 3],
+    [10, 4, 2.5],
+    [12, 0.5, 0.375],
+  ])('%d per lb at %d oz costs %d', (cost, ounces, portion) => {
+    expect(portionCost(cost, ounces)).toBeCloseTo(portion, 10);
+  });
+
+  it('reads plain number text', () => {
+    expect(portionCost('8', '6')).toBeCloseTo(3, 10);
+  });
+
+  describe('returns null', () => {
+    it.each([
+      ['zero', 0],
+      ['negative', -8],
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['null', null],
+      ['undefined', undefined],
+      ['empty text', ''],
+      ['text with a unit', '8/lb'],
+      ['text that is not a number', 'abc'],
+    ])('when the cost is %s', (_label, cost) => {
+      expect(portionCost(cost, 6)).toBeNull();
+    });
+
+    it.each([
+      ['zero', 0],
+      ['negative', -6],
+      ['NaN', NaN],
+      ['Infinity', Infinity],
+      ['null', null],
+      ['undefined', undefined],
+      ['empty text', ''],
+      ['text with a unit', '6 oz'],
+      ['text that is not a number', 'abc'],
+    ])('when the ounces are %s', (_label, ounces) => {
+      expect(portionCost(8, ounces)).toBeNull();
+    });
+
+    it('when the portion cost overflows', () => {
+      expect(portionCost(Number.MAX_VALUE, 32)).toBeNull();
+    });
   });
 });

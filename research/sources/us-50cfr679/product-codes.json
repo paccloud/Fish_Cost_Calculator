@@ -1,0 +1,158 @@
+{
+  "source": "50 CFR Part 679, Table 1a: Delivery Condition and Product Codes",
+  "read_from": "eCFR (ecfr.gov), as of 2026-11-10",
+  "codes": [
+    {
+      "code": "01",
+      "description": "Whole fish/ or shellfish/food fish"
+    },
+    {
+      "code": "03",
+      "description": "Bled only. Throat, or isthmus, slit to allow blood to drain"
+    },
+    {
+      "code": "04",
+      "description": "Gutted, head on. Belly slit and viscera removed"
+    },
+    {
+      "code": "05",
+      "description": "Gutted, head off. Belly slit and viscera removed (May be used for halibut personal use)"
+    },
+    {
+      "code": "06",
+      "description": "Head and gutted, with roe"
+    },
+    {
+      "code": "07",
+      "description": "Headed and gutted, Western cut. Head removed just in front of the collar bone, and viscera removed"
+    },
+    {
+      "code": "08",
+      "description": "Headed and gutted, Eastern cut. Head removed just behind the collar bone, and viscera removed"
+    },
+    {
+      "code": "10",
+      "description": "Headed and gutted, tail removed. Head removed usually in front of collar bone, and viscera and tail removed"
+    },
+    {
+      "code": "11",
+      "description": "Kirimi (Steak). Head removed either in front or behind the collar bone, viscera removed, and tail removed by cuts perpendicular to the spine, resulting in a steak"
+    },
+    {
+      "code": "12",
+      "description": "Salted and split. Head removed, belly slit, viscera removed, fillets cut from head to tail but remaining attached near tail. Product salted"
+    },
+    {
+      "code": "13",
+      "description": "Wings. On skates, side fins are cut off next to body"
+    },
+    {
+      "code": "14",
+      "description": "Roe. Eggs, either loose or in sacs, or skeins (ancillary only)"
+    },
+    {
+      "code": "15",
+      "description": "Pectoral girdle. Collar bone and associated bones, cartilage and flesh"
+    },
+    {
+      "code": "16",
+      "description": "Heads. Heads only, regardless where severed from body (ancillary only)"
+    },
+    {
+      "code": "17",
+      "description": "Cheeks. Muscles on sides of head (ancillary only)"
+    },
+    {
+      "code": "18",
+      "description": "Chins. Lower jaw (mandible), muscles, and flesh (ancillary only)"
+    },
+    {
+      "code": "19",
+      "description": "Belly flaps. Flesh in region of pelvic and pectoral fins and behind head (ancillary only)"
+    },
+    {
+      "code": "20",
+      "description": "Fillets with skin and ribs. Meat and skin with ribs attached, from sides of body behind head and in front of tail"
+    },
+    {
+      "code": "21",
+      "description": "Fillets with skin, no ribs. Meat and skin with ribs removed, from sides of body behind head and in front of tail"
+    },
+    {
+      "code": "22",
+      "description": "Fillets with ribs, no skin. Meat with ribs with skin removed, from sides of body behind head and in front of tail"
+    },
+    {
+      "code": "23",
+      "description": "Fillets, skinless/boneless. Meat with both skin and ribs removed, from sides of body behind head and in front of tail"
+    },
+    {
+      "code": "24",
+      "description": "Fillets, deep-skin. Meat with skin, adjacent meat with silver lining, and ribs removed from sides of body behind head and in front of tail, resulting in thin fillets"
+    },
+    {
+      "code": "30",
+      "description": "Surimi. Paste from fish flesh and additives"
+    },
+    {
+      "code": "31",
+      "description": "Minced. Ground flesh"
+    },
+    {
+      "code": "32",
+      "description": "Fish meal. Meal from whole fish or fish parts; includes bone meal"
+    },
+    {
+      "code": "33",
+      "description": "Fish oil. Rendered oil from whole fish or fish parts. Record only oil destined for sale and not oil stored or burned for fuel onboard"
+    },
+    {
+      "code": "34",
+      "description": "Milt. In sacs, or testes (ancillary only)"
+    },
+    {
+      "code": "35",
+      "description": "Stomachs. Includes all internal organs (ancillary only)"
+    },
+    {
+      "code": "36",
+      "description": "Mantles, octopus or squid. Flesh after removal of viscera and arms"
+    },
+    {
+      "code": "37",
+      "description": "Butterfly, no backbone. Head removed, belly slit, viscera and most of backbone removed; fillets attached"
+    },
+    {
+      "code": "39",
+      "description": "Bones (if meal, report as 32) (ancillary only)"
+    },
+    {
+      "code": "42",
+      "description": "Bled fish destined for fish meal (includes offsite production) DO NOT RECORD ON PTR"
+    },
+    {
+      "code": "75",
+      "description": "Soft shell crab"
+    },
+    {
+      "code": "76",
+      "description": "Bitter crab"
+    },
+    {
+      "code": "79",
+      "description": "Deadloss"
+    },
+    {
+      "code": "80",
+      "description": "Sections"
+    },
+    {
+      "code": "81",
+      "description": "Meat"
+    },
+    {
+      "code": "97",
+      "description": "Other retained product. If product is not listed on this table, enter code 97 and write a description with product recovery rate next to it in parentheses"
+    }
+  ]
+}

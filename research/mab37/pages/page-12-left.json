@@ -1,0 +1,426 @@
+{
+  "pdf_page": 12,
+  "side": "left",
+  "book_page": 16,
+  "rows": [
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Steaks",
+      "average": 58,
+      "range": [
+        54,
+        65
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Dry-Salt Sides",
+      "average": 40,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Mild Cure Sides",
+      "average": 34,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Smoked Sides",
+      "average": 34,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 6,
+      "range": [
+        3,
+        10
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 82,
+      "range": [
+        73,
+        90
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 63,
+      "range": [
+        55,
+        73
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 52,
+      "range": [
+        44,
+        59
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 41,
+      "range": [
+        32,
+        49
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 50,
+      "range": [
+        42,
+        57
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "S/B Trim",
+      "average": 16,
+      "range": [
+        13,
+        20
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Steaks",
+      "average": 66,
+      "range": [
+        57,
+        79
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Dry-Salt Sides",
+      "average": 46,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Mild Cure Sides",
+      "average": 39,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Smoked Sides",
+      "average": 39,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skin-On Fillet (Hand)",
+      "average": 76,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Skinless Fillet",
+      "average": 64,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Hand-V-Cut)",
+      "average": 50,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Fillet (Pinboning)",
+      "average": 61,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "S/B Trim",
+      "average": 19,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Steaks",
+      "average": 81,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Dry-Salt Sides",
+      "average": 56,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Mild Cure Sides",
+      "average": 47,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Smoked Sides",
+      "average": 47,
+      "range": [
+        35,
+        60
+      ],
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Raw Steak",
+      "to": "Baked Steak",
+      "average": 89,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Salmon",
+      "species": "Other Salmon, including Chinook and Cherry",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "Raw Steak",
+      "to": "Broiled Steak",
+      "average": 83,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "All Wild Salmon",
+      "species": "Salmon, Trim",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Trim A",
+      "average": 76,
+      "range": [
+        75,
+        80
+      ],
+      "check": null
+    },
+    {
+      "group": "All Wild Salmon",
+      "species": "Salmon, Trim",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Trim B",
+      "average": 74,
+      "range": [
+        73,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": "All Wild Salmon",
+      "species": "Salmon, Trim",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Trim C",
+      "average": 74,
+      "range": [
+        73,
+        75
+      ],
+      "check": null
+    },
+    {
+      "group": "All Wild Salmon",
+      "species": "Salmon, Trim",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Trim D",
+      "average": 67,
+      "range": [
+        64,
+        70
+      ],
+      "check": null
+    },
+    {
+      "group": "All Wild Salmon",
+      "species": "Salmon, Trim",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "from": "D/H-Off",
+      "to": "Trim E",
+      "average": 61,
+      "range": [
+        58,
+        64
+      ],
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

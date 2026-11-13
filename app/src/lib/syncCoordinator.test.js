@@ -126,6 +126,41 @@ describe('createSyncCoordinator', () => {
       expect(calcs.find((c) => c.id === calc.id)?.syncStatus).toBe('synced');
     });
 
+    it('keeps a "Pounds to buy" answer on the device: not pushed, not pending, still there after the pull', async () => {
+      // The server keeps no mode, so a weight sent there would come back as a price
+      const weight = await repo.addCalc({ species: 'Halibut', product: 'Round → Fletch', mode: 'weight', cost: 0, target_weight: 100, yield: 46, result: 217.39 });
+      client = makeClient({
+        listSavedCalcsRaw: vi.fn(async () => fakeRes({ body: [{ id: 7, species: 'Cod', product: 'Fillet', cost: '4.00', yield: '40.00', result: '10.00' }] })),
+      });
+      const coordinator = createSyncCoordinator(repo, client);
+
+      expect(await coordinator.pendingCount()).toBe(0);
+      const stats = await coordinator.sync(AUTH_USER);
+
+      expect(client.saveCalcRaw).not.toHaveBeenCalled();
+      expect(stats).toMatchObject({ pushed: 0, errors: 0 });
+      expect(await coordinator.pendingCount()).toBe(0);
+      const calcs = await repo.getCalcs();
+      expect(calcs).toHaveLength(2);
+      expect(calcs.find((c) => c.id === weight.id)).toMatchObject({ mode: 'weight', result: 217.39, syncStatus: 'local' });
+      expect(calcs.find((c) => c.id === weight.id).serverId).toBeUndefined();
+    });
+
+    it('pushes a price saved with nothing paid for the fish, like any other price', async () => {
+      // A fisher's own catch with processing to pay for: cost 0, and a real price per lb
+      const price = await repo.addCalc({ species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', mode: 'cost', cost: 0, yield: 46, result: 2.17 });
+      const coordinator = createSyncCoordinator(repo, client);
+
+      expect(await coordinator.pendingCount()).toBe(1);
+      await coordinator.sync(AUTH_USER);
+
+      expect(client.saveCalcRaw).toHaveBeenCalledExactlyOnceWith(
+        { name: '', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', cost: 0, yield: 46, result: 2.17, client_id: price.id },
+        expect.anything(),
+      );
+      expect((await repo.getCalcs())[0]).toMatchObject({ syncStatus: 'synced', serverId: 'server-1' });
+    });
+
     it('handles deleted calc tombstones (with serverId)', async () => {
       const calc = await repo.addCalc({ species: 'Tuna', product: 'Loin', cost: 20, yield: 65, result: 30 });
       await repo.markCalcSynced(calc.id, 'srv-calc-1');

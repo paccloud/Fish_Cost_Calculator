@@ -1,0 +1,1470 @@
+{
+  "source": "FAO ASFIS List of Species for Fishery Statistics Purposes, with WoRMS AphiaIDs, as published in fdiwg/fdi-codelists (global/cwp)",
+  "note": "A table with no taxa has no scientific name in the bulletin. \"match\" says how the name was found: as printed, through corrections.json, at genus level, or not at all.",
+  "tables": [
+    {
+      "table": "Abalone, Pinto",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Abalone, Pinto",
+          "printed": "Haliotus kamtschatkana",
+          "corrected": "Haliotis kamtschatkana",
+          "why": "Misspelled in the bulletin.",
+          "asfis": "AIZ",
+          "fao_name": "Threaded abalone",
+          "fao_scientific_name": "Haliotis kamtschatkana",
+          "isscaap_group": "52",
+          "aphia_id": 405014,
+          "accepted_name": "Haliotis kamtschatkana",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Capelin",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Capelin",
+          "printed": "Mallotus villosus",
+          "asfis": "CAP",
+          "fao_name": "Capelin",
+          "fao_scientific_name": "Mallotus villosus",
+          "isscaap_group": "37",
+          "aphia_id": 126735,
+          "accepted_name": "Mallotus villosus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Softshell",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Softshell",
+          "printed": "Mya sp.",
+          "asfis": "MWA",
+          "fao_name": "Gaper NEI",
+          "fao_scientific_name": "Mya spp",
+          "isscaap_group": "56",
+          "aphia_id": 138211,
+          "accepted_name": "Mya",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Macoma",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Macoma",
+          "printed": "Macoma sp.",
+          "asfis": "OVX",
+          "fao_name": "",
+          "fao_scientific_name": "Macoma spp",
+          "isscaap_group": "56",
+          "aphia_id": 138531,
+          "accepted_name": "Macoma",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Cockles",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Cockles",
+          "printed": "Clinocardium sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Littlenecks",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Littlenecks",
+          "printed": "Protothaca sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Geoducks",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Geoducks",
+          "printed": "Panope sp.",
+          "corrected": "Panopea sp.",
+          "why": "Spelling of the genus. ASFIS lists geoducks at genus level as Panopea spp (GEX).",
+          "asfis": "GEX",
+          "fao_name": "",
+          "fao_scientific_name": "Panopea spp",
+          "isscaap_group": "56",
+          "aphia_id": 225484,
+          "accepted_name": "Panopea",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Razors",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Razors",
+          "printed": "Siliqua sp.",
+          "asfis": "IQX",
+          "fao_name": "",
+          "fao_scientific_name": "Siliqua spp",
+          "isscaap_group": "56",
+          "aphia_id": 159997,
+          "accepted_name": "Siliqua",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Clams / Butter",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Butter",
+          "printed": "Saxidomus sp.",
+          "asfis": "XDX",
+          "fao_name": "Butter clams NEI",
+          "fao_scientific_name": "Saxidomus spp",
+          "isscaap_group": "56",
+          "aphia_id": 367777,
+          "accepted_name": "Saxidomus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Cod, Pacific",
+      "pdf_page": 5,
+      "taxa": [
+        {
+          "common_name": "Cod, Pacific",
+          "printed": "Gadus macrocephalus",
+          "asfis": "PCO",
+          "fao_name": "Pacific cod",
+          "fao_scientific_name": "Gadus macrocephalus",
+          "isscaap_group": "32",
+          "aphia_id": 254538,
+          "accepted_name": "Gadus macrocephalus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Crab / Dungeness",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "Dungeness",
+          "printed": "Cancer magister",
+          "corrected": "Metacarcinus magister",
+          "why": "Genus changed since 2004. ASFIS lists Dungeness crab as Metacarcinus magister (DUN).",
+          "asfis": "DUN",
+          "fao_name": "Dungeness crab",
+          "fao_scientific_name": "Metacarcinus magister",
+          "isscaap_group": "42",
+          "aphia_id": 440388,
+          "accepted_name": "Metacarcinus magister",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Crab / King (Red, Brown or Golden)",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "King (Red, Brown or Golden)",
+          "printed": "Paralithodes camtschatica",
+          "corrected": "Paralithodes camtschaticus",
+          "why": "Spelling. ASFIS lists red king crab as Paralithodes camtschaticus (KCD).",
+          "asfis": "KCD",
+          "fao_name": "Red king crab",
+          "fao_scientific_name": "Paralithodes camtschaticus",
+          "isscaap_group": "44",
+          "aphia_id": 233889,
+          "accepted_name": "Paralithodes camtschaticus",
+          "match": "corrected name"
+        },
+        {
+          "common_name": "King (Red, Brown or Golden)",
+          "printed": "Lithodes aequispina",
+          "corrected": "Lithodes aequispinus",
+          "why": "Spelling. ASFIS lists golden king crab as Lithodes aequispinus (KAQ).",
+          "asfis": "KAQ",
+          "fao_name": "Golden king crab",
+          "fao_scientific_name": "Lithodes aequispinus",
+          "isscaap_group": "44",
+          "aphia_id": 550622,
+          "accepted_name": "Lithodes aequispinus",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Crab / King (Blue)",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "King (Blue)",
+          "printed": "Paralithodes platypus",
+          "asfis": "KCI",
+          "fao_name": "Blue king crab",
+          "fao_scientific_name": "Paralithodes platypus",
+          "isscaap_group": "44",
+          "aphia_id": 254493,
+          "accepted_name": "Paralithodes platypus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Crab / Tanner",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "Tanner",
+          "printed": "Chionoecetes bairdi",
+          "asfis": "CVB",
+          "fao_name": "Tanner crab",
+          "fao_scientific_name": "Chionoecetes bairdi",
+          "isscaap_group": "42",
+          "aphia_id": 368558,
+          "accepted_name": "Chionoecetes bairdi",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Tanner",
+          "printed": "Chionoecetes opilio",
+          "asfis": "CRQ",
+          "fao_name": "Queen crab",
+          "fao_scientific_name": "Chionoecetes opilio",
+          "isscaap_group": "42",
+          "aphia_id": 107315,
+          "accepted_name": "Chionoecetes opilio",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Dogfish",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "Dogfish",
+          "printed": "Squalus acanthias",
+          "asfis": "DGS",
+          "fao_name": "Piked dogfish",
+          "fao_scientific_name": "Squalus acanthias",
+          "isscaap_group": "38",
+          "aphia_id": 105923,
+          "accepted_name": "Squalus acanthias",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Eels",
+      "pdf_page": 6,
+      "taxa": [
+        {
+          "common_name": "Eels",
+          "printed": "Anguilliformes",
+          "asfis": "XAX",
+          "fao_name": "Eels, morays, congers NEI",
+          "fao_scientific_name": "Anguilliformes",
+          "isscaap_group": "34",
+          "aphia_id": 10295,
+          "accepted_name": "Anguilliformes",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Fish Meal",
+      "pdf_page": 6,
+      "taxa": []
+    },
+    {
+      "table": "Flounders / Arrowtooth",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Arrowtooth",
+          "printed": "Atheresthes stomias",
+          "asfis": "ARF",
+          "fao_name": "Arrowtooth flounder",
+          "fao_scientific_name": "Atheresthes stomias",
+          "isscaap_group": "31",
+          "aphia_id": 279792,
+          "accepted_name": "Atheresthes stomias",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Flounders / Starry",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Starry",
+          "printed": "Platichthys stellatus",
+          "asfis": "PWQ",
+          "fao_name": "Starry flounder",
+          "fao_scientific_name": "Platichthys stellatus",
+          "isscaap_group": "31",
+          "aphia_id": 154781,
+          "accepted_name": "Platichthys stellatus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Hake, Pacific",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Hake, Pacific",
+          "printed": "Merluccius productus",
+          "asfis": "NHA",
+          "fao_name": "North Pacific hake",
+          "fao_scientific_name": "Merluccius productus",
+          "isscaap_group": "32",
+          "aphia_id": 272458,
+          "accepted_name": "Merluccius productus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Halibut, Pacific",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Halibut, Pacific",
+          "printed": "Hippoglossus stenolepis",
+          "asfis": "HAP",
+          "fao_name": "Pacific halibut",
+          "fao_scientific_name": "Hippoglossus stenolepis",
+          "isscaap_group": "31",
+          "aphia_id": 274290,
+          "accepted_name": "Hippoglossus stenolepis",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Herring, Pacific",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Herring, Pacific",
+          "printed": "Clupea harengus pallasi",
+          "corrected": "Clupea pallasii",
+          "why": "Now a full species. ASFIS lists Pacific herring as Clupea pallasii (HEP).",
+          "asfis": "HEP",
+          "fao_name": "Pacific herring",
+          "fao_scientific_name": "Clupea pallasii",
+          "isscaap_group": "35",
+          "aphia_id": 151159,
+          "accepted_name": "Clupea pallasii",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Lamprey, Pacific",
+      "pdf_page": 7,
+      "taxa": [
+        {
+          "common_name": "Lamprey, Pacific",
+          "printed": "Lampetra tridentata",
+          "corrected": "Entosphenus tridentatus",
+          "why": "Genus changed. ASFIS lists Pacific lamprey as Entosphenus tridentatus (LAO).",
+          "asfis": "LAO",
+          "fao_name": "Pacific lamprey",
+          "fao_scientific_name": "Entosphenus tridentatus",
+          "isscaap_group": "25",
+          "aphia_id": 314348,
+          "accepted_name": "Entosphenus tridentatus",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Lingcod",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Lingcod",
+          "printed": "Ophiodon elongatus",
+          "asfis": "CLI",
+          "fao_name": "Lingcod",
+          "fao_scientific_name": "Ophiodon elongatus",
+          "isscaap_group": "33",
+          "aphia_id": 240745,
+          "accepted_name": "Ophiodon elongatus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Mackerel, Atka",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Mackerel, Atka",
+          "printed": "Pleurogrammus monopterygius",
+          "asfis": "HUM",
+          "fao_name": "Atka mackerel",
+          "fao_scientific_name": "Pleurogrammus monopterygius",
+          "isscaap_group": "33",
+          "aphia_id": 282289,
+          "accepted_name": "Pleurogrammus monopterygius",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Mussels",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Mussels",
+          "printed": "Mytilus sp.",
+          "asfis": "MYV",
+          "fao_name": "Mytilus mussels NEI",
+          "fao_scientific_name": "Mytilus spp",
+          "isscaap_group": "54",
+          "aphia_id": 138228,
+          "accepted_name": "Mytilus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Octopus",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Octopus",
+          "printed": "Octopus dofleini",
+          "corrected": "Enteroctopus dofleini",
+          "why": "Genus changed. ASFIS lists North Pacific giant octopus as Enteroctopus dofleini (OQF).",
+          "asfis": "OQF",
+          "fao_name": "North Pacific giant octopus",
+          "fao_scientific_name": "Enteroctopus dofleini",
+          "isscaap_group": "57",
+          "aphia_id": 342305,
+          "accepted_name": "Enteroctopus dofleini",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Oysters",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Oysters",
+          "printed": "Crassostrea sp.",
+          "asfis": "OYC",
+          "fao_name": "Cupped oysters NEI",
+          "fao_scientific_name": "Crassostrea spp",
+          "isscaap_group": "53",
+          "aphia_id": 138297,
+          "accepted_name": "Crassostrea",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Pacific Ocean Perch",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Pacific Ocean Perch",
+          "printed": "Sebastes alutus",
+          "asfis": "OPP",
+          "fao_name": "Pacific ocean perch",
+          "fao_scientific_name": "Sebastes alutus",
+          "isscaap_group": "34",
+          "aphia_id": 254573,
+          "accepted_name": "Sebastes alutus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Plaice, Alaska",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Plaice, Alaska",
+          "printed": "Pleuronectes quadrituberculatus",
+          "asfis": "ALP",
+          "fao_name": "Alaska plaice",
+          "fao_scientific_name": "Pleuronectes quadrituberculatus",
+          "isscaap_group": "31",
+          "aphia_id": 254564,
+          "accepted_name": "Pleuronectes quadrituberculatus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Pollock, Walleye",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Pollock, Walleye",
+          "printed": "Theragra chalcogramma",
+          "corrected": "Gadus chalcogrammus",
+          "why": "Genus changed. ASFIS lists Alaska (walleye) pollock as Gadus chalcogrammus (ALK).",
+          "asfis": "ALK",
+          "fao_name": "Alaska pollock (=walleye pollock)",
+          "fao_scientific_name": "Gadus chalcogrammus",
+          "isscaap_group": "32",
+          "aphia_id": 300735,
+          "accepted_name": "Gadus chalcogrammus",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Rat-Tails",
+      "pdf_page": 8,
+      "taxa": [
+        {
+          "common_name": "Rat-Tails",
+          "printed": "Coryphaenoides sp.",
+          "asfis": "CVY",
+          "fao_name": "Grenadiers, whiptails NEI",
+          "fao_scientific_name": "Coryphaenoides spp",
+          "isscaap_group": "32",
+          "aphia_id": 125748,
+          "accepted_name": "Coryphaenoides",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Rockfish / Black / Greenstriped / Thornyhead",
+      "pdf_page": 9,
+      "taxa": [
+        {
+          "common_name": "Black",
+          "printed": "Sebastes melanops",
+          "asfis": "RMG",
+          "fao_name": "Black rockfish",
+          "fao_scientific_name": "Sebastes melanops",
+          "isscaap_group": "34",
+          "aphia_id": 274817,
+          "accepted_name": "Sebastes melanops",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Greenstriped",
+          "printed": "Sebastes elongatus",
+          "asfis": "SFE",
+          "fao_name": "Greenstriped rockfish",
+          "fao_scientific_name": "Sebastes elongatus",
+          "isscaap_group": "34",
+          "aphia_id": 274788,
+          "accepted_name": "Sebastes elongatus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Thornyhead",
+          "printed": "Sebastes altivelis",
+          "corrected": "Sebastolobus altivelis",
+          "why": "The bulletin prints the wrong genus. Thornyheads are Sebastolobus; ASFIS lists longspine thornyhead as Sebastolobus altivelis (SJZ).",
+          "asfis": "SJZ",
+          "fao_name": "Longspine thornyhead",
+          "fao_scientific_name": "Sebastolobus altivelis",
+          "isscaap_group": "34",
+          "aphia_id": 282741,
+          "accepted_name": "Sebastolobus altivelis",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "pdf_page": 9,
+      "taxa": [
+        {
+          "common_name": "Canary",
+          "printed": "Sebastes pinniger",
+          "asfis": "SPG",
+          "fao_name": "Canary rockfish",
+          "fao_scientific_name": "Sebastes pinniger",
+          "isscaap_group": "34",
+          "aphia_id": 274836,
+          "accepted_name": "Sebastes pinniger",
+          "match": "as printed"
+        },
+        {
+          "common_name": "China",
+          "printed": "Sebastes nebulosus",
+          "asfis": "RVN",
+          "fao_name": "China rockfish",
+          "fao_scientific_name": "Sebastes nebulosus",
+          "isscaap_group": "34",
+          "aphia_id": 274824,
+          "accepted_name": "Sebastes nebulosus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Dusky",
+          "printed": "Sebastes ciliatus",
+          "asfis": "RVC",
+          "fao_name": "Dusky rockfish",
+          "fao_scientific_name": "Sebastes ciliatus",
+          "isscaap_group": "34",
+          "aphia_id": 274782,
+          "accepted_name": "Sebastes ciliatus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Quillback",
+          "printed": "Sebastes maliger",
+          "asfis": "SFG",
+          "fao_name": "Quillback rockfish",
+          "fao_scientific_name": "Sebastes maliger",
+          "isscaap_group": "34",
+          "aphia_id": 274815,
+          "accepted_name": "Sebastes maliger",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Redbanded",
+          "printed": "Sebastes babcocki",
+          "asfis": "RVB",
+          "fao_name": "Redbanded rockfish",
+          "fao_scientific_name": "Sebastes babcocki",
+          "isscaap_group": "34",
+          "aphia_id": 274775,
+          "accepted_name": "Sebastes babcocki",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Redstriped",
+          "printed": "Sebastes prorigor",
+          "corrected": "Sebastes proriger",
+          "why": "Misprint in the bulletin. ASFIS lists redstripe rockfish as Sebastes proriger (RPJ).",
+          "asfis": "RPJ",
+          "fao_name": "Redstripe rockfish",
+          "fao_scientific_name": "Sebastes proriger",
+          "isscaap_group": "34",
+          "aphia_id": 274838,
+          "accepted_name": "Sebastes proriger",
+          "match": "corrected name"
+        },
+        {
+          "common_name": "Rosethorn",
+          "printed": "Sebastes helvomaculatus",
+          "asfis": "RVH",
+          "fao_name": "Rosethorn rockfish",
+          "fao_scientific_name": "Sebastes helvomaculatus",
+          "isscaap_group": "34",
+          "aphia_id": 274799,
+          "accepted_name": "Sebastes helvomaculatus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Rougheye",
+          "printed": "Sebastes aleutianus",
+          "asfis": "SFT",
+          "fao_name": "Rougheye rockfish",
+          "fao_scientific_name": "Sebastes aleutianus",
+          "isscaap_group": "34",
+          "aphia_id": 274771,
+          "accepted_name": "Sebastes aleutianus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Shortraker",
+          "printed": "Sebastes borealis",
+          "asfis": "SFB",
+          "fao_name": "Shortraker rockfish",
+          "fao_scientific_name": "Sebastes borealis",
+          "isscaap_group": "34",
+          "aphia_id": 274777,
+          "accepted_name": "Sebastes borealis",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Silvergray",
+          "printed": "Sebastes brevispinis",
+          "asfis": "SBY",
+          "fao_name": "Silvergray rockfish",
+          "fao_scientific_name": "Sebastes brevispinis",
+          "isscaap_group": "34",
+          "aphia_id": 274778,
+          "accepted_name": "Sebastes brevispinis",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Tiger",
+          "printed": "Sebastes nigrocinctus",
+          "asfis": "RNV",
+          "fao_name": "Tiger rockfish",
+          "fao_scientific_name": "Sebastes nigrocinctus",
+          "isscaap_group": "34",
+          "aphia_id": 274825,
+          "accepted_name": "Sebastes nigrocinctus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Widow",
+          "printed": "Sebastes entomelas",
+          "asfis": "WRO",
+          "fao_name": "Widow rockfish",
+          "fao_scientific_name": "Sebastes entomelas",
+          "isscaap_group": "34",
+          "aphia_id": 274791,
+          "accepted_name": "Sebastes entomelas",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Yelloweye",
+          "printed": "Sebastes ruberrimus",
+          "asfis": "RRV",
+          "fao_name": "Yelloweye rockfish",
+          "fao_scientific_name": "Sebastes ruberrimus",
+          "isscaap_group": "34",
+          "aphia_id": 274844,
+          "accepted_name": "Sebastes ruberrimus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Yellowtail",
+          "printed": "Sebastes flavidus",
+          "asfis": "YRO",
+          "fao_name": "Yellowtail rockfish",
+          "fao_scientific_name": "Sebastes flavidus",
+          "isscaap_group": "34",
+          "aphia_id": 274795,
+          "accepted_name": "Sebastes flavidus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Sablefish",
+      "pdf_page": 9,
+      "taxa": [
+        {
+          "common_name": "Sablefish",
+          "printed": "Anoplopoma fimbria",
+          "asfis": "SAB",
+          "fao_name": "Sablefish",
+          "fao_scientific_name": "Anoplopoma fimbria",
+          "isscaap_group": "34",
+          "aphia_id": 159463,
+          "accepted_name": "Anoplopoma fimbria",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Salmon / Pink",
+      "pdf_page": 9,
+      "taxa": [
+        {
+          "common_name": "Pink",
+          "printed": "Oncorhynchus gorbuscha",
+          "asfis": "PIN",
+          "fao_name": "Pink(=Humpback) salmon",
+          "fao_scientific_name": "Oncorhynchus gorbuscha",
+          "isscaap_group": "23",
+          "aphia_id": 127182,
+          "accepted_name": "Oncorhynchus gorbuscha",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Salmon / Chum",
+      "pdf_page": 10,
+      "taxa": [
+        {
+          "common_name": "Chum",
+          "printed": "Oncorhynchus keta",
+          "asfis": "CHU",
+          "fao_name": "Chum(=Keta=Dog) salmon",
+          "fao_scientific_name": "Oncorhynchus keta",
+          "isscaap_group": "23",
+          "aphia_id": 127183,
+          "accepted_name": "Oncorhynchus keta",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Salmon / Sockeye",
+      "pdf_page": 10,
+      "taxa": [
+        {
+          "common_name": "Sockeye",
+          "printed": "Oncorhynchus nerka",
+          "asfis": "SOC",
+          "fao_name": "Sockeye(=Red) salmon",
+          "fao_scientific_name": "Oncorhynchus nerka",
+          "isscaap_group": "23",
+          "aphia_id": 254569,
+          "accepted_name": "Oncorhynchus nerka",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Salmon / Coho",
+      "pdf_page": 11,
+      "taxa": [
+        {
+          "common_name": "Coho",
+          "printed": "Oncorhynchus kisutch",
+          "asfis": "COH",
+          "fao_name": "Coho(=Silver) salmon",
+          "fao_scientific_name": "Oncorhynchus kisutch",
+          "isscaap_group": "23",
+          "aphia_id": 127184,
+          "accepted_name": "Oncorhynchus kisutch",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Salmon / Other Salmon, including Chinook and Cherry",
+      "pdf_page": 11,
+      "taxa": []
+    },
+    {
+      "table": "All Wild Salmon / Salmon, Trim",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Farmed / Norwegian",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Farmed / Chilean",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Frozen and Thawed / Chum (Thawed)",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Frozen and Thawed / Pink (Thawed)",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Frozen and Thawed / Sockeye (Thawed)",
+      "pdf_page": 12,
+      "taxa": []
+    },
+    {
+      "table": "Salmon, Frozen and Thawed / Silver (Thawed)",
+      "pdf_page": 13,
+      "taxa": []
+    },
+    {
+      "table": "Saury, Pacific",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Saury, Pacific",
+          "printed": "Cololabis saira",
+          "asfis": "SAP",
+          "fao_name": "Pacific saury",
+          "fao_scientific_name": "Cololabis saira",
+          "isscaap_group": "37",
+          "aphia_id": 280366,
+          "accepted_name": "Cololabis saira",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Scallops",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Scallops",
+          "printed": "Chlamys sp.",
+          "asfis": "ZKQ",
+          "fao_name": "",
+          "fao_scientific_name": "Chlamys spp",
+          "isscaap_group": "55",
+          "aphia_id": 138315,
+          "accepted_name": "Chlamys",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Scallops",
+          "printed": "Hinnites sp.",
+          "asfis": null,
+          "match": "none"
+        },
+        {
+          "common_name": "Scallops",
+          "printed": "Pecten sp.",
+          "asfis": "KTZ",
+          "fao_name": "Pecten scallops NEI",
+          "fao_scientific_name": "Pecten spp",
+          "isscaap_group": "55",
+          "aphia_id": 138323,
+          "accepted_name": "Pecten",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Sculpin",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Sculpin",
+          "printed": "Enophrys sp.",
+          "asfis": null,
+          "match": "none"
+        },
+        {
+          "common_name": "Sculpin",
+          "printed": "Hemilepidotus sp.",
+          "asfis": null,
+          "match": "none"
+        },
+        {
+          "common_name": "Sculpin",
+          "printed": "Myoxocephalus sp.",
+          "asfis": "SCU",
+          "fao_name": "Sculpins",
+          "fao_scientific_name": "Myoxocephalus spp",
+          "isscaap_group": "33",
+          "aphia_id": 126152,
+          "accepted_name": "Myoxocephalus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Sea Cucumber",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Sea Cucumber",
+          "printed": "Cucumaria sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Sea Urchin / Green",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Green",
+          "printed": "Strongylocentrotus sp.",
+          "asfis": "URC",
+          "fao_name": "Sea urchins NEI",
+          "fao_scientific_name": "Strongylocentrotus spp",
+          "isscaap_group": "76",
+          "aphia_id": 123390,
+          "accepted_name": "Strongylocentrotus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Sea Urchin / Red",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Red",
+          "printed": "Strongylocentrotus sp.",
+          "asfis": "URC",
+          "fao_name": "Sea urchins NEI",
+          "fao_scientific_name": "Strongylocentrotus spp",
+          "isscaap_group": "76",
+          "aphia_id": 123390,
+          "accepted_name": "Strongylocentrotus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shad, American",
+      "pdf_page": 13,
+      "taxa": [
+        {
+          "common_name": "Shad, American",
+          "printed": "Alosa sapidissima",
+          "asfis": "SHA",
+          "fao_name": "American shad",
+          "fao_scientific_name": "Alosa sapidissima",
+          "isscaap_group": "24",
+          "aphia_id": 158670,
+          "accepted_name": "Alosa sapidissima",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Sharks, General",
+      "pdf_page": 13,
+      "taxa": []
+    },
+    {
+      "table": "Shark / Salmon",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Salmon",
+          "printed": "Lamna ditropis",
+          "asfis": "LMD",
+          "fao_name": "Salmon shark",
+          "fao_scientific_name": "Lamna ditropis",
+          "isscaap_group": "38",
+          "aphia_id": 271421,
+          "accepted_name": "Lamna ditropis",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Sevengill (Cow Shark)",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Sevengill (Cow Shark)",
+          "printed": "Notorynchus maculata",
+          "corrected": "Notorynchus cepedianus",
+          "why": "Old name. ASFIS lists broadnose sevengill shark as Notorynchus cepedianus (NTC).",
+          "asfis": "NTC",
+          "fao_name": "Broadnose sevengill shark",
+          "fao_scientific_name": "Notorynchus cepedianus",
+          "isscaap_group": "38",
+          "aphia_id": 217628,
+          "accepted_name": "Notorynchus cepedianus",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Soupfin",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Soupfin",
+          "printed": "Galeorhinus zyopterus",
+          "corrected": "Galeorhinus galeus",
+          "why": "Old name. Soupfin is the tope shark; ASFIS lists it as Galeorhinus galeus (GAG).",
+          "asfis": "GAG",
+          "fao_name": "Tope shark",
+          "fao_scientific_name": "Galeorhinus galeus",
+          "isscaap_group": "38",
+          "aphia_id": 105820,
+          "accepted_name": "Galeorhinus galeus",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Blue",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Blue",
+          "printed": "Prionace glauca",
+          "asfis": "BSH",
+          "fao_name": "Blue shark",
+          "fao_scientific_name": "Prionace glauca",
+          "isscaap_group": "38",
+          "aphia_id": 105801,
+          "accepted_name": "Prionace glauca",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Thresher",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Thresher",
+          "printed": "Alopias vulpinus",
+          "asfis": "ALV",
+          "fao_name": "Thresher",
+          "fao_scientific_name": "Alopias vulpinus",
+          "isscaap_group": "38",
+          "aphia_id": 105836,
+          "accepted_name": "Alopias vulpinus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shark / Blacktip",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Blacktip",
+          "printed": "Carcharhinus limbatus",
+          "asfis": "CCL",
+          "fao_name": "Blacktip shark",
+          "fao_scientific_name": "Carcharhinus limbatus",
+          "isscaap_group": "38",
+          "aphia_id": 105793,
+          "accepted_name": "Carcharhinus limbatus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shrimp / Pink",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Pink",
+          "printed": "Pandalus sp.",
+          "asfis": "PAN",
+          "fao_name": "Pandalus shrimps NEI",
+          "fao_scientific_name": "Pandalus spp",
+          "isscaap_group": "45",
+          "aphia_id": 107044,
+          "accepted_name": "Pandalus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Shrimp / Spot",
+      "pdf_page": 14,
+      "taxa": [
+        {
+          "common_name": "Spot",
+          "printed": "Pandalus sp.",
+          "asfis": "PAN",
+          "fao_name": "Pandalus shrimps NEI",
+          "fao_scientific_name": "Pandalus spp",
+          "isscaap_group": "45",
+          "aphia_id": 107044,
+          "accepted_name": "Pandalus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Skates",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Skates",
+          "printed": "Raja sp.",
+          "asfis": "SKA",
+          "fao_name": "Raja rays NEI",
+          "fao_scientific_name": "Raja spp",
+          "isscaap_group": "38",
+          "aphia_id": 105766,
+          "accepted_name": "Raja",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Smelt",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Smelt",
+          "printed": "Hypomesus sp.",
+          "asfis": "JGE",
+          "fao_name": "Rainbow and European smelts NEI",
+          "fao_scientific_name": "Hypomesus spp",
+          "isscaap_group": "23",
+          "aphia_id": 254339,
+          "accepted_name": "Hypomesus",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Smelt",
+          "printed": "Spirinchus sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Snails",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Snails",
+          "printed": "Neptunea sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Dabs",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Dabs",
+          "printed": "Limanda proboscidea",
+          "corrected": "Myzopsetta proboscidea",
+          "why": "Genus changed. ASFIS lists longhead dab as Myzopsetta proboscidea (EOR).",
+          "asfis": "EOR",
+          "fao_name": "Longhead dab",
+          "fao_scientific_name": "Myzopsetta proboscidea",
+          "isscaap_group": "31",
+          "aphia_id": 319505,
+          "accepted_name": "Myzopsetta proboscidea",
+          "match": "corrected name"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Dover",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Dover",
+          "printed": "Microstomus pacificus",
+          "asfis": "MIP",
+          "fao_name": "Dover sole",
+          "fao_scientific_name": "Microstomus pacificus",
+          "isscaap_group": "31",
+          "aphia_id": 274294,
+          "accepted_name": "Microstomus pacificus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / English",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "English",
+          "printed": "Parophrys vetulus",
+          "asfis": "RFE",
+          "fao_name": "English sole",
+          "fao_scientific_name": "Parophrys vetulus",
+          "isscaap_group": "31",
+          "aphia_id": 254393,
+          "accepted_name": "Parophrys vetulus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Flathead",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Flathead",
+          "printed": "Hippoglossoides elassodon",
+          "asfis": "FTS",
+          "fao_name": "Flathead sole",
+          "fao_scientific_name": "Hippoglossoides elassodon",
+          "isscaap_group": "31",
+          "aphia_id": 274289,
+          "accepted_name": "Hippoglossoides elassodon",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Petrale",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Petrale",
+          "printed": "Eopsetta jordani",
+          "asfis": "EOJ",
+          "fao_name": "Petrale sole",
+          "fao_scientific_name": "Eopsetta jordani",
+          "isscaap_group": "31",
+          "aphia_id": 280690,
+          "accepted_name": "Eopsetta jordani",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Rex",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Rex",
+          "printed": "Glyptocephalus zachirus",
+          "asfis": "GLZ",
+          "fao_name": "Rex sole",
+          "fao_scientific_name": "Glyptocephalus zachirus",
+          "isscaap_group": "31",
+          "aphia_id": 274287,
+          "accepted_name": "Glyptocephalus zachirus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Rock",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Rock",
+          "printed": "Lepidopsetta bilineata",
+          "asfis": "ROS",
+          "fao_name": "Rock sole",
+          "fao_scientific_name": "Lepidopsetta bilineata",
+          "isscaap_group": "31",
+          "aphia_id": 281305,
+          "accepted_name": "Lepidopsetta bilineata",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Soles / Yellowfin",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Yellowfin",
+          "printed": "Limanda aspera",
+          "asfis": "YES",
+          "fao_name": "Yellowfin sole",
+          "fao_scientific_name": "Limanda aspera",
+          "isscaap_group": "31",
+          "aphia_id": 254562,
+          "accepted_name": "Limanda aspera",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Squid",
+      "pdf_page": 15,
+      "taxa": [
+        {
+          "common_name": "Squid",
+          "printed": "Loligo sp.",
+          "asfis": "SQC",
+          "fao_name": "Common squids NEI",
+          "fao_scientific_name": "Loligo spp",
+          "isscaap_group": "57",
+          "aphia_id": 138139,
+          "accepted_name": "Loligo",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Sturgeon",
+      "pdf_page": 16,
+      "taxa": [
+        {
+          "common_name": "Sturgeon",
+          "printed": "Acipenser sp.",
+          "asfis": null,
+          "match": "none"
+        }
+      ]
+    },
+    {
+      "table": "Trout",
+      "pdf_page": 16,
+      "taxa": [
+        {
+          "common_name": "Trout",
+          "printed": "Salmo sp.",
+          "asfis": "TRO",
+          "fao_name": "Trouts NEI",
+          "fao_scientific_name": "Salmo spp",
+          "isscaap_group": "23",
+          "aphia_id": 126141,
+          "accepted_name": "Salmo",
+          "match": "as printed"
+        },
+        {
+          "common_name": "Trout",
+          "printed": "Salvelinus sp.",
+          "asfis": "CHR",
+          "fao_name": "Chars NEI",
+          "fao_scientific_name": "Salvelinus spp",
+          "isscaap_group": "23",
+          "aphia_id": 126142,
+          "accepted_name": "Salvelinus",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Trout, Farmed / Norwegian",
+      "pdf_page": 16,
+      "taxa": []
+    },
+    {
+      "table": "Tuna, Albacore",
+      "pdf_page": 16,
+      "taxa": [
+        {
+          "common_name": "Tuna, Albacore",
+          "printed": "Thunnus alalunga",
+          "asfis": "ALB",
+          "fao_name": "Albacore",
+          "fao_scientific_name": "Thunnus alalunga",
+          "isscaap_group": "36",
+          "aphia_id": 127026,
+          "accepted_name": "Thunnus alalunga",
+          "match": "as printed"
+        }
+      ]
+    },
+    {
+      "table": "Turbot, Greenland",
+      "pdf_page": 16,
+      "taxa": [
+        {
+          "common_name": "Turbot, Greenland",
+          "printed": "Reinhardtius hippoglossoides",
+          "asfis": "GHL",
+          "fao_name": "Greenland halibut",
+          "fao_scientific_name": "Reinhardtius hippoglossoides",
+          "isscaap_group": "31",
+          "aphia_id": 127144,
+          "accepted_name": "Reinhardtius hippoglossoides",
+          "match": "as printed"
+        }
+      ]
+    }
+  ]
+}

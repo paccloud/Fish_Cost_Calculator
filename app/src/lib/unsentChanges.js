@@ -42,14 +42,16 @@ const PUBLICATION_INTENTS = { 'pending-publish': 'publish', 'pending-unpublish':
  * @param {Array} parts.accountCalcs  - signed-in user's pending calcs (repo.getPendingSync().calcs)
  * @param {Array} parts.accountYields - signed-in user's pending yields
  * @param {Array} parts.accountConflicts - signed-in user's conflicted yields (repo.getConflictedYields())
+ * @param {Array} parts.deviceOnlyCalcs - signed-in user's calcs that are never synced ("Pounds to
+ *   buy" answers; isDeviceOnlyCalc in localRepository.js). They keep their `mode` in the file.
  * @param {Array} parts.guestCalcs    - every calc saved on this device as a guest
  * @param {Array} parts.guestYields   - every custom yield saved on this device as a guest
  */
 export function buildUnsentChangesFile({
-  accountCalcs = [], accountYields = [], accountConflicts = [], guestCalcs = [], guestYields = [],
+  accountCalcs = [], accountYields = [], accountConflicts = [], deviceOnlyCalcs = [], guestCalcs = [], guestYields = [],
   exportedAt = new Date().toISOString(),
 } = {}) {
-  const calcs = [...accountCalcs, ...guestCalcs];
+  const calcs = [...accountCalcs, ...deviceOnlyCalcs, ...guestCalcs];
   const yields = [...accountYields, ...accountConflicts, ...guestYields];
   return {
     format: UNSENT_CHANGES_FORMAT,
@@ -76,6 +78,24 @@ export function countUnsentChanges(file) {
     + file.pendingDeletes.customYields.length
     + file.pendingDeletes.savedCalculations.length
     + file.pendingPublication.length;
+}
+
+/**
+ * The two numbers the move notice shows.
+ *
+ * `account` is what is still on its way to the server. It drives "keep this page open" and the
+ * warning on leaving the page, so it leaves out a signed-in person's device-only records: they are
+ * never sent, and waiting would not change that.
+ *
+ * `total` is everything on the device the server does not have, which is what the file holds.
+ *
+ * @param {Object} parts - the same parts as buildUnsentChangesFile
+ * @returns {{account: number, total: number}}
+ */
+export function countUnsentParts({ accountCalcs, accountYields, accountConflicts, deviceOnlyCalcs, guestCalcs, guestYields } = {}) {
+  const account = countUnsentChanges(buildUnsentChangesFile({ accountCalcs, accountYields, accountConflicts }));
+  const kept = countUnsentChanges(buildUnsentChangesFile({ deviceOnlyCalcs, guestCalcs, guestYields }));
+  return { account, total: account + kept };
 }
 
 export function downloadUnsentChanges(file, { document: doc = globalThis.document } = {}) {

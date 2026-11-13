@@ -1,0 +1,15 @@
+{
+  "Cancer magister": { "name": "Metacarcinus magister", "why": "Genus changed since 2004. ASFIS lists Dungeness crab as Metacarcinus magister (DUN)." },
+  "Paralithodes camtschatica": { "name": "Paralithodes camtschaticus", "why": "Spelling. ASFIS lists red king crab as Paralithodes camtschaticus (KCD)." },
+  "Lithodes aequispina": { "name": "Lithodes aequispinus", "why": "Spelling. ASFIS lists golden king crab as Lithodes aequispinus (KAQ)." },
+  "Octopus dofleini": { "name": "Enteroctopus dofleini", "why": "Genus changed. ASFIS lists North Pacific giant octopus as Enteroctopus dofleini (OQF)." },
+  "Theragra chalcogramma": { "name": "Gadus chalcogrammus", "why": "Genus changed. ASFIS lists Alaska (walleye) pollock as Gadus chalcogrammus (ALK)." },
+  "Clupea harengus pallasi": { "name": "Clupea pallasii", "why": "Now a full species. ASFIS lists Pacific herring as Clupea pallasii (HEP)." },
+  "Lampetra tridentata": { "name": "Entosphenus tridentatus", "why": "Genus changed. ASFIS lists Pacific lamprey as Entosphenus tridentatus (LAO)." },
+  "Sebastes altivelis": { "name": "Sebastolobus altivelis", "why": "The bulletin prints the wrong genus. Thornyheads are Sebastolobus; ASFIS lists longspine thornyhead as Sebastolobus altivelis (SJZ)." },
+  "Sebastes prorigor": { "name": "Sebastes proriger", "why": "Misprint in the bulletin. ASFIS lists redstripe rockfish as Sebastes proriger (RPJ)." },
+  "Notorynchus maculata": { "name": "Notorynchus cepedianus", "why": "Old name. ASFIS lists broadnose sevengill shark as Notorynchus cepedianus (NTC)." },
+  "Galeorhinus zyopterus": { "name": "Galeorhinus galeus", "why": "Old name. Soupfin is the tope shark; ASFIS lists it as Galeorhinus galeus (GAG)." },
+  "Limanda proboscidea": { "name": "Myzopsetta proboscidea", "why": "Genus changed. ASFIS lists longhead dab as Myzopsetta proboscidea (EOR)." },
+  "Panope sp.": { "name": "Panopea sp.", "why": "Spelling of the genus. ASFIS lists geoducks at genus level as Panopea spp (GEX)." }
+}

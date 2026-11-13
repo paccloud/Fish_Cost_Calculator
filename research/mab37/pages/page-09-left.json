@@ -1,0 +1,438 @@
+{
+  "pdf_page": 9,
+  "side": "left",
+  "book_page": 10,
+  "rows": [
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 88,
+      "range": [
+        85,
+        91
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 57,
+      "range": [
+        48,
+        62
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Round",
+      "to": "D/H-Off (Eastern)",
+      "average": 50,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Round",
+      "to": "Skin-On Fillet",
+      "average": 32,
+      "range": [
+        30,
+        36
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 27,
+      "range": [
+        25,
+        33
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "Skin-On Fillet",
+      "to": "Skinless Fillet",
+      "average": 85,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "D/H-On",
+      "to": "Skin-On Fillet",
+      "average": 56,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Black / Greenstriped / Thornyhead",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Black Sebastes melanops",
+        "Greenstriped Sebastes elongatus",
+        "Thornyhead Sebastes altivelis"
+      ],
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 48,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 88,
+      "range": [
+        85,
+        91
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 57,
+      "range": [
+        48,
+        62
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Round",
+      "to": "D/H-Off (Eastern)",
+      "average": 50,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Round",
+      "to": "Skin-On Fillet",
+      "average": 28,
+      "range": [
+        25,
+        35
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 23,
+      "range": [
+        21,
+        30
+      ],
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "Skin-On Fillet",
+      "to": "Skinless Fillet",
+      "average": 82,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 65,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "D/H-On",
+      "to": "Skin-On Fillet",
+      "average": 49,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": "Rockfish",
+      "species": "Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail",
+      "scientific_name": null,
+      "scientific_name_as_printed": null,
+      "subheading": null,
+      "applies_to_species": [
+        "Canary Sebastes pinniger",
+        "China Sebastes nebulosus",
+        "Dusky Sebastes ciliatus",
+        "Quillback Sebastes maliger",
+        "Redbanded Sebastes babcocki",
+        "Redstriped Sebastes prorigor",
+        "Rosethorn Sebastes helvomaculatus",
+        "Rougheye Sebastes aleutianus",
+        "Shortraker Sebastes borealis",
+        "Silvergray Sebastes brevispinis",
+        "Tiger Sebastes nigrocinctus",
+        "Widow Sebastes entomelas",
+        "Yelloweye Sebastes ruberrimus",
+        "Yellowtail Sebastes flavidus"
+      ],
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 40,
+      "range": null,
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": []
+}

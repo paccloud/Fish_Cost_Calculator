@@ -1,0 +1,323 @@
+{
+  "pdf_page": 8,
+  "side": "right",
+  "book_page": 9,
+  "rows": [
+    {
+      "group": null,
+      "species": "Pacific Ocean Perch",
+      "scientific_name": "Sebastes alutus",
+      "scientific_name_as_printed": "Sebastes alutus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 88,
+      "range": [
+        82,
+        94
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pacific Ocean Perch",
+      "scientific_name": "Sebastes alutus",
+      "scientific_name_as_printed": "Sebastes alutus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 62,
+      "range": [
+        46,
+        72
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pacific Ocean Perch",
+      "scientific_name": "Sebastes alutus",
+      "scientific_name_as_printed": "Sebastes alutus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 30,
+      "range": [
+        27,
+        32
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pacific Ocean Perch",
+      "scientific_name": "Sebastes alutus",
+      "scientific_name_as_printed": "Sebastes alutus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "D/H-Off",
+      "average": 71,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pacific Ocean Perch",
+      "scientific_name": "Sebastes alutus",
+      "scientific_name_as_printed": "Sebastes alutus",
+      "subheading": null,
+      "from": "D/H-On",
+      "to": "Skinless Fillet",
+      "average": 35,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Plaice, Alaska",
+      "scientific_name": "Pleuronectes quadrituberculatus",
+      "scientific_name_as_printed": "Pleuronectes quadrituberculatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 84,
+      "range": [
+        79,
+        86
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Plaice, Alaska",
+      "scientific_name": "Pleuronectes quadrituberculatus",
+      "scientific_name_as_printed": "Pleuronectes quadrituberculatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 68,
+      "range": [
+        60,
+        72
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Plaice, Alaska",
+      "scientific_name": "Pleuronectes quadrituberculatus",
+      "scientific_name_as_printed": "Pleuronectes quadrituberculatus",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillet",
+      "average": 35,
+      "range": [
+        30,
+        40
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-On",
+      "average": 79,
+      "range": [
+        72,
+        86
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "D/H-Off",
+      "average": 62,
+      "range": [
+        52,
+        72
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skin-On Fillets",
+      "average": 40,
+      "range": [
+        35,
+        55
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Skinless Fillets",
+      "average": 34,
+      "range": [
+        29,
+        43
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "S/B Fillets",
+      "average": 28,
+      "range": [
+        24,
+        36
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Mince",
+      "average": 50,
+      "range": [
+        30,
+        60
+      ],
+      "check": "average: printed clearly as 50 (range 30-60); above Skin-On Fillets 40 in the same From group. Reading is certain; flagged for plausibility only."
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Surimi (Traditional Process)",
+      "average": 20,
+      "range": [
+        15,
+        22
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Surimi (Decanter Process)",
+      "average": 27,
+      "range": [
+        26,
+        32
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Round",
+      "to": "Roe",
+      "average": 6.5,
+      "range": [
+        3,
+        20
+      ],
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Skinless Fillets",
+      "average": 85,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "Trim",
+      "average": 15,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Skin-On Fillets",
+      "to": "S/B Fillets",
+      "average": 70,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Pollock, Walleye",
+      "scientific_name": "Theragra chalcogramma",
+      "scientific_name_as_printed": "Theragra chalcogramma",
+      "subheading": null,
+      "from": "Trim",
+      "to": "Mince",
+      "average": 90,
+      "range": null,
+      "check": null
+    },
+    {
+      "group": null,
+      "species": "Rat-Tails",
+      "scientific_name": "Coryphaenoides sp.",
+      "scientific_name_as_printed": "Coryphaenoides sp.",
+      "subheading": null,
+      "from": "Round",
+      "to": "Edible Meat",
+      "average": 53,
+      "range": null,
+      "check": null
+    }
+  ],
+  "notes": [],
+  "cross_references": [
+    {
+      "heading": "Red Snappers",
+      "see": "Rockfish"
+    }
+  ]
+}

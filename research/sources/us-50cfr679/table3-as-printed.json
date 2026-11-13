@@ -1,0 +1,47 @@
+{
+  "source": "50 CFR Part 679, Table 3: Product Recovery Rates for Groundfish Species and Conversion Rates for Pacific Halibut [80 FR 11910, Mar. 5, 2015]",
+  "read_from": "Code of Federal Regulations, Title 50, Volume 13, 10-1-24 edition, pages 974 to 976 (govinfo.gov, CFR-2024-title50-vol13-part679.pdf, PDF pages 447 to 449). The table is printed as three page images; it was read from them by eye on 2026-11-13.",
+  "notes": [
+    "A rate is product weight divided by round weight. To obtain round weight of groundfish, divide the product weight by the rate.",
+    "Pacific halibut rates convert to net weight (gutted, head off), not round weight. Round weight is net weight divided by 0.75.",
+    "Codes 88, 89 (infested or decomposed fish, 0.00) and 98, 99 (discards, 1.00; 0.75 for halibut) are accounting codes, not products, and are not transcribed.",
+    "The six flatfish with their own species codes (122 to 134) appear only on the third printed page, where every species has the same meal rate."
+  ],
+  "columns": {
+    "1": "Whole fish (codes 1, 41, 86, 92, 93, 95)", "3": "Bled", "4": "Gutted head on", "5": "Gutted head off",
+    "6": "H&G with roe", "7": "H&G west cut", "8": "H&G east cut", "10": "H&G w/o tail", "11": "Kirimi",
+    "12": "Salted & Split", "13": "Wings", "14": "Roe", "15": "Pectoral Girdle", "16": "Heads", "17": "Cheeks",
+    "18": "Chins", "19": "Belly", "20": "Fillets with skin & ribs", "21": "Fillets with skin no ribs",
+    "22": "Fillets with ribs no skin", "23": "Fillets skinless boneless", "24": "Fillets deep skin",
+    "30": "Surimi", "31": "Mince", "32": "Meal", "33": "Oil", "34": "Milt", "35": "Stomachs", "36": "Mantles",
+    "37": "Butterfly Backbone Removed"
+  },
+  "species": [
+    { "code": "110", "name": "Pacific Cod", "rates": { "1": 1.00, "3": 0.98, "4": 0.85, "6": 0.63, "7": 0.57, "8": 0.47, "10": 0.44, "12": 0.45, "14": 0.05, "15": 0.05, "17": 0.05, "19": 0.01, "20": 0.45, "21": 0.35, "22": 0.25, "23": 0.25, "30": 0.15, "31": 0.5, "32": 0.17, "37": 0.43 },
+      "check": { "31": "Printed as 0.5, with one decimal where every other rate has two." } },
+    { "code": null, "name": "Flatfish other than Pacific Halibut", "rates": { "1": 1.00, "3": 0.98, "4": 0.90, "6": 0.80, "7": 0.72, "8": 0.65, "10": 0.62, "11": 0.48, "14": 0.08, "20": 0.32, "21": 0.27, "22": 0.27, "23": 0.22, "30": 0.18, "32": 0.17 } },
+    { "code": "122", "name": "Flathead Sole", "rates": { "32": 0.17 } },
+    { "code": "123", "name": "Rock Sole", "rates": { "32": 0.17 } },
+    { "code": "124", "name": "Dover Sole", "rates": { "32": 0.17 } },
+    { "code": "125", "name": "Rex Sole", "rates": { "32": 0.17 } },
+    { "code": "127", "name": "Yellowfin Sole", "rates": { "32": 0.17 } },
+    { "code": "134", "name": "Greenland Turbot", "rates": { "32": 0.17 } },
+    { "code": "143", "name": "Thornyhead Rockfish", "rates": { "1": 1.00, "3": 0.98, "4": 0.88, "6": 0.55, "7": 0.60, "8": 0.50, "16": 0.20, "17": 0.05, "18": 0.05, "19": 0.05, "20": 0.40, "21": 0.30, "22": 0.35, "23": 0.25, "32": 0.17 } },
+    { "code": "160", "name": "Sculpins", "rates": { "1": 1.00, "3": 0.98, "4": 0.87, "7": 0.50, "8": 0.40, "32": 0.17 } },
+    { "code": "193", "name": "Atka Mackerel", "rates": { "1": 1.00, "3": 0.98, "4": 0.87, "6": 0.67, "7": 0.64, "8": 0.61, "30": 0.15, "32": 0.17 } },
+    { "code": "214", "name": "Giant grenadiers", "rates": { "1": 1.00, "7": 0.50, "8": 0.50, "21": 24.3, "32": 0.17 },
+      "check": { "21": "Printed as 24.3. A rate cannot be above 1; it is probably 0.243 with the percentage left in. Transcribed as printed and excluded from comparisons." } },
+    { "code": "270", "name": "Pollock", "rates": { "1": 1.00, "3": 0.98, "4": 0.80, "6": 0.70, "7": 0.65, "8": 0.56, "10": 0.50, "11": 0.25, "14": 0.07, "16": 0.15, "20": 0.35, "21": 0.30, "22": 0.30, "23": 0.21, "24": 0.16, "30": [0.16, 0.17], "31": 0.22, "32": 0.17, "37": 0.43 },
+      "check": { "30": "Two rates are printed: 0.16 for January through June and 0.17 for July through December." } },
+    { "code": "510", "name": "Smelts", "rates": { "1": 1.00, "3": 0.98, "4": 0.82, "7": 0.71, "21": 0.38, "32": 0.17 } },
+    { "code": "511", "name": "Eulachon", "rates": { "1": 1.00, "3": 0.98, "4": 0.82, "7": 0.71, "32": 0.17 } },
+    { "code": "516", "name": "Capelin", "rates": { "1": 1.00, "3": 0.98, "4": 0.89, "7": 0.78, "32": 0.17 } },
+    { "code": null, "name": "Sharks", "rates": { "1": 1.00, "3": 0.98, "4": 0.83, "7": 0.72, "21": 0.30, "22": 0.30, "23": 0.25, "32": 0.17 } },
+    { "code": null, "name": "Skates", "rates": { "1": 1.00, "3": 0.98, "4": 0.90, "8": 0.32, "13": 0.32, "32": 0.17 } },
+    { "code": "710", "name": "Sablefish", "rates": { "1": 1.00, "3": 0.98, "4": 0.89, "7": 0.68, "8": 0.63, "10": 0.50, "17": 0.05, "20": 0.35, "21": 0.30, "22": 0.30, "23": 0.25, "32": 0.17 } },
+    { "code": "870", "name": "Octopus", "rates": { "1": 1.00, "3": 0.98, "4": 0.81, "32": 0.17, "36": 0.85 } },
+    { "code": "875", "name": "Squid", "rates": { "1": 1.00, "3": 0.98, "4": 0.69, "32": 0.17, "36": 0.75 } },
+    { "code": null, "name": "Rockfish", "rates": { "1": 1.00, "3": 0.98, "4": 0.88, "7": 0.60, "8": 0.50, "16": 0.15, "17": 0.05, "18": 0.05, "19": 0.10, "20": 0.40, "21": 0.30, "22": 0.33, "23": 0.25 } },
+    { "code": "200", "name": "Pacific Halibut (conversion rates to net weight)", "basis": "net weight", "rates": { "4": 0.90, "5": 1.0 } }
+  ]
+}

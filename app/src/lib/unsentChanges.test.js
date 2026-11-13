@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUnsentChangesFile, countUnsentChanges, UNSENT_CHANGES_FORMAT } from './unsentChanges';
+import { buildUnsentChangesFile, countUnsentChanges, countUnsentParts, UNSENT_CHANGES_FORMAT } from './unsentChanges';
 import { parseMoveStage } from '../config/move';
 
 describe('parseMoveStage', () => {
@@ -65,5 +65,24 @@ describe('buildUnsentChangesFile', () => {
   it('is empty when nothing is waiting', () => {
     const file = buildUnsentChangesFile({ exportedAt });
     expect(countUnsentChanges(file)).toBe(0);
+  });
+});
+
+describe('device-only records (a signed-in person\'s "Pounds to buy" answers)', () => {
+  const weight = { id: 'w1', species: 'Sockeye Salmon', product: 'Round → Skinless Fillet', mode: 'weight', cost: 0, target_weight: 100, yield: 46, result: 217.39, syncStatus: 'local', scope: 'account:a' };
+  const price = { id: 'c1', species: 'Cod', product: 'Round → Fillet', mode: 'cost', cost: 4, yield: 42, result: 9.52, syncStatus: 'local', scope: 'account:a' };
+
+  it('are in the file, with the mode that says the result is a weight', () => {
+    const file = buildUnsentChangesFile({ accountCalcs: [price], deviceOnlyCalcs: [weight] });
+    expect(file.savedCalculations.map((c) => c.id)).toEqual(['c1', 'w1']);
+    expect(file.savedCalculations[1]).toMatchObject({ mode: 'weight', target_weight: 100, result: 217.39, serverId: null });
+    expect(file.savedCalculations[1]).not.toHaveProperty('syncStatus');
+  });
+
+  it('count toward what the file holds, not toward what is still on its way to the server', () => {
+    expect(countUnsentParts({ accountCalcs: [price], deviceOnlyCalcs: [weight] })).toEqual({ account: 1, total: 2 });
+    expect(countUnsentParts({ deviceOnlyCalcs: [weight] })).toEqual({ account: 0, total: 1 });
+    expect(countUnsentParts({ guestCalcs: [weight], guestYields: [] })).toEqual({ account: 0, total: 1 });
+    expect(countUnsentParts()).toEqual({ account: 0, total: 0 });
   });
 });
