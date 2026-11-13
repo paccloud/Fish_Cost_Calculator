@@ -14,7 +14,7 @@ import RecoveryModal from '../components/RecoveryModal';
 import { apiClient } from '../lib/apiClient';
 import { trackGuestAdoption, trackPendingAge } from '../lib/lifecycleTelemetry';
 import { isAppReadOnly, isMoveNoticeOn } from '../config/move';
-import { buildUnsentChangesFile, countUnsentChanges, downloadUnsentChanges } from '../lib/unsentChanges';
+import { buildUnsentChangesFile, countUnsentParts, downloadUnsentChanges } from '../lib/unsentChanges';
 
 const DataContext = createContext(null);
 
@@ -585,14 +585,17 @@ export function DataProvider({ children }) {
   // ---- The move to Firebase (issue #130) ----
 
   // Everything on this device that never reached the server: the signed-in
-  // user's pending changes, anything saved here as a guest, and legacy records
+  // user's pending changes and the records that are never synced at all
+  // ("Pounds to buy" answers), anything saved here as a guest, and legacy records
   // waiting in the recovery scope (exported with the guest ones, as unowned).
   const collectUnsentParts = useCallback(async () => {
     const guestRepo = uid ? createRepository(guestScope()) : repo;
     const recoveryRepo = createRepository(recoveryScope());
-    const [pending, accountConflicts, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
+    const [pending, accountConflicts, accountCalcsAll, guestCalcs, guestYields, recoveryCalcs, recoveryYields] = await Promise.all([
       uid ? repo.getPendingSync() : { calcs: [], yields: [] },
       uid ? repo.getConflictedYields() : [],
+      // getPendingSync leaves device-only records out of the sync queue, so they are read here
+      uid ? repo.getCalcs() : [],
       guestRepo.getCalcs(),
       guestRepo.getYields(),
       recoveryRepo.getCalcs(),
@@ -602,6 +605,7 @@ export function DataProvider({ children }) {
       accountCalcs: pending.calcs,
       accountYields: pending.yields,
       accountConflicts,
+      deviceOnlyCalcs: accountCalcsAll.filter(isDeviceOnlyCalc),
       guestCalcs: [...guestCalcs, ...recoveryCalcs],
       guestYields: [...guestYields, ...recoveryYields],
     };
@@ -620,12 +624,11 @@ export function DataProvider({ children }) {
     if (!isMoveNoticeOn || !dataLoaded) return;
     let cancelled = false;
     collectUnsentParts()
-      .then(({ accountCalcs, accountYields, accountConflicts, guestCalcs, guestYields }) => {
+      .then((parts) => {
         if (cancelled) return;
-        const account = countUnsentChanges(buildUnsentChangesFile({ accountCalcs, accountYields, accountConflicts }));
-        const guest = countUnsentChanges(buildUnsentChangesFile({ guestCalcs, guestYields }));
+        const { account, total } = countUnsentParts(parts);
         setAccountUnsentCount(account);
-        setUnsentCount(account + guest);
+        setUnsentCount(total);
       })
       .catch(() => {});
     return () => { cancelled = true; };
