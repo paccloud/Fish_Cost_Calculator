@@ -10,5 +10,6 @@
   "Sebastes prorigor": { "name": "Sebastes proriger", "why": "Misprint in the bulletin. ASFIS lists redstripe rockfish as Sebastes proriger (RPJ)." },
   "Notorynchus maculata": { "name": "Notorynchus cepedianus", "why": "Old name. ASFIS lists broadnose sevengill shark as Notorynchus cepedianus (NTC)." },
   "Galeorhinus zyopterus": { "name": "Galeorhinus galeus", "why": "Old name. Soupfin is the tope shark; ASFIS lists it as Galeorhinus galeus (GAG)." },
-  "Limanda proboscidea": { "name": "Myzopsetta proboscidea", "why": "Genus changed. ASFIS lists longhead dab as Myzopsetta proboscidea (EOR)." }
+  "Limanda proboscidea": { "name": "Myzopsetta proboscidea", "why": "Genus changed. ASFIS lists longhead dab as Myzopsetta proboscidea (EOR)." },
+  "Panope sp.": { "name": "Panopea sp.", "why": "Spelling of the genus. ASFIS lists geoducks at genus level as Panopea spp (GEX)." }
 }

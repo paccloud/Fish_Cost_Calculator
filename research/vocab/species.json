@@ -103,8 +103,15 @@
         {
           "common_name": "Geoducks",
           "printed": "Panope sp.",
-          "asfis": null,
-          "match": "none"
+          "corrected": "Panopea sp.",
+          "why": "Spelling of the genus. ASFIS lists geoducks at genus level as Panopea spp (GEX).",
+          "asfis": "GEX",
+          "fao_name": "",
+          "fao_scientific_name": "Panopea spp",
+          "isscaap_group": "56",
+          "aphia_id": 225484,
+          "accepted_name": "Panopea",
+          "match": "corrected name"
         }
       ]
     },

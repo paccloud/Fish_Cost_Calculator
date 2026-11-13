@@ -15,7 +15,7 @@ Evidence is labelled throughout. **Checked** means read from the source or measu
 |---|---|
 | Is the app's data right? | Mostly. 623 of its 655 conversions match the bulletin. **23 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 56 printed rows are missing.** Every one is listed in [`research/mab37/comparison.md`](../../research/mab37/comparison.md). Nothing in the app has been changed yet. |
 | Other datasets? | Yes, and two are now in the repository. The **US federal recovery rates for Alaska groundfish** (public domain, same species): 162 rates, set beside the bulletin in 126 places. The **EU's official conversion factors**: 250 factors for 63 species, checked against EUR-Lex. USDA tables cover meat, poultry and produce. |
-| An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 82 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
+| An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 83 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
 | Implement GS1? | **Be compatible with it; do not issue it.** Build the data in the shape of the seafood traceability standard (GDST, which is built on GS1's event standard), with optional fields for a fisherman's own GS1 numbers. That costs nothing and needs no membership. See [ADR 0005](../adr/0005-standards-aligned-data-model.md) (proposed). |
 | Shipping and finding a buyer? | There is a real gap. Start with an **offline, by-port "ship it" resource**, then a **shareable catch notice**, and only later a network. Two rules shape it: most air cargo out of Alaska needs Known Shipper status set up a week ahead, and in Alaska only a direct marketer licence allows shipping out of state. |
 
@@ -125,9 +125,9 @@ No existing ontology covers this app's product forms. The recommendation is to a
 
 Each table in the bulletin now has its **FAO ASFIS 3-alpha code** (the code the EU, NAFO and the seafood traceability standard use) and its **WoRMS AphiaID** (the taxonomic anchor), in `research/vocab/species.json`.
 
-- 92 scientific names in 80 tables: **69 matched as printed, 13 after a correction, 10 not matched.**
-- The 13 corrections are names that have changed since 2004 or that the bulletin misprints or misspells, each checked against the FAO list (12 in `research/vocab/corrections.json`, and one spelling fixed in the transcription). For example walleye pollock is now *Gadus chalcogrammus*, Dungeness crab *Metacarcinus magister*, and the bulletin puts thornyhead in the wrong genus.
-- The 10 unmatched are genus-level entries ("*Acipenser* sp.") where FAO has no genus code. Picking one species would invent precision, so they stay unmatched.
+- 92 scientific names in 80 tables: **69 matched as printed, 14 after a correction, 9 not matched.**
+- The 14 corrections are names that have changed since 2004 or that the bulletin misprints or misspells, each checked against the FAO list (13 in `research/vocab/corrections.json`, and one spelling fixed in the transcription). For example walleye pollock is now *Gadus chalcogrammus*, Dungeness crab *Metacarcinus magister*, and the bulletin puts thornyhead in the wrong genus.
+- The 9 unmatched are genus-level entries ("*Acipenser* sp.") where FAO has no genus code. Picking one species would invent precision, so they stay unmatched.
 - FishBase is **not** used: its data licence is non-commercial (search only), which conflicts with a tool for commercial fishers.
 
 ### Product forms (recommended; partly extracted)
