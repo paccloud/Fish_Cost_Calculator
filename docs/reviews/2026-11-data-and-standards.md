@@ -90,7 +90,7 @@ Where the EU table and the bulletin cover the same species, they agree closely:
 
 Only four species overlap, so the EU table extends the data to the Atlantic more than it corroborates the Pacific.
 
-**US federal recovery rates** (checked; in `research/sources/us-50cfr679/`). 50 CFR Part 679, Table 3 gives a standard recovery rate for each Alaska groundfish group and product code: **162 rates for 23 species lines**, public domain. Table 1a defines the 39 product codes and Table 2a the 65 species codes. Table 3 is published only as page images, so it was read by eye, once; a second reading is still owed. Set beside the bulletin (`comparison-with-mab37.md`, 126 pairs):
+**US federal recovery rates** (checked; in `research/sources/us-50cfr679/`). 50 CFR Part 679, Table 3 gives a standard recovery rate for each Alaska groundfish group and product code: **162 rates for 23 species lines**, public domain. Table 1a defines the 38 product codes and Table 2a the 65 species codes. Table 3 is published only as page images, so it was read by eye, once; a second reading is still owed. Set beside the bulletin (`comparison-with-mab37.md`, 126 pairs):
 
 - Where the bulletin prints a range, the federal rate falls inside it in 81 of 115 pairs. The two sources broadly agree on head-on and head-off yields.
 - **The bulletin's plain `D/H-Off` matches the federal Western cut**, not the Eastern (cod 63 against 57 and 47; sablefish 68 against 68 and 63). That settles what an unqualified "head-off" means in the app.
@@ -135,7 +135,7 @@ Each table in the bulletin now has its **FAO ASFIS 3-alpha code** (the code the 
 | Layer | Use | State |
 |---|---|---|
 | **EU presentation and state codes** (`WHL` whole, `GUT` gutted, `GUH` gutted and headed, `FIL` fillet, `FIS` skinned fillet, `ROE`, `SUR`; states `FRE`, `FRO`, `SAL`…) | The international spine. The same list is used by NAFO, NEAFC and, in practice, the traceability standard. | Checked and extracted: 32 presentations, 6 states. |
-| **Alaska product codes** (50 CFR 679 Table 1a; ADF&G fish tickets use the same numbers) | The closest match to the bulletin's words. It is the only list with Eastern and Western cut. | Checked and extracted: 39 codes with definitions. |
+| **Alaska product codes** (50 CFR 679 Table 1a; ADF&G fish tickets use the same numbers) | The closest match to the bulletin's words. It is the only list with Eastern and Western cut. | Checked and extracted: 38 codes with definitions. |
 | **FoodOn** (open food ontology, CC BY 4.0) | Cross-reference layer for parts, states and processes, and the bridge to other foods later. | Checked; use a small extract, not the 40 MB file. |
 | **Our own facets** | Part, head, viscera, skin, bones, cut style, method, preservation, heat. | Proposed in ADR 0005. |
 

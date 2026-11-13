@@ -4,7 +4,7 @@ From 50 CFR Part 679 (Fisheries of the Exclusive Economic Zone off Alaska), a wo
 
 - `table3-as-printed.json`: Table 3, Product Recovery Rates for Groundfish Species and Conversion Rates for Pacific Halibut, as printed [80 FR 11910, Mar. 5, 2015]. 23 species lines, 30 product columns. This is the record; edit a value only after looking at the printed table again.
 - `recovery-rates.json`: the same as one row per rate, with the yield as a percentage.
-- `product-codes.json`: Table 1a, the 39 delivery condition and product codes with their definitions. This is the only published list that defines the Western cut (07, head removed in front of the collar bone) and the Eastern cut (08, behind it).
+- `product-codes.json`: Table 1a, the 38 delivery condition and product codes with their definitions. This is the only published list that defines the Western cut (07, head removed in front of the collar bone) and the Eastern cut (08, behind it).
 - `species-codes.json`: Table 2a, the 65 groundfish species codes.
 - `comparison-with-mab37.md`: the federal rates beside the bulletin's averages and ranges, 126 pairs.
 
