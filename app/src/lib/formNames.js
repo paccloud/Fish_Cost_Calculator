@@ -9,8 +9,9 @@
  * that none is missed). Names are sentence case. Where a term's meaning was not certain it keeps
  * its own words, only re-cased: nothing here guesses what a cut is.
  *
- * "SIB" is how the data set spells the source's "S/B" (skinless/boneless, per ACRONYMS). It is
- * shown as the data has it.
+ * The bulletin writes "S/B" for skinless and boneless. The app's data used to spell it "SIB", as
+ * the scan's text layer misread it, so prices saved before the correction still carry that
+ * spelling. Both are listed and read the same.
  *
  * @module formNames
  */
@@ -47,15 +48,29 @@ const FORMS = [
   ['Skinless Fillet (Fletch)', 'Skinless fillet (fletch)', false],
   ['Skinless Fillets (V-cut)', 'Skinless fillets, V-cut', false],
   ['Skinless Fillets (J-cut)', 'Skinless fillets, J-cut', false],
+  ['S/B Fillet (Hand-V-Cut)', 'Skinless, boneless fillet, hand V-cut', true],
+  ['S/B Fillet (Pinboning)', 'Skinless, boneless fillet, pin-boned', true],
+  ['S/B Fillets', 'Skinless, boneless fillets', true],
+  ['S/B Fillets (V-cut)', 'Skinless, boneless fillets, V-cut', true],
+  ['S/B Fillets (J-cut)', 'Skinless, boneless fillets, J-cut', true],
+  ['S/B Trim', 'Skinless, boneless trim', true],
+  ['Cooked Fillet', 'Cooked fillet', false],
+
+  // As prices saved before the November 2026 correction spell them
   ['SIB Fillet (V-Cut)', 'Skinless, boneless fillet, V-cut', true],
   ['SIB Fillet (Pinboning)', 'Skinless, boneless fillet, pin-boned', true],
   ['SIB Fillets', 'Skinless, boneless fillets', true],
   ['SIB Fillets (V-cut)', 'Skinless, boneless fillets, V-cut', true],
   ['SIB Fillets (J-cut)', 'Skinless, boneless fillets, J-cut', true],
   ['SIB Trim', 'Skinless, boneless trim', true],
+  ['Surimi (Traditional)', 'Surimi, traditional process', false],
+  ['Surimi (Decanter)', 'Surimi, decanter process', false],
 
   // Other cuts and parts of a fish
   ['Steaks', 'Steaks', false],
+  ['Raw Steak', 'Raw steak', false],
+  ['Baked Steak', 'Baked steak', false],
+  ['Broiled Steak', 'Broiled steak', false],
   ['Roasts', 'Roasts', false],
   ['Belly Flaps', 'Belly flaps', false],
   ['Roe', 'Roe', false],
@@ -79,16 +94,21 @@ const FORMS = [
   ['Salted Round', 'Salted whole fish', true],
   ['Salted Fillets', 'Salted fillets', false],
   ['Salted D/H-Off', 'Salted, gutted, head off', true],
+  ['Salted Gibbed', 'Salted, gibbed', false],
+  ['Pickled', 'Pickled', false],
+  ['Pickled D/H-On', 'Pickled, gutted, head on', true],
   ['Dry-Salt Sides', 'Dry-salt sides', false],
   ['Mild Cure Sides', 'Mild cure sides', false],
   ['Mince', 'Mince', false],
   ['Surimi', 'Surimi', false],
-  ['Surimi (Traditional)', 'Surimi (traditional)', false],
-  ['Surimi (Decanter)', 'Surimi (decanter)', false],
+  ['Surimi (Traditional Process)', 'Surimi, traditional process', false],
+  ['Surimi (Decanter Process)', 'Surimi, decanter process', false],
   ['Kurimi', 'Kurimi', false],
 
   // Crab, shrimp and other shellfish
   ['Cooked Meat', 'Cooked meat', false],
+  ['Cooked Meat (during molt)', 'Cooked meat, during molt', false],
+  ['Raw Meat', 'Raw meat', false],
   ['Cooked Meats', 'Cooked meats', false],
   ['Raw Peeled', 'Raw, peeled', false],
   ['Cooked Peeled', 'Cooked, peeled', false],

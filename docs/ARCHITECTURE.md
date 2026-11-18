@@ -13,7 +13,7 @@ This document provides a technical overview of the Local Catch Fish Yield Calcul
 │  │                 React 19 + Vite 7                      │  │
 │  │  Calculator   My data / Upload   Community   Sign-in   │  │
 │  │                                                        │  │
-│  │  fish_data_v3.js  89 species, bundled with the app     │  │
+│  │  mab37_yields.js  89 species, bundled with the app     │  │
 │  │  calcEngine.js    all yield and cost math              │  │
 │  │  IndexedDB        saved calculations and custom yields │  │
 │  └───────────┬───────────────────────────────┬────────────┘  │
@@ -37,9 +37,10 @@ There are two backends. `api/` runs in production on Vercel against Neon Postgre
 ### 1. Reference yields
 
 ```
-fish_data_v3.js ──────────────► Calculator.jsx
-                                 └── species, From → To conversions, yield %
-GET /api/fish-data ── if it returns usable conversions, replaces the bundled copy
+research/mab37/mab37.json ── to-app.mjs ──► mab37_yields.js (generated; do not edit)
+mab37_yields.js ── fish_data_v3.js ──────► Calculator.jsx
+                                            └── species, From → To conversions, yield %
+GET /api/fish-data ── species profiles only; its yields are not used
 ```
 
 The reference yields ship inside the app, so the calculator works with no backend and offline.

@@ -1,12 +1,12 @@
 {
   "totals": {
-    "same": 564,
-    "valueDiffers": 23,
-    "spellingOnly": 40,
-    "reworded": 19,
-    "wrongFrom": 7,
-    "onlyInApp": 2,
-    "onlyInSource": 56
+    "same": 709,
+    "valueDiffers": 0,
+    "spellingOnly": 0,
+    "reworded": 0,
+    "wrongFrom": 0,
+    "onlyInApp": 0,
+    "onlyInSource": 0
   },
   "matches": {
     "Pink Salmon": {
@@ -23,7 +23,7 @@
           "fromSuffix": " (Thawed)"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Chum Salmon": {
@@ -40,7 +40,7 @@
           "fromSuffix": " (Thawed)"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Sockeye Salmon": {
@@ -57,7 +57,7 @@
           "fromSuffix": " (Thawed)"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Coho Salmon": {
@@ -74,7 +74,7 @@
           "fromSuffix": " (Thawed)"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Chinook Salmon": {
@@ -86,164 +86,320 @@
           "table": "Salmon / Other Salmon, including Chinook and Cherry"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Norwegian Farmed Salmon": {
       "tables": [
         "Salmon, Farmed / Norwegian"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Salmon, Farmed / Norwegian"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Chilean Farmed Salmon": {
       "tables": [
         "Salmon, Farmed / Chilean"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Salmon, Farmed / Chilean"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Cod": {
       "tables": [
         "Cod, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Cod, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Walleye Pollock": {
       "tables": [
         "Pollock, Walleye"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Pollock, Walleye"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Hake": {
       "tables": [
         "Hake, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Hake, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Halibut": {
       "tables": [
         "Halibut, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Halibut, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Arrowtooth Flounder": {
       "tables": [
         "Flounders / Arrowtooth"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Flounders / Arrowtooth"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Starry Flounder": {
       "tables": [
         "Flounders / Starry"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Flounders / Starry"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Flathead Sole": {
       "tables": [
         "Soles / Flathead"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Flathead"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Petrale Sole": {
       "tables": [
         "Soles / Petrale"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Petrale"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Dover Sole": {
       "tables": [
         "Soles / Dover"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Dover"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Rex Sole": {
       "tables": [
         "Soles / Rex"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Rex"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Rock Sole": {
       "tables": [
         "Soles / Rock"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Rock"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Yellowfin Sole": {
       "tables": [
         "Soles / Yellowfin"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Yellowfin"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "English Sole": {
       "tables": [
         "Soles / English"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / English"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Dabs": {
       "tables": [
         "Soles / Dabs"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Soles / Dabs"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Alaska Plaice": {
       "tables": [
         "Plaice, Alaska"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Plaice, Alaska"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Greenland Turbot": {
       "tables": [
         "Turbot, Greenland"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Turbot, Greenland"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Black Rockfish": {
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Black / Greenstriped / Thornyhead"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Greenstriped Rockfish": {
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Black / Greenstriped / Thornyhead"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Thornyhead Rockfish": {
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Black / Greenstriped / Thornyhead"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Canary Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "China Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Dusky Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Quillback Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Redbanded Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Redstriped Rockfish": {
       "tables": [
@@ -254,104 +410,200 @@
           "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Rosethorn Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Rougheye Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Shortraker Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Silvergray Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Tiger Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Widow Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Yelloweye Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Yellowtail Rockfish": {
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Ocean Perch": {
       "tables": [
         "Pacific Ocean Perch"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Pacific Ocean Perch"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Salmon Shark": {
       "tables": [
         "Shark / Salmon"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Salmon"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sevengill Shark": {
       "tables": [
         "Shark / Sevengill (Cow Shark)"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Sevengill (Cow Shark)"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Soupfin Shark": {
       "tables": [
         "Shark / Soupfin"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Soupfin"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Blue Shark": {
       "tables": [
         "Shark / Blue"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Blue"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Thresher Shark": {
       "tables": [
         "Shark / Thresher"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Thresher"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Blacktip Shark": {
       "tables": [
         "Shark / Blacktip"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shark / Blacktip"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Spiny Dogfish": {
       "tables": [
         "Dogfish"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Dogfish"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sharks General": {
       "tables": [
@@ -362,248 +614,488 @@
           "table": "Shark / Sharks, General"
         }
       ],
-      "how": "hand-checked list",
+      "how": "app-species.json",
       "missing": []
     },
     "Pacific Saury": {
       "tables": [
         "Saury, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Saury, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sablefish": {
       "tables": [
         "Sablefish"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Sablefish"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Lingcod": {
       "tables": [
         "Lingcod"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Lingcod"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Atka Mackerel": {
       "tables": [
         "Mackerel, Atka"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Mackerel, Atka"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Herring": {
       "tables": [
         "Herring, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Herring, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pacific Lamprey": {
       "tables": [
         "Lamprey, Pacific"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Lamprey, Pacific"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Capelin": {
       "tables": [
         "Capelin"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Capelin"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Smelt": {
       "tables": [
         "Smelt"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Smelt"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Albacore Tuna": {
       "tables": [
         "Tuna, Albacore"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Tuna, Albacore"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sturgeon": {
       "tables": [
         "Sturgeon"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Sturgeon"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Trout": {
       "tables": [
         "Trout"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Trout"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Norwegian Farmed Trout": {
       "tables": [
         "Trout, Farmed / Norwegian"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Trout, Farmed / Norwegian"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "American Shad": {
       "tables": [
         "Shad, American"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Shad, American"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Eels": {
       "tables": [
         "Eels"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Eels"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Rat-Tails": {
       "tables": [
         "Rat-Tails"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Rat-Tails"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Dungeness Crab": {
       "tables": [
         "Crab / Dungeness"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Crab / Dungeness"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "King Crab (Red/Brown/Golden)": {
       "tables": [
         "Crab / King (Red, Brown or Golden)"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Crab / King (Red, Brown or Golden)"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Blue King Crab": {
       "tables": [
         "Crab / King (Blue)"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Crab / King (Blue)"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Tanner Crab": {
       "tables": [
         "Crab / Tanner"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Crab / Tanner"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Pink Shrimp": {
       "tables": [
         "Shrimp / Pink"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Shrimp / Pink"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Spot Shrimp": {
       "tables": [
         "Shrimp / Spot"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Shrimp / Spot"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Softshell Clams": {
       "tables": [
         "Clams / Softshell"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Softshell"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Macoma Clams": {
       "tables": [
         "Clams / Macoma"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Macoma"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Cockles": {
       "tables": [
         "Clams / Cockles"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Cockles"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Littleneck Clams": {
       "tables": [
         "Clams / Littlenecks"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Littlenecks"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Geoduck Clams": {
       "tables": [
         "Clams / Geoducks"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Geoducks"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Razor Clams": {
       "tables": [
         "Clams / Razors"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Razors"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Butter Clams": {
       "tables": [
         "Clams / Butter"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Clams / Butter"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Mussels": {
       "tables": [
         "Mussels"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Mussels"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Oysters": {
       "tables": [
         "Oysters"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Oysters"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Scallops": {
       "tables": [
         "Scallops"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Scallops"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Snails": {
       "tables": [
         "Snails"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Snails"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Abalone (Pinto)": {
       "tables": [
         "Abalone, Pinto"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Abalone, Pinto"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Squid": {
       "tables": [
         "Squid"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Squid"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Octopus": {
       "tables": [
         "Octopus"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Octopus"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sea Cucumber": {
       "tables": [
         "Sea Cucumber"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Sea Cucumber"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sea Urchin (Green)": {
       "tables": [
         "Sea Urchin / Green"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Sea Urchin / Green"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sea Urchin (Red)": {
       "tables": [
         "Sea Urchin / Red"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Sea Urchin / Red"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Skates": {
       "tables": [
         "Skates"
       ],
-      "how": "scientific name"
+      "entries": [
+        {
+          "table": "Skates"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     },
     "Sculpin": {
       "tables": [
         "Sculpin"
       ],
-      "how": "name (100% of words shared)"
+      "entries": [
+        {
+          "table": "Sculpin"
+        }
+      ],
+      "how": "app-species.json",
+      "missing": []
     }
   },
   "perSpecies": [
@@ -613,10 +1105,10 @@
         "Salmon / Pink",
         "Salmon, Frozen and Thawed / Pink (Thawed)"
       ],
-      "same": 30,
+      "same": 39,
       "valueDiffers": 0,
-      "spellingOnly": 6,
-      "reworded": 3,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
@@ -627,10 +1119,10 @@
         "Salmon / Chum",
         "Salmon, Frozen and Thawed / Chum (Thawed)"
       ],
-      "same": 30,
+      "same": 39,
       "valueDiffers": 0,
-      "spellingOnly": 6,
-      "reworded": 3,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
@@ -641,10 +1133,10 @@
         "Salmon / Sockeye",
         "Salmon, Frozen and Thawed / Sockeye (Thawed)"
       ],
-      "same": 30,
+      "same": 39,
       "valueDiffers": 0,
-      "spellingOnly": 6,
-      "reworded": 3,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
@@ -655,10 +1147,10 @@
         "Salmon / Coho",
         "Salmon, Frozen and Thawed / Silver (Thawed)"
       ],
-      "same": 30,
+      "same": 39,
       "valueDiffers": 0,
-      "spellingOnly": 6,
-      "reworded": 3,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
@@ -668,13 +1160,13 @@
       "tables": [
         "Salmon / Other Salmon, including Chinook and Cherry"
       ],
-      "same": 22,
+      "same": 33,
       "valueDiffers": 0,
-      "spellingOnly": 6,
-      "reworded": 3,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Norwegian Farmed Salmon",
@@ -707,12 +1199,12 @@
       "tables": [
         "Cod, Pacific"
       ],
-      "same": 21,
+      "same": 27,
       "valueDiffers": 0,
-      "spellingOnly": 6,
+      "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
-      "onlyInApp": 1,
+      "onlyInApp": 0,
       "onlyInSource": 0
     },
     {
@@ -720,26 +1212,26 @@
       "tables": [
         "Pollock, Walleye"
       ],
-      "same": 6,
-      "valueDiffers": 2,
-      "spellingOnly": 1,
-      "reworded": 2,
+      "same": 13,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Pacific Hake",
       "tables": [
         "Hake, Pacific"
       ],
-      "same": 4,
-      "valueDiffers": 5,
-      "spellingOnly": 2,
-      "reworded": 1,
+      "same": 15,
+      "valueDiffers": 0,
+      "spellingOnly": 0,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 3
+      "onlyInSource": 0
     },
     {
       "name": "Pacific Halibut",
@@ -759,9 +1251,9 @@
       "tables": [
         "Flounders / Arrowtooth"
       ],
-      "same": 5,
+      "same": 6,
       "valueDiffers": 0,
-      "spellingOnly": 1,
+      "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
@@ -915,104 +1407,104 @@
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "same": 8,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Greenstriped Rockfish",
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Thornyhead Rockfish",
       "tables": [
         "Rockfish / Black / Greenstriped / Thornyhead"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Canary Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "China Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Dusky Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Quillback Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Redbanded Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Redstriped Rockfish",
@@ -1045,91 +1537,91 @@
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 3,
-      "valueDiffers": 4,
+      "same": 9,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Shortraker Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 3,
-      "valueDiffers": 4,
+      "same": 9,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Silvergray Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Tiger Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Widow Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Yelloweye Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Yellowtail Rockfish",
       "tables": [
         "Rockfish / Canary / China / Dusky / Quillback / Redbanded / Redstriped / Rosethorn / Rougheye / Shortraker / Silvergray / Tiger / Widow / Yelloweye / Yellowtail"
       ],
-      "same": 7,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Pacific Ocean Perch",
@@ -1227,13 +1719,13 @@
       "tables": [
         "Dogfish"
       ],
-      "same": 8,
+      "same": 11,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 3
+      "onlyInSource": 0
     },
     {
       "name": "Sharks General",
@@ -1266,23 +1758,23 @@
       "tables": [
         "Sablefish"
       ],
-      "same": 9,
-      "valueDiffers": 2,
+      "same": 15,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 4
+      "onlyInSource": 0
     },
     {
       "name": "Lingcod",
       "tables": [
         "Lingcod"
       ],
-      "same": 8,
+      "same": 9,
       "valueDiffers": 0,
       "spellingOnly": 0,
-      "reworded": 1,
+      "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
@@ -1292,11 +1784,11 @@
       "tables": [
         "Mackerel, Atka"
       ],
-      "same": 4,
+      "same": 5,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 1,
+      "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
     },
@@ -1305,13 +1797,13 @@
       "tables": [
         "Herring, Pacific"
       ],
-      "same": 8,
+      "same": 12,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 4
+      "onlyInSource": 0
     },
     {
       "name": "Pacific Lamprey",
@@ -1336,7 +1828,7 @@
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
-      "onlyInApp": 1,
+      "onlyInApp": 0,
       "onlyInSource": 0
     },
     {
@@ -1344,13 +1836,13 @@
       "tables": [
         "Smelt"
       ],
-      "same": 3,
+      "same": 6,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 2,
+      "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Albacore Tuna",
@@ -1370,26 +1862,26 @@
       "tables": [
         "Sturgeon"
       ],
-      "same": 8,
-      "valueDiffers": 1,
+      "same": 12,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 2,
+      "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Trout",
       "tables": [
         "Trout"
       ],
-      "same": 9,
-      "valueDiffers": 1,
+      "same": 13,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 1,
+      "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 2
+      "onlyInSource": 0
     },
     {
       "name": "Norwegian Farmed Trout",
@@ -1409,8 +1901,8 @@
       "tables": [
         "Shad, American"
       ],
-      "same": 4,
-      "valueDiffers": 1,
+      "same": 5,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
@@ -1422,11 +1914,11 @@
       "tables": [
         "Eels"
       ],
-      "same": 3,
+      "same": 4,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
-      "wrongFrom": 1,
+      "wrongFrom": 0,
       "onlyInApp": 0,
       "onlyInSource": 0
     },
@@ -1448,52 +1940,52 @@
       "tables": [
         "Crab / Dungeness"
       ],
-      "same": 7,
+      "same": 8,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "King Crab (Red/Brown/Golden)",
       "tables": [
         "Crab / King (Red, Brown or Golden)"
       ],
-      "same": 7,
+      "same": 8,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Blue King Crab",
       "tables": [
         "Crab / King (Blue)"
       ],
-      "same": 7,
+      "same": 8,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Tanner Crab",
       "tables": [
         "Crab / Tanner"
       ],
-      "same": 7,
+      "same": 8,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Pink Shrimp",
@@ -1591,13 +2083,13 @@
       "tables": [
         "Clams / Razors"
       ],
-      "same": 1,
+      "same": 2,
       "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
       "onlyInApp": 0,
-      "onlyInSource": 1
+      "onlyInSource": 0
     },
     {
       "name": "Butter Clams",
@@ -1630,8 +2122,8 @@
       "tables": [
         "Oysters"
       ],
-      "same": 1,
-      "valueDiffers": 1,
+      "same": 2,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
@@ -1721,8 +2213,8 @@
       "tables": [
         "Sea Urchin / Green"
       ],
-      "same": 0,
-      "valueDiffers": 1,
+      "same": 1,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,
@@ -1734,8 +2226,8 @@
       "tables": [
         "Sea Urchin / Red"
       ],
-      "same": 0,
-      "valueDiffers": 1,
+      "same": 1,
+      "valueDiffers": 0,
       "spellingOnly": 0,
       "reworded": 0,
       "wrongFrom": 0,

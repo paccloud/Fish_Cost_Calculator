@@ -31,7 +31,7 @@ This guide will help you deploy Local Catch to Vercel with Firebase Auth and Neo
 
 `scripts/neon-schema.sql` creates the four tables the API writes to (`users`, `calculations`, `user_data`, `contributors`) with every current column. A database made from an older copy of it also needs the files in `db/migrations/`, run in order.
 
-`GET /api/fish-data` reads three more tables (`species`, `fish_yields`, `species_profiles`). They are optional: without them that endpoint answers 500 and the app uses the reference yields bundled with it. `scripts/import-fish-data-to-neon.js` creates and fills `species` and `fish_yields`, but it creates a table named `profiles`, not `species_profiles`, so on its own it does not make the endpoint work.
+`GET /api/fish-data` reads three more tables (`species`, `fish_yields`, `species_profiles`). They are optional: without them that endpoint answers 500 and nothing is lost, because the app uses the reference yields bundled with it either way and takes only species profiles from this endpoint. `scripts/import-fish-data-to-neon.js` creates and fills `species` and `fish_yields`, but it creates a table named `profiles`, not `species_profiles`, so on its own it does not make the endpoint work.
 
 ### 1.2 Migrate Existing Data from SQLite
 

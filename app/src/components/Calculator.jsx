@@ -7,7 +7,7 @@ import { useData } from '../context/DataContext';
 import { apiUrl } from '../config/api';
 import { backendEnabled, isNativeApp, thisDevice } from '../config/platform';
 import { parseAmount } from '../lib/numberInput';
-import { withConversionStates, hasUsableConversions } from '../lib/fishDataShape';
+import { withConversionStates } from '../lib/fishDataShape';
 import { mergeFishData } from '../lib/fishDataMerge';
 import { readRecentSpecies, pushRecentSpecies, RECENT_SPECIES_LIMIT } from '../lib/recentSpecies';
 import Notice from './Notice';
@@ -29,6 +29,14 @@ import { buildTicketModel, marginProblem, portionProblem, yieldProblem, yieldSou
 
 const money = (n) => n.toFixed(2);
 const plainNumber = (n) => String(Number(n.toFixed(2)));
+
+// The reference yields ship with the app. They are the bulletin's, row for row, and the same on
+// the web, offline and in the iOS app; no server copy stands in for them.
+const REFERENCE_YIELDS = withConversionStates(FISH_DATA_V3);
+
+// What goes in the yield box when a product is chosen. The bulletin prints only a range for a
+// few products; no figure is made up for those, so the box starts empty.
+const yieldText = (conv) => (Number.isFinite(conv?.yield) ? String(conv.yield) : '');
 
 const MODES = [
   { id: 'cost', label: 'Cost per lb' },
@@ -100,16 +108,15 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   const savingRef = useRef(false);
 
   const [publicHistory, setPublicHistory] = useState([]);
-  const [fishData, setFishData] = useState(() => withConversionStates(FISH_DATA_V3));
   const [profilesData, setProfilesData] = useState(PROFILES_DATA);
 
+  // Only the species write-ups come from the server. Its copy of the yields is not used: it was
+  // imported from the app's data before the November 2026 correction and still holds the errors.
   useEffect(() => {
+    if (!backendEnabled) return;
     fetch(apiUrl('/api/fish-data'))
       .then(res => res.json())
       .then(fresh => {
-        // Keep the bundled reference yields unless the API sends usable conversions.
-        const apiData = fresh.fishData ? withConversionStates(fresh.fishData) : null;
-        if (hasUsableConversions(apiData)) setFishData(apiData);
         if (fresh.profiles && Object.keys(fresh.profiles).length > 0) setProfilesData(fresh.profiles);
       })
       .catch(() => {});
@@ -131,7 +138,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
 
   // Only a signed-in person's own yields: the guest scope can hold records no one here owns
   const myYields = user ? customYields : NO_YIELDS;
-  const combinedData = useMemo(() => mergeFishData(fishData, myYields), [fishData, myYields]);
+  const combinedData = useMemo(() => mergeFishData(REFERENCE_YIELDS, myYields), [myYields]);
 
   const speciesList = Object.keys(combinedData).sort();
   const recentSpecies = recent.filter(name => combinedData[name]);
@@ -161,7 +168,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
 
   // When a sync changes the chosen conversion (edited or deleted on another device), follow it,
   // unless the yield was typed in by hand
-  const conversionYield = currentConversion ? String(currentConversion.yield) : null;
+  const conversionYield = currentConversion ? yieldText(currentConversion) : null;
   const [followedYield, setFollowedYield] = useState(conversionYield);
   if (conversionYield !== followedYield) {
     setFollowedYield(conversionYield);
@@ -197,7 +204,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   const chooseTo = (to) => {
     setToState(to);
     const conv = toStates.find(t => t.to === to);
-    setYieldPercent(conv ? String(conv.yield) : '');
+    setYieldPercent(yieldText(conv));
   };
 
   const { margin, portion } = charge;
@@ -344,9 +351,16 @@ const Calculator = ({ initial = NO_INITIAL }) => {
     ? toStates
     : toStates.filter((t, i) => i < TO_LIMIT || t.to === toState);
 
-  const presets = currentConversion && yieldRange
-    ? [['Low', yieldRange[0]], ['Average', currentConversion.yield], ['High', yieldRange[1]]]
-    : [];
+  // Where the bulletin prints a range and no average, the two ends are the choices
+  const referenceYield = Number.isFinite(currentConversion?.yield) ? currentConversion.yield : null;
+  const rangeOnly = Boolean(currentConversion) && referenceYield === null && Boolean(yieldRange);
+  const presets = !currentConversion || !yieldRange ? []
+    : rangeOnly ? [['Low', yieldRange[0]], ['High', yieldRange[1]]]
+    : [['Low', yieldRange[0]], ['Average', referenceYield], ['High', yieldRange[1]]];
+
+  // Said beside the yield: why a printed value looks wrong, and any note the source prints itself
+  const yieldCaution = currentConversion?.caution ?? null;
+  const yieldNote = currentConversion?.note ?? null;
 
   const fromWords = nameInSentence(fromState, 'whole fish');
   const productWords = nameInSentence(toState, 'finished product');
@@ -354,6 +368,8 @@ const Calculator = ({ initial = NO_INITIAL }) => {
   let yieldHint = 'Choose what you’re making to fill this in.';
   if (currentConversion?.from === YOUR_YIELDS_FROM) {
     yieldHint = 'Your own yield for this cut.';
+  } else if (rangeOnly) {
+    yieldHint = `The source gives a range for this, ${yieldRange[0]}–${yieldRange[1]}%, and no average. Pick an end of it or type your own.`;
   } else if (currentConversion && source?.tone === 'yours') {
     yieldHint = `Reference yield ${currentConversion.yield}%${yieldRange ? `, typical ${yieldRange[0]}–${yieldRange[1]}%` : ''}.`;
   } else if (currentConversion) {
@@ -489,7 +505,7 @@ const Calculator = ({ initial = NO_INITIAL }) => {
                       checked={toState === t.to}
                       onChange={() => chooseTo(t.to)}
                       label={name}
-                      sub={`${t.yield}% yield`}
+                      sub={Number.isFinite(t.yield) ? `${t.yield}% yield` : t.range ? `${t.range[0]}–${t.range[1]}% yield` : 'Your own yield'}
                       code={code}
                     />
                   );
@@ -611,13 +627,21 @@ const Calculator = ({ initial = NO_INITIAL }) => {
             placeholder="0"
             lessLabel="Lower the yield by 1 point"
             moreLabel="Raise the yield by 1 point"
-            describedBy={[yieldError && 'calc-yield-error', source && 'calc-yield-source', 'calc-yield-hint'].filter(Boolean).join(' ')}
+            describedBy={[yieldError && 'calc-yield-error', source && 'calc-yield-source', 'calc-yield-hint', yieldCaution && 'calc-yield-caution', yieldNote && 'calc-yield-note'].filter(Boolean).join(' ')}
             invalid={Boolean(yieldError)}
           />
           {yieldError && <FieldError id="calc-yield-error">{yieldError}</FieldError>}
           <p id="calc-yield-hint" className="text-sm text-text-secondary">{yieldHint}</p>
+          {yieldCaution && (
+            <p id="calc-yield-caution" className="text-sm text-text-primary">
+              <strong className="font-semibold">Check this one.</strong> {yieldCaution}
+            </p>
+          )}
+          {yieldNote && (
+            <p id="calc-yield-note" className="text-sm text-text-secondary">From the source: {yieldNote}</p>
+          )}
           {presets.length > 0 && (
-            <div role="group" aria-label="Typical yields" className="grid grid-cols-3 gap-2">
+            <div role="group" aria-label="Typical yields" className={`grid gap-2 ${presets.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
               {presets.map(([name, value]) => (
                 <button
                   key={name}
