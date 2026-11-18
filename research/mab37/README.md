@@ -4,12 +4,15 @@ The app's reference yields come from "Recoveries and Yields from Pacific Fish an
 
 - `pages/page-NN-left.json`, `page-NN-right.json`: one file per printed page, as transcribed. These are the record; edit a value only after looking at the scan again.
 - `build.mjs`: checks the page files and joins them into `mab37.json` and `mab37.csv`.
-- `compare.mjs`: compares `mab37.json` with `app/src/data/fish_data_v3.js` and writes `comparison.md`. It changes nothing in the app.
-- `species-map.json`: which table in the bulletin each app species uses, checked by hand, for the cases names and scientific names do not settle.
+- `to-app.mjs`: writes the reference yields the app ships, `app/src/data/mab37_yields.js`, from `mab37.json`. Every conversion is a row of the bulletin with its average and range; where the bulletin prints only a range the yield is left empty. `--check` fails if the app's file is out of date, and so does a test in the app.
+- `app-species.json`: which tables of the bulletin each species in the app uses, checked by hand.
+- `cautions.json`: what the app says beside a value that looks wrong in the bulletin itself.
+- `compare.mjs`: an independent check that the app's yields equal `mab37.json`; writes `comparison.md`. Before November 2026 the app's data was a hand-kept copy, and this is how its errors were found.
+- `corrections-2026-11.md`: every yield that changed when the app's data was regenerated.
 - `references.json`: the bulletin's own list of sources.
 
 ```bash
-node research/mab37/build.mjs && node research/mab37/compare.mjs
+node research/mab37/build.mjs && node research/mab37/to-app.mjs && node research/mab37/compare.mjs
 ```
 
 Alaska Sea Grant holds the copyright in the bulletin. Individual yields are facts, but the bulletin's text and layout are not ours to republish; see the product audit, section 2.6.

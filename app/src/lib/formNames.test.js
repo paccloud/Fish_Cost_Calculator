@@ -61,10 +61,13 @@ describe('plainFormName — products', () => {
   it.each([
     ['Skin-On Fillet (Hand)', { name: 'Skin-on fillet, hand cut', code: null }],
     ['Skin-On Fillet (Machine)', { name: 'Skin-on fillet, machine cut', code: null }],
-    ['SIB Fillet (V-Cut)', { name: 'Skinless, boneless fillet, V-cut', code: 'SIB Fillet (V-Cut)' }],
-    ['SIB Fillet (Pinboning)', { name: 'Skinless, boneless fillet, pin-boned', code: 'SIB Fillet (Pinboning)' }],
-    ['SIB Fillets', { name: 'Skinless, boneless fillets', code: 'SIB Fillets' }],
-    ['SIB Trim', { name: 'Skinless, boneless trim', code: 'SIB Trim' }],
+    ['S/B Fillet (Hand-V-Cut)', { name: 'Skinless, boneless fillet, hand V-cut', code: 'S/B Fillet (Hand-V-Cut)' }],
+    ['S/B Fillet (Pinboning)', { name: 'Skinless, boneless fillet, pin-boned', code: 'S/B Fillet (Pinboning)' }],
+    ['S/B Fillets', { name: 'Skinless, boneless fillets', code: 'S/B Fillets' }],
+    ['S/B Trim', { name: 'Skinless, boneless trim', code: 'S/B Trim' }],
+    ['Surimi (Decanter Process)', { name: 'Surimi, decanter process', code: null }],
+    ['Cooked Meat (during molt)', { name: 'Cooked meat, during molt', code: null }],
+    ['Pickled D/H-On', { name: 'Pickled, gutted, head on', code: 'Pickled D/H-On' }],
     ['Skinless Fillet (Fletch)', { name: 'Skinless fillet (fletch)', code: null }],
     ['Smoked D/H-Off', { name: 'Smoked, gutted, head off', code: 'Smoked D/H-Off' }],
     ['Salted D/H-Off', { name: 'Salted, gutted, head off', code: 'Salted D/H-Off' }],
@@ -79,6 +82,21 @@ describe('plainFormName — products', () => {
     ['Gutted/Skin-On', { name: 'Gutted, skin on', code: null }],
     ['Gutted/Skinned', { name: 'Gutted, skinned', code: null }],
     ['Kurimi', { name: 'Kurimi', code: null }],
+  ])('%s', (code, expected) => {
+    expect(plainFormName(code)).toEqual(expected);
+  });
+});
+
+describe('plainFormName — names in prices saved before the November 2026 correction', () => {
+  // The data spelled "S/B" as "SIB" until then, and a saved price keeps the words it was saved with
+  it.each([
+    ['SIB Fillet (V-Cut)', { name: 'Skinless, boneless fillet, V-cut', code: 'SIB Fillet (V-Cut)' }],
+    ['SIB Fillet (Pinboning)', { name: 'Skinless, boneless fillet, pin-boned', code: 'SIB Fillet (Pinboning)' }],
+    ['SIB Fillets', { name: 'Skinless, boneless fillets', code: 'SIB Fillets' }],
+    ['SIB Trim', { name: 'Skinless, boneless trim', code: 'SIB Trim' }],
+    ['Surimi (Decanter)', { name: 'Surimi, decanter process', code: null }],
+    ['Salted', { name: 'Salted', code: null }],
+    ['Smoked', { name: 'Smoked', code: null }],
   ])('%s', (code, expected) => {
     expect(plainFormName(code)).toEqual(expected);
   });
@@ -141,8 +159,8 @@ describe('plainFormName — how it matches', () => {
     expect(plainFormName('round')).toEqual({ name: 'Whole fish', code: 'Round' });
     expect(plainFormName('  d/h-on ')).toEqual({ name: 'Gutted, head on', code: 'D/H-On' });
     expect(plainFormName('skinless   fillet')).toEqual({ name: 'Skinless fillet', code: null });
-    // The data has both "SIB Fillets" and "SIB fillets"
-    expect(plainFormName('SIB fillets')).toEqual({ name: 'Skinless, boneless fillets', code: 'SIB Fillets' });
+    // The bulletin prints both "S/B Fillets" and "S/B fillets"
+    expect(plainFormName('S/B fillets')).toEqual({ name: 'Skinless, boneless fillets', code: 'S/B Fillets' });
   });
 
   it('returns a fresh object each time', () => {

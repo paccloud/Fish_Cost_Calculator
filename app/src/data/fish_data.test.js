@@ -1,258 +1,217 @@
 /**
- * Fish Data Test Suite
- * Tests for fish_data_v3.js structure, completeness, and accuracy
+ * The reference yields the app ships.
  *
- * Run with: npm test (after adding test script to package.json)
+ * They are generated from the bulletin as re-read (research/mab37/), so the first thing checked is
+ * that the generated file is the one the generator would write today. The rest pins the shape the
+ * calculator relies on and the corrections made in November 2026, so none of them can slip back.
  */
-
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { FISH_DATA_V3, PROCESSING_DATA, DATA_SOURCE, ACRONYMS } from './fish_data_v3.js';
-import {
-  checkMissingSpecies,
-  checkMissingConversions,
-  validateYieldChain,
-  validateSchema,
-  EXPECTED_SPECIES
-} from './validate_fish_data.js';
+import { FISH_DATA_V3, PROCESSING_DATA, DATA_SOURCE, ACRONYMS, UNCERTAIN_DATA } from './fish_data_v3.js';
+import { MAB37_YIELDS } from './mab37_yields.js';
+import { buildYields, render, OUTPUT } from '../../../research/mab37/to-app.mjs';
 
-describe('Fish Data V3 - Structure', () => {
-  it('should export FISH_DATA_V3', () => {
-    expect(FISH_DATA_V3).toBeDefined();
-    expect(typeof FISH_DATA_V3).toBe('object');
+const bulletin = JSON.parse(readFileSync(new URL('../../../research/mab37/mab37.json', import.meta.url), 'utf8'));
+const ROWS = new Map(bulletin.rows.map((row) => [row.id, row]));
+const ALL = Object.entries(FISH_DATA_V3).flatMap(([species, data]) =>
+  Object.entries(data.conversions).map(([key, conv]) => ({ species, key, conv }))
+);
+const CATEGORIES = ['Salmon', 'Groundfish', 'Flatfish', 'Rockfish', 'Shark', 'Other', 'Crab', 'Shrimp', 'Shellfish'];
+
+describe('the generated file', () => {
+  it('is what research/mab37/to-app.mjs writes from mab37.json today', () => {
+    const { yields, problems } = buildYields();
+    expect(problems).toEqual([]);
+    // If this fails, run: node research/mab37/to-app.mjs
+    expect(readFileSync(OUTPUT, 'utf8')).toBe(render(yields));
   });
 
-  it('should export DATA_SOURCE', () => {
-    expect(DATA_SOURCE).toBeDefined();
-    expect(DATA_SOURCE.title).toBe("Recoveries and Yields from Pacific Fish and Shellfish");
-    expect(DATA_SOURCE.year).toBe(2004);
-  });
-
-  it('should export ACRONYMS', () => {
-    expect(ACRONYMS).toBeDefined();
-    expect(ACRONYMS['D/H-On']).toBe("Dressed/Head-On - Gutted, head attached");
-    expect(ACRONYMS['D/H-Off']).toBe("Dressed/Head-Off - Gutted, head removed");
-    expect(ACRONYMS['S/B']).toBe("Skinless/Boneless");
+  it('is what the app exports as its reference yields', () => {
+    expect(FISH_DATA_V3).toBe(MAB37_YIELDS);
   });
 });
 
-describe('Fish Data V3 - Species Completeness', () => {
-  it('should have all expected species from MAB-37 PDF', () => {
-    const missingSpecies = checkMissingSpecies();
+describe('every conversion is a row of the bulletin', () => {
+  it('has 89 species and 709 conversions', () => {
+    expect(Object.keys(FISH_DATA_V3)).toHaveLength(89);
+    expect(ALL).toHaveLength(709);
+  });
 
-    if (missingSpecies.length > 0) {
-      console.warn('Missing species:', missingSpecies);
+  it.each(ALL)('$species: $key', ({ key, conv }) => {
+    const row = ROWS.get(conv.row);
+    expect(row).toBeDefined();
+    // The thawed salmon tables add "(Thawed)" to the starting form; nothing else is reworded
+    expect(key.replace(' (Thawed) → ', ' → ')).toBe(`${row.from} → ${row.to}`);
+    expect(conv.yield).toBe(row.average);
+    expect(conv.range).toEqual(row.range);
+  });
+});
+
+describe('the shape the calculator reads', () => {
+  it.each(Object.entries(FISH_DATA_V3))('%s has a name, a category and conversions', (_species, data) => {
+    expect(typeof data.scientific_name).toBe('string');
+    expect(data.scientific_name).not.toBe('');
+    expect(CATEGORIES).toContain(data.category);
+    expect(Object.keys(data.conversions).length).toBeGreaterThan(0);
+  });
+
+  it.each(ALL)('$species: $key has a usable yield or a range to choose from', ({ key, conv }) => {
+    expect(key.split(' → ')).toHaveLength(2);
+    if (conv.yield === null) {
+      // The bulletin printed only a range: the calculator asks for a yield within it
+      expect(conv.range).not.toBeNull();
+    } else {
+      expect(conv.yield).toBeGreaterThan(0);
+      expect(conv.yield).toBeLessThanOrEqual(100);
     }
-
-    expect(missingSpecies).toHaveLength(0);
+    if (conv.range !== null) {
+      expect(conv.range).toHaveLength(2);
+      expect(conv.range[0]).toBeGreaterThan(0);
+      expect(conv.range[0]).toBeLessThanOrEqual(conv.range[1]);
+      expect(conv.range[1]).toBeLessThanOrEqual(100);
+      if (conv.yield !== null) {
+        expect(conv.yield).toBeGreaterThanOrEqual(conv.range[0]);
+        expect(conv.yield).toBeLessThanOrEqual(conv.range[1]);
+      }
+    }
   });
 
-  it('should have at least 80 species total', () => {
-    const count = Object.keys(FISH_DATA_V3).length;
-    expect(count).toBeGreaterThanOrEqual(80);
+  it('never invents an average: exactly the ten range-only rows have none', () => {
+    const rangeOnly = ALL.filter(({ conv }) => conv.yield === null).map(({ species, key }) => `${species}: ${key}`);
+    expect(rangeOnly).toEqual([
+      'Pacific Hake: Round → Roe',
+      'Sturgeon: Round → Roe',
+      'American Shad: Round → Roe',
+      'Dungeness Crab: Raw Whole → Cooked Meat (during molt)',
+      'King Crab (Red/Brown/Golden): Raw Whole → Cooked Meat (during molt)',
+      'Blue King Crab: Raw Whole → Cooked Meat (during molt)',
+      'Tanner Crab: Raw Whole → Cooked Meat (during molt)',
+      'Oysters: Raw Whole → Raw Meats',
+      'Sea Urchin (Green): Round → Roe',
+      'Sea Urchin (Red): Round → Roe',
+    ]);
   });
 });
 
-describe('Fish Data V3 - Schema Validation', () => {
-  Object.keys(FISH_DATA_V3).forEach(species => {
-    describe(`${species}`, () => {
-      it('should have required fields', () => {
-        const data = FISH_DATA_V3[species];
-        expect(data).toHaveProperty('scientific_name');
-        expect(data).toHaveProperty('category');
-        expect(data).toHaveProperty('conversions');
-      });
-
-      it('should have valid scientific name', () => {
-        const scientificName = FISH_DATA_V3[species].scientific_name;
-        expect(typeof scientificName).toBe('string');
-        expect(scientificName.length).toBeGreaterThan(0);
-      });
-
-      it('should have valid category', () => {
-        const category = FISH_DATA_V3[species].category;
-        const validCategories = [
-          'Salmon', 'Groundfish', 'Flatfish', 'Rockfish',
-          'Shark', 'Other', 'Crab', 'Shrimp', 'Shellfish'
-        ];
-        expect(validCategories).toContain(category);
-      });
-
-      it('should have conversions object', () => {
-        const conversions = FISH_DATA_V3[species].conversions;
-        expect(typeof conversions).toBe('object');
-        expect(Object.keys(conversions).length).toBeGreaterThan(0);
-      });
-
-      it('should pass full schema validation', () => {
-        const errors = validateSchema(species);
-        if (errors.length > 0) {
-          console.error(`Schema errors for ${species}:`, errors);
-        }
-        expect(errors).toHaveLength(0);
-      });
-    });
+describe('gutting then heading agrees with the direct yield', () => {
+  it.each(['Pink Salmon', 'Chum Salmon', 'Sockeye Salmon', 'Coho Salmon', 'Pacific Cod', 'Pacific Halibut', 'Lingcod'])('%s', (species) => {
+    const c = FISH_DATA_V3[species].conversions;
+    const compound = (c['Round → D/H-On'].yield * c['D/H-On → D/H-Off'].yield) / 100;
+    expect(Math.abs(compound - c['Round → D/H-Off'].yield)).toBeLessThanOrEqual(2);
   });
 });
 
-describe('Fish Data V3 - Conversion Validation', () => {
-  Object.keys(FISH_DATA_V3).forEach(species => {
-    const conversions = FISH_DATA_V3[species].conversions;
+describe('the corrections of November 2026', () => {
+  const conv = (species, key) => FISH_DATA_V3[species].conversions[key];
 
-    Object.keys(conversions).forEach(conversionKey => {
-      describe(`${species} - ${conversionKey}`, () => {
-        const conv = conversions[conversionKey];
+  it('spells skinless, boneless as the bulletin does', () => {
+    expect(ALL.filter(({ key }) => /\bSIB\b/.test(key))).toEqual([]);
+    expect(conv('Pacific Cod', 'Round → S/B Fillets (V-cut)')).toMatchObject({ yield: 33, range: [18, 39] });
+    expect(ACRONYMS).not.toHaveProperty('SIB');
+    expect(ACRONYMS['S/B']).toBe('Skinless/Boneless');
+  });
 
-        it('should have valid yield value', () => {
-          expect(typeof conv.yield).toBe('number');
-          expect(conv.yield).toBeGreaterThan(0);
-          expect(conv.yield).toBeLessThanOrEqual(100);
-        });
+  it('gives Rougheye and Shortraker rockfish the second rockfish table', () => {
+    for (const species of ['Rougheye Rockfish', 'Shortraker Rockfish']) {
+      expect(conv(species, 'Round → Skin-On Fillet')).toMatchObject({ yield: 28, range: [25, 35] });
+      expect(conv(species, 'Round → Skinless Fillet')).toMatchObject({ yield: 23, range: [21, 30] });
+      expect(conv(species, 'D/H-On → Skin-On Fillet').yield).toBe(49);
+      expect(conv(species, 'D/H-On → Skinless Fillet').yield).toBe(40);
+    }
+    // The three species of the first table keep its higher yields
+    expect(conv('Black Rockfish', 'Round → Skin-On Fillet')).toMatchObject({ yield: 32, range: [30, 36] });
+  });
 
-        it('should have valid range (if present)', () => {
-          if (conv.range !== null) {
-            expect(Array.isArray(conv.range)).toBe(true);
-            expect(conv.range).toHaveLength(2);
-            expect(conv.range[0]).toBeLessThanOrEqual(conv.range[1]);
+  it('puts salted and smoked whole-fish yields under whole fish', () => {
+    expect(conv('Smelt', 'Round → Smoked D/H-Off').yield).toBe(57);
+    expect(conv('Smelt', 'Round → Salted D/H-Off').yield).toBe(45);
+    expect(conv('Atka Mackerel', 'Round → Salted D/H-Off').yield).toBe(41);
+    expect(conv('Sturgeon', 'Round → Smoked D/H-Off').yield).toBe(56);
+    expect(conv('Trout', 'Round → Smoked D/H-Off').yield).toBe(54);
+    expect(conv('Eels', 'Round → Smoked D/H-Off').yield).toBe(65);
+    for (const species of ['Smelt', 'Atka Mackerel', 'Sturgeon', 'Trout', 'Eels', 'Pacific Cod']) {
+      expect(conv(species, 'D/H-Off → Smoked')).toBeUndefined();
+      expect(conv(species, 'D/H-Off → Salted')).toBeUndefined();
+    }
+  });
 
-            // Yield should fall within range
-            expect(conv.yield).toBeGreaterThanOrEqual(conv.range[0]);
-            expect(conv.yield).toBeLessThanOrEqual(conv.range[1]);
-          }
-        });
-      });
-    });
+  it('keeps the cod belly flaps on cod', () => {
+    expect(conv('Capelin', 'Round → Belly Flaps')).toBeUndefined();
+    expect(conv('Pacific Cod', 'Round → Belly Flaps').yield).toBe(10);
+  });
+
+  it('has the bulletin\'s numbers for hake, pollock, sablefish and trout', () => {
+    expect(conv('Pacific Hake', 'D/H-On → Skin-On Fillets').yield).toBe(51);
+    expect(conv('Pacific Hake', 'D/H-On → Skinless Fillets').yield).toBe(38);
+    expect(conv('Pacific Hake', 'D/H-On → S/B Fillets').yield).toBe(32);
+    expect(conv('Pacific Hake', 'Skin-On Fillets → Skinless Fillets').yield).toBe(75);
+    expect(conv('Walleye Pollock', 'Trim → Mince').yield).toBe(90);
+    expect(conv('Walleye Pollock', 'Round → Roe')).toMatchObject({ yield: 6.5, range: [3, 20] });
+    expect(conv('Sablefish', 'D/H-Off (Eastern) → Skin-On Fillets').yield).toBe(64);
+    expect(conv('Sablefish', 'D/H-Off (Eastern) → Skinless Fillet').yield).toBe(56);
+    expect(conv('Trout', 'D/H-Off → Skinless Fillet').yield).toBe(79);
+  });
+
+  it('adds rows the bulletin prints and the app lacked', () => {
+    expect(conv('Canary Rockfish', 'Round → D/H-Off (Eastern)')).toBeDefined();
+    expect(conv('Canary Rockfish', 'Skin-On Fillet → Skinless Fillet')).toBeDefined();
+    expect(conv('Chinook Salmon', 'Raw Steak → Baked Steak')).toBeDefined();
+    expect(conv('Dungeness Crab', 'Raw Whole → Cooked Meat (during molt)')).toMatchObject({ yield: null, range: [13, 14] });
+  });
+
+  it('leaves unchanged what was right', () => {
+    expect(conv('Sockeye Salmon', 'Round → Skinless Fillet')).toMatchObject({ yield: 46, range: [41, 49] });
+    expect(conv('Pink Salmon', 'Round → D/H-On')).toMatchObject({ yield: 91, range: [84, 94] });
+    expect(conv('Pink Salmon', 'D/H-On (Thawed) → Skin-On Fillet')).toMatchObject({ yield: 54, range: null });
+    expect(conv('Pacific Halibut', 'D/H-On → Skinless Fillet (Fletch)')).toBeDefined();
   });
 });
 
-describe('Fish Data V3 - Yield Chain Consistency', () => {
-  const testCases = [
-    { species: "Pink Salmon", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Chum Salmon", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Sockeye Salmon", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Coho Salmon", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Pacific Cod", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Pacific Halibut", chain: ["Round", "D/H-On", "D/H-Off"] },
-    { species: "Lingcod", chain: ["Round", "D/H-On", "D/H-Off"] },
-  ];
+describe('notes and cautions', () => {
+  it('carries the bulletin\'s own note on every thawed salmon row, and on no other', () => {
+    const noted = ALL.filter(({ conv }) => conv.note);
+    expect(noted).toHaveLength(16);
+    for (const { key, conv } of noted) {
+      expect(key).toContain('(Thawed)');
+      expect(conv.note).toMatch(/^Freezing conditions and length of storage/);
+    }
+  });
 
-  testCases.forEach(({ species, chain }) => {
-    it(`${species}: ${chain.join(" → ")} should be mathematically consistent`, () => {
-      const result = validateYieldChain(species, chain);
+  it('lists the eleven values that look wrong in the bulletin itself', () => {
+    expect(UNCERTAIN_DATA.map((item) => `${item.species}: ${item.field}`)).toEqual([
+      'Chum Salmon: D/H-Off → Salted D/H-Off',
+      'Chum Salmon: D/H-Off → Smoked Sides',
+      'Sockeye Salmon: D/H-On → S/B Trim',
+      'Pacific Cod: Round → Skin-On Fillets',
+      'Pacific Cod: D/H-Off → Skinless Fillets',
+      'Walleye Pollock: Round → Mince',
+      'Arrowtooth Flounder: Round → Kurimi',
+      'Yellowfin Sole: Round → Kurimi',
+      'Spiny Dogfish: Round → Viscera',
+      'Sablefish: D/H-Off → Skinless Fillet',
+      'Pink Shrimp: Raw Headless → Cooked Peeled',
+    ]);
+    for (const item of UNCERTAIN_DATA) {
+      expect(item.note.length).toBeGreaterThan(20);
+      expect(ROWS.get(item.row).check).toBeTruthy();
+    }
+  });
 
-      if (result === null || result.valid === null) {
-        const message = `Cannot validate ${species}: ${result?.message || 'species not found'}`;
-        console.error(message);
-        throw new Error(message);
-      }
-
-      if (!result.valid) {
-        console.warn(
-          `${species}: Compound yield ${result.compound}% vs direct ${result.direct}% ` +
-          `(difference: ${result.difference}%)`
-        );
-      }
-
-      // Allow 2% tolerance for rounding differences
-      expect(result.valid).toBe(true);
-    });
+  it('keeps the printed value beside its caution', () => {
+    expect(FISH_DATA_V3.Sablefish.conversions['D/H-Off → Skinless Fillet']).toMatchObject({ yield: 28, range: null });
+    expect(FISH_DATA_V3.Sablefish.conversions['D/H-Off → Skinless Fillet'].caution).toMatch(/prints 28%/);
   });
 });
 
-describe('Fish Data V3 - Key Species Conversions', () => {
-  describe('Pacific Cod', () => {
-    it('should have D/H-On to fillet conversions', () => {
-      const result = checkMissingConversions('Pacific Cod');
-      const dhOnFillets = result.missing.filter(c =>
-        c.startsWith('D/H-On →') && c.includes('Fillet')
-      );
+describe('what the bulletin does not hold', () => {
+  it('cites the source', () => {
+    expect(DATA_SOURCE).toMatchObject({ publication: 'Marine Advisory Bulletin No. 37', year: 2004, isbn: '1-56612-012-8' });
+  });
 
-      if (dhOnFillets.length > 0) {
-        console.warn('Pacific Cod missing D/H-On conversions:', dhOnFillets);
-      }
-
-      expect(dhOnFillets).toHaveLength(0);
+  it('has the fish meal table as the bulletin prints it', () => {
+    expect(PROCESSING_DATA['Fish Meal'].conversions).toEqual({
+      'Lean Fish → Meal': { yield: 18, range: [16, 20] },
+      'Fatty Fish → Meal': { yield: 22, range: [20, 25] },
     });
-
-    it('should have D/H-Off to SIB fillet conversions', () => {
-      const cod = FISH_DATA_V3['Pacific Cod'];
-      expect(cod.conversions['Round → SIB Fillets (V-cut)']).toBeDefined();
-    });
-  });
-
-  describe('Pink Salmon', () => {
-    it('should have comprehensive D/H-On conversions', () => {
-      const result = checkMissingConversions('Pink Salmon');
-      const dhOnConversions = result.missing.filter(c => c.startsWith('D/H-On →'));
-
-      if (dhOnConversions.length > 0) {
-        console.warn('Pink Salmon missing D/H-On conversions:', dhOnConversions);
-      }
-
-      expect(dhOnConversions).toHaveLength(0);
-    });
-
-    it('should have comprehensive D/H-Off conversions', () => {
-      const result = checkMissingConversions('Pink Salmon');
-      const dhOffConversions = result.missing.filter(c => c.startsWith('D/H-Off →'));
-
-      if (dhOffConversions.length > 0) {
-        console.warn('Pink Salmon missing D/H-Off conversions:', dhOffConversions);
-      }
-
-      expect(dhOffConversions).toHaveLength(0);
-    });
-
-    it('should have thawed conversions', () => {
-      const salmon = FISH_DATA_V3['Pink Salmon'];
-      expect(salmon.conversions['D/H-On (Thawed) → Skin-On Fillet']).toBeDefined();
-      expect(salmon.conversions['D/H-Off (Thawed) → Skin-On Fillet']).toBeDefined();
-    });
-  });
-
-  describe('Pacific Halibut', () => {
-    it('should have D/H-On to fillet conversions', () => {
-      const halibut = FISH_DATA_V3['Pacific Halibut'];
-      expect(halibut.conversions['D/H-On → Skin-On Fillet']).toBeDefined();
-      expect(halibut.conversions['D/H-On → Skinless Fillet (Fletch)']).toBeDefined();
-    });
-  });
-
-  describe('All Salmon Species', () => {
-    const salmonSpecies = ['Pink Salmon', 'Chum Salmon', 'Sockeye Salmon', 'Coho Salmon', 'Chinook Salmon'];
-
-    salmonSpecies.forEach(species => {
-      it(`${species} should have D/H-On → Skinless Fillet conversion`, () => {
-        const salmon = FISH_DATA_V3[species];
-        expect(salmon?.conversions['D/H-On → Skinless Fillet']).toBeDefined();
-      });
-
-      it(`${species} should have D/H-Off → Skinless Fillet conversion`, () => {
-        const salmon = FISH_DATA_V3[species];
-        expect(salmon?.conversions['D/H-Off → Skinless Fillet']).toBeDefined();
-      });
-    });
-  });
-});
-
-describe('Fish Data V3 - Special Cases', () => {
-  it('should have Fish Meal entry in PROCESSING_DATA', () => {
-    expect(PROCESSING_DATA['Fish Meal']).toBeDefined();
-  });
-
-  it('should have Sharks General entry', () => {
-    expect(FISH_DATA_V3['Sharks General']).toBeDefined();
-  });
-
-  it('should have Farmed Salmon entries', () => {
-    expect(FISH_DATA_V3['Norwegian Farmed Salmon']).toBeDefined();
-    expect(FISH_DATA_V3['Chilean Farmed Salmon']).toBeDefined();
-  });
-
-  it('should have Redstriped Rockfish', () => {
-    expect(FISH_DATA_V3['Redstriped Rockfish']).toBeDefined();
-  });
-
-  it('should have Rosethorn Rockfish', () => {
-    expect(FISH_DATA_V3['Rosethorn Rockfish']).toBeDefined();
   });
 });

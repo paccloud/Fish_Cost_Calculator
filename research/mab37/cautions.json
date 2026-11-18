@@ -1,0 +1,16 @@
+{
+  "note": "What the app says beside a reference yield that looks wrong in the bulletin itself. Keyed by row id in mab37.json. Each row is transcribed as printed (see its `check` there); this is the short version a person pricing fish reads. One or two plain sentences, no jargon.",
+  "cautions": {
+    "p05R-06": "The bulletin names no cut for this row. By its place on the page it is probably the J-cut.",
+    "p05R-20": "The printed range, 31–81%, tops out higher than the range for skin-on fillets (54–80%). The top of it is probably a misprint.",
+    "p06R-16": "The bulletin prints 51%, which cannot sit beside a dressed yield of 75%. Probably a misprint.",
+    "p07L-05": "Printed as “Kurimi”, probably kirimi: headed, gutted and tail off. Check it against your own cut.",
+    "p08R-14": "Higher than the skin-on fillet yield in the same table (40%). Check it against your own figures.",
+    "p09R-10": "The bulletin prints 28%. Its other sablefish yields imply about 51%. Probably a misprint.",
+    "p10R-20": "The other salmon tables print “Mild Cure Sides” in this row, and 47% is what mild cure sides would be here. The product name is probably a misprint.",
+    "p10R-21": "In the other salmon tables smoked sides match the mild cure figure, which is 47% here. 55% may be a misprint.",
+    "p11L-10": "The top of the printed range, 28%, is well above the other salmon (18–20%). It may be a misprint.",
+    "p14R-17": "The bulletin prints 69%. The rows beside it imply about 47% for cooked, peeled shrimp; 69% fits raw peeled. Probably a misprint.",
+    "p15R-17": "Printed as “Kurimi”, probably kirimi: headed, gutted and tail off. Check it against your own cut."
+  }
+}

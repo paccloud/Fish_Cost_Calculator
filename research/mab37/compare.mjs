@@ -1,11 +1,16 @@
-// Compares the transcription (mab37.json) with the reference yields the app ships
-// (app/src/data/fish_data_v3.js) and writes comparison.md and comparison.json.
+// Checks the reference yields the app ships (app/src/data/fish_data_v3.js) against the
+// transcription (mab37.json) and writes comparison.md and comparison.json.
 //
 //   node research/mab37/build.mjs && node research/mab37/compare.mjs
 //
-// It changes nothing in the app. Each app species is matched to one table in the bulletin: by the
-// hand-checked list in species-map.json first, then by scientific name, then by the words in its
-// name. Rows are then paired by starting form and product.
+// Since November 2026 the app's yields are generated from the transcription (to-app.mjs), so this
+// should find no difference; it is kept as an independent check, and it lists the tables no species
+// uses and the cells flagged in the transcription. Before that the app's data was a hand-kept copy,
+// and this script is how its errors were found (corrections-2026-11.md).
+//
+// Which tables a species uses comes from app-species.json. A species that file does not list falls
+// back to matching by scientific name, then by the words in its name. Rows are paired by starting
+// form and product.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -49,7 +54,7 @@ export function matchSpecies(appData, tables, manual = {}) {
       // species by adding to the starting form (the thawed salmon tables become "D/H-On (Thawed)").
       const entries = [].concat(manual[name] ?? []).map((e) => (typeof e === 'string' ? { table: e } : e));
       const found = entries.filter((e) => tables.has(e.table));
-      matches[name] = { tables: found.map((e) => e.table), entries: found, how: entries.length ? 'hand-checked list' : 'hand-checked: not in the bulletin', missing: entries.filter((e) => !tables.has(e.table)).map((e) => e.table) };
+      matches[name] = { tables: found.map((e) => e.table), entries: found, how: entries.length ? 'app-species.json' : 'app-species.json: not in the bulletin', missing: entries.filter((e) => !tables.has(e.table)).map((e) => e.table) };
       continue;
     }
     const sci = sciKey(entry.scientific_name);
@@ -117,8 +122,10 @@ const line = (r) => `${r.from} → ${r.to}: ${r.average ?? 'no average'}${r.rang
 async function main() {
   const dataset = JSON.parse(readFileSync(join(HERE, 'mab37.json'), 'utf8'));
   const { FISH_DATA_V3 } = await import(pathToFileURL(APP_DATA).href);
-  const manualFile = join(HERE, 'species-map.json');
-  const manual = existsSync(manualFile) ? JSON.parse(readFileSync(manualFile, 'utf8')) : {};
+  const speciesFile = join(HERE, 'app-species.json');
+  const manual = existsSync(speciesFile)
+    ? Object.fromEntries(JSON.parse(readFileSync(speciesFile, 'utf8')).species.map((s) => [s.name, s.tables.map((t) => (t.from_suffix ? { table: t.table, fromSuffix: t.from_suffix } : { table: t.table }))]))
+    : {};
   const tables = groupTables(dataset.rows);
   const matches = matchSpecies(FISH_DATA_V3, tables, manual);
 

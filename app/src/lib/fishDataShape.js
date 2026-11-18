@@ -1,9 +1,9 @@
-// Normalizes fish yield data into the shape the Calculator reads:
-// conversions[key] = { from, to, yield: number, range: [min, max] | null }.
+// Normalizes yield data into the shape the Calculator reads:
+// conversions[key] = { from, to, yield: number | null, range: [min, max] | null, ...the rest }.
 //
-// The bundled FISH_DATA_V3 keys conversions as "From → To" and omits the
-// from/to fields; the Neon-backed /api/fish-data response includes them.
-// Normalizing both lets the calculator work offline and when the API fails.
+// The bundled FISH_DATA_V3 keys conversions as "From → To" and omits the from/to fields, so they
+// are read from the key. A yield is null where the source prints only a range. Whatever else a
+// conversion carries (its row in the bulletin, a note, a caution) is passed through.
 
 const ARROW = ' → ';
 
@@ -45,15 +45,6 @@ export function withConversionStates(fishData) {
     out[species] = { ...data, conversions };
   }
   return out;
-}
-
-// True when at least one conversion has a usable from/to pair and yield.
-export function hasUsableConversions(fishData) {
-  return Object.values(fishData || {}).some((data) =>
-    Object.values(data?.conversions || {}).some(
-      (conv) => conv.from && conv.to && parseYieldPercent(conv.yield) !== null
-    )
-  );
 }
 
 // A yield percentage is usable when it is a finite number in (0, 100].

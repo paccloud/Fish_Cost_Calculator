@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FISH_DATA_V3 } from '../data/fish_data_v3';
 import {
-  hasUsableConversions,
   normalizeConversion,
   parseYieldPercent,
   withConversionStates,
@@ -14,7 +13,6 @@ describe('withConversionStates', () => {
     const conversions = Object.values(data).flatMap((sp) => Object.values(sp.conversions));
     expect(conversions.length).toBeGreaterThan(600);
     expect(conversions.every((c) => c.from && c.to)).toBe(true);
-    expect(hasUsableConversions(data)).toBe(true);
   });
 
   it('lets the calculator offer Round → Skinless Fillet for Pink Salmon', () => {
@@ -30,18 +28,16 @@ describe('withConversionStates', () => {
     expect(conv).toMatchObject({ from: 'Round', to: 'Fillet', yield: 45.5, range: [40, 50] });
   });
 
-  it('treats data without usable conversions as unusable', () => {
-    expect(hasUsableConversions({})).toBe(false);
-    expect(hasUsableConversions({ Cod: { conversions: { Fillet: { yield: 40 } } } })).toBe(false);
+  it('keeps a yield the source does not give as null, with its range', () => {
+    const roe = data['Sea Urchin (Green)'].conversions['Round → Roe'];
+    expect(roe).toMatchObject({ from: 'Round', to: 'Roe', yield: null, range: [5, 30] });
   });
-});
 
-describe('hasUsableConversions', () => {
-  it('rejects API data whose only yields are outside 0-100%', () => {
-    const conv = (y) => ({ Cod: { conversions: { 'Round → Fillet': { from: 'Round', to: 'Fillet', yield: y } } } });
-    expect(hasUsableConversions(conv(150))).toBe(false);
-    expect(hasUsableConversions(conv(0))).toBe(false);
-    expect(hasUsableConversions(conv(42))).toBe(true);
+  it('passes through the row, the note and the caution', () => {
+    const fillet = data.Sablefish.conversions['D/H-Off → Skinless Fillet'];
+    expect(fillet.row).toBe('p09R-10');
+    expect(fillet.caution).toMatch(/prints 28%/);
+    expect(data['Pink Salmon'].conversions['D/H-On (Thawed) → Skin-On Fillet'].note).toMatch(/^Freezing conditions/);
   });
 });
 
