@@ -114,7 +114,7 @@ Fish_Cost_Calculator/
 │   │   ├── components/       # Screens and shared components (Calculator, TabBar, Stamp, Notice…)
 │   │   ├── context/          # Sign-in, saved data and theme state
 │   │   ├── lib/              # Pure logic with tests beside it (calcEngine, formNames, priceCard…)
-│   │   ├── data/             # fish_data_v3.js: the 89-species reference yields
+│   │   ├── data/             # mab37_yields.js: the 89-species reference yields (generated)
 │   │   ├── index.css         # Design tokens and shared classes
 │   │   └── App.jsx           # Routes and the app shell
 │   ├── ios/                  # Capacitor iOS project (see docs/ios.md)

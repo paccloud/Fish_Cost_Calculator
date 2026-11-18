@@ -24,16 +24,9 @@ Read [`CONTEXT.md`](CONTEXT.md) for the project's vocabulary and [`docs/adr/`](d
 We're always looking to expand our species database. To contribute yield data:
 
 1. **Source your data** - It must come from a reputable source (scientific studies, NOAA, state fisheries agencies)
-2. **Format your data** - Follow the structure in `app/src/data/fish_data_v3.js`:
-   ```javascript
-   "Species Name": {
-     scientific_name: "Genus species",
-     category: "Category",
-     conversions: {
-       "Round → D/H-On": { yield: 88, range: [82, 94] },
-       // ... more conversions
-     }
-   }
+2. **Format your data** - One row per yield: species, starting form, product, average and range. The reference yields the app ships (`app/src/data/mab37_yields.js`) are generated from the bulletin in `research/mab37/` and are not edited by hand, so a new source goes in its own folder under `research/sources/`, as the EU and US tables do:
+   ```json
+   { "species": "Species Name", "from": "Round", "to": "D/H-On", "average": 88, "range": [82, 94] }
    ```
 3. **Cite your source** - All data must include attribution
 4. **Submit a PR** - Include the source in your PR description

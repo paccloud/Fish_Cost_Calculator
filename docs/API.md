@@ -653,7 +653,7 @@ Retrieve the reference yields. No authentication required. The app carries its o
 }
 ```
 
-`profiles` and `source` are cut short here. The local server returns the contents of `app/src/data/fish_data_v3.js`, as above. Production builds the answer from the `species`, `fish_yields` and `species_profiles` tables in Neon: conversion keys there are the finished product alone (or `From <state>: <product>` when the starting form is not a whole fish), and each conversion also carries `from` and `to`. No script in this repository creates `species_profiles` (`scripts/import-fish-data-to-neon.js` creates a table named `profiles`), so a database built only from those scripts answers `500` here and the app falls back to its own copy.
+`profiles` and `source` are cut short here. Since November 2026 the app reads only `profiles` from this endpoint; it ships its own reference yields (`app/src/data/mab37_yields.js`) and ignores `fishData`, which in production still holds the yields as they were before that month's correction. The local server returns the contents of `app/src/data/fish_data_v3.js`, as above. Production builds the answer from the `species`, `fish_yields` and `species_profiles` tables in Neon: conversion keys there are the finished product alone (or `From <state>: <product>` when the starting form is not a whole fish), and each conversion also carries `from` and `to`. No script in this repository creates `species_profiles` (`scripts/import-fish-data-to-neon.js` creates a table named `profiles`), so a database built only from those scripts answers `500` here and the app falls back to its own copy.
 
 ---
 

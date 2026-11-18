@@ -13,7 +13,7 @@ Read these before changing anything:
 - `CONTEXT.md` — the project's vocabulary. Use its terms.
 - `docs/adr/` — accepted decisions. ADR 0001 replaces both backends with Firebase Auth, Firestore and Firebase Hosting.
 - `docs/reviews/2026-11-product-audit.md` — the current state of the product and what to do next.
-- `docs/reviews/2026-11-data-and-standards.md` — what is wrong in the reference yields, other datasets, species and form codes, GS1, and the shipping idea. `research/mab37/` holds the bulletin as re-read; do not change a reference yield without the owner's agreement.
+- `docs/reviews/2026-11-data-and-standards.md` — other datasets, species and form codes, GS1, and the shipping idea. `research/mab37/` holds the bulletin as re-read, and the app's reference yields are generated from it (`node research/mab37/to-app.mjs`). Never edit a reference yield by hand: correct the page file after looking at the scan, then regenerate.
 - `docs/STYLE_GUIDE.md` — the look, the words and the components.
 
 The two backends described below (`server/` and `api/`) are in maintenance only until the move to Firebase (issues #123–#133); fix what is broken, but do not build new features on them. Short-term work is the calculator itself, on the web and on iOS through Capacitor (see `docs/ios.md`). Use Node 22.
@@ -103,12 +103,12 @@ Most endpoint logic lives once in **`shared/handlers/`**, behind a small databas
 - Routes defined in `App.jsx`:
   - `/` (calculator), `/login`, `/upload`, `/about`
   - `/data-sources`, `/manage-data`, `/profile`, `/community-data`, `/account`
-- Fish yield data in `src/data/fish_data_v3.js` — 89 species with conversion yields from MAB-37 research publication
+- Reference yields in `src/data/mab37_yields.js` — 89 species, 709 conversions, generated from the MAB-37 bulletin (`research/mab37/`); `src/data/fish_data_v3.js` re-exports them with the legend, the citation and the species profiles
 - Calculation math in `src/lib/calcEngine.js`
 - Offline data: `src/context/DataContext.jsx` keeps a copy of the account's saved calculations and custom yields in IndexedDB (`src/lib/localRepository.js`) and syncs it with the API when signed in (`src/lib/syncCoordinator.js`)
 
 ### Data Flow
-1. Reference yields are bundled in `fish_data_v3.js` (from the MAB-37 PDF research document). The calculator also asks `GET /api/fish-data` and uses the answer only if it holds usable conversions, so it works with no backend.
+1. Reference yields ship with the app (`mab37_yields.js`, through `fish_data_v3.js`) and are the same on the web, offline and on iOS. The calculator takes only the species profiles from `GET /api/fish-data`; the yields in that answer are not used.
 2. Custom yields (added on `/manage-data`, signed in) are written to IndexedDB first and then synced to the `user_data` table in SQLite (local) or Neon PostgreSQL (prod).
 3. Calculator merges reference + custom yields (`src/lib/fishDataMerge.js`), performs yield/cost calculations client-side
 4. Saving a calculation writes it to IndexedDB first through `DataContext.saveCalc`, for guests and signed-in people alike, and `/manage-data` lists it from there. For a signed-in person the sync then pushes it to `/api/save-calc` (the `calculations` table).
@@ -118,12 +118,14 @@ Fish conversions use "From State → To Product" pattern with yield percentages:
 ```javascript
 "Pink Salmon": {
   conversions: {
-    "Round → D/H-On": { yield: 91, range: [84, 94] },
-    "Round → Skinless Fillet": { yield: 42, range: [41, 46] }
+    "Round → D/H-On": { yield: 91, range: [84, 94], row: "p09R-16" },
+    "Round → Skinless Fillet": { yield: 42, range: [41, 46], row: "p09R-21" }
   }
 }
 ```
-Common acronyms: Round (whole fish), D/H-On (dressed/head-on), D/H-Off (dressed/head-off), S/B or SIB (skinless/boneless)
+`yield` is null where the bulletin prints only a range (the calculator then asks for one). `row` is the row in `research/mab37/mab37.json`. A conversion may also carry `note` (a note the bulletin prints) and `caution` (why a printed value looks wrong); the calculator shows both beside the yield.
+
+Common acronyms: Round (whole fish), D/H-On (dressed/head-on), D/H-Off (dressed/head-off), S/B (skinless/boneless; prices saved before November 2026 may spell it SIB)
 
 ## API Endpoints
 

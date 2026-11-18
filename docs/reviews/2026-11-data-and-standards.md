@@ -7,13 +7,15 @@ Written 2026-11-12, after the [product audit](2026-11-product-audit.md). It answ
 3. Is there an existing ontology or industry schema to adopt, and should we implement GS1?
 4. How could the app grow into helping a direct marketer ship a catch and find a buyer?
 
+**Update, 18 November 2026.** The owner approved the corrections in section 1 and they are made: the app's reference yields are now generated from the re-read bulletin. Every change is listed in [`research/mab37/corrections-2026-11.md`](../../research/mab37/corrections-2026-11.md). Section 1 below describes the data as it was before.
+
 Evidence is labelled throughout. **Checked** means read from the source or measured here. **Search only** means it came from search-result text because the site was blocked from this environment; treat it as a lead, not a fact. Section 7 lists what to verify.
 
 ## Summary
 
 | Question | Answer |
 |---|---|
-| Is the app's data right? | Mostly. 623 of its 655 conversions match the bulletin. **23 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 56 printed rows are missing.** Every one is listed in [`research/mab37/comparison.md`](../../research/mab37/comparison.md). Nothing in the app has been changed yet. |
+| Is the app's data right? | Mostly. 623 of its 655 conversions match the bulletin. **23 have wrong numbers, 9 are under the wrong starting form or the wrong species, and 56 printed rows are missing.** Every one is listed in [`research/mab37/corrections-2026-11.md`](../../research/mab37/corrections-2026-11.md). Corrected on 18 November 2026. |
 | Other datasets? | Yes, and two are now in the repository. The **US federal recovery rates for Alaska groundfish** (public domain, same species): 162 rates, set beside the bulletin in 126 places. The **EU's official conversion factors**: 250 factors for 63 species, checked against EUR-Lex. USDA tables cover meat, poultry and produce. |
 | An existing ontology? | No single one covers product forms. The workable set is **FAO species codes + WoRMS IDs** for species (done for 83 of the bulletin's 92 names), **EU presentation codes cross-referenced to Alaska's product codes** for forms, and a few facets of our own for what neither has. |
 | Implement GS1? | **Be compatible with it; do not issue it.** Build the data in the shape of the seafood traceability standard (GDST, which is built on GS1's event standard), with optional fields for a fisherman's own GS1 numbers. That costs nothing and needs no membership. See [ADR 0005](../adr/0005-standards-aligned-data-model.md) (proposed). |
@@ -208,7 +210,7 @@ ADR 0003 scoped this app to the calculator and said inventory belongs in a separ
 
 ## 6. Decisions for the owner
 
-1. **Correct the app's reference yields from the re-read bulletin?** 32 conversions change (23 numbers, 9 moved), 40 are respelled and 56 are added. Every change is listed in `comparison.md`.
+1. **Correct the app's reference yields from the re-read bulletin?** 32 conversions change (23 numbers, 9 moved), 40 are respelled and 56 are added. **Done on 18 November 2026**; every change is listed in `research/mab37/corrections-2026-11.md`.
 2. **Adopt ADR 0005** (the standards-aligned data model) as the shape for the Firestore work and for any dataset release?
 3. **Shipping and buyers:** start Stage A in this app? Which ports and fisheries first? Are the first users catcher-sellers or licensed direct marketers? Fresh by air, or frozen by parcel?
 4. **Permission from Alaska Sea Grant** for the bulletin, and whether to ask them, NOAA or a Sea Grant agent to review the flagged values.

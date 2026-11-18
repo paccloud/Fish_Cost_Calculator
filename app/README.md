@@ -19,5 +19,5 @@ Where things are:
 
 - `src/components/` screens and shared components (`Calculator.jsx`, `TabBar.jsx`, `Stamp.jsx`, `Notice.jsx`)
 - `src/lib/` pure logic with tests beside it (`calcEngine.js`, `formNames.js`, `priceCard.js`, `numberInput.js`)
-- `src/data/fish_data_v3.js` the reference yields
+- `src/data/mab37_yields.js` the reference yields, generated from the bulletin by `research/mab37/to-app.mjs` (do not edit); `fish_data_v3.js` re-exports them with the legend and profiles
 - `src/index.css`, `tailwind.config.js` design tokens and shared classes; the rules are in `../docs/STYLE_GUIDE.md` and `../docs/DESIGN_SYSTEM.md`

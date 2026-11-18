@@ -199,7 +199,7 @@ guide's components. `app/src/components/Calculator.jsx` holds the state and the 
   tall as its tallest tile. The plain name leads (`plainFormName`). A starting form has its trade
   code on the second line. A product has its yield on the second line and its code on a third when
   the code fits on one line of a phone tile (16 characters: "D/H-Off"); a longer code
-  ("SIB Fillet (Pinboning)") would make a six-line tile, so it is in the radio's name for screen
+  ("S/B Fillet (Pinboning)") would make a six-line tile, so it is in the radio's name for screen
   readers only. Long lists show 6 plus "Show all". The glossary of trade codes ("What do D/H-On, S/B
   and Round mean?") is a disclosure directly under the tiles.
 - **Steppers** (a 56px minus and plus either side of a typed field) for price, pounds, yield, margin,
@@ -222,8 +222,8 @@ guide's components. `app/src/components/Calculator.jsx` holds the state and the 
   (`FieldError`) has an icon and says what to type.
 - **Works with no signal.** The calculator starts from the bundled reference yields
   (`FISH_DATA_V3`, given `from`/`to` by `app/src/lib/fishDataShape.js`) and the service worker serves
-  the app, so it works on a boat with no connection. `/api/fish-data` replaces that data only when it
-  sends usable yields, and what is already picked stays picked. A signed-in person's own yields come
+  the app, so it works on a boat with no connection. No server copy replaces that data: the yields are
+  the same everywhere. A signed-in person's own yields come
   from the copy `DataContext` keeps on the device (merged by `app/src/lib/fishDataMerge.js`), which the
   sync refreshes when there is signal (and each time the calculator opens), so they work offline too.
   If a sync changes the yield you picked, the yield box follows it, unless you typed your own.

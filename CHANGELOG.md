@@ -44,6 +44,9 @@ Everything merged to `main` since 1.0.0. Entries from March 2026 on were rebuilt
 - Data validation module for ensuring fish data integrity
 
 ### Changed
+- Reference yields are now generated from the bulletin as re-read from its printed pages (`research/mab37/`), row for row, and are the same on the web, offline and on iOS; the server's copy is no longer used. 23 numbers were corrected (Rougheye and Shortraker rockfish, Pacific hake, pollock, sablefish, trout), 9 rows moved to the starting form the bulletin prints or removed, 56 missing rows added, and "SIB" is spelled "S/B". Every change is in `research/mab37/corrections-2026-11.md`
+- Where the bulletin prints only a range (roe, oysters, crab during molt), the calculator shows the range and asks for a yield; it no longer shows a made-up average
+- The calculator says so beside eleven values that look wrong in the bulletin itself, and passes on the bulletin's note about thawed salmon
 - Every screen follows one design: a serif for names and titles, the same layout and control sizes, and wording from one glossary
 - Fonts and icons ship with the app, so a first launch with no signal looks right; the home-screen icon is a PNG that iPhones accept
 - The app has one name, "Local Catch", in the title, the installed app and the navigation
