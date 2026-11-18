@@ -93,7 +93,8 @@ export function yieldSource(conversion, yieldPercent) {
  * @property {'incoming'|'outgoing'} shippingWeightType
  * @property {string} [margin] — typed margin, percent of the sell price
  * @property {string} [portion] — typed portion size, ounces
- * @property {{yield: number, range?: [number, number]|null, from?: string}|null} [conversion]
+ * @property {{yield: number|null, range?: [number, number]|null, from?: string}|null} [conversion] — yield
+ *   is null when the source gives only a range
  */
 
 /**
@@ -176,7 +177,13 @@ export function buildTicketModel(inputs) {
     else if (!toState) model.prompt = 'Choose what you’re making.';
     else if (badInput) model.prompt = NUMBERS_ONLY;
     else if (yieldMessage) model.prompt = yieldMessage;
-    else if (!yieldValid) model.prompt = 'Type a yield, like 46%.';
+    else if (!yieldValid) {
+      // A product the source gives only a range for starts with no yield in the box
+      const [low, high] = Array.isArray(conversion?.range) ? conversion.range : [];
+      model.prompt = parseYieldPercent(conversion?.yield) === null && Number.isFinite(low) && Number.isFinite(high)
+        ? `Pick a yield between ${plain(low)}% and ${plain(high)}%.`
+        : 'Type a yield, like 46%.';
+    }
     else if (!Number.isFinite(mainNumber) || mainNumber === 0) {
       model.prompt = costMode
         ? `Type what you pay per lb of ${fromWords}.`

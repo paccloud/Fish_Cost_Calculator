@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
  * One-off import script: populates Neon PostgreSQL with fish yield data.
+ *
+ * Since November 2026 the app does not read reference yields from this database: it ships
+ * them (app/src/data/mab37_yields.js) and uses those everywhere. Only the species profiles
+ * imported here are still read. The fish_yields table is left as it was imported; this script
+ * updates rows by name and does not delete ones the bulletin never had.
  * This script is NOT part of the Vercel build — it runs locally on a
  * developer machine only.
  *
@@ -136,6 +141,12 @@ async function importData(pool) {
 
       const fromState = parts[0];
       const toState = parts[1];
+
+      // The bulletin prints only a range for a few products, and the column needs a number
+      if (conversionData.yield === null) {
+        console.warn(`  Skipping ${conversionKey}: the source gives a range and no average`);
+        continue;
+      }
 
       await pool.query(
         `INSERT INTO fish_yields (species_id, from_state, to_state, yield_percent, range_min, range_max)

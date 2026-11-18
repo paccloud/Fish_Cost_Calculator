@@ -374,3 +374,68 @@ describe('sharing the price', () => {
     expect(priceCardFor(CHOSEN, buildTicketModel({ mode: 'cost', ...CHOSEN, conversion: SOCKEYE }))).toBe('');
   });
 });
+
+describe('reference yields as the bulletin prints them', () => {
+  const OYSTERS = { species: 'Oysters', fromState: 'Raw Whole', toState: 'Raw Meats', cost: '2.00' };
+
+  it('asks for a yield where the source gives only a range, and makes none up', async () => {
+    const html = await renderCalculator({ initial: { ...OYSTERS, yieldPercent: '' } });
+    const text = textOf(html);
+
+    expect(html).toMatch(/<input[^>]*id="calc-yield"[^>]*value=""/);
+    expect(textOf(ticketOf(html))).toContain('Pick a yield between 5% and 14%.');
+    expect(text).toContain('The source gives a range for this, 5–14%, and no average. Pick an end of it or type your own.');
+    // The two ends are offered; there is no average to offer
+    const presets = html.slice(html.indexOf('aria-label="Typical yields"'));
+    expect(presets.slice(0, presets.indexOf('</div>'))).toMatch(/Low<br\/><span class="tabular-nums">5%<\/span>.*High<br\/><span class="tabular-nums">14%<\/span>/s);
+    expect(presets.slice(0, presets.indexOf('</div>'))).not.toContain('Average');
+    expect(html).toContain('grid gap-2 grid-cols-2');
+    expect(text).not.toMatch(/null|NaN|undefined|\$0\.00/);
+  });
+
+  it('shows the range on the product tile in place of a yield', async () => {
+    const html = await renderCalculator({ initial: { species: 'Oysters', fromState: 'Raw Whole' } });
+    expect(textOf(html)).toContain('5–14% yield');
+    expect(textOf(html)).not.toContain('null% yield');
+  });
+
+  it('prices from an end of the range once one is picked', async () => {
+    const ticket = ticketOf(await renderCalculator({ initial: { ...OYSTERS, yieldPercent: '5' } }));
+    expect(ticket).toMatch(/<p class="ticket-figure"[^>]*>\$40\.00<small>\/lb<\/small><\/p>/);
+    expect(textOf(ticket)).toContain('Across typical yields, 5–14%');
+  });
+
+  it('keeps three choices where the source gives an average', async () => {
+    const html = await renderCalculator({ initial: WORKED });
+    expect(html).toContain('grid gap-2 grid-cols-3');
+    expect(textOf(html)).toContain('Average 46%');
+  });
+
+  it('says so beside a value that looks wrong in the source, and still uses what is printed', async () => {
+    const html = await renderCalculator({
+      initial: { species: 'Sablefish', fromState: 'D/H-Off', toState: 'Skinless Fillet', cost: '5.00', yieldPercent: '28' },
+    });
+    expect(html).toMatch(/<p id="calc-yield-caution"[^>]*><strong[^>]*>Check this one\.<\/strong> The bulletin prints 28%\. Its other sablefish yields imply about 51%\. Probably a misprint\.<\/p>/);
+    expect(html).toMatch(/<input[^>]*id="calc-yield"[^>]*aria-describedby="[^"]*calc-yield-caution/);
+    expect(ticketOf(html)).toMatch(/\$17\.86<small>\/lb<\/small>/);
+  });
+
+  it('passes on the note the source prints for thawed salmon', async () => {
+    const html = await renderCalculator({
+      initial: { species: 'Pink Salmon', fromState: 'D/H-On (Thawed)', toState: 'Skin-On Fillet', cost: '3.00', yieldPercent: '54' },
+    });
+    expect(textOf(html)).toContain('From the source: Freezing conditions and length of storage will affect recoveries.');
+    expect(html).not.toContain('calc-yield-caution');
+  });
+
+  it('says nothing extra beside an ordinary yield', async () => {
+    const html = await renderCalculator({ initial: WORKED });
+    expect(html).not.toContain('calc-yield-caution');
+    expect(html).not.toContain('calc-yield-note');
+  });
+
+  it('gives Rougheye rockfish the yield of the table it is printed in', async () => {
+    const html = await renderCalculator({ initial: { species: 'Rougheye Rockfish', fromState: 'Round' } });
+    expect(textOf(html)).toMatch(/Skin-on fillet 28% yield/);
+  });
+});

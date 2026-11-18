@@ -112,6 +112,10 @@ describe('buildTicketModel: one sentence saying what is missing', () => {
     expect(buildTicketModel(worked({ toState: '' })).prompt).toBe('Choose what you’re making.');
     expect(buildTicketModel(worked({ cost: '' })).prompt).toBe('Type what you pay per lb of whole fish.');
     expect(buildTicketModel(worked({ yieldPercent: '' })).prompt).toBe('Type a yield, like 46%.');
+    // A product the source gives only a range for: say the range, not a made-up example
+    const rangeOnly = { yield: null, range: [5, 14], from: 'Raw Whole', to: 'Raw Meats' };
+    expect(buildTicketModel(worked({ yieldPercent: '', conversion: rangeOnly })).prompt).toBe('Pick a yield between 5% and 14%.');
+    expect(buildTicketModel(worked({ yieldPercent: '', conversion: { yield: null, range: null } })).prompt).toBe('Type a yield, like 46%.');
   });
 
   it('says to use numbers when a box cannot be read, and blanks the answer', () => {

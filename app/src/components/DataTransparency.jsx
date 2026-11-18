@@ -82,6 +82,16 @@ const DataTransparency = () => {
                         </div>
 
                         <div>
+                            <h3 className={SUBHEADING}>Where there is no average</h3>
+                            <p>For a few products, such as roe and oysters, the bulletin prints a range and no average. The calculator shows the range and asks you to pick a yield. It does not make one up.</p>
+                        </div>
+
+                        <div>
+                            <h3 className={SUBHEADING}>How the yields were checked</h3>
+                            <p>Every reference yield is a row of the bulletin, read from the printed pages and checked against the scan&apos;s own text. In November 2026 that reading corrected 32 yields and added 56 the app did not have.</p>
+                        </div>
+
+                        <div>
                             <h3 className={SUBHEADING}>Smoked products</h3>
                             <p>Smoked fish yields were calculated using an average <strong className="text-text-primary">15% weight loss</strong> during salting/brining and <strong className="text-text-primary">10%</strong> during the smoking process.</p>
                         </div>
@@ -105,10 +115,10 @@ const DataTransparency = () => {
                 {/* Uncertain Data */}
                 {UNCERTAIN_DATA && UNCERTAIN_DATA.length > 0 && (
                     <section className="card p-5 sm:p-6" aria-labelledby="source-quality">
-                        <h2 id="source-quality" className={HEADING}>Data quality notes</h2>
+                        <h2 id="source-quality" className={HEADING}>Values to check</h2>
 
                         <p className="mt-3 max-w-prose text-base text-text-secondary">
-                            The following data entries were extracted from PDF scans and may have quality issues:
+                            The bulletin prints these clearly, but they do not fit the figures beside them. The calculator uses what is printed and says so when you choose one.
                         </p>
 
                         <ul className="mt-3 divide-y divide-line-subtle">
