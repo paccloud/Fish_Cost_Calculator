@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Fish above a wave"><title>Fish above a wave</title>
+<path d="M4 12C8 5 18 5 22 12C18 19 8 19 4 12Z" fill="#fff"/>
+<path d="M22 12L28 6V18Z" fill="#fff"/>
+<circle cx="9" cy="11" r="1.4" fill="#014457"/>
+<path d="M3 25Q7.5 20 12 25T21 25T30 25" stroke="#F7C648" stroke-width="3"/>
+</svg>

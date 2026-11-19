@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Calculator with a fish on its display"><title>Calculator with a fish on its display</title>
+<rect x="5" y="2.5" width="22" height="27" rx="3.5" stroke="#fff" stroke-width="2.2"/>
+<rect x="8.5" y="6" width="15" height="9" rx="1.5" fill="#F7C648"/>
+<path d="M10.5 10.5C12 8 16 8 17.5 10.5C16 13 12 13 10.5 10.5Z" fill="#014457"/>
+<path d="M17.5 10.5L20.5 8.3V12.7Z" fill="#014457"/>
+<g fill="#fff"><circle cx="10.5" cy="20" r="1.7"/><circle cx="16" cy="20" r="1.7"/><circle cx="21.5" cy="20" r="1.7"/><circle cx="10.5" cy="25" r="1.7"/><circle cx="16" cy="25" r="1.7"/><circle cx="21.5" cy="25" r="1.7"/></g>
+</svg>

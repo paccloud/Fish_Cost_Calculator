@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Fish emerging from a catch basket"><title>Fish emerging from a catch basket</title>
+<g transform="rotate(-50 16 12)">
+<path d="M7 12C10 5 19 5 22 12C19 19 10 19 7 12Z" fill="#F7C648"/>
+<path d="M22 12L28 7V17Z" fill="#F7C648"/>
+</g>
+<path d="M4 17H28L25 29H7Z" fill="#014457" stroke="#fff" stroke-width="2.2"/>
+<path d="M11 17L12 29M16 17V29M21 17L20 29" stroke="#fff" stroke-width="1.6"/>
+</svg>
