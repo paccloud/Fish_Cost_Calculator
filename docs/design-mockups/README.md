@@ -19,3 +19,16 @@ Three candidate directions for the calculator screen, plus a visual board that s
 - The directions are original and are **not** derived from the reference sites named in the redesign request (Grace Communications, NAMA, NFFC, Local Catch Network). Those sites could not be reached when the mock-ups were made.
 - Yields are real values from `app/src/data/fish_data_v3.js` for five species (Pink Salmon, Sockeye Salmon, Pacific Halibut, Pacific Cod, Lingcod), copied in at build time. They will not follow later changes to that file.
 - Colors and type follow the current brand tokens in `docs/DESIGN_SYSTEM.md`. Screenshots on the board were taken with a fallback font, so real devices using Inter will look slightly narrower.
+
+## Brand icon options (#145)
+
+`icon-options.html` compares four proposed replacements for the Lucide fish in the header's "Local Catch" mark, against the current icon as a baseline, at enlarged, 16/24/28 px and in-header sizes on light and dark pages. It loads the real files from `app/public/icons/candidates/`, so open it from this checkout.
+
+| Option | File | Idea |
+|---|---|---|
+| A | `fish-wave.svg` | Fish above a wave |
+| B | `fish-price-tag.svg` | Fish inside a price tag |
+| C | `catch-basket.svg` | Fish emerging from a catch basket |
+| D | `fish-calculator.svg` | Calculator with a fish on its display |
+
+**Status: proposed, pending selection.** None is wired into the app. The header, favicon, Apple touch icon and PWA icons are unchanged; adopting one is a follow-up once a choice is made.

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Catch brand icon options</title>
+<style>
+  :root { --teal:#014457; --yellow:#F7C648; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height:1.45; }
+  .ctx { padding:24px 16px; }
+  .ctx.light { background:#f6f7f8; color:#12262d; }
+  .ctx.dark { background:#0d1417; color:#e8eef0; }
+  .wrap { max-width:1100px; margin:0 auto; }
+  h1 { font-size:1.5rem; margin:0 0 .25rem; }
+  h2 { font-size:1.15rem; margin:0 0 1rem; }
+  p.lead { margin:0 0 1.5rem; max-width:65ch; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+  .card { border:1px solid rgba(128,128,128,.35); border-radius:10px; padding:16px; min-width:0; }
+  .light .card { background:#fff; } .dark .card { background:#151f23; }
+  .card h3 { margin:0 0 .25rem; font-size:1rem; }
+  .card p { margin:0 0 .75rem; font-size:.875rem; opacity:.85; }
+  .big { background:var(--teal); border-radius:8px; display:flex; justify-content:center; padding:16px; margin-bottom:12px; }
+  .big img { width:96px; height:96px; display:block; }
+  .sizes { display:flex; gap:16px; align-items:flex-end; background:var(--teal); border-radius:8px; padding:12px 16px; margin-bottom:12px; font-size:.7rem; color:#fff; }
+  .sizes figure { margin:0; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .sizes img { display:block; }
+  .header-ctx { background:var(--teal); border-radius:8px; padding:0 16px; height:56px; display:flex; align-items:center; gap:10px; }
+  .tile { width:28px; height:28px; background:rgba(255,255,255,.15); border-radius:4px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .tile img, .tile svg { width:16px; height:16px; display:block; }
+  .tile.fill img { width:24px; height:24px; }
+  .wordmark { color:#fff; font-weight:600; font-size:.875rem; letter-spacing:-.01em; white-space:nowrap; }
+  .label { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; opacity:.7; margin:0 0 4px; }
+  .baseline { margin-top:24px; }
+</style>
+</head>
+<body>
+
+<section class="ctx light">
+<div class="wrap">
+  <h1>Local Catch brand icon options</h1>
+  <p class="lead">Four proposed replacements for the Lucide fish in the top-left header mark (issue #145), pending selection. Nothing here is wired into the app. Each card shows the real SVG file from <code>app/public/icons/candidates/</code>: enlarged, at 16, 24 and 28&nbsp;px, and in the header tile (28&nbsp;px translucent tile, 16&nbsp;px glyph, teal bar). The header section repeats on light and dark pages.</p>
+  <h2>Light page context</h2>
+  <div class="grid" id="light"></div>
+  <div class="baseline">
+    <h2>Current baseline (not a candidate)</h2>
+    <div class="grid"><div class="card">
+      <h3>Current: Lucide fish</h3>
+      <p>What the header uses today.</p>
+      <div class="header-ctx"><div class="tile"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z"/><path d="M18 12v.5"/><path d="M16 17.93a9.77 9.77 0 0 1 0-11.86"/><path d="M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33"/><path d="M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4"/><path d="M16.01 17.93 15.78 19.33A2 2 0 0 1 13.8 21H9.5a5.96 5.96 0 0 0 1.49-3.98"/></svg></div><span class="wordmark">Local Catch</span></div>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<section class="ctx dark">
+<div class="wrap">
+  <h2>Dark page context</h2>
+  <div class="grid" id="dark"></div>
+</div>
+</section>
+
+<script>
+  // Candidate list; the board renders the shipped SVG files via <img>, never copies of the artwork.
+  var base = "../../app/public/icons/candidates/";
+  var options = [
+    ["A", "Fish + wave", "fish-wave.svg", "A white fish riding a yellow wave. Friendly and nautical; the wave reads as 'local water'."],
+    ["B", "Fish in price tag", "fish-price-tag.svg", "A tag outline holding a fish. Points straight at the app's purpose: turning yield into a price."],
+    ["C", "Catch basket", "catch-basket.svg", "A yellow fish leaping from a woven basket. Speaks to the fisher's catch."],
+    ["D", "Fish calculator", "fish-calculator.svg", "A calculator with a fish on its display. Most literal 'fish cost calculator' mark; densest at small sizes."]
+  ];
+  function card(o) {
+    var src = base + o[2];
+    var el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML =
+      "<h3>Option " + o[0] + " · " + o[1] + "</h3><p>" + o[3] + "</p>" +
+      '<div class="big"><img src="' + src + '" alt="Option ' + o[0] + ' enlarged"></div>' +
+      '<p class="label">Actual size 16 / 24 / 28 px</p>' +
+      '<div class="sizes">' +
+        '<figure><img src="' + src + '" width="16" height="16" alt="16px">16</figure>' +
+        '<figure><img src="' + src + '" width="24" height="24" alt="24px">24</figure>' +
+        '<figure><img src="' + src + '" width="28" height="28" alt="28px">28</figure>' +
+      '</div>' +
+      '<p class="label">In header</p>' +
+      '<div class="header-ctx"><div class="tile"><img src="' + src + '" alt="Option ' + o[0] + ' in header"></div><span class="wordmark">Local Catch</span></div>';
+    return el;
+  }
+  ["light", "dark"].forEach(function (id) {
+    var root = document.getElementById(id);
+    options.forEach(function (o) { root.appendChild(card(o)); });
+  });
+</script>
+<noscript><p style="padding:16px">This board needs JavaScript to list the options. The SVG files are in <code>app/public/icons/candidates/</code>.</p></noscript>
+</body>
+</html>
